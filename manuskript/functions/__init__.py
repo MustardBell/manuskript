@@ -23,11 +23,22 @@ AUC = Qt.AutoConnection | Qt.UniqueConnection
 MW = None
 
 
+translationCache = dict()
+
+def resetTranslation():
+    translationCache.clear()
+
 def safeTranslate(qApp, group, text):
+    if text in translationCache:
+        return translationCache[text]
+
     try:
-        return qApp.translate(group, text)
+        _text = qApp.translate(group, text)
+        translationCache[text] = _text
+        return _text
     except:
         return text
+
 
 def wordCount(text):
     return len(re.findall(r"\S+", re.sub(r"(<!--).+?(-->)", "", text, flags=re.DOTALL)))
