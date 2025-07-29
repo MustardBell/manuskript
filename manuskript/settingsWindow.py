@@ -310,13 +310,16 @@ class settingsWindow(QWidget, Ui_Settings):
         self.timerUpdateFSPreview.setInterval(250)
         self.timerUpdateFSPreview.timeout.connect(self.updatePreview)
 
-        # Style - Tooltips
+        # Style - Tooltips  
+        self.chkUseSystemTooltips.setChecked(settings.tooltipStyle["useSystemDefaultsForTooltips"])
+        self.chkUseSystemTooltips.stateChanged.connect(self.toggleTooltipCustomization)
         self.setButtonColor(self.btnTooltipTextColor, settings.tooltipStyle["textColor"])
         self.btnTooltipTextColor.clicked.connect(self.chooseTooltipTextColor)
         self.setButtonColor(self.btnTooltipBackgroundColor, settings.tooltipStyle["backgroundColor"])
         self.btnTooltipBackgroundColor.clicked.connect(self.chooseTooltipBackgroundColor)
         self.setButtonColor(self.btnTooltipBorderColor, settings.tooltipStyle["borderColor"])
         self.btnTooltipBorderColor.clicked.connect(self.chooseTooltipBorderColor)
+        self.updateTooltipControlsState()
 
     def setTab(self, tab):
 
@@ -1043,6 +1046,30 @@ class settingsWindow(QWidget, Ui_Settings):
             self.setButtonColor(self.btnTooltipBorderColor, color.name())
             self.updateTooltipStyle()
 
+    def toggleTooltipCustomization(self):
+        settings.tooltipStyle["useSystemDefaultsForTooltips"] = self.chkUseSystemTooltips.isChecked()
+        self.updateTooltipControlsState()
+        self.updateTooltipStyle()
+
+    def updateTooltipControlsState(self):
+        visible = not settings.tooltipStyle["useSystemDefaultsForTooltips"]
+        self.lblTooltipTextColor.setVisible(visible)
+        self.btnTooltipTextColor.setVisible(visible)
+        self.lblTooltipBackgroundColor.setVisible(visible)
+        self.btnTooltipBackgroundColor.setVisible(visible)
+        self.lblTooltipBorderColor.setVisible(visible)
+        self.btnTooltipBorderColor.setVisible(visible)
+        
+        # Adjust layout spacing when controls are hidden/shown
+        if visible:
+            self.formLayout_tooltips.setContentsMargins(9, 9, 9, 9)
+        else:
+            self.formLayout_tooltips.setContentsMargins(9, 9, 9, 0)
+
     def updateTooltipStyle(self):
         # Apply the new tooltip style immediately
-        qApp.setStyleSheet(f"QToolTip {{ color: {settings.tooltipStyle['textColor']}; background-color: {settings.tooltipStyle['backgroundColor']}; border: 1px solid {settings.tooltipStyle['borderColor']}; }}")
+        if settings.tooltipStyle["useSystemDefaultsForTooltips"]:
+            # Clear any custom tooltip styling to use system defaults
+            qApp.setStyleSheet("")
+        else:
+            qApp.setStyleSheet(f"QToolTip {{ color: {settings.tooltipStyle['textColor']}; background-color: {settings.tooltipStyle['backgroundColor']}; border: 1px solid {settings.tooltipStyle['borderColor']}; }}")

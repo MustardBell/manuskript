@@ -108,6 +108,7 @@ frequencyAnalyzer = {
 }
 
 tooltipStyle = {
+    "useSystemDefaultsForTooltips": True,
     "textColor": "#000000",
     "backgroundColor": "#ffffdc",
     "borderColor": "#767676"
@@ -132,10 +133,11 @@ def initDefaultValues():
 
 def applyTooltipStyle():
     """
-    Apply tooltip styling to the application.
+    Apply tooltip styling to the application if system defaults are disabled.
     """
-    from PyQt5.QtWidgets import qApp
-    qApp.setStyleSheet(f"QToolTip {{ color: {tooltipStyle['textColor']}; background-color: {tooltipStyle['backgroundColor']}; border: 1px solid {tooltipStyle['borderColor']}; }}")
+    if not tooltipStyle["useSystemDefaultsForTooltips"]:
+        from PyQt5.QtWidgets import qApp
+        qApp.setStyleSheet(f"QToolTip {{ color: {tooltipStyle['textColor']}; background-color: {tooltipStyle['backgroundColor']}; border: 1px solid {tooltipStyle['borderColor']}; }}")
 
 def save(filename=None, protocol=None):
 
@@ -348,4 +350,8 @@ def load(string, fromString=False, protocol=None):
 
     if "tooltipStyle" in allSettings:
         global tooltipStyle
-        tooltipStyle = allSettings["tooltipStyle"]
+        loaded_tooltip_style = allSettings["tooltipStyle"]
+        # Add missing keys with defaults
+        if "useSystemDefaultsForTooltips" not in loaded_tooltip_style:
+            loaded_tooltip_style["useSystemDefaultsForTooltips"] = True
+        tooltipStyle = loaded_tooltip_style
