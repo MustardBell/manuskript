@@ -2,120 +2,119 @@ import json
 import logging
 from PyQt5.QtWidgets import qApp
 
-from manuskript import settings
+# Import default settings
+from manuskript import settings as default_settings
 
 LOGGER = logging.getLogger(__name__)
 
 class SettingsManager:
     def __init__(self):
-        pass
+        # Initialize settings with default values from the settings module
+        self.viewSettings = default_settings.viewSettings.copy()
+        self.fullscreenSettings = default_settings.fullscreenSettings.copy()
+        self.dict = default_settings.dict
+        self.spellcheck = default_settings.spellcheck
+        self.corkSizeFactor = default_settings.corkSizeFactor
+        self.folderView = default_settings.folderView
+        self.lastTab = default_settings.lastTab
+        self.openIndexes = default_settings.openIndexes.copy()
+        self.progressChars = default_settings.progressChars
+        self.countSpaces = default_settings.countSpaces
+        self.autoSave = default_settings.autoSave
+        self.autoSaveDelay = default_settings.autoSaveDelay
+        self.saveOnQuit = default_settings.saveOnQuit
+        self.autoSaveNoChanges = default_settings.autoSaveNoChanges
+        self.autoSaveNoChangesDelay = default_settings.autoSaveNoChangesDelay
+        self.outlineViewColumns = default_settings.outlineViewColumns.copy()
+        self.corkBackground = default_settings.corkBackground.copy()
+        self.corkStyle = default_settings.corkStyle
+        self.fullScreenTheme = default_settings.fullScreenTheme
+        self.defaultTextType = default_settings.defaultTextType
+        self.textEditor = default_settings.textEditor.copy()
+        self.revisions = default_settings.revisions.copy()
+        self.frequencyAnalyzer = default_settings.frequencyAnalyzer.copy()
+        self.viewMode = default_settings.viewMode
+        self.saveToZip = default_settings.saveToZip
+        self.dontShowDeleteWarning = default_settings.dontShowDeleteWarning
+        self.tooltipStyle = default_settings.tooltipStyle.copy()
+        
+        self.initDefaultValues()
 
     def save(self, filename=None, protocol=None):
+        """Saves the current settings into a JSON string.
+        
+        Note: filename and protocol parameters seem to be unused but are kept for compatibility."""
         allSettings = {
-            "viewSettings": settings.viewSettings,
-            "fullscreenSettings": settings.fullscreenSettings,
-            "dict": settings.dict,
-            "spellcheck": settings.spellcheck,
-            "corkSizeFactor": settings.corkSizeFactor,
-            "folderView": settings.folderView,
-            "lastTab": settings.lastTab,
-            "openIndexes": settings.openIndexes,
-            "progressChars": settings.progressChars,
-            "countSpaces": settings.countSpaces,
-            "autoSave": settings.autoSave,
-            "autoSaveDelay": settings.autoSaveDelay,
-            "saveOnQuit": settings.saveOnQuit,
-            "autoSaveNoChanges": settings.autoSaveNoChanges,
-            "autoSaveNoChangesDelay": settings.autoSaveNoChangesDelay,
-            "outlineViewColumns": settings.outlineViewColumns,
-            "corkBackground": settings.corkBackground,
-            "corkStyle": settings.corkStyle,
-            "fullScreenTheme": settings.fullScreenTheme,
-            "defaultTextType": settings.defaultTextType,
-            "textEditor": settings.textEditor,
-            "revisions": settings.revisions,
-            "frequencyAnalyzer": settings.frequencyAnalyzer,
-            "viewMode": settings.viewMode,
-            "saveToZip": settings.saveToZip,
-            "dontShowDeleteWarning": settings.dontShowDeleteWarning,
-            "tooltipStyle": settings.tooltipStyle,
+            "viewSettings": self.viewSettings,
+            "fullscreenSettings": self.fullscreenSettings,
+            "dict": self.dict,
+            "spellcheck": self.spellcheck,
+            "corkSizeFactor": self.corkSizeFactor,
+            "folderView": self.folderView,
+            "lastTab": self.lastTab,
+            "openIndexes": self.openIndexes,
+            "progressChars": self.progressChars,
+            "countSpaces": self.countSpaces,
+            "autoSave": self.autoSave,
+            "autoSaveDelay": self.autoSaveDelay,
+            "saveOnQuit": self.saveOnQuit,
+            "autoSaveNoChanges": self.autoSaveNoChanges,
+            "autoSaveNoChangesDelay": self.autoSaveNoChangesDelay,
+            "outlineViewColumns": self.outlineViewColumns,
+            "corkBackground": self.corkBackground,
+            "corkStyle": self.corkStyle,
+            "fullScreenTheme": self.fullScreenTheme,
+            "defaultTextType": self.defaultTextType,
+            "textEditor": self.textEditor,
+            "revisions": self.revisions,
+            "frequencyAnalyzer": self.frequencyAnalyzer,
+            "viewMode": self.viewMode,
+            "saveToZip": self.saveToZip,
+            "dontShowDeleteWarning": self.dontShowDeleteWarning,
+            "tooltipStyle": self.tooltipStyle,
         }
         return json.dumps(json.loads(json.dumps(allSettings)), indent=4, sort_keys=True)
 
     def load(self, string, fromString=False, protocol=None):
+        """Loads settings from a JSON string.
+        
+        Note: fromString and protocol parameters seem to be unused but are kept for compatibility."""
         if not string:
-            LOGGER.error("Cannot load settings.")
+            LOGGER.error("Cannot load settings from empty string.")
             return
 
         allSettings = json.loads(string)
 
-        if "viewSettings" in allSettings:
-            settings.viewSettings = allSettings["viewSettings"]
-            for cat, name, default in [
-                ("Tree", "iconSize", 24),
-            ]:
-                if not name in settings.viewSettings[cat]:
-                    settings.viewSettings[cat][name] = default
+        # Use dict.get(key, default_value) for safer loading
+        self.viewSettings = allSettings.get("viewSettings", self.viewSettings)
+        # Ensure backward compatibility for missing keys
+        for cat, name, default in [("Tree", "iconSize", 24)]:
+            if cat in self.viewSettings and name not in self.viewSettings[cat]:
+                self.viewSettings[cat][name] = default
 
-        if "fullscreenSettings" in allSettings:
-            settings.fullscreenSettings = allSettings["fullscreenSettings"]
-
-        if "dict" in allSettings:
-            settings.dict = allSettings["dict"]
-
-        if "spellcheck" in allSettings:
-            settings.spellcheck = allSettings["spellcheck"]
-
-        if "corkSizeFactor" in allSettings:
-            settings.corkSizeFactor = allSettings["corkSizeFactor"]
-
-        if "folderView" in allSettings:
-            settings.folderView = allSettings["folderView"]
-
-        if "lastTab" in allSettings:
-            settings.lastTab = allSettings["lastTab"]
-
-        if "openIndexes" in allSettings:
-            settings.openIndexes = allSettings["openIndexes"]
-
-        if "progressChars" in allSettings:
-            settings.progressChars = allSettings["progressChars"]
-
-        if "countSpaces" in allSettings:
-            settings.countSpaces = allSettings["countSpaces"]
-
-        if "autoSave" in allSettings:
-            settings.autoSave = allSettings["autoSave"]
-
-        if "autoSaveDelay" in allSettings:
-            settings.autoSaveDelay = allSettings["autoSaveDelay"]
-
-        if "saveOnQuit" in allSettings:
-            settings.saveOnQuit = allSettings["saveOnQuit"]
-
-        if "autoSaveNoChanges" in allSettings:
-            settings.autoSaveNoChanges = allSettings["autoSaveNoChanges"]
-
-        if "autoSaveNoChangesDelay" in allSettings:
-            settings.autoSaveNoChangesDelay = allSettings["autoSaveNoChangesDelay"]
-
-        if "outlineViewColumns" in allSettings:
-            settings.outlineViewColumns = allSettings["outlineViewColumns"]
-
-        if "corkBackground" in allSettings:
-            settings.corkBackground = allSettings["corkBackground"]
-
-        if "corkStyle" in allSettings:
-            settings.corkStyle = allSettings["corkStyle"]
-
-        if "fullScreenTheme" in allSettings:
-            settings.fullScreenTheme = allSettings["fullScreenTheme"]
-
-        if "defaultTextType" in allSettings:
-            settings.defaultTextType = allSettings["defaultTextType"]
-
+        self.fullscreenSettings = allSettings.get("fullscreenSettings", self.fullscreenSettings)
+        self.dict = allSettings.get("dict", self.dict)
+        self.spellcheck = allSettings.get("spellcheck", self.spellcheck)
+        self.corkSizeFactor = allSettings.get("corkSizeFactor", self.corkSizeFactor)
+        self.folderView = allSettings.get("folderView", self.folderView)
+        self.lastTab = allSettings.get("lastTab", self.lastTab)
+        self.openIndexes = allSettings.get("openIndexes", self.openIndexes)
+        self.progressChars = allSettings.get("progressChars", self.progressChars)
+        self.countSpaces = allSettings.get("countSpaces", self.countSpaces)
+        self.autoSave = allSettings.get("autoSave", self.autoSave)
+        self.autoSaveDelay = allSettings.get("autoSaveDelay", self.autoSaveDelay)
+        self.saveOnQuit = allSettings.get("saveOnQuit", self.saveOnQuit)
+        self.autoSaveNoChanges = allSettings.get("autoSaveNoChanges", self.autoSaveNoChanges)
+        self.autoSaveNoChangesDelay = allSettings.get("autoSaveNoChangesDelay", self.autoSaveNoChangesDelay)
+        self.outlineViewColumns = allSettings.get("outlineViewColumns", self.outlineViewColumns)
+        self.corkBackground = allSettings.get("corkBackground", self.corkBackground)
+        self.corkStyle = allSettings.get("corkStyle", self.corkStyle)
+        self.fullScreenTheme = allSettings.get("fullScreenTheme", self.fullScreenTheme)
+        self.defaultTextType = allSettings.get("defaultTextType", self.defaultTextType)
+        
+        # Special handling for textEditor with backward compatibility
         if "textEditor" in allSettings:
-            settings.textEditor = allSettings["textEditor"]
+            self.textEditor = allSettings["textEditor"]
             added = {
                 "textAlignment": 0,
                 "cursorWidth": 1,
@@ -128,38 +127,70 @@ class SettingsManager:
                 "focusMode": False,
             }
             for k in added:
-                if not k in settings.textEditor: settings.textEditor[k] = added[k]
-            if settings.textEditor["cursorNotBlinking"]:
-                qApp.setCursorFlashTime(0)
-            else:
-                from manuskript.functions import mainWindow
-                qApp.setCursorFlashTime(mainWindow()._defaultCursorFlashTime)
-
+                if k not in self.textEditor: 
+                    self.textEditor[k] = added[k]
+        
+        # Special handling for revisions with key conversion
         if "revisions" in allSettings:
-            settings.revisions = allSettings["revisions"]
+            self.revisions = allSettings["revisions"]
             r = {}
-            for i in settings.revisions["rules"]:
+            for i in self.revisions["rules"]:
                 if i == "null":
-                    r[None] = settings.revisions["rules"]["null"]
+                    r[None] = self.revisions["rules"]["null"]
                 elif i == None:
-                    r[None] = settings.revisions["rules"][None]
+                    r[None] = self.revisions["rules"][None]
                 else:
-                    r[int(i)] = settings.revisions["rules"][i]
-            settings.revisions["rules"] = r
+                    r[int(i)] = self.revisions["rules"][i]
+            self.revisions["rules"] = r
 
-        if "frequencyAnalyzer" in allSettings:
-            settings.frequencyAnalyzer = allSettings["frequencyAnalyzer"]
-
-        if "viewMode" in allSettings:
-            settings.viewMode = allSettings["viewMode"]
-
-        if "saveToZip" in allSettings:
-            settings.saveToZip = allSettings["saveToZip"]
-
-        if "dontShowDeleteWarning" in allSettings:
-            settings.dontShowDeleteWarning = allSettings["dontShowDeleteWarning"]
-
+        self.frequencyAnalyzer = allSettings.get("frequencyAnalyzer", self.frequencyAnalyzer)
+        self.viewMode = allSettings.get("viewMode", self.viewMode)
+        self.saveToZip = allSettings.get("saveToZip", self.saveToZip)
+        self.dontShowDeleteWarning = allSettings.get("dontShowDeleteWarning", self.dontShowDeleteWarning)
+        
+        # Special handling for tooltipStyle with backward compatibility
         if "tooltipStyle" in allSettings:
-            settings.tooltipStyle = allSettings["tooltipStyle"]
-            if "useSystemDefaultsForTooltips" not in settings.tooltipStyle:
-                settings.tooltipStyle["useSystemDefaultsForTooltips"] = True
+            self.tooltipStyle = allSettings["tooltipStyle"]
+            if "useSystemDefaultsForTooltips" not in self.tooltipStyle:
+                self.tooltipStyle["useSystemDefaultsForTooltips"] = True
+
+        # Apply loaded settings effects
+        self.apply_loaded_settings_effects()
+
+    def initDefaultValues(self):
+        """
+        Initialize values that depend on the environment.
+        """
+        if not self.textEditor["background"]:
+            from manuskript.ui import style as S
+            self.textEditor["background"] = S.base
+        if not self.textEditor["fontColor"]:
+            from manuskript.ui import style as S
+            self.textEditor["fontColor"] = S.text
+
+    def apply_loaded_settings_effects(self):
+        """
+        Apply side-effects of loading settings, especially those that interact with Qt's application state.
+        """
+        self.applyTooltipStyle()
+        self.applyCursorFlashTime()
+
+    def applyTooltipStyle(self):
+        """
+        Apply tooltip styling to the application.
+        """
+        if not self.tooltipStyle.get("useSystemDefaultsForTooltips", True):
+            qApp.setStyleSheet(f"QToolTip {{ color: {self.tooltipStyle['textColor']}; background-color: {self.tooltipStyle['backgroundColor']}; border: 1px solid {self.tooltipStyle['borderColor']}; }}")
+        else:
+            qApp.setStyleSheet("")  # Reset to default
+
+    def applyCursorFlashTime(self):
+        """
+        Apply cursor flash time based on settings.
+        """
+        if self.textEditor.get("cursorNotBlinking", False):
+            qApp.setCursorFlashTime(0)
+        else:
+            from manuskript.functions import mainWindow
+            if mainWindow():
+                qApp.setCursorFlashTime(mainWindow()._defaultCursorFlashTime)
