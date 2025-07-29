@@ -165,6 +165,10 @@ def prepare(arguments, tests=False):
 
     respectSystemDarkThemeSetting()
 
+    # Apply configurable tooltip styling
+    from manuskript import settings as manuskript_settings
+    manuskript_settings.applyTooltipStyle()
+
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
 

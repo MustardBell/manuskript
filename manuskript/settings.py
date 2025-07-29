@@ -107,6 +107,13 @@ frequencyAnalyzer = {
     "phraseMax": 5
 }
 
+tooltipStyle = {
+    "useSystemDefaultsForTooltips": True,
+    "textColor": "#000000",
+    "backgroundColor": "#ffffdc",
+    "borderColor": "#767676"
+}
+
 viewMode = "fiction"  # simple, fiction
 saveToZip = False
 dontShowDeleteWarning = False
@@ -124,12 +131,20 @@ def initDefaultValues():
         from manuskript.ui import style as S
         textEditor["fontColor"] = S.text
 
+def applyTooltipStyle():
+    """
+    Apply tooltip styling to the application if system defaults are disabled.
+    """
+    if not tooltipStyle["useSystemDefaultsForTooltips"]:
+        from PyQt5.QtWidgets import qApp
+        qApp.setStyleSheet(f"QToolTip {{ color: {tooltipStyle['textColor']}; background-color: {tooltipStyle['backgroundColor']}; border: 1px solid {tooltipStyle['borderColor']}; }}")
+
 def save(filename=None, protocol=None):
 
     global spellcheck, dict, corkSliderFactor, viewSettings, corkSizeFactor, folderView, lastTab, openIndexes, \
            progressChars, autoSave, autoSaveDelay, saveOnQuit, autoSaveNoChanges, autoSaveNoChangesDelay, outlineViewColumns, \
            corkBackground, corkStyle, fullScreenTheme, defaultTextType, textEditor, revisions, frequencyAnalyzer, viewMode, \
-           saveToZip, dontShowDeleteWarning, fullscreenSettings
+           saveToZip, dontShowDeleteWarning, fullscreenSettings, tooltipStyle
 
     allSettings = {
         "viewSettings": viewSettings,
@@ -159,6 +174,7 @@ def save(filename=None, protocol=None):
         "viewMode": viewMode,
         "saveToZip": saveToZip,
         "dontShowDeleteWarning": dontShowDeleteWarning,
+        "tooltipStyle": tooltipStyle,
     }
 
     #pp=pprint.PrettyPrinter(indent=4, compact=False)
@@ -331,3 +347,11 @@ def load(string, fromString=False, protocol=None):
     if "dontShowDeleteWarning" in allSettings:
         global dontShowDeleteWarning
         dontShowDeleteWarning = allSettings["dontShowDeleteWarning"]
+
+    if "tooltipStyle" in allSettings:
+        global tooltipStyle
+        loaded_tooltip_style = allSettings["tooltipStyle"]
+        # Add missing keys with defaults
+        if "useSystemDefaultsForTooltips" not in loaded_tooltip_style:
+            loaded_tooltip_style["useSystemDefaultsForTooltips"] = True
+        tooltipStyle = loaded_tooltip_style
