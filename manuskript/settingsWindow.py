@@ -40,6 +40,7 @@ class settingsWindow(QWidget, Ui_Settings):
                   self.lblTitleLabels,
                   self.lblTitleStatus,
                   self.lblTitleFullscreen,
+                  self.lblTitleStyle,
                   ]:
             l.setStyleSheet(S.titleLabelSS())
 
@@ -48,7 +49,8 @@ class settingsWindow(QWidget, Ui_Settings):
                  QIcon.fromTheme("gnome-settings"),
                  themeIcon("label"),
                  themeIcon("status"),
-                 QIcon.fromTheme("preferences-desktop-theme")
+                 QIcon.fromTheme("preferences-desktop-theme"),
+                 QIcon.fromTheme("color-picker")
                 ]
         for i in range(self.lstMenu.count()):
             item = self.lstMenu.item(i)
@@ -316,6 +318,7 @@ class settingsWindow(QWidget, Ui_Settings):
             "Labels": 2,
             "Status": 3,
             "Fullscreen": 4,
+            "Style": 5,
         }
 
         if tab in tabs:
