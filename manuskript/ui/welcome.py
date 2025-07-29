@@ -439,7 +439,8 @@ class welcome(QWidget, Ui_welcome):
 
         # Empty settings
         importlib.reload(settings)
-        settings.initDefaultValues()
+        from manuskript.settingsManager import SettingsManager
+        SettingsManager().initDefaultValues()
         self.mw.projectManager.loadEmptyDatas()
 
         if self.template:
