@@ -8,7 +8,17 @@ from manuskript import settings as default_settings
 LOGGER = logging.getLogger(__name__)
 
 class SettingsManager:
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(SettingsManager, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
+        if SettingsManager._initialized:
+            return
         # Initialize settings with default values from the settings module
         self.viewSettings = default_settings.viewSettings.copy()
         self.fullscreenSettings = default_settings.fullscreenSettings.copy()
@@ -39,6 +49,7 @@ class SettingsManager:
         self.tooltipStyle = default_settings.tooltipStyle.copy()
         
         self.initDefaultValues()
+        SettingsManager._initialized = True
 
     def save(self, filename=None, protocol=None):
         """Saves the current settings into a JSON string.
@@ -156,6 +167,9 @@ class SettingsManager:
 
         # Apply loaded settings effects
         self.apply_loaded_settings_effects()
+        
+        # TEMPORARY: Also update global settings variables until Phase 3 integration
+        self._update_global_settings()
 
     def initDefaultValues(self):
         """
@@ -194,3 +208,39 @@ class SettingsManager:
             from manuskript.functions import mainWindow
             if mainWindow():
                 qApp.setCursorFlashTime(mainWindow()._defaultCursorFlashTime)
+
+    def _update_global_settings(self):
+        """
+        TEMPORARY: Update global settings variables until Phase 3 integration.
+        This bridges the gap between SettingsManager and the existing global variables.
+        """
+        from manuskript import settings as default_settings
+        
+        # Update global variables
+        default_settings.viewSettings = self.viewSettings
+        default_settings.fullscreenSettings = self.fullscreenSettings
+        default_settings.dict = self.dict
+        default_settings.spellcheck = self.spellcheck
+        default_settings.corkSizeFactor = self.corkSizeFactor
+        default_settings.folderView = self.folderView
+        default_settings.lastTab = self.lastTab
+        default_settings.openIndexes = self.openIndexes
+        default_settings.progressChars = self.progressChars
+        default_settings.countSpaces = self.countSpaces
+        default_settings.autoSave = self.autoSave
+        default_settings.autoSaveDelay = self.autoSaveDelay
+        default_settings.saveOnQuit = self.saveOnQuit
+        default_settings.autoSaveNoChanges = self.autoSaveNoChanges
+        default_settings.autoSaveNoChangesDelay = self.autoSaveNoChangesDelay
+        default_settings.outlineViewColumns = self.outlineViewColumns
+        default_settings.corkBackground = self.corkBackground
+        default_settings.corkStyle = self.corkStyle
+        default_settings.fullScreenTheme = self.fullScreenTheme
+        default_settings.defaultTextType = self.defaultTextType
+        default_settings.textEditor = self.textEditor
+        default_settings.revisions = self.revisions
+        default_settings.frequencyAnalyzer = self.frequencyAnalyzer
+        default_settings.viewMode = self.viewMode
+        default_settings.saveToZip = self.saveToZip
+        default_settings.dontShowDeleteWarning = self.dontShowDeleteWarning
+        default_settings.tooltipStyle = self.tooltipStyle

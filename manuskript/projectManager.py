@@ -42,7 +42,8 @@ class ProjectManager:
         if loadFromFile:
             # Load empty settings
             importlib.reload(settings)
-            settings.initDefaultValues()
+            from manuskript.settingsManager import SettingsManager
+            SettingsManager().initDefaultValues()
 
             # Load data
             self.loadEmptyDatas()
