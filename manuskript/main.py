@@ -165,8 +165,9 @@ def prepare(arguments, tests=False):
 
     respectSystemDarkThemeSetting()
 
-    # Fix tooltip contrast on Linux
-    app.setStyleSheet("QToolTip { color: #000000; background-color: #ffffdc; border: 1px solid #767676; }")
+    # Apply configurable tooltip styling
+    from manuskript import settings as manuskript_settings
+    manuskript_settings.applyTooltipStyle()
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")

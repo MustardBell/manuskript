@@ -310,6 +310,14 @@ class settingsWindow(QWidget, Ui_Settings):
         self.timerUpdateFSPreview.setInterval(250)
         self.timerUpdateFSPreview.timeout.connect(self.updatePreview)
 
+        # Style - Tooltips
+        self.setButtonColor(self.btnTooltipTextColor, settings.tooltipStyle["textColor"])
+        self.btnTooltipTextColor.clicked.connect(self.chooseTooltipTextColor)
+        self.setButtonColor(self.btnTooltipBackgroundColor, settings.tooltipStyle["backgroundColor"])
+        self.btnTooltipBackgroundColor.clicked.connect(self.chooseTooltipBackgroundColor)
+        self.setButtonColor(self.btnTooltipBorderColor, settings.tooltipStyle["borderColor"])
+        self.btnTooltipBorderColor.clicked.connect(self.chooseTooltipBorderColor)
+
     def setTab(self, tab):
 
         tabs = {
@@ -1003,3 +1011,38 @@ class settingsWindow(QWidget, Ui_Settings):
         QWidget.resizeEvent(self, event)
         if self._editingTheme:
             self.updatePreview()
+
+        ####################################################################################################
+        #                                           STYLE                                                  #
+        ####################################################################################################
+
+    def chooseTooltipTextColor(self):
+        color = settings.tooltipStyle["textColor"]
+        self.colorDialog = QColorDialog(QColor(color), self)
+        color = self.colorDialog.getColor(QColor(color))
+        if color.isValid():
+            settings.tooltipStyle["textColor"] = color.name()
+            self.setButtonColor(self.btnTooltipTextColor, color.name())
+            self.updateTooltipStyle()
+
+    def chooseTooltipBackgroundColor(self):
+        color = settings.tooltipStyle["backgroundColor"]
+        self.colorDialog = QColorDialog(QColor(color), self)
+        color = self.colorDialog.getColor(QColor(color))
+        if color.isValid():
+            settings.tooltipStyle["backgroundColor"] = color.name()
+            self.setButtonColor(self.btnTooltipBackgroundColor, color.name())
+            self.updateTooltipStyle()
+
+    def chooseTooltipBorderColor(self):
+        color = settings.tooltipStyle["borderColor"]
+        self.colorDialog = QColorDialog(QColor(color), self)
+        color = self.colorDialog.getColor(QColor(color))
+        if color.isValid():
+            settings.tooltipStyle["borderColor"] = color.name()
+            self.setButtonColor(self.btnTooltipBorderColor, color.name())
+            self.updateTooltipStyle()
+
+    def updateTooltipStyle(self):
+        # Apply the new tooltip style immediately
+        qApp.setStyleSheet(f"QToolTip {{ color: {settings.tooltipStyle['textColor']}; background-color: {settings.tooltipStyle['backgroundColor']}; border: 1px solid {settings.tooltipStyle['borderColor']}; }}")

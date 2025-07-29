@@ -3760,10 +3760,54 @@
         </widget>
        </item>
        <item>
-        <widget class="QLabel" name="lblStylePlaceholder">
-         <property name="text">
-          <string>Tooltip styling options will be added here.</string>
+        <widget class="QGroupBox" name="groupBoxTooltips">
+         <property name="title">
+          <string>Tooltips</string>
          </property>
+         <layout class="QFormLayout" name="formLayout_tooltips">
+          <item row="0" column="0">
+           <widget class="QLabel" name="lblTooltipTextColor">
+            <property name="text">
+             <string>Text color:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="btnTooltipTextColor">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="lblTooltipBackgroundColor">
+            <property name="text">
+             <string>Background color:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QPushButton" name="btnTooltipBackgroundColor">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="lblTooltipBorderColor">
+            <property name="text">
+             <string>Border color:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QPushButton" name="btnTooltipBorderColor">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
