@@ -9,7 +9,7 @@ from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat
 
 import manuskript.models.references as Ref
 import manuskript.ui.style as S
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript import functions as F
 
 import logging
@@ -80,7 +80,7 @@ class BasicHighlighter(QSyntaxHighlighter):
         """
 
         # Reading user settings
-        opt = settings.textEditor
+        opt = SettingsManager().textEditor
 
         if not self.editor._fromTheme or not self.editor._themeData:
 

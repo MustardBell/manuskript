@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QWidget, QAction, QFileDialog, QSpinBox, QLineEdit, 
     qApp, QMessageBox
 
 from manuskript import loadSave
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import mainWindow, iconFromColor, appPath
 from manuskript.models.characterModel import characterModel
@@ -438,15 +438,13 @@ class welcome(QWidget, Ui_welcome):
         """Initialize a basic Manuskript project."""
 
         # Empty settings
-        importlib.reload(settings)
-        from manuskript.settingsManager import SettingsManager
-        SettingsManager().initDefaultValues()
+        SettingsManager().reset_to_defaults()
         self.mw.projectManager.loadEmptyDatas()
 
         if self.template:
             t = [i for i in self._templates if i[0] == self.template[0]]
             if t and t[0][2] == "Non-fiction":
-                settings.viewMode = "simple"
+                SettingsManager().viewMode = "simple"
 
         # Tasks
         self.mw.mdlFlatData.setRowCount(2)     # data from: infos.txt, summary.txt

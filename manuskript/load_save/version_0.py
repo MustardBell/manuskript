@@ -12,7 +12,7 @@ from PyQt5.QtGui import QColor, QStandardItem
 from PyQt5.QtWidgets import qApp
 from lxml import etree as ET
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.functions import iconColor, iconFromColorString, mainWindow
 from manuskript.models.characterModel import Character, CharacterInfo
 
@@ -53,7 +53,7 @@ def saveProject():
                   "plots.xml"))
     files.append((mw.mdlOutline.saveToXML(),
                   "outline.xml"))
-    files.append((settings.save(),
+    files.append((SettingsManager().save(),
                   "settings.pickle"))
 
     saveFilesToZip(files, mw.currentProject)
@@ -169,7 +169,7 @@ def loadProject(project):
         errors.append("outline.xml")
 
     if "settings.txt" in files:
-        settings.load(files["settings.txt"], fromString=True, protocol=0)
+        SettingsManager().load(files["settings.txt"], fromString=True, protocol=0)
     else:
         errors.append("settings.txt")
 

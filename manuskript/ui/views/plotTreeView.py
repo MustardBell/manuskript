@@ -5,7 +5,7 @@ from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem
 from lxml import etree as ET
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Plot, Outline, PlotStep
 from manuskript.models import references as Ref
 from manuskript.ui import style as S
@@ -186,7 +186,7 @@ class plotTreeView(QTreeWidget):
             _id, name, summary = self._model.getSubPlotsByID(plotID)[subplotRaw]
             sub = ET.Element("outlineItem")
             sub.set(Outline.title.name, name)
-            sub.set(Outline.type.name, settings.defaultTextType)
+            sub.set(Outline.type.name, SettingsManager().defaultTextType)
             sub.set(Outline.summaryFull.name, summary)
             sub.set(Outline.notes.name, self.tr("**Plot:** {}").format(
                     Ref.plotReference(plotID)))

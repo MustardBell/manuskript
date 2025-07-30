@@ -26,7 +26,8 @@ def test_general(MWSampleProject):
     from PyQt5.QtWidgets import qApp, QStyleFactory
     from PyQt5.QtCore import QSettings, Qt
     qS = QSettings(qApp.organizationName(), qApp.applicationName())
-    from manuskript import settings as S
+    from manuskript.settingsManager import SettingsManager
+    S = SettingsManager()
 
     # Style
     assert SW.cmbStyle.count() == len(list(QStyleFactory.keys()))
