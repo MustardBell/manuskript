@@ -11,7 +11,7 @@ from PyQt5.QtGui import QStandardItemModel, QIcon, QColor, QStandardItem
 from PyQt5.QtWidgets import QMainWindow, QHeaderView, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QDialog, QTableView
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, findWidgetsOfClass, openURL, showInFolder
 import manuskript.functions as F
@@ -78,6 +78,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.history = History()
         self._previousSelectionEmpty = True
         self.projectManager = ProjectManager(self)
+        self.settingsManager = SettingsManager()
 
         self.readSettings()
 
@@ -1466,8 +1467,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         dictionaries = Spellchecker.availableDictionaries()
 
         # Set first run dictionary
-        if settings.dict is None:
-            settings.dict = Spellchecker.getDefaultDictionary()
+        if self.settingsManager.dict is None:
+            self.settingsManager.dict = Spellchecker.getDefaultDictionary()
 
         # Check if project dict is unavailable on this machine
         dict_available = False
@@ -1475,12 +1476,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if dict_available:
                 break
             for i in dicts:
-                if Spellchecker.normalizeDictName(lib, i) == settings.dict:
+                if Spellchecker.normalizeDictName(lib, i) == self.settingsManager.dict:
                     dict_available = True
                     break
         # Reset dict to default one if it's unavailable
         if not dict_available:
-            settings.dict = Spellchecker.getDefaultDictionary()
+            self.settingsManager.dict = Spellchecker.getDefaultDictionary()
 
         for lib, dicts in dictionaries.items():
             if len(dicts) > 0:
@@ -1493,7 +1494,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 a = QAction(i, self)
                 a.data = lib
                 a.setCheckable(True)
-                if Spellchecker.normalizeDictName(lib, i) == settings.dict:
+                if Spellchecker.normalizeDictName(lib, i) == self.settingsManager.dict:
                     a.setChecked(True)
                 a.triggered.connect(self.setDictionary, F.AUC)
                 self.menuDictGroup.addAction(a)
@@ -1503,7 +1504,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # If a new dictionary was chosen, apply the change and re-enable spellcheck if it was enabled.
         if not dict_available:
             self.setDictionary()
-            self.toggleSpellcheck(settings.spellcheck)
+            self.toggleSpellcheck(self.settingsManager.spellcheck)
 
         for lib, requirement in Spellchecker.supportedLibraries().items():
             if lib not in dictionaries:
@@ -1519,18 +1520,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in self.menuDictGroup.actions():
             if i.isChecked():
                 # self.dictChanged.emit(i.text().replace("&", ""))
-                settings.dict = Spellchecker.normalizeDictName(i.data, i.text().replace("&", ""))
+                self.settingsManager.dict = Spellchecker.normalizeDictName(i.data, i.text().replace("&", ""))
 
                 # Find all textEditView from self, and toggle spellcheck
                 for w in self.findChildren(textEditView, QRegExp(".*"),
                                            Qt.FindChildrenRecursively):
-                    w.setDict(settings.dict)
+                    w.setDict(self.settingsManager.dict)
 
     def openSpellcheckWebPage(self, lib):
         F.openURL(Spellchecker.getLibraryURL(lib))
 
     def toggleSpellcheck(self, val):
-        settings.spellcheck = val
+        self.settingsManager.spellcheck = val
 
         # Find all textEditView from self, and toggle spellcheck
         for w in self.findChildren(textEditView, QRegExp(".*"),
@@ -1615,7 +1616,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.menuView.addMenu(self.menuMode)
         self.menuView.addSeparator()
 
-        # LOGGER.debug("Generating menus with %s.", settings.viewSettings)
+        # LOGGER.debug("Generating menus with %s.", self.settingsManager.viewSettings)
 
         for mnu, mnud, icon in menus:
             m = QMenu(mnu, self.menuView)
@@ -1628,7 +1629,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     a = QAction(v, m)
                     a.setCheckable(True)
                     a.setData("{},{},{}".format(mnud, sd, vd))
-                    if settings.viewSettings[mnud][sd] == vd:
+                    if self.settingsManager.viewSettings[mnud][sd] == vd:
                         a.setChecked(True)
                     a.triggered.connect(self.setViewSettingsAction, F.AUC)
                     agp.addAction(a)
@@ -1642,7 +1643,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setViewSettings(item, part, element)
 
     def setViewSettings(self, item, part, element):
-        settings.viewSettings[item][part] = element
+        self.settingsManager.viewSettings[item][part] = element
         if item == "Cork":
             self.mainEditor.updateCorkView()
         if item == "Outline":
@@ -1656,13 +1657,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
 
     def setViewModeSimple(self):
-        settings.viewMode = "simple"
+        self.settingsManager.viewMode = "simple"
         self.tabMain.setCurrentIndex(self.TabRedac)
         self.viewModeFictionVisibilitySwitch(False)
         self.actModeSimple.setChecked(True)
 
     def setViewModeFiction(self):
-        settings.viewMode = "fiction"
+        self.settingsManager.viewMode = "fiction"
         self.viewModeFictionVisibilitySwitch(True)
         self.actModeFiction.setChecked(True)
 
@@ -1682,8 +1683,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             w.cmbPOV.setVisible(val)
 
         # POV in outline view
-        if val is None and Outline.POV in settings.outlineViewColumns:
-            settings.outlineViewColumns.remove(Outline.POV)
+        if val is None and Outline.POV in self.settingsManager.outlineViewColumns:
+            self.settingsManager.outlineViewColumns.remove(Outline.POV)
 
         from manuskript.ui.views.outlineView import outlineView
         for w in findWidgetsOfClass(outlineView):
