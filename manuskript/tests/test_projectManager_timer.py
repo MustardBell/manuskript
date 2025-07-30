@@ -35,23 +35,23 @@ class TestProjectManagerTimer(unittest.TestCase):
         patch.stopall()
 
     def _load_project_helper(self, auto_save, auto_save_no_changes):
-        with patch("manuskript.projectManager.settings") as mock_settings, \
-             patch("importlib.reload"), \
-             patch("os.path.exists", return_value=True), \
+        with patch("os.path.exists", return_value=True), \
              patch.object(self.project_manager, "loadDatas", return_value=True), \
              patch.object(self.project_manager, "loadEmptyDatas"), \
-             patch.object(self.window, "makeConnections"):
-            mock_settings.autoSave = auto_save
-            mock_settings.autoSaveDelay = 15
-            mock_settings.autoSaveNoChanges = auto_save_no_changes
-            mock_settings.autoSaveNoChangesDelay = 3
-            mock_settings.openIndexes = []
-            mock_settings.viewSettings = {"Tree": {"iconSize": 24}}
-            mock_settings.lastTab = 0
-            mock_settings.corkSizeFactor = 100
-            mock_settings.spellcheck = False
-            mock_settings.folderView = False
-            mock_settings.viewMode = "fiction"
+             patch.object(self.window, "makeConnections"), \
+             patch.object(self.window.settingsManager, "reset_to_defaults"):
+            # Configure the settingsManager directly
+            self.window.settingsManager.autoSave = auto_save
+            self.window.settingsManager.autoSaveDelay = 15
+            self.window.settingsManager.autoSaveNoChanges = auto_save_no_changes
+            self.window.settingsManager.autoSaveNoChangesDelay = 3
+            self.window.settingsManager.openIndexes = []
+            self.window.settingsManager.viewSettings = {"Tree": {"iconSize": 24}}
+            self.window.settingsManager.lastTab = 0
+            self.window.settingsManager.corkSizeFactor = 100
+            self.window.settingsManager.spellcheck = False
+            self.window.settingsManager.folderView = False
+            self.window.settingsManager.viewMode = "fiction"
 
             self.project_manager.loadProject("dummy_project.msk")
 
@@ -83,10 +83,8 @@ class TestProjectManagerTimer(unittest.TestCase):
 
     def test_save_timer_no_changes_does_not_start_with_autosave_disabled(self):
         self._load_project_helper(auto_save=False, auto_save_no_changes=False)
-        # Need to mock settings during the actual startTimerNoChanges call
-        with patch("manuskript.projectManager.settings") as mock_settings:
-            mock_settings.autoSaveNoChanges = False
-            self.project_manager.startTimerNoChanges()
+        # settingsManager already configured in _load_project_helper
+        self.project_manager.startTimerNoChanges()
         self.mock_save_timer_no_changes.start.assert_not_called()
 
     def test_save_timer_no_changes_stops_on_project_close(self):
