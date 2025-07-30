@@ -1,11 +1,10 @@
-import importlib
 import os
 
 from PyQt5.QtCore import QSettings, QTimer, QSize
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtWidgets import QMessageBox
 
-from manuskript import settings, loadSave
+from manuskript import loadSave
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
@@ -40,10 +39,8 @@ class ProjectManager:
             return
 
         if loadFromFile:
-            # Load empty settings
-            importlib.reload(settings)
-            from manuskript.settingsManager import SettingsManager
-            SettingsManager().initDefaultValues()
+            # Reset settings to defaults
+            self.window.settingsManager.reset_to_defaults()
 
             # Load data
             self.loadEmptyDatas()
@@ -55,36 +52,36 @@ class ProjectManager:
         self.window.makeConnections()
 
         # Load settings
-        if settings.openIndexes and settings.openIndexes != [""]:
-            self.window.mainEditor.tabSplitter.restoreOpenIndexes(settings.openIndexes)
+        if self.window.settingsManager.openIndexes and self.window.settingsManager.openIndexes != [""]:
+            self.window.mainEditor.tabSplitter.restoreOpenIndexes(self.window.settingsManager.openIndexes)
         self.window.generateViewMenu()
-        self.window.mainEditor.sldCorkSizeFactor.setValue(settings.corkSizeFactor)
-        self.window.actSpellcheck.setChecked(settings.spellcheck)
-        self.window.toggleSpellcheck(settings.spellcheck)
+        self.window.mainEditor.sldCorkSizeFactor.setValue(self.window.settingsManager.corkSizeFactor)
+        self.window.actSpellcheck.setChecked(self.window.settingsManager.spellcheck)
+        self.window.toggleSpellcheck(self.window.settingsManager.spellcheck)
         self.window.updateMenuDict()
         self.window.setDictionary()
 
-        iconSize = settings.viewSettings["Tree"]["iconSize"]
+        iconSize = self.window.settingsManager.viewSettings["Tree"]["iconSize"]
         self.window.treeRedacOutline.setIconSize(QSize(iconSize, iconSize))
-        self.window.mainEditor.setFolderView(settings.folderView)
-        self.window.mainEditor.updateFolderViewButtons(settings.folderView)
+        self.window.mainEditor.setFolderView(self.window.settingsManager.folderView)
+        self.window.mainEditor.updateFolderViewButtons(self.window.settingsManager.folderView)
         self.window.mainEditor.tabSplitter.updateStyleSheet()
-        self.window.tabMain.setCurrentIndex(settings.lastTab)
+        self.window.tabMain.setCurrentIndex(self.window.settingsManager.lastTab)
         self.window.mainEditor.updateCorkBackground()
-        if settings.viewMode == "simple":
+        if self.window.settingsManager.viewMode == "simple":
             self.window.setViewModeSimple()
         else:
             self.window.setViewModeFiction()
 
         # Set autosave
-        self.saveTimer.setInterval(settings.autoSaveDelay * 60 * 1000)
+        self.saveTimer.setInterval(self.window.settingsManager.autoSaveDelay * 60 * 1000)
         self.saveTimer.setSingleShot(False)
         self.saveTimer.timeout.connect(self.saveDatas)
-        if settings.autoSave:
+        if self.window.settingsManager.autoSave:
             self.saveTimer.start()
 
         # Set autosave if no changes
-        self.saveTimerNoChanges.setInterval(settings.autoSaveNoChangesDelay * 1000)
+        self.saveTimerNoChanges.setInterval(self.window.settingsManager.autoSaveNoChangesDelay * 1000)
         self.saveTimerNoChanges.setSingleShot(True)
         self.window.mdlFlatData.dataChanged.connect(self.startTimerNoChanges)
         self.window.mdlOutline.dataChanged.connect(self.startTimerNoChanges)
@@ -107,7 +104,7 @@ class ProjectManager:
                   self.window.actCompile, self.window.actSettings]:
             i.setEnabled(True)
         # We force to emit even if it opens on the current tab
-        self.window.tabMain.currentChanged.emit(settings.lastTab)
+        self.window.tabMain.currentChanged.emit(self.window.settingsManager.lastTab)
 
         # Make sure we can update the window title later.
         self.window.currentProject = project
@@ -166,7 +163,7 @@ class ProjectManager:
             return
 
         # Make sure data is saved.
-        if (self.window.projectDirty and settings.saveOnQuit == True):
+        if (self.window.projectDirty and self.window.settingsManager.saveOnQuit == True):
              self.saveDatas()
         elif not self.handleUnsavedChanges():
              return  # user cancelled action
@@ -210,7 +207,7 @@ class ProjectManager:
         """
         self.window.projectDirty = True
 
-        if settings.autoSaveNoChanges:
+        if self.window.settingsManager.autoSaveNoChanges:
             self.saveTimerNoChanges.start()
 
     def saveDatas(self, projectName=None):

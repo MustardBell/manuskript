@@ -244,3 +244,40 @@ class SettingsManager:
         default_settings.saveToZip = self.saveToZip
         default_settings.dontShowDeleteWarning = self.dontShowDeleteWarning
         default_settings.tooltipStyle = self.tooltipStyle
+
+    def reset_to_defaults(self):
+        """
+        Reset all settings to their default values.
+        Used when starting a new project.
+        """
+        # Re-initialize all settings from defaults
+        self.viewSettings = default_settings.viewSettings.copy()
+        self.fullscreenSettings = default_settings.fullscreenSettings.copy()
+        self.dict = default_settings.dict
+        self.spellcheck = default_settings.spellcheck
+        self.corkSizeFactor = default_settings.corkSizeFactor
+        self.folderView = default_settings.folderView
+        self.lastTab = default_settings.lastTab
+        self.openIndexes = default_settings.openIndexes.copy()
+        self.progressChars = default_settings.progressChars
+        self.countSpaces = default_settings.countSpaces
+        self.autoSave = default_settings.autoSave
+        self.autoSaveDelay = default_settings.autoSaveDelay
+        self.saveOnQuit = default_settings.saveOnQuit
+        self.autoSaveNoChanges = default_settings.autoSaveNoChanges
+        self.autoSaveNoChangesDelay = default_settings.autoSaveNoChangesDelay
+        self.outlineViewColumns = default_settings.outlineViewColumns.copy()
+        self.corkBackground = default_settings.corkBackground.copy()
+        self.corkStyle = default_settings.corkStyle
+        self.fullScreenTheme = default_settings.fullScreenTheme
+        self.defaultTextType = default_settings.defaultTextType
+        self.textEditor = default_settings.textEditor.copy()
+        self.revisions = default_settings.revisions.copy()
+        self.frequencyAnalyzer = default_settings.frequencyAnalyzer.copy()
+        self.viewMode = default_settings.viewMode
+        self.saveToZip = default_settings.saveToZip
+        self.dontShowDeleteWarning = default_settings.dontShowDeleteWarning
+        self.tooltipStyle = default_settings.tooltipStyle.copy()
+        
+        self.initDefaultValues()
+        self._update_global_settings()
