@@ -3,7 +3,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTreeView, QHeaderView
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.ui.views.dndView import dndView
 from manuskript.ui.views.outlineBasics import outlineBasics
@@ -72,7 +72,7 @@ class outlineView(QTreeView, dndView, outlineBasics):
 
         for c in range(self.model().columnCount()):
             self.hideColumn(c)
-        for c in settings.outlineViewColumns:
+        for c in SettingsManager().outlineViewColumns:
             self.showColumn(c)
 
     def setRootIndex(self, index):

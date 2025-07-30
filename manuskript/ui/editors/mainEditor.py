@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter, QIcon
 from PyQt5.QtWidgets import QWidget, qApp, QDesktopWidget
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import AUC, mainWindow, drawProgress, appPath, uiParse
 from manuskript.ui import style
@@ -374,7 +374,7 @@ class mainEditor(QWidget, Ui_mainEditor):
             del p
             self.lblRedacProgress.setPixmap(self.px)
 
-            if settings.progressChars:
+            if SettingsManager().progressChars:
                 self.lblRedacWC.setText(self.tr("({} chars) {}  words / {} ").format(
                         locale.format_string("%d", cc, grouping=True),
                         locale.format_string("%d", wc, grouping=True),
@@ -389,7 +389,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         else:
             self.lblRedacProgress.hide()
 
-            if settings.progressChars:
+            if SettingsManager().progressChars:
                 self.lblRedacWC.setText(self.tr("{} chars ").format(
                         locale.format_string("%d", cc, grouping=True)))
                 self.lblRedacWC.setToolTip("")
@@ -410,7 +410,7 @@ class mainEditor(QWidget, Ui_mainEditor):
     def setCorkSizeFactor(self, val):
         for w in self.allAllTabs():
             w.setCorkSizeFactor(val)
-        settings.corkSizeFactor = val
+        SettingsManager().corkSizeFactor = val
 
     def updateCorkView(self):
         for w in self.allAllTabs():

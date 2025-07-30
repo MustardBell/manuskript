@@ -5,7 +5,7 @@ from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QWidget, QFrame, QSpacerItem, QSizePolicy
 from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.functions import AUC, mainWindow
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
@@ -54,7 +54,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.dictChanged.connect(self.txtRedacText.setDict, AUC)
         self.txtRedacText.setHighlighting(True)
         self.currentDict = ""
-        self.spellcheck = settings.spellcheck
+        self.spellcheck = SettingsManager().spellcheck
         self.folderView = "cork"
         self.mw = mainWindow()
         self._tabWidget = None  # set by mainEditor on creation
@@ -102,7 +102,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.folderView = "text"
 
         # Saving value
-        settings.folderView = self.folderView
+        SettingsManager().folderView = self.folderView
 
         if oldV != self.folderView and self.currentIndex:
             self.setCurrentModelIndex(self.currentIndex)
@@ -194,7 +194,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             edt = MDEditView(self,
                                index=itm.index(),
                                spellcheck=self.spellcheck,
-                               dict=settings.dict,
+                               dict=SettingsManager().dict,
                                highlighting=True,
                                autoResize=True)
             edt.setFrameShape(QFrame.NoFrame)
@@ -242,7 +242,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             w = QWidget()
             w.setObjectName("editorWidgetFolderText")
             l = QVBoxLayout(w)
-            opt = settings.textEditor
+            opt = SettingsManager().textEditor
             background = (opt["background"] if not opt["backgroundTransparent"]
                           else "transparent")
             w.setStyleSheet("background: {};".format(background))

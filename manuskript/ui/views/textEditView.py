@@ -7,7 +7,7 @@ from PyQt5.QtCore import QTimer, QModelIndex, Qt, QEvent, pyqtSignal, QRegExp, Q
 from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QFont, QColor, QIcon, QMouseEvent, QTextCursor
 from PyQt5.QtWidgets import QWidget, QTextEdit, qApp, QAction, QMenu, QToolTip
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline, World, Character, Plot
 from manuskript import functions as F
 from manuskript.models import outlineModel, outlineItem
@@ -44,10 +44,10 @@ class textEditView(QTextEdit):
         self._highlighterClass = BasicHighlighter
 
         if spellcheck == None:
-            spellcheck = settings.spellcheck
+            spellcheck = SettingsManager().spellcheck
 
         self.spellcheck = spellcheck
-        self.currentDict = dict if dict else settings.dict
+        self.currentDict = dict if dict else SettingsManager().dict
         self._defaultFontSize = qApp.font().pointSize()
         self.highlighter = None
         self.setAutoResize(autoResize)
@@ -182,7 +182,7 @@ class textEditView(QTextEdit):
                 self._column != Outline.text:
             return
 
-        opt = settings.textEditor
+        opt = SettingsManager().textEditor
         f = QFont()
         f.fromString(opt["font"])
         background = (opt["background"] if not opt["backgroundTransparent"]
@@ -377,7 +377,7 @@ class textEditView(QTextEdit):
             self.sizeChange()
 
     def sizeChange(self):
-        opt = settings.textEditor
+        opt = SettingsManager().textEditor
         docHeight = self.document().size().height() + 2 * opt["marginsTB"]
         if self.heightMin <= docHeight <= self.heightMax:
             self.setMinimumHeight(int(docHeight))
@@ -477,9 +477,9 @@ class textEditView(QTextEdit):
 
             # Update settings
             f = QFont()
-            f.fromString(settings.textEditor["font"])
+            f.fromString(SettingsManager().textEditor["font"])
             f.setPointSizeF(f.pointSizeF() + d)
-            settings.textEditor["font"] = f.toString()
+            SettingsManager().textEditor["font"] = f.toString()
 
             # Update font to all textEditView. Drastically.
             for w in F.mainWindow().findChildren(textEditView, QRegExp(".*")):
