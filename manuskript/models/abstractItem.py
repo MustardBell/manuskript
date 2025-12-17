@@ -33,6 +33,7 @@ class abstractItem():
         self.childItems = []
         self._parent = None
         self._model = model
+        self._parser = ET.XMLParser(huge_tree=True)
 
         self.IDs = ["0"]  # used by root item to store unique IDs
         self._lastPath = ""  # used by loadSave version_1 to remember which files the items comes from,
@@ -305,7 +306,7 @@ class abstractItem():
         item = self.toXMLProcessItem(item)
 
         for i in self.childItems:
-            item.append(ET.XML(i.toXML()))
+            item.append(ET.XML(i.toXML(), parser = self._parser))
 
         return ET.tostring(item)
 

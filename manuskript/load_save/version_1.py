@@ -30,6 +30,7 @@ from manuskript.ui.listDialog import ListDialog
 
 import logging
 LOGGER = logging.getLogger(__name__)
+_parser = ET.XMLParser(huge_tree=True)
 
 try:
     import zlib  # Used with zipfile for compression
@@ -920,7 +921,7 @@ def loadProject(project, zip=None):
 
     # Adds revisions
     if "revisions.xml" in files:
-        root = ET.fromstring(files["revisions.xml"])
+        root = ET.fromstring(files["revisions.xml"], parser=_parser)
         appendRevisions(mdl, root)
 
     # Check IDS
