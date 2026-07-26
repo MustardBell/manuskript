@@ -113,14 +113,3 @@ tooltipStyle = {
 viewMode = "fiction"  # simple, fiction
 saveToZip = False
 dontShowDeleteWarning = False
-
-def load(string, fromString=False, protocol=None):
-    """Bridge function that delegates to SettingsManager until Phase 3 integration."""
-    from manuskript.settingsManager import SettingsManager
-    SettingsManager().load(string, fromString, protocol)
-
-def save(filename=None, protocol=None):
-    """Bridge function that delegates to SettingsManager until Phase 3 integration."""
-    from manuskript.settingsManager import SettingsManager
-    return SettingsManager().save(filename, protocol)
-
