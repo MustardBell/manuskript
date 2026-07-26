@@ -8,7 +8,7 @@ import pathlib
 from random import *
 
 from PyQt5.QtCore import Qt, QRect, QStandardPaths, QObject, QProcess, QRegExp
-from PyQt5.QtCore import QDir, QUrl, QTimer
+from PyQt5.QtCore import QDir, QUrl
 from PyQt5.QtGui import QBrush, QIcon, QPainter, QColor, QImage, QPixmap
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import qApp, QFileDialog
@@ -362,32 +362,6 @@ def customIcons():
         ]
 
     return sorted(r)
-
-def statusMessage(message, duration=5000, importance=1):
-    """
-    Shows a message in MainWindow's status bar.
-    Importance: 0 = low, 1 = normal, 2 = important, 3 = critical.
-    """
-    from manuskript.ui import style as S
-    MW.statusBar().hide()
-    MW.statusLabel.setText(message)
-    if importance == 0:
-        MW.statusLabel.setStyleSheet("color:{};".format(S.textLighter))
-    elif importance == 1:
-        MW.statusLabel.setStyleSheet("color:{};".format(S.textLight))
-    elif importance == 2:
-        MW.statusLabel.setStyleSheet("color:{}; font-weight: bold;".format(S.text))
-    elif importance == 3:
-        MW.statusLabel.setStyleSheet("color:red; font-weight: bold;")
-    MW.statusLabel.adjustSize()
-    g = MW.statusLabel.geometry()
-    # g.moveCenter(MW.mapFromGlobal(MW.geometry().center()))
-    s = int(MW.layout().spacing() / 2)
-    g.setLeft(s)
-    g.moveBottom(MW.mapFromGlobal(MW.geometry().bottomLeft()).y() - s)
-    MW.statusLabel.setGeometry(g)
-    MW.statusLabel.show()
-    QTimer.singleShot(duration, MW.statusLabel.hide)
 
 def openURL(url):
     """

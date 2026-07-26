@@ -8,7 +8,6 @@ from manuskript.domain.project import (
     InvalidProjectStateTransition,
     ProjectSession,
 )
-import manuskript.functions as F
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
@@ -24,9 +23,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ProjectManager:
-    def __init__(self, window, storage=None):
+    def __init__(
+            self, window, storage=None, status_reporter=None):
         self.window = window
         self.storage = storage if storage is not None else ProjectStorage()
+        self.status_reporter = status_reporter or (
+            lambda message, duration=5000, importance=1: None
+        )
         self.session = ProjectSession()
         self.modelConnections = SignalConnectionRegistry()
         self.saveTimer = QTimer()
@@ -76,7 +79,7 @@ class ProjectManager:
 
         if loadFromFile and not os.path.exists(project):
             LOGGER.warning("The file {} does not exist. Has it been moved or deleted?".format(project))
-            F.statusMessage(
+            self.status_reporter(
                     self.window.tr("The file {} does not exist. Has it been moved or deleted?").format(project), importance=3)
             return False
 
@@ -290,7 +293,7 @@ class ProjectManager:
             QSettings().setValue("lastProject", self.currentProject)
 
             feedback = self.window.tr("Project {} saved.").format(current_project_name)
-            F.statusMessage(feedback, importance=0)
+            self.status_reporter(feedback, importance=0)
             LOGGER.info("Project {} saved.".format(current_project_name))
         else:
             if projectName:
@@ -298,7 +301,7 @@ class ProjectManager:
             feedback = self.window.tr("WARNING: Project {} not saved.").format(
                 current_project_name
             )
-            F.statusMessage(feedback, importance=3)
+            self.status_reporter(feedback, importance=3)
             LOGGER.warning("Project {} not saved.".format(current_project_name))
         return bool(r)
 
@@ -327,18 +330,18 @@ class ProjectManager:
         # Giving some feedback
         if not errors:
             LOGGER.info("Project {} loaded.".format(project))
-            F.statusMessage(
+            self.status_reporter(
                     self.window.tr("Project {} loaded.").format(project), 2000)
         else:
             LOGGER.error("Project {} loaded with some errors:".format(project))
             for e in errors:
                 LOGGER.error(" * {} wasn't found in project file.".format(e))
-            F.statusMessage(
+            self.status_reporter(
                     self.window.tr("Project {} loaded with some errors.").format(project), 5000, importance = 3)
         
         if project in errors:
             LOGGER.error("Loading project {} failed.".format(project))
-            F.statusMessage(
+            self.status_reporter(
                     self.window.tr("Loading project {} failed.").format(project), 5000, importance = 3)
 
             return False

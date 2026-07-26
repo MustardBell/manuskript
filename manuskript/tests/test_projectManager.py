@@ -15,11 +15,15 @@ class TestProjectManager(unittest.TestCase):
             settings_manager.reset_to_defaults()
         self.window.settingsManager = settings_manager
         self.storage = MagicMock()
-        self.project_manager = ProjectManager(self.window, storage=self.storage)
+        self.status_reporter = MagicMock()
+        self.project_manager = ProjectManager(
+            self.window,
+            storage=self.storage,
+            status_reporter=self.status_reporter,
+        )
 
-    @patch('manuskript.functions.statusMessage')
     @patch('os.path.exists')
-    def test_load_project_file_not_exists(self, mock_exists, mock_status_message):
+    def test_load_project_file_not_exists(self, mock_exists):
         # Test case: file doesn't exist
         mock_exists.return_value = False
         expected_message = "The file {} does not exist. Has it been moved or deleted?"
@@ -31,12 +35,14 @@ class TestProjectManager(unittest.TestCase):
         self.assertEqual(self.project_manager.session.state, ProjectState.CLOSED)
         # Verify the translation function was called with correct message
         self.window.tr.assert_called_with("The file {} does not exist. Has it been moved or deleted?")
-        # Verify statusMessage was called with the translated message and importance=3
-        mock_status_message.assert_called_once_with(expected_message.format("non_existent_project.msk"), importance=3)
+        # Verify the status reporter received the translated critical message.
+        self.status_reporter.assert_called_once_with(
+            expected_message.format("non_existent_project.msk"),
+            importance=3,
+        )
         
-    @patch('manuskript.functions.statusMessage')
     @patch('os.path.exists')
-    def test_load_project_file_exists(self, mock_exists, mock_status_message):
+    def test_load_project_file_exists(self, mock_exists):
         # Test case: file exists - should proceed with loading
         mock_exists.return_value = True
         
@@ -59,8 +65,8 @@ class TestProjectManager(unittest.TestCase):
                           if "does not exist" in str(call)]
             self.assertEqual(len(error_calls), 0, "Should not show file not found error")
             
-            # Should not call statusMessage with importance=3 (error level)
-            error_status_calls = [call for call in mock_status_message.call_args_list 
+            # Should not report a critical status message.
+            error_status_calls = [call for call in self.status_reporter.call_args_list
                                 if len(call.kwargs) > 0 and call.kwargs.get('importance') == 3]
             self.assertEqual(len(error_status_calls), 0, "Should not show error status message")
 
@@ -73,10 +79,7 @@ class TestProjectManager(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.DIRTY)
 
-    @patch("manuskript.projectManager.F.statusMessage")
-    def test_successful_save_transitions_session_to_clean(
-        self, mock_status_message
-    ):
+    def test_successful_save_transitions_session_to_clean(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
         self.storage.save.return_value = True
@@ -87,8 +90,7 @@ class TestProjectManager(unittest.TestCase):
         self.assertEqual(self.project_manager.session.state, ProjectState.CLEAN)
         self.storage.save.assert_called_once_with(self.window)
 
-    @patch("manuskript.projectManager.F.statusMessage")
-    def test_failed_save_preserves_dirty_state(self, mock_status_message):
+    def test_failed_save_preserves_dirty_state(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
         self.storage.save.return_value = False
@@ -129,10 +131,7 @@ class TestProjectManager(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.CLOSED)
 
-    @patch("manuskript.projectManager.F.statusMessage")
-    def test_failed_save_as_restores_original_project_path(
-        self, mock_status_message
-    ):
+    def test_failed_save_as_restores_original_project_path(self):
         self.project_manager.session.open("original.msk")
         self.project_manager.session.mark_dirty()
         self.storage.save.return_value = False

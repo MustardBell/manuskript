@@ -255,6 +255,7 @@ class importerDialog(QWidget, Ui_importer):
                     if indexes
                     else None
                 ),
+                show_status=self.context.show_status,
             )
             self.editor.set_context(
                 EditorContext(

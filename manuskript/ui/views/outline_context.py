@@ -15,3 +15,4 @@ class OutlineViewContext:
     open_index: Callable
     open_indexes: Callable
     selection_changed: Optional[Callable] = None
+    show_status: Optional[Callable] = None
