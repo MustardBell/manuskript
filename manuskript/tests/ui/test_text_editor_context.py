@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+from PyQt5.QtGui import QColor
+
 from manuskript.commands import DocumentCommand
 from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.views.text_editor_context import text_editor_context_for
@@ -83,3 +85,27 @@ def test_text_editor_routes_rename_as_typed_command():
     context.invoke_outline_command.assert_called_once_with(
         DocumentCommand.RENAME
     )
+
+
+def test_unattached_text_editors_use_isolated_local_settings():
+    first = textEditView(spellcheck=False)
+    second = textEditView(spellcheck=False)
+    context = MagicMock()
+    context.settings = MagicMock()
+
+    assert first.settings is not second.settings
+
+    first.set_text_editor_context(context)
+
+    assert first.settings is context.settings
+    assert second.settings is not context.settings
+
+
+def test_highlighter_reads_settings_owned_by_its_editor():
+    editor = textEditView(spellcheck=False, highlighting=True)
+    editor.settings.textEditor["fontColor"] = "#123456"
+    editor.settings.textEditor["background"] = "#ffffff"
+
+    editor.highlighter.updateColorScheme(rehighlight=False)
+
+    assert editor.highlighter.defaultTextColor == QColor("#123456")

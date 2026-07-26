@@ -25,10 +25,11 @@ class MDEditView(textEditView):
     automaticLinkRegex = QRegExp("(<([a-zA-Z]+\\:[^\n]+)>)|(<([^\n]+@[^\n]+)>)")
 
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
-                 highlighting=False, dict="", autoResize=False):
+                 highlighting=False, dict="", autoResize=False,
+                 settings=None):
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
-                              autoResize=autoResize)
+                              autoResize=autoResize, settings=settings)
 
         # Highlighter
         self._textFormat = "md"

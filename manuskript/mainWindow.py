@@ -728,7 +728,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Plots
         self.lstSubPlots.setModel(self.mdlPlots)
         self.lstPlotPerso.setModel(self.mdlPlots)
-        self.lstPlots.setPlotModel(self.mdlPlots)
+        self.lstPlots.setPlotModel(
+            self.mdlPlots,
+            settings=self.settingsManager,
+        )
         connect(self.btnAddPlot.clicked, self.plotController.add_plot, F.AUC)
         connect(
             self.btnRmPlot.clicked,
@@ -775,7 +778,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.mdlCharacter.dataChanged,
             self.plotController.refresh_character_menu,
         )
-        self.lstOutlinePlots.setPlotModel(self.mdlPlots)
+        self.lstOutlinePlots.setPlotModel(
+            self.mdlPlots,
+            settings=self.settingsManager,
+        )
         self.lstOutlinePlots.setShowSubPlot(True)
         self.plotCharacterDelegate = outlineCharacterDelegate(self.mdlCharacter, self)
         self.lstPlotPerso.setItemDelegate(self.plotCharacterDelegate)

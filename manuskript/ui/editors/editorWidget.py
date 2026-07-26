@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QWidget, QFrame, QSpacerItem, QSizePolicy
 from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 
 from manuskript.commands import DocumentCommand
-from manuskript.settingsManager import SettingsManager
 from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
@@ -50,7 +49,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.main_editor = (
             parent if hasattr(parent, "updateTargets") else None
         )
-        self.settings = SettingsManager()
+        self.settings = self.txtRedacText.settings
         self.editor_context = None
         self.outline_context = None
         if editor_context is not None:
@@ -202,7 +201,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
         def addTitle(itm):
             edt = MDEditView(self, html="<h{l}>{t}</h{l}>".format(l=min(itm.level() + 1, 5), t=itm.title()),
-                               autoResize=True)
+                               autoResize=True, settings=self.settings)
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
                     self.editor_context.text_editor
@@ -223,7 +222,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                                spellcheck=self.spellcheck,
                                dict=self.settings.dict,
                                highlighting=True,
-                               autoResize=True)
+                               autoResize=True,
+                               settings=self.settings)
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
                     self.editor_context.text_editor
