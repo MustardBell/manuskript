@@ -195,8 +195,15 @@ class ProjectFeatureBinding:
             raise RuntimeError(
                 "Project features must be released before rebinding."
             )
-        for binding in self.bindings:
-            binding.bind(connect)
+        installed = []
+        try:
+            for binding in self.bindings:
+                binding.bind(connect)
+                installed.append(binding)
+        except Exception:
+            for binding in reversed(installed):
+                binding.unbind()
+            raise
         self.bound = True
 
     def unbind(self):

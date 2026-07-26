@@ -70,3 +70,21 @@ def test_project_feature_binding_rejects_double_binding():
 
     with pytest.raises(RuntimeError, match="released"):
         binding.bind(MagicMock())
+
+
+def test_project_feature_binding_rolls_back_partial_install():
+    window = make_window()
+    binding = ProjectFeatureBinding(window)
+    first, second, third = binding.bindings
+    for feature in binding.bindings:
+        feature.bind = MagicMock()
+        feature.unbind = MagicMock()
+    second.bind.side_effect = RuntimeError("broken feature")
+
+    with pytest.raises(RuntimeError, match="broken feature"):
+        binding.bind(MagicMock())
+
+    first.unbind.assert_called_once_with()
+    second.unbind.assert_not_called()
+    third.bind.assert_not_called()
+    assert not binding.bound
