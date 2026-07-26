@@ -88,13 +88,13 @@ class TestProjectManagerAutosave(unittest.TestCase):
 
     def test_last_project_path_tracks_load_save_and_close(self):
         self._load_project()
-        self.last_project_store.remember.assert_called_once_with(
+        self.last_project_store.remember_last_project.assert_called_once_with(
             "dummy_project.msk"
         )
 
         self.project_manager.session.mark_dirty()
         self.project_manager.saveDatas("renamed.msk")
-        self.last_project_store.remember.assert_called_with(
+        self.last_project_store.remember_last_project.assert_called_with(
             "renamed.msk"
         )
 
@@ -103,7 +103,7 @@ class TestProjectManagerAutosave(unittest.TestCase):
             "loadEmptyDatas",
         ):
             self.project_manager.closeProject()
-        self.last_project_store.clear.assert_called_once_with()
+        self.last_project_store.clear_last_project.assert_called_once_with()
 
 
 if __name__ == "__main__":

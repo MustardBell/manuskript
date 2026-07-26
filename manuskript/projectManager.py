@@ -6,10 +6,10 @@ from manuskript.domain.project import (
     ProjectSession,
 )
 from manuskript.logging import getLogFilePath
-from manuskript.services.last_project_store import LastProjectStore
 from manuskript.services.project_autosave import (
     ProjectAutosaveScheduler,
 )
+from manuskript.services.project_history import ProjectHistory
 from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_persistence import (
     ProjectPersistenceContext,
@@ -38,7 +38,7 @@ class ProjectManager:
             self.saveDatas
         )
         self.last_project_store = (
-            last_project_store or LastProjectStore()
+            last_project_store or ProjectHistory()
         )
 
     @property
@@ -101,7 +101,7 @@ class ProjectManager:
             )
 
         self.syncUiToState()
-        self.last_project_store.remember(project)
+        self.last_project_store.remember_last_project(project)
         self.ui.project_opened()
         return True
 
@@ -142,7 +142,7 @@ class ProjectManager:
         self.ui.prepare_close()
 
         self.session.close()
-        self.last_project_store.clear()
+        self.last_project_store.clear_last_project()
 
         self.autosave.stop()
         self.modelConnections.disconnect_all()
@@ -206,7 +206,9 @@ class ProjectManager:
         current_project_name = os.path.basename(self.currentProject)
         if result.succeeded:
             self.session.mark_clean()
-            self.last_project_store.remember(self.currentProject)
+            self.last_project_store.remember_last_project(
+                self.currentProject
+            )
 
             feedback = self.ui.translate(
                 "Project {} saved."
