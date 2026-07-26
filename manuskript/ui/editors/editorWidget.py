@@ -10,7 +10,7 @@ from manuskript.settingsManager import SettingsManager
 from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
-from manuskript.ui.tools.splitDialog import splitDialog
+from manuskript.ui.tools.splitDialog import open_split_dialog
 
 
 class editorWidget(QWidget, Ui_editorWidget_ui):
@@ -483,7 +483,12 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             sel = self.txtRedacText.textCursor().selectedText()
             # selectedText uses \u2029 instead of \n, no idea why.
             sel = sel.replace("\u2029", "\n")
-            splitDialog(self, [self.currentIndex], mark=sel)
+            open_split_dialog(
+                self,
+                [self.currentIndex],
+                self.editor_context.outline_model.rootItem,
+                mark=sel,
+            )
 
         elif self.getCurrentItemView():
             # One of the views
