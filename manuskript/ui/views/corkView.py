@@ -2,7 +2,6 @@
 # --!-- coding: utf8 --!--
 from PyQt5.QtWidgets import QListView
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.functions import findBackground
 from manuskript.ui.views.corkDelegate import corkDelegate
 from manuskript.ui.views.dndView import dndView
@@ -31,10 +30,15 @@ class corkView(QListView, dndView, outlineBasics):
         self.cork_delegate.set_color_resolver(
             context.color_resolver if context is not None else None
         )
+        if context is not None:
+            self.cork_delegate.set_settings(context.settings)
+            self.updateBackground()
 
     def updateBackground(self):
-        if SettingsManager().corkBackground["image"] != "":
-            img = findBackground(SettingsManager().corkBackground["image"])
+        if self.settings is None:
+            return
+        if self.settings.corkBackground["image"] != "":
+            img = findBackground(self.settings.corkBackground["image"])
             if img == None:
                 img = ""
         else:
@@ -45,7 +49,7 @@ class corkView(QListView, dndView, outlineBasics):
             background-image: url({url});
             background-attachment: fixed;
             }}""".format(
-                color=SettingsManager().corkBackground["color"],
+                color=self.settings.corkBackground["color"],
                 url=img.replace("\\", "/")
         ))
 

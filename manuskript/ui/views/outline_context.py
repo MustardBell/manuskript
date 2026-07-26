@@ -11,6 +11,7 @@ class OutlineViewContext:
     character_model: object
     label_model: object
     status_model: object
+    settings: object
     color_resolver: OutlineColorResolver
     open_index: Callable
     open_indexes: Callable

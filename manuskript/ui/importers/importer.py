@@ -245,6 +245,7 @@ class importerDialog(QWidget, Ui_importer):
                 character_model=self.context.character_model,
                 label_model=self.context.label_model,
                 status_model=self.context.status_model,
+                settings=self.context.settings,
                 color_resolver=OutlineColorResolver(
                     self.context.character_model,
                     self.context.label_model,

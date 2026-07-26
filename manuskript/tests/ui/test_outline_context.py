@@ -8,10 +8,19 @@ from manuskript.ui.views.outline_context import OutlineViewContext
 
 
 def make_outline_context():
+    settings = MagicMock(name="settings")
+    settings.corkSizeFactor = 100
+    settings.corkStyle = "new"
+    settings.corkBackground = {
+        "image": "",
+        "color": "#ffffff",
+    }
+    settings.outlineViewColumns = []
     return OutlineViewContext(
         character_model=MagicMock(name="characters"),
         label_model=MagicMock(name="labels"),
         status_model=MagicMock(name="statuses"),
+        settings=settings,
         color_resolver=OutlineColorResolver(),
         open_index=MagicMock(name="open_index"),
         open_indexes=MagicMock(name="open_indexes"),
@@ -34,6 +43,7 @@ def test_outline_view_context_supplies_models_and_open_callbacks():
     assert view.modelCharacters is context.character_model
     assert view.modelLabels is context.label_model
     assert view.modelStatus is context.status_model
+    assert view.settings is context.settings
     context.open_index.assert_called_once_with(first)
     context.open_indexes.assert_called_once_with([first, second])
 
@@ -77,6 +87,7 @@ def test_cork_delegate_receives_status_model_from_outline_context():
 
     assert view.cork_delegate.status_model is context.status_model
     assert view.cork_delegate.color_resolver is context.color_resolver
+    assert view.cork_delegate.settings is context.settings
     assert view.cork_delegate.status_item("2") is status_item
     context.status_model.item.assert_called_once_with(2, 0)
 
