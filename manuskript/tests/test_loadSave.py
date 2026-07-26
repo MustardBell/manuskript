@@ -13,15 +13,24 @@ from manuskript.services.project_persistence import (
 def test_save_dispatches_explicit_context_to_current_format():
     context = MagicMock()
     cache = {}
+    file_access = MagicMock()
     expected = ProjectSaveResult()
 
     with patch.object(
         loadSave.v1, "saveProject", return_value=expected
     ) as save_project:
-        result = loadSave.saveProject(context, cache=cache)
+        result = loadSave.saveProject(
+            context,
+            cache=cache,
+            file_access=file_access,
+        )
 
     assert result is expected
-    save_project.assert_called_once_with(context, cache=cache)
+    save_project.assert_called_once_with(
+        context,
+        cache=cache,
+        file_access=file_access,
+    )
 
 
 def test_save_dispatches_explicit_context_to_legacy_format():
@@ -46,18 +55,24 @@ def test_load_dispatches_explicit_context_to_detected_format(tmp_path):
         settings=MagicMock(),
     )
     cache = {}
+    file_access = MagicMock()
     expected = ProjectLoadResult()
 
     with patch.object(
         loadSave.v1, "loadProject", return_value=expected
     ) as load_project:
-        result = loadSave.loadProject(context, cache=cache)
+        result = loadSave.loadProject(
+            context,
+            cache=cache,
+            file_access=file_access,
+        )
 
     assert result is expected
     load_project.assert_called_once_with(
         context,
         zip=False,
         cache=cache,
+        file_access=file_access,
     )
 
 

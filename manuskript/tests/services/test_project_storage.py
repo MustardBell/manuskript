@@ -10,7 +10,11 @@ from manuskript.services.project_storage import ProjectStorage
 def test_storage_passes_explicit_context_to_persistence_facade():
     context = MagicMock()
     cache = {}
-    storage = ProjectStorage(file_cache=cache)
+    file_access = MagicMock()
+    storage = ProjectStorage(
+        file_cache=cache,
+        file_access=file_access,
+    )
     load_result = ProjectLoadResult()
 
     with patch(
@@ -18,7 +22,11 @@ def test_storage_passes_explicit_context_to_persistence_facade():
         return_value=load_result,
     ) as load_project:
         assert storage.load(context) is load_result
-    load_project.assert_called_once_with(context, cache=cache)
+    load_project.assert_called_once_with(
+        context,
+        cache=cache,
+        file_access=file_access,
+    )
 
     save_result = ProjectSaveResult()
     with patch(
@@ -30,6 +38,7 @@ def test_storage_passes_explicit_context_to_persistence_facade():
         context,
         version=None,
         cache=cache,
+        file_access=file_access,
     )
 
 

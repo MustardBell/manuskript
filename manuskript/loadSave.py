@@ -14,17 +14,26 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
-def saveProject(context, version=None, cache=None):
+def saveProject(
+    context,
+    version=None,
+    cache=None,
+    file_access=None,
+):
     # While debugging, we don't save the project
     # return
 
     if version == 0:
         return v0.saveProject(context)
     else:
-        return v1.saveProject(context, cache=cache)
+        return v1.saveProject(
+            context,
+            cache=cache,
+            file_access=file_access,
+        )
 
 
-def loadProject(context, cache=None):
+def loadProject(context, cache=None, file_access=None):
     project = context.project_file
     # Detect version
     isZip = False
@@ -78,9 +87,19 @@ def loadProject(context, cache=None):
     LOGGER.info("Detected file format version: {}. Zip: {}.".format(version, isZip))
 
     if len(errors) > 0:
+        if isZip:
+            zf.close()
         return ProjectLoadResult(fatal_errors=tuple(errors))
+
+    if isZip:
+        zf.close()
 
     if version == 0:
         return v0.loadProject(context)
     else:
-        return v1.loadProject(context, zip=isZip, cache=cache)
+        return v1.loadProject(
+            context,
+            zip=isZip,
+            cache=cache,
+            file_access=file_access,
+        )
