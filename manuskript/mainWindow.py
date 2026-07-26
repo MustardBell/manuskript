@@ -16,8 +16,10 @@ from manuskript.commands import DocumentCommand, DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
+from manuskript.controllers.view_configuration_controller import (
+    ViewConfigurationController,
+)
 from manuskript.controllers.world_controller import WorldController
-from manuskript.enums import Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -53,6 +55,10 @@ from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
+from manuskript.ui.view_configuration import (
+    MainViewConfiguration,
+    ViewSettingsMenuBuilder,
+)
 from manuskript.ui.window_state import MainWindowStateController
 from manuskript.functions import Spellchecker
 
@@ -99,6 +105,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsManager = settings_manager
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
+        )
+        self.viewConfigurationController = (
+            ViewConfigurationController(
+                MainViewConfiguration(self),
+                self.settingsManager,
+            )
+        )
+        self.viewSettingsMenu = ViewSettingsMenuBuilder(
+            self,
+            self.viewConfigurationController,
         )
         self.referenceService = None
         self.textEditorContext = None
@@ -863,122 +879,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
 
     def generateViewMenu(self):
-
-        values = [
-            (self.tr("Nothing"), "Nothing"),
-            (self.tr("POV"), "POV"),
-            (self.tr("Label"), "Label"),
-            (self.tr("Progress"), "Progress"),
-            (self.tr("Compile"), "Compile"),
-        ]
-
-        menus = [
-            (self.tr("Tree"), "Tree", "view-list-tree"),
-            (self.tr("Index cards"), "Cork", "view-cards"),
-            (self.tr("Outline"), "Outline", "view-outline")
-        ]
-
-        submenus = {
-            "Tree": [
-                (self.tr("Icon color"), "Icon"),
-                (self.tr("Text color"), "Text"),
-                (self.tr("Background color"), "Background"),
-            ],
-            "Cork": [
-                (self.tr("Icon"), "Icon"),
-                (self.tr("Text"), "Text"),
-                (self.tr("Background"), "Background"),
-                (self.tr("Border"), "Border"),
-                (self.tr("Corner"), "Corner"),
-            ],
-            "Outline": [
-                (self.tr("Icon color"), "Icon"),
-                (self.tr("Text color"), "Text"),
-                (self.tr("Background color"), "Background"),
-            ],
-        }
-
-        self.menuView.clear()
-        self.menuView.addMenu(self.menuMode)
-        self.menuView.addSeparator()
-
-        # LOGGER.debug("Generating menus with %s.", self.settingsManager.viewSettings)
-
-        for mnu, mnud, icon in menus:
-            m = QMenu(mnu, self.menuView)
-            if icon:
-                m.setIcon(QIcon.fromTheme(icon))
-            for s, sd in submenus[mnud]:
-                m2 = QMenu(s, m)
-                agp = QActionGroup(m2)
-                for v, vd in values:
-                    a = QAction(v, m)
-                    a.setCheckable(True)
-                    a.setData("{},{},{}".format(mnud, sd, vd))
-                    if self.settingsManager.viewSettings[mnud][sd] == vd:
-                        a.setChecked(True)
-                    a.triggered.connect(self.setViewSettingsAction, F.AUC)
-                    agp.addAction(a)
-                    m2.addAction(a)
-                m.addMenu(m2)
-            self.menuView.addMenu(m)
-
-    def setViewSettingsAction(self):
-        action = self.sender()
-        item, part, element = action.data().split(",")
-        self.setViewSettings(item, part, element)
+        self.viewSettingsMenu.rebuild()
 
     def setViewSettings(self, item, part, element):
-        self.settingsManager.viewSettings[item][part] = element
-        if item == "Cork":
-            self.mainEditor.updateCorkView()
-        if item == "Outline":
-            self.mainEditor.updateTreeView()
-            self.treeOutlineOutline.viewport().update()
-        if item == "Tree":
-            self.treeRedacOutline.viewport().update()
+        self.viewConfigurationController.set_view_setting(
+            item,
+            part,
+            element,
+        )
 
     ###############################################################################
     # VIEW MODES
     ###############################################################################
 
-    def setViewModeSimple(self):
-        self.settingsManager.viewMode = "simple"
-        self.tabMain.setCurrentIndex(self.TabRedac)
-        self.viewModeFictionVisibilitySwitch(False)
-        self.actModeSimple.setChecked(True)
+    def setViewModeSimple(self, _checked=False):
+        self.viewConfigurationController.set_simple()
 
-    def setViewModeFiction(self):
-        self.settingsManager.viewMode = "fiction"
-        self.viewModeFictionVisibilitySwitch(True)
-        self.actModeFiction.setChecked(True)
-
-    def viewModeFictionVisibilitySwitch(self, val):
-        """
-        Switches the visibility of some UI components useful for fiction only
-        @param val: sets visibility to val
-        """
-
-        # Menu navigation & button in toolbar
-        self.toolbar.setDockVisibility(self.dckNavigation, val)
-
-        # POV in metadata
-        from manuskript.ui.views.propertiesView import propertiesView
-        for w in self.findChildren(propertiesView):
-            w.lblPOV.setVisible(val)
-            w.cmbPOV.setVisible(val)
-
-        # POV in outline view
-        if val is None and Outline.POV in self.settingsManager.outlineViewColumns:
-            self.settingsManager.outlineViewColumns.remove(Outline.POV)
-
-        from manuskript.ui.views.outlineView import outlineView
-        for w in self.findChildren(outlineView):
-            w.hideColumns()
-
-        # TODO: clean up all other fiction things in non-fiction view mode
-        # Character in search widget
-        # POV in settings / views
+    def setViewModeFiction(self, _checked=False):
+        self.viewConfigurationController.set_fiction()
 
     ###############################################################################
     # IMPORT / EXPORT
