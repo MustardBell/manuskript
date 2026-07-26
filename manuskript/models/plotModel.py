@@ -1,28 +1,27 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 from PyQt5.QtCore import QModelIndex
-from PyQt5.QtCore import QSignalMapper
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QBrush
 from PyQt5.QtGui import QStandardItem
 from PyQt5.QtGui import QStandardItemModel
-from PyQt5.QtWidgets import QAction, QMenu
 
 from manuskript.enums import Plot, PlotStep, Model
-from manuskript.functions import toInt, mainWindow
+from manuskript.functions import toInt
 from manuskript.models.searchResultModel import searchResultModel
 from manuskript.searchLabels import PlotSearchLabels, PLOT_STEP_COLUMNS_OFFSET
 from manuskript.functions import search
 from manuskript.models.searchableModel import searchableModel
 from manuskript.models.searchableItem import searchableItem
 
-class plotModel(QStandardItemModel, searchableModel):
-    def __init__(self, parent):
-        QStandardItemModel.__init__(self, 0, 3, parent)
-        self.setHorizontalHeaderLabels([i.name for i in Plot])
-        self.mw = mainWindow()
 
-        self.updatePlotPersoButton()
+class plotModel(QStandardItemModel, searchableModel):
+    """Store plot data without depending on application widgets."""
+
+    def __init__(self, parent=None, character_lookup=None):
+        QStandardItemModel.__init__(self, 0, len(Plot), parent)
+        self.setHorizontalHeaderLabels([i.name for i in Plot])
+        self._character_lookup = character_lookup or (lambda character_id: None)
 
     ###############################################################################
     # QUERIES
@@ -39,7 +38,7 @@ class plotModel(QStandardItemModel, searchableModel):
     def getSubPlotsByID(self, ID):
         index = self.getIndexFromID(ID)
         if not index.isValid():
-            return
+            return []
         index = index.sibling(index.row(), Plot.steps)
         item = self.itemFromIndex(index)
         lst = []
@@ -83,8 +82,11 @@ class plotModel(QStandardItemModel, searchableModel):
         is ``subplotRaw``, of plot whose ID is ``plotID``.
         """
         plotIndex = self.getIndexFromID(plotID)
-        name = plotIndex.child(subplotRaw, PlotStep.name).data()
-        summary = plotIndex.child(subplotRaw, PlotStep.summary).data()
+        if not plotIndex.isValid():
+            return None, None
+        stepsIndex = plotIndex.sibling(plotIndex.row(), Plot.steps)
+        name = stepsIndex.child(subplotRaw, PlotStep.name).data()
+        summary = stepsIndex.child(subplotRaw, PlotStep.summary).data()
         return name, summary
 
     def getIndexFromID(self, ID):
@@ -93,13 +95,6 @@ class plotModel(QStandardItemModel, searchableModel):
             if _ID == ID or toInt(_ID) == ID:
                 return self.index(i, 0)
         return QModelIndex()
-
-    def currentIndex(self):
-        i = self.mw.lstPlots.currentIndex()
-        if i.isValid():
-            return i
-        else:
-            return None
 
     ###############################################################################
     # ADDING / REMOVING
@@ -132,7 +127,10 @@ class plotModel(QStandardItemModel, searchableModel):
         return str(k)
 
     def removePlot(self, index):
+        if not index.isValid() or index.parent().isValid():
+            return False
         self.takeRow(index.row())
+        return True
 
     ###############################################################################
     # SUBPLOTS
@@ -166,48 +164,52 @@ class plotModel(QStandardItemModel, searchableModel):
         else:
             return QStandardItemModel.data(self, index, role)
 
-    def addSubPlot(self):
-        index = self.mw.lstPlots.currentPlotIndex()
-        if not index.isValid():
-            return
+    def addSubPlot(self, plotIndex, afterIndex=QModelIndex()):
+        """Add a plot step and return its name index.
 
-        parent = index.sibling(index.row(), Plot.steps)
-        parentItem = self.item(index.row(), Plot.steps)
+        Selection and view updates belong to the caller. ``afterIndex`` may
+        identify a step after which the new step should be inserted; otherwise
+        the step is appended.
+        """
+        if not plotIndex.isValid() or plotIndex.parent().isValid():
+            return QModelIndex()
 
-        if not parentItem:
-            return
+        parent = plotIndex.sibling(plotIndex.row(), Plot.steps)
+        parentItem = self.itemFromIndex(parent)
+        if parentItem is None:
+            return QModelIndex()
 
         p = QStandardItem(self.tr("New step"))
         _id = QStandardItem(self.getUniqueID(parent))
         summary = QStandardItem()
+        row = parentItem.rowCount()
 
-        currentIndex = self.mw.lstSubPlots.selectionModel().selectedIndexes()
-        if currentIndex:
-            # We use last item of selection in case of many
-            currentIndex = currentIndex[-1]
-            row = currentIndex.row() + 1
-            parentItem.insertRow(row, [p, _id, QStandardItem(), summary])
-            # Select last index
-            self.mw.lstSubPlots.setCurrentIndex(currentIndex.sibling(row, 0))
-        else:
-            # Don't know why, if summary is in third position, then drag/drop deletes it...
-            parentItem.appendRow([p, _id, QStandardItem(), summary])
-            # Select last index
-            self.mw.lstSubPlots.setCurrentIndex(
-                parent.child(self.rowCount(parent) - 1, 0))
+        if afterIndex.isValid() and afterIndex.parent() == parent:
+            row = afterIndex.row() + 1
 
-    def removeSubPlot(self):
-        """
-        Remove all selected subplots / plot steps, in mw.lstSubPlots.
-        """
-        parent = self.mw.lstSubPlots.rootIndex()
-        if not parent.isValid():
-            return
-        parentItem = self.itemFromIndex(parent)
+        # Keep summary fourth: moving rows can otherwise discard it.
+        parentItem.insertRow(row, [p, _id, QStandardItem(), summary])
+        return self.index(row, PlotStep.name, parent)
 
-        while self.mw.lstSubPlots.selectionModel().selectedRows():
-            i = self.mw.lstSubPlots.selectionModel().selectedRows()[0]
-            parentItem.takeRow(i.row())
+    def removeSubPlots(self, parentIndex, rows):
+        """Remove explicit step rows from a plot and return the count removed."""
+        if not parentIndex.isValid() or parentIndex.column() != Plot.steps:
+            return 0
+        parentItem = self.itemFromIndex(parentIndex)
+        if parentItem is None:
+            return 0
+
+        validRows = sorted(
+            {
+                row
+                for row in rows
+                if 0 <= row < parentItem.rowCount()
+            },
+            reverse=True,
+        )
+        for row in validRows:
+            parentItem.takeRow(row)
+        return len(validRows)
 
     def flags(self, index):
         parent = index.parent()
@@ -217,59 +219,52 @@ class plotModel(QStandardItemModel, searchableModel):
             return QStandardItemModel.flags(self, index)
 
     ###############################################################################
-    # PLOT PERSOS
+    # PLOT CHARACTERS
     ###############################################################################
 
-    def addPlotPerso(self, v):
-        index = self.mw.lstPlots.currentPlotIndex()
-        if index.isValid():
-            if not self.item(index.row(), Plot.characters):
-                self.setItem(index.row(), Plot.characters, QStandardItem())
+    def addPlotPerso(self, plotIndex, characterID):
+        """Associate a character with a plot, avoiding duplicates."""
+        if not plotIndex.isValid() or plotIndex.parent().isValid():
+            return False
 
-            item = self.item(index.row(), Plot.characters)
+        item = self.item(plotIndex.row(), Plot.characters)
+        if item is None:
+            item = QStandardItem()
+            self.setItem(plotIndex.row(), Plot.characters, item)
 
-            # We check that the PersoID is not in the list yet
-            for i in range(item.rowCount()):
-                if item.child(i).text() == str(v):
-                    return
+        characterID = str(characterID)
+        for row in range(item.rowCount()):
+            if item.child(row).text() == characterID:
+                return False
 
-            item.appendRow(QStandardItem(str(v)))
+        item.appendRow(QStandardItem(characterID))
+        return True
 
-    def removePlotPerso(self):
-        index = self.mw.lstPlotPerso.currentIndex()
-        if not index.isValid():
-            return
-        parent = index.parent()
+    def removePlotPersos(self, indexes):
+        """Remove explicit character association indexes."""
+        indexes = [index for index in indexes if index.isValid()]
+        if not indexes:
+            return 0
+
+        parent = indexes[0].parent()
+        if not parent.isValid() or parent.column() != Plot.characters:
+            return 0
         parentItem = self.itemFromIndex(parent)
-        parentItem.takeRow(index.row())
+        if parentItem is None:
+            return 0
 
-    def updatePlotPersoButton(self):
-        menu = QMenu(self.mw)
-
-        menus = []
-        for i in [self.tr("Main"), self.tr("Secondary"), self.tr("Minor")]:
-            m = QMenu(i, menu)
-            menus.append(m)
-            menu.addMenu(m)
-
-        mpr = QSignalMapper(menu)
-        for i in range(self.mw.mdlCharacter.rowCount()):
-            a = QAction(self.mw.mdlCharacter.name(i), menu)
-            a.setIcon(self.mw.mdlCharacter.icon(i))
-            a.triggered.connect(mpr.map)
-            mpr.setMapping(a, int(self.mw.mdlCharacter.ID(i)))
-
-            imp = toInt(self.mw.mdlCharacter.importance(i))
-
-            menus[2 - imp].addAction(a)
-
-        # Disabling empty menus
-        for m in menus:
-            if not m.actions():
-                m.setEnabled(False)
-
-        mpr.mapped.connect(self.addPlotPerso)
-        self.mw.btnAddPlotPerso.setMenu(menu)
+        rows = sorted(
+            {
+                index.row()
+                for index in indexes
+                if index.parent() == parent
+                and 0 <= index.row() < parentItem.rowCount()
+            },
+            reverse=True,
+        )
+        for row in rows:
+            parentItem.takeRow(row)
+        return len(rows)
 
     #######################################################################
     # Search
@@ -278,7 +273,13 @@ class plotModel(QStandardItemModel, searchableModel):
         items = []
 
         for i in range(self.rowCount()):
-            items.append(plotItemSearchWrapper(i, self.item, self.mw.mdlCharacter.getCharacterByID))
+            items.append(
+                plotItemSearchWrapper(
+                    i,
+                    self.item,
+                    self._character_lookup,
+                )
+            )
 
         return items
 
