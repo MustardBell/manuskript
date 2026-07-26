@@ -7,7 +7,7 @@ from functools import partial
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, QTimer, QSettings, Qt, QPoint,
-                          QRegExp, QUrl, QSize)
+                          QRegExp, QUrl, QSize, QModelIndex)
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
@@ -37,6 +37,7 @@ from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.editors.editor_context import EditorContext
 from manuskript.ui.importers.importer import importerDialog
+from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
@@ -1460,7 +1461,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 return
 
         # Proceed with Import
-        self.dialog = importerDialog(mw=self)
+        self.dialog = importerDialog(
+            ImportContext(
+                outline_model=self.mdlOutline,
+                character_model=self.mdlCharacter,
+                label_model=self.mdlLabels,
+                status_model=self.mdlStatus,
+                current_outline_index=lambda: (
+                    self.treeRedacOutline.currentIndex()
+                    if self.treeRedacOutline.selectedIndexes()
+                    else QModelIndex()
+                ),
+                show_status=F.statusMessage,
+            )
+        )
         self.dialog.show()
         self.centerChildWindow(self.dialog)
 

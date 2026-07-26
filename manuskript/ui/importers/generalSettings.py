@@ -1,25 +1,20 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import json
-import os
+from PyQt5.QtCore import QSortFilterProxyModel, QModelIndex
+from PyQt5.QtWidgets import QWidget
 
-from PyQt5.QtCore import Qt, QSize, QSortFilterProxyModel, QModelIndex
-from PyQt5.QtGui import QIcon, QFontMetrics, QFont
-from PyQt5.QtWidgets import QWidget, QTableWidgetItem, QListWidgetItem, QTreeView
-
-from manuskript.functions import mainWindow, writablePath
 from manuskript.ui.importers.generalSettings_ui import Ui_generalSettings
 from manuskript.enums import Outline
 from manuskript.ui import style
 
 
 class generalSettings(QWidget, Ui_generalSettings):
-    def __init__(self, parent=None):
+    def __init__(self, context, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.toolBox.setStyleSheet(style.toolBoxSS())
 
-        self.mw = mainWindow()
+        self.context = context
         self.txtGeneralSplitScenes.setStyleSheet(style.lineEditSS())
 
         # TreeView to select parent
@@ -27,9 +22,9 @@ class generalSettings(QWidget, Ui_generalSettings):
         proxy = QSortFilterProxyModel()
         proxy.setFilterKeyColumn(Outline.type)
         proxy.setFilterFixedString("folder")
-        proxy.setSourceModel(self.mw.mdlOutline)
+        proxy.setSourceModel(self.context.outline_model)
         self.treeGeneralParent.setModel(proxy)
-        for i in range(1, self.mw.mdlOutline.columnCount()):
+        for i in range(1, self.context.outline_model.columnCount()):
             self.treeGeneralParent.hideColumn(i)
         self.treeGeneralParent.setCurrentIndex(self.getParentIndex())
         self.chkGeneralParent.toggled.connect(self.treeGeneralParent.setVisible)
@@ -37,14 +32,12 @@ class generalSettings(QWidget, Ui_generalSettings):
 
     def getParentIndex(self):
         """
-        Returns the currently selected index in the mainWindow.
+        Returns the current outline selection mapped into the folder proxy.
         """
-        if len(self.mw.treeRedacOutline.selectionModel().
-                        selection().indexes()) == 0:
-            idx = QModelIndex()
-        else:
-            idx = self.mw.treeRedacOutline.currentIndex()
-        return idx
+        index = self.context.current_outline_index()
+        if not index.isValid():
+            return QModelIndex()
+        return self.treeGeneralParent.model().mapFromSource(index)
 
     def importUnderID(self):
         """
@@ -88,4 +81,3 @@ class generalSettings(QWidget, Ui_generalSettings):
 
         else:
             return False
-
