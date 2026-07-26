@@ -826,6 +826,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             character_model=self.mdlCharacter,
             label_model=self.mdlLabels,
             status_model=self.mdlStatus,
+            settings=self.settingsManager,
             color_resolver=OutlineColorResolver(
                 self.mdlCharacter,
                 self.mdlLabels,
@@ -1499,6 +1500,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 character_model=self.mdlCharacter,
                 label_model=self.mdlLabels,
                 status_model=self.mdlStatus,
+                settings=self.settingsManager,
                 current_outline_index=lambda: (
                     self.treeRedacOutline.currentIndex()
                     if self.treeRedacOutline.selectedIndexes()

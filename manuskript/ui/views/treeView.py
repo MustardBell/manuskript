@@ -23,6 +23,8 @@ class treeView(QTreeView, dndView, outlineBasics):
             self.titleDelegate.set_color_resolver(
                 context.color_resolver if context is not None else None
             )
+            if context is not None:
+                self.titleDelegate.set_settings(context.settings)
 
     def setModel(self, model):
         QTreeView.setModel(self, model)
@@ -42,6 +44,7 @@ class treeView(QTreeView, dndView, outlineBasics):
         self.titleDelegate = treeTitleDelegate(
             self,
             color_resolver=color_resolver,
+            settings=self.settings,
         )
         self.setItemDelegateForColumn(Outline.title, self.titleDelegate)
 

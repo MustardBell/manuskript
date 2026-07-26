@@ -3,7 +3,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTreeView, QHeaderView
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.ui.views.dndView import dndView
 from manuskript.ui.views.outlineBasics import outlineBasics
@@ -29,6 +28,8 @@ class outlineView(QTreeView, dndView, outlineBasics):
             self.outlineTitleDelegate.set_color_resolver(
                 context.color_resolver if context is not None else None
             )
+            if context is not None:
+                self.outlineTitleDelegate.set_settings(context.settings)
             self.outlineCharacterDelegate.mdlCharacter = (
                 self.modelCharacters
             )
@@ -47,6 +48,7 @@ class outlineView(QTreeView, dndView, outlineBasics):
         self.outlineTitleDelegate = outlineTitleDelegate(
             self,
             color_resolver=color_resolver,
+            settings=self.settings,
         )
         # self.outlineTitleDelegate.setView(self)
         self.setItemDelegateForColumn(Outline.title, self.outlineTitleDelegate)
@@ -80,7 +82,7 @@ class outlineView(QTreeView, dndView, outlineBasics):
 
         for c in range(self.model().columnCount()):
             self.hideColumn(c)
-        for c in SettingsManager().outlineViewColumns:
+        for c in self.settings.outlineViewColumns:
             self.showColumn(c)
 
     def setRootIndex(self, index):

@@ -4,7 +4,6 @@ from PyQt5.QtCore import QSize, Qt, QRect, QPoint, QPointF
 from PyQt5.QtGui import QMouseEvent, QFont, QPalette, QRegion, QFontMetrics, QColor, QIcon, QPolygonF
 from PyQt5.QtWidgets import QStyledItemDelegate, QLineEdit, QPlainTextEdit, QFrame, qApp, QStyle
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import colorifyPixmap
 from manuskript.functions import mixColors
@@ -14,11 +13,17 @@ from manuskript.ui.views.outline_colors import OutlineColorResolver
 
 class corkDelegate(QStyledItemDelegate):
     def __init__(
-            self, parent=None, status_model=None, color_resolver=None):
+            self, parent=None, status_model=None, color_resolver=None,
+            settings=None):
         QStyledItemDelegate.__init__(self, parent)
         self.status_model = status_model
         self.color_resolver = color_resolver or OutlineColorResolver()
-        self.factor = SettingsManager().corkSizeFactor / 100.
+        self.settings = settings
+        self.factor = (
+            settings.corkSizeFactor / 100.
+            if settings is not None
+            else 1.
+        )
         self.lastPos = None
         self.editing = None
         self.margin = 5
@@ -31,13 +36,18 @@ class corkDelegate(QStyledItemDelegate):
     def set_color_resolver(self, color_resolver):
         self.color_resolver = color_resolver or OutlineColorResolver()
 
+    def set_settings(self, settings):
+        if settings is not None:
+            self.settings = settings
+            self.factor = settings.corkSizeFactor / 100.
+
     def status_item(self, status):
         if self.status_model is None:
             return None
         return self.status_model.item(int(status), 0)
 
     def newStyle(self):
-        return SettingsManager().corkStyle == "new"
+        return self.settings is None or self.settings.corkStyle == "new"
 
     def setCorkSizeFactor(self, v):
         self.factor = v / 100.
@@ -264,8 +274,8 @@ class corkDelegate(QStyledItemDelegate):
 
             # Background
         p.save()
-        if SettingsManager().viewSettings["Cork"]["Background"] != "Nothing":
-            c = colors[SettingsManager().viewSettings["Cork"]["Background"]]
+        if self.settings.viewSettings["Cork"]["Background"] != "Nothing":
+            c = colors[self.settings.viewSettings["Cork"]["Background"]]
             if c == QColor(Qt.transparent):
                 c = QColor(Qt.white)
             col = mixColors(c, QColor(Qt.white), .2)
@@ -293,9 +303,9 @@ class corkDelegate(QStyledItemDelegate):
         p.restore()
 
         # Label color
-        if SettingsManager().viewSettings["Cork"]["Corner"] != "Nothing":
+        if self.settings.viewSettings["Cork"]["Corner"] != "Nothing":
             p.save()
-            color = colors[SettingsManager().viewSettings["Cork"]["Corner"]]
+            color = colors[self.settings.viewSettings["Cork"]["Corner"]]
             p.setPen(Qt.NoPen)
             p.setBrush(color)
             p.drawRect(self.labelRect)
@@ -311,7 +321,7 @@ class corkDelegate(QStyledItemDelegate):
             p.drawPolygon(poly)
             p.restore()
 
-        if SettingsManager().viewSettings["Cork"]["Corner"] == "Nothing" or \
+        if self.settings.viewSettings["Cork"]["Corner"] == "Nothing" or \
            color == Qt.transparent:
             # No corner, so title can be full width
             self.titleRect.setRight(self.mainRect.right())
@@ -325,8 +335,8 @@ class corkDelegate(QStyledItemDelegate):
             mode = QIcon.Selected
         # index.data(Qt.DecorationRole).paint(p, iconRect, option.decorationAlignment, mode)
         icon = index.data(Qt.DecorationRole).pixmap(iconRect.size())
-        if SettingsManager().viewSettings["Cork"]["Icon"] != "Nothing":
-            color = colors[SettingsManager().viewSettings["Cork"]["Icon"]]
+        if self.settings.viewSettings["Cork"]["Icon"] != "Nothing":
+            color = colors[self.settings.viewSettings["Cork"]["Icon"]]
             colorifyPixmap(icon, color)
         QIcon(icon).paint(p, iconRect, option.decorationAlignment, mode)
 
@@ -338,14 +348,14 @@ class corkDelegate(QStyledItemDelegate):
         if text:
             p.setPen(Qt.black)
             textColor = QColor(Qt.black)
-            if SettingsManager().viewSettings["Cork"]["Text"] != "Nothing":
-                col = colors[SettingsManager().viewSettings["Cork"]["Text"]]
+            if self.settings.viewSettings["Cork"]["Text"] != "Nothing":
+                col = colors[self.settings.viewSettings["Cork"]["Text"]]
                 if col == Qt.transparent:
                     col = Qt.black
 
                 # If title setting is compile, we have to hack the color
                 # Or we won't see anything in some themes
-                if SettingsManager().viewSettings["Cork"]["Text"] == "Compile":
+                if self.settings.viewSettings["Cork"]["Text"] == "Compile":
                     if item.compile() in [0, "0"]:
                         col = mixColors(QColor(Qt.black), backgroundColor)
                     else:
@@ -366,12 +376,12 @@ class corkDelegate(QStyledItemDelegate):
         fullSummary = item.data(Outline.summaryFull)
 
             # Border
-        if SettingsManager().viewSettings["Cork"]["Border"] != "Nothing":
+        if self.settings.viewSettings["Cork"]["Border"] != "Nothing":
             p.save()
             p.setBrush(Qt.NoBrush)
             pen = p.pen()
             pen.setWidth(2)
-            col = colors[SettingsManager().viewSettings["Cork"]["Border"]]
+            col = colors[self.settings.viewSettings["Cork"]["Border"]]
             pen.setColor(col)
             p.setPen(pen)
             if item.isFolder():
@@ -458,8 +468,8 @@ class corkDelegate(QStyledItemDelegate):
             # Background
         itemRect = self.itemRect
         p.save()
-        if SettingsManager().viewSettings["Cork"]["Background"] != "Nothing":
-            c = colors[SettingsManager().viewSettings["Cork"]["Background"]]
+        if self.settings.viewSettings["Cork"]["Background"] != "Nothing":
+            c = colors[self.settings.viewSettings["Cork"]["Background"]]
             col = mixColors(c, QColor(Qt.white), .2)
             p.setBrush(col)
         else:
@@ -485,9 +495,9 @@ class corkDelegate(QStyledItemDelegate):
         p.restore()
 
         # Label color
-        if SettingsManager().viewSettings["Cork"]["Corner"] != "Nothing":
+        if self.settings.viewSettings["Cork"]["Corner"] != "Nothing":
             p.save()
-            color = colors[SettingsManager().viewSettings["Cork"]["Corner"]]
+            color = colors[self.settings.viewSettings["Cork"]["Corner"]]
             p.setPen(Qt.NoPen)
             p.setBrush(color)
             p.setClipRegion(QRegion(self.labelRect))
@@ -514,8 +524,8 @@ class corkDelegate(QStyledItemDelegate):
         p.setBrush(Qt.NoBrush)
         pen = p.pen()
         pen.setWidth(2)
-        if SettingsManager().viewSettings["Cork"]["Border"] != "Nothing":
-            col = colors[SettingsManager().viewSettings["Cork"]["Border"]]
+        if self.settings.viewSettings["Cork"]["Border"] != "Nothing":
+            col = colors[self.settings.viewSettings["Cork"]["Border"]]
             if col == Qt.transparent:
                 col = Qt.black
             pen.setColor(col)
@@ -532,8 +542,8 @@ class corkDelegate(QStyledItemDelegate):
             mode = QIcon.Selected
         # index.data(Qt.DecorationRole).paint(p, iconRect, option.decorationAlignment, mode)
         icon = index.data(Qt.DecorationRole).pixmap(iconRect.size())
-        if SettingsManager().viewSettings["Cork"]["Icon"] != "Nothing":
-            color = colors[SettingsManager().viewSettings["Cork"]["Icon"]]
+        if self.settings.viewSettings["Cork"]["Icon"] != "Nothing":
+            color = colors[self.settings.viewSettings["Cork"]["Icon"]]
             colorifyPixmap(icon, color)
         QIcon(icon).paint(p, iconRect, option.decorationAlignment, mode)
 
@@ -542,8 +552,8 @@ class corkDelegate(QStyledItemDelegate):
         text = index.data()
         titleRect = self.titleRect
         if text:
-            if SettingsManager().viewSettings["Cork"]["Text"] != "Nothing":
-                col = colors[SettingsManager().viewSettings["Cork"]["Text"]]
+            if self.settings.viewSettings["Cork"]["Text"] != "Nothing":
+                col = colors[self.settings.viewSettings["Cork"]["Text"]]
                 if col == Qt.transparent:
                     col = Qt.black
                 p.setPen(col)

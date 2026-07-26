@@ -10,5 +10,6 @@ class ImportContext:
     character_model: object
     label_model: object
     status_model: object
+    settings: object
     current_outline_index: Callable
     show_status: Callable

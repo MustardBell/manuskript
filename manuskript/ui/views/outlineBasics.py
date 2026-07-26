@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QAbstractItemView, qApp, QMenu, QAction, \
                             QListWidget, QWidgetAction, QListWidgetItem, \
                             QLineEdit, QInputDialog, QMessageBox, QCheckBox
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import toInt, customIcons, safeTranslate
 from manuskript.models import outlineItem
@@ -18,6 +17,7 @@ class outlineBasics(QAbstractItemView):
         self._indexesToOpen = None
         self.menuCustomIcons = None
         self.outline_context = None
+        self.settings = None
         self.show_status = (
             lambda message, duration=5000, importance=1: None
         )
@@ -33,6 +33,8 @@ class outlineBasics(QAbstractItemView):
         self.modelStatus = (
             context.status_model if context is not None else None
         )
+        if context is not None:
+            self.settings = context.settings
         self.show_status = (
             context.show_status
             if context is not None and context.show_status is not None
@@ -304,7 +306,7 @@ class outlineBasics(QAbstractItemView):
             parent = self.currentIndex()
 
         if _type == "text":
-            _type = SettingsManager().defaultTextType
+            _type = self.settings.defaultTextType
 
         item = outlineItem(title=safeTranslate(qApp, "outlineBasics", "New"), _type=_type)
         self.model().appendItem(item, parent)
@@ -335,7 +337,7 @@ class outlineBasics(QAbstractItemView):
         """
         Shows a warning, and then deletes currently selected indexes.
         """
-        if not SettingsManager().dontShowDeleteWarning:
+        if not self.settings.dontShowDeleteWarning:
             msgInfo = list()
             msgInfo.append("<p><b>")
             msgInfo.append(safeTranslate(qApp, "outlineBasics", "You're about to delete {} item(s).").format(
@@ -364,7 +366,7 @@ class outlineBasics(QAbstractItemView):
                 return
 
             if chk.isChecked():
-                SettingsManager().dontShowDeleteWarning = True
+                self.settings.dontShowDeleteWarning = True
 
         self.model().removeIndexes(self.getSelection())
 
