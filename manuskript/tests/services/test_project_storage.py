@@ -11,9 +11,11 @@ def test_storage_passes_explicit_context_to_persistence_facade():
     context = MagicMock()
     cache = {}
     file_access = MagicMock()
+    legacy_file_access = MagicMock()
     storage = ProjectStorage(
         file_cache=cache,
         file_access=file_access,
+        legacy_file_access=legacy_file_access,
     )
     load_result = ProjectLoadResult()
 
@@ -26,6 +28,7 @@ def test_storage_passes_explicit_context_to_persistence_facade():
         context,
         cache=cache,
         file_access=file_access,
+        legacy_file_access=legacy_file_access,
     )
 
     save_result = ProjectSaveResult()
@@ -39,6 +42,7 @@ def test_storage_passes_explicit_context_to_persistence_facade():
         version=None,
         cache=cache,
         file_access=file_access,
+        legacy_file_access=legacy_file_access,
     )
 
 
