@@ -29,31 +29,31 @@ except:
 # SAVE
 ###########################################################################################
 
-def saveProject(mw):
+def saveProject(context):
     """
     Saves the whole project. Call this function to save the project in Version 0 format.
     """
 
     files = []
-    files.append((saveStandardItemModelXML(mw.mdlFlatData),
+    files.append((saveStandardItemModelXML(context.models.flat_data),
                   "flatModel.xml"))
     LOGGER.error("File format 0 does not save characters!")
-    # files.append((saveStandardItemModelXML(mw.mdlCharacter),
+    # files.append((saveStandardItemModelXML(context.models.characters),
     #               "perso.xml"))
-    files.append((saveStandardItemModelXML(mw.mdlWorld),
+    files.append((saveStandardItemModelXML(context.models.world),
                   "world.xml"))
-    files.append((saveStandardItemModelXML(mw.mdlLabels),
+    files.append((saveStandardItemModelXML(context.models.labels),
                   "labels.xml"))
-    files.append((saveStandardItemModelXML(mw.mdlStatus),
+    files.append((saveStandardItemModelXML(context.models.statuses),
                   "status.xml"))
-    files.append((saveStandardItemModelXML(mw.mdlPlots),
+    files.append((saveStandardItemModelXML(context.models.plots),
                   "plots.xml"))
-    files.append((mw.mdlOutline.saveToXML(),
+    files.append((context.models.outline.saveToXML(),
                   "outline.xml"))
-    files.append((mw.settingsManager.save(),
+    files.append((context.settings.save(),
                   "settings.pickle"))
 
-    saveFilesToZip(files, mw.currentProject)
+    saveFilesToZip(files, context.project_file)
 
 def saveFilesToZip(files, zipname):
     """Saves given files to zipname.
@@ -118,54 +118,55 @@ def saveItem(root, mdl, parent=QModelIndex()):
 # LOAD
 ###########################################################################################
 
-def loadProject(project, mw):
+def loadProject(context):
+    project = context.project_file
 
     files = loadFilesFromZip(project)
 
     errors = []
 
     if "flatModel.xml" in files:
-        loadStandardItemModelXML(mw.mdlFlatData,
+        loadStandardItemModelXML(context.models.flat_data,
                                  files["flatModel.xml"], fromString=True)
     else:
         errors.append("flatModel.xml")
 
     if "perso.xml" in files:
-        loadStandardItemModelXMLForCharacters(mw.mdlCharacter, files["perso.xml"])
+        loadStandardItemModelXMLForCharacters(context.models.characters, files["perso.xml"])
     else:
         errors.append("perso.xml")
 
     if "world.xml" in files:
-        loadStandardItemModelXML(mw.mdlWorld,
+        loadStandardItemModelXML(context.models.world,
                                  files["world.xml"], fromString=True)
     else:
         errors.append("world.xml")
 
     if "labels.xml" in files:
-        loadStandardItemModelXML(mw.mdlLabels,
+        loadStandardItemModelXML(context.models.labels,
                                  files["labels.xml"], fromString=True)
     else:
         errors.append("labels.xml")
 
     if "status.xml" in files:
-        loadStandardItemModelXML(mw.mdlStatus,
+        loadStandardItemModelXML(context.models.statuses,
                                  files["status.xml"], fromString=True)
     else:
         errors.append("status.xml")
 
     if "plots.xml" in files:
-        loadStandardItemModelXML(mw.mdlPlots,
+        loadStandardItemModelXML(context.models.plots,
                                  files["plots.xml"], fromString=True)
     else:
         errors.append("plots.xml")
 
     if "outline.xml" in files:
-        mw.mdlOutline.loadFromXML(files["outline.xml"], fromString=True)
+        context.models.outline.loadFromXML(files["outline.xml"], fromString=True)
     else:
         errors.append("outline.xml")
 
     if "settings.txt" in files:
-        mw.settingsManager.load(files["settings.txt"], fromString=True, protocol=0)
+        context.settings.load(files["settings.txt"], fromString=True, protocol=0)
     else:
         errors.append("settings.txt")
 

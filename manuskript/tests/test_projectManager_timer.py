@@ -109,7 +109,11 @@ class TestProjectManagerTimer(unittest.TestCase):
         self.storage.save.return_value = True
         # Manually trigger the timeout signal
         self.project_manager.saveTimer.timeout.connect.call_args[0][0]()
-        self.storage.save.assert_called_once_with(self.window)
+        self.storage.save.assert_called_once()
+        self.assertEqual(
+            self.storage.save.call_args.args[0].project_file,
+            "dummy_project.msk",
+        )
 
     def test_save_timer_no_changes_triggers_save_datas(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=True)
@@ -117,7 +121,11 @@ class TestProjectManagerTimer(unittest.TestCase):
         self.storage.save.return_value = True
         # Manually trigger the timeout signal
         self.project_manager.saveTimerNoChanges.timeout.connect.call_args[0][0]()
-        self.storage.save.assert_called_once_with(self.window)
+        self.storage.save.assert_called_once()
+        self.assertEqual(
+            self.storage.save.call_args.args[0].project_file,
+            "dummy_project.msk",
+        )
 
 if __name__ == "__main__":
     unittest.main()

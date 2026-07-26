@@ -11,8 +11,8 @@ def test_storage_passes_explicit_context_to_persistence_facade():
         "manuskript.services.project_storage.loadSave.loadProject",
         return_value=[],
     ) as load_project:
-        assert storage.load("story.msk", context) == []
-    load_project.assert_called_once_with("story.msk", context)
+        assert storage.load(context) == []
+    load_project.assert_called_once_with(context)
 
     with patch(
         "manuskript.services.project_storage.loadSave.saveProject",

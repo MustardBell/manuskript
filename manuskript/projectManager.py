@@ -9,6 +9,9 @@ from manuskript.domain.project import (
 )
 from manuskript.logging import getLogFilePath
 from manuskript.services.project_model_factory import ProjectModelFactory
+from manuskript.services.project_persistence import (
+    ProjectPersistenceContext,
+)
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.ui.connections import SignalConnectionRegistry
 
@@ -206,7 +209,9 @@ class ProjectManager:
             LOGGER.error("There is no current project to save.")
             return False
 
-        r = self.storage.save(self.ui.persistence_context)
+        r = self.storage.save(
+            self.persistence_context(self.currentProject)
+        )
 
         current_project_name = os.path.basename(self.currentProject)
         if r:
@@ -239,10 +244,7 @@ class ProjectManager:
         return self.models
 
     def loadDatas(self, project):
-        errors = self.storage.load(
-            project,
-            self.ui.persistence_context,
-        )
+        errors = self.storage.load(self.persistence_context(project))
 
         # Giving some feedback
         if not errors:
@@ -267,3 +269,10 @@ class ProjectManager:
 
     def clearSaveCache(self):
         self.storage.clear_cache()
+
+    def persistence_context(self, project_file):
+        return ProjectPersistenceContext(
+            project_file=project_file,
+            models=self.models,
+            settings=self.ui.settings,
+        )

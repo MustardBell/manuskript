@@ -19,10 +19,6 @@ class ProjectLifecycleView:
     def model_parent(self):
         return self.window
 
-    @property
-    def persistence_context(self):
-        return self.window
-
     def translate(self, text):
         return self.window.tr(text)
 
