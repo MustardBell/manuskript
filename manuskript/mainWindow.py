@@ -24,7 +24,6 @@ from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
-from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
@@ -37,7 +36,6 @@ from manuskript.ui import style
 from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
 from manuskript.ui.connections import SignalConnectionRegistry
-from manuskript.ui.editors.editor_context import EditorContext
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
@@ -45,23 +43,18 @@ from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
-from manuskript.ui.reference_navigation import reference_navigation_for
-from manuskript.ui.search_context import SearchContext, SearchResultViewAdapter
+from manuskript.ui.project_context_binding import ProjectContextBinding
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
-from manuskript.ui.views.outline_colors import OutlineColorResolver
-from manuskript.ui.views.outline_context import OutlineViewContext
 from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
-from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
-from manuskript.ui.views.text_editor_context import text_editor_context_for
 from manuskript.functions import Spellchecker
 
 import logging
@@ -111,6 +104,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.referenceService = None
         self.textEditorContext = None
+        self.projectContextBinding = ProjectContextBinding(self)
 
         self.readSettings()
 
@@ -578,17 +572,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Project connections must be released before binding new models."
             )
         connect = self.projectConnections.connect
-        self.referenceService = ReferenceService(
-            ReferenceModels(
-                outline=self.mdlOutline,
-                characters=self.mdlCharacter,
-                plots=self.mdlPlots,
-                world=self.mdlWorld,
-                statuses=self.mdlStatus,
-                labels=self.mdlLabels,
-            ),
-            reference_navigation_for(self),
-        )
 
         # Flat datas (Summary and general infos)
         for widget, col in [
@@ -769,52 +752,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.treeWorld.expandAll()
 
         # Outline
-        self.textEditorContext = text_editor_context_for(
-            self,
-            self.settingsManager,
+        self.projectContextBinding.bind(connect)
+        self.referenceService = (
+            self.projectContextBinding.reference_service
         )
-        for editor in self.findChildren(textEditView):
-            editor.set_text_editor_context(self.textEditorContext)
-
-        outline_view_context = OutlineViewContext(
-            character_model=self.mdlCharacter,
-            label_model=self.mdlLabels,
-            status_model=self.mdlStatus,
-            settings=self.settingsManager,
-            color_resolver=OutlineColorResolver(
-                self.mdlCharacter,
-                self.mdlLabels,
-            ),
-            open_index=self.openIndex,
-            open_indexes=self.openIndexes,
-            selection_changed=self.redacMetadata.selectionChanged,
-            show_status=self.statusPresenter.show,
-        )
-        editor_context = EditorContext(
-            outline_model=self.mdlOutline,
-            outline_tree=self.treeRedacOutline,
-            outline_views=outline_view_context,
-            text_editor=self.textEditorContext,
-        )
-        self.treeRedacOutline.set_outline_context(outline_view_context)
-        self.treeOutlineOutline.set_outline_context(outline_view_context)
-        self.mainEditor.set_context(editor_context)
-
-        self.treeRedacOutline.setModel(self.mdlOutline)
-
-        self.redacMetadata.setModels(self.mdlOutline, self.mdlCharacter,
-                                     self.mdlLabels, self.mdlStatus)
-        self.outlineItemEditor.setModels(self.mdlOutline, self.mdlCharacter,
-                                         self.mdlLabels, self.mdlStatus)
-
-        self.treeOutlineOutline.setModel(self.mdlOutline)
-        # self.redacEditor.setModel(self.mdlOutline)
-        self.storylineView.setModels(
-            self.mdlOutline,
-            self.mdlCharacter,
-            self.mdlPlots,
-            self.referenceService,
-            connect=connect,
+        self.textEditorContext = (
+            self.projectContextBinding.text_editor_context
         )
 
         connect(
@@ -853,35 +796,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.treeRedacOutline.selectionModel().selectionChanged,
             self.mainEditor.selectionChanged,
             F.AUC,
-        )
-
-        # Cheat Sheet
-        self.cheatSheet.setModels(
-            self.mdlOutline,
-            self.mdlCharacter,
-            self.mdlPlots,
-            self.mdlWorld,
-            self.referenceService,
-            connect=connect,
-        )
-        completion_data = lambda: self.cheatSheet.data
-        for editor in self.findChildren(MDEditCompleter):
-            editor.setReferenceService(
-                self.referenceService,
-                completion_data,
-            )
-        self.widget.setContext(
-            SearchContext.from_models(
-                outline=self.mdlOutline,
-                characters=self.mdlCharacter,
-                flat_data=self.mdlFlatData,
-                world=self.mdlWorld,
-                plots=self.mdlPlots,
-                result_views=SearchResultViewAdapter(
-                    self,
-                    self.referenceService,
-                ),
-            )
         )
 
         # Debug
@@ -933,17 +847,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.characterController.reset()
         self.plotController.reset()
         self.worldController.reset()
-        self.treeRedacOutline.set_outline_context(None)
-        self.treeOutlineOutline.set_outline_context(None)
-        self.mainEditor.clear_context()
-        for editor in self.findChildren(textEditView):
-            editor.set_text_editor_context(None)
+        self.projectContextBinding.unbind()
         self.textEditorContext = None
-        for editor in self.findChildren(MDEditCompleter):
-            editor.setReferenceService(None)
-        self.widget.clearContext()
-        self.cheatSheet.clearModels()
-        self.storylineView.clearModels()
         self.referenceService = None
         self.projectConnections.disconnect_all()
 
