@@ -37,3 +37,18 @@ def test_recent_project_is_not_loaded_when_close_is_cancelled(MW):
 
     append_recent.assert_not_called()
     load_project.assert_not_called()
+
+
+def test_welcome_dependencies_are_assigned_by_main_window(MW):
+    assert MW.welcome.context.project_manager is MW.projectManager
+    assert MW.welcome.context.recent_menu is MW.menuRecents
+
+
+def test_auto_load_project_is_consumed_once(MW):
+    MW._autoLoadProject = "/tmp/project.msk"
+
+    assert (
+        MW.welcome.context.consume_auto_load_project()
+        == "/tmp/project.msk"
+    )
+    assert MW.welcome.context.consume_auto_load_project() is None
