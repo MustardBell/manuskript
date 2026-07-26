@@ -14,12 +14,12 @@ from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QSt
 
 from manuskript.commands import DocumentCommand, DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
+from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
-from manuskript.functions.history.History import History
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
@@ -43,6 +43,7 @@ from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
+from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.reference_navigation import reference_navigation_for
 from manuskript.ui.search_context import SearchContext, SearchResultViewAdapter
@@ -92,7 +93,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                             # value. In manuskript.main.
         self._autoLoadProject = None  # Used to load a command line project
         self.sessionStartWordCount = 0  # Used to track session targets
-        self.history = History()
         self._previousSelectionEmpty = True
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
@@ -101,6 +101,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
         self.worldController = WorldController(self)
+        self.navigationController = NavigationController(
+            MainNavigationView(self)
+        )
+        self.history = self.navigationController.history
         self.settingsManager = settings_manager
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
@@ -217,8 +221,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
         # Main menu:: Navigate
-        self.actBack.triggered.connect(self.navigateBack)
-        self.actForward.triggered.connect(self.navigateForward)
+        self.actBack.triggered.connect(self.navigationController.back)
+        self.actForward.triggered.connect(
+            self.navigationController.forward
+        )
 
         # Main Menu:: view
         self.generateViewMenu()
@@ -481,89 +487,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # Navigate
     
     def navigateBack(self):
-        self.history.back()
+        self.navigationController.back()
 
     def navigateForward(self):
-        self.history.forward()
+        self.navigationController.forward()
 
     def pushHistory(self, entry):
-        if self._previousSelectionEmpty:
-            self.history.replace(entry)
-        else:
-            self.history.next(entry)
+        self.navigationController.record(
+            entry,
+            replace=self._previousSelectionEmpty,
+        )
 
     def navigated(self, event):
-        if event.entry:
-            first_entry = event.entry[0]
-
-            if first_entry == "character":
-                if self.tabMain.currentIndex() != self.TabPersos:
-                    self.tabMain.setCurrentIndex(self.TabPersos)
-
-                if event.entry[1] is None:
-                    self.lstCharacters.setCurrentItem(None)
-                    self.lstCharacters.clearSelection()
-                else:
-                    if self.lstCharacters.currentCharacterID() != event.entry[1]:
-                        char = self.lstCharacters.getItemByID(event.entry[1])
-                        if char != None:
-                            self.lstCharacters.clearSelection()
-                            self.lstCharacters.setCurrentItem(char)
-            elif first_entry == "plot":
-                if self.tabMain.currentIndex() != self.TabPlots:
-                    self.tabMain.setCurrentIndex(self.TabPlots)
-
-                if event.entry[1] is None:
-                    self.lstPlots.setCurrentItem(None)
-                else:
-                    index = self.lstPlots.currentPlotIndex()
-                    if index and index.row() != event.entry[1]:
-                        plot = self.lstPlots.getItemByID(event.entry[1])
-                        if plot != None:
-                            self.lstPlots.setCurrentItem(plot)
-            elif first_entry == "world":
-                if self.tabMain.currentIndex() != self.TabWorld:
-                    self.tabMain.setCurrentIndex(self.TabWorld)
-
-                if event.entry[1] is None:
-                    self.treeWorld.selectionModel().clear()
-                else:
-                    index = self.worldController.current_index()
-                    if (
-                        not index.isValid()
-                        or self.mdlWorld.ID(index) != event.entry[1]
-                    ):
-                        self.worldController.select_by_id(event.entry[1])
-            elif first_entry == "outline":
-                if self.tabMain.currentIndex() != self.TabOutline:
-                    self.tabMain.setCurrentIndex(self.TabOutline)
-
-                if event.entry[1] is None:
-                    self.treeOutlineOutline.selectionModel().clear()
-                else:
-                    index = self.treeOutlineOutline.selectionModel().currentIndex()
-                    if index and self.mdlOutline.ID(index) != event.entry[1]:
-                        outline = self.mdlOutline.getIndexByID(event.entry[1])
-                        if outline is not None:
-                            self.treeOutlineOutline.setCurrentIndex(outline)
-            elif first_entry == "redac":
-                if self.tabMain.currentIndex() != self.TabRedac:
-                    self.tabMain.setCurrentIndex(self.TabRedac)
-
-                if event.entry[1] is None:
-                    self.treeRedacOutline.selectionModel().clear()
-                else:
-                    index = self.treeRedacOutline.selectionModel().currentIndex()
-                    if index and self.mdlOutline.ID(index) != event.entry[1]:
-                        outline = self.mdlOutline.getIndexByID(event.entry[1])
-                        if outline is not None:
-                            self.treeRedacOutline.setCurrentIndex(outline)
-            elif first_entry == "main":
-                if self.tabMain.currentIndex() != event.entry[1]:
-                    self.lstTabs.setCurrentRow(event.entry[1])
-
-        self.actBack.setEnabled(event.position > 0)
-        self.actForward.setEnabled(event.position < event.count - 1)
+        self.navigationController.navigated(event)
 
     def readSettings(self):
         # Load State and geometry
@@ -633,8 +569,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.tabMain.currentChanged.connect(self.toolbar.setCurrentGroup)
         self.tabMain.currentChanged.connect(self.tabMainChanged)
-
-        self.history.navigated.connect(self.navigated)
 
         qApp.focusChanged.connect(self.focusChanged)
 
