@@ -4,6 +4,7 @@
 # Lots of stuff from here comes from the excellent focuswriter.
 import os
 import re
+from copy import deepcopy
 
 from PyQt5.QtCore import QRect, QSize, Qt, QPoint, QFile, QIODevice, QTextStream
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QBrush, QImage, QTextBlockFormat, QTextCharFormat, QFont, qGray
@@ -12,9 +13,6 @@ from PyQt5.QtWidgets import qApp, QFrame
 from manuskript.functions import allPaths, appPath, findBackground, findFirstFile
 from manuskript.theme_data import getThemeName, loadThemeDatas
 from manuskript.ui.views.MDEditView import MDEditView
-
-_thumbCache = {}
-
 
 def themeTextRect(themeDatas, screenRect):
     margin = themeDatas["Foreground/Margin"]
@@ -35,39 +33,80 @@ def themeTextRect(themeDatas, screenRect):
     return QRect(int(x), int(y), int(width), int(height))
 
 
+class ThemePreviewRenderer:
+    """Render theme previews with an instance-owned, geometry-aware cache."""
+
+    def __init__(self, theme_loader=None, preview_factory=None):
+        self._theme_loader = theme_loader or loadThemeDatas
+        self._preview_factory = (
+            preview_factory or _renderThemePreview
+        )
+        self._cache = {}
+
+    def render(self, theme, screen_rect, size=QSize(200, 120)):
+        from_file = isinstance(theme, str) and os.path.exists(theme)
+        if not from_file:
+            return self._preview_factory(theme, screen_rect, size)
+
+        path = os.path.abspath(theme)
+        theme_data = self._theme_loader(path)
+        geometry = (
+            screen_rect.x(),
+            screen_rect.y(),
+            screen_rect.width(),
+            screen_rect.height(),
+            size.width(),
+            size.height(),
+        )
+        cached = self._cache.get(path)
+        if (
+            cached is not None
+            and cached[0] == theme_data
+            and cached[1] == geometry
+        ):
+            return cached[2]
+
+        preview = self._preview_factory(
+            theme_data,
+            screen_rect,
+            size,
+        )
+        self._cache[path] = (
+            deepcopy(theme_data),
+            geometry,
+            preview,
+        )
+        return preview
+
+    def clear(self):
+        self._cache.clear()
+
+
 def createThemePreview(theme, screenRect, size=QSize(200, 120)):
     """
     Generates a QPixmap preview for given theme.
 
     Theme can be either a string containing the filename of the ini
     file with the theme settings, or it can be a dict with the settings.
-
-    If theme is a filename, the result is cached.
+    This compatibility helper is stateless; use ``ThemePreviewRenderer``
+    when previews should be cached.
     """
 
-    # Checking whether theme is a string or dict
-    if type(theme) == str and os.path.exists(theme):
-        # Theme is the path to an ini file
-        themeDatas = loadThemeDatas(theme)
-        fromFile = True
+    if isinstance(theme, str) and os.path.exists(theme):
+        theme_data = loadThemeDatas(theme)
     else:
-        themeDatas = theme
-        fromFile = False
+        theme_data = theme
+    return _renderThemePreview(theme_data, screenRect, size)
 
-    # Check if item is in cache
-    if fromFile and theme in _thumbCache:
-        if _thumbCache[theme][0] == themeDatas:
-            return _thumbCache[theme][1]
 
-    pixmap = generateTheme(themeDatas, screenRect)
-
-    addThemePreviewText(pixmap, themeDatas, screenRect)
-
+def _renderThemePreview(theme_data, screen_rect, size):
+    pixmap = generateTheme(theme_data, screen_rect)
+    addThemePreviewText(pixmap, theme_data, screen_rect)
     px = QPixmap(pixmap).scaled(size, Qt.KeepAspectRatio)
 
     w = int(px.width() / 10)
     h = int(px.height() / 10)
-    r = themeTextRect(themeDatas, screenRect)
+    r = themeTextRect(theme_data, screen_rect)
 
     painter = QPainter(px)
     painter.drawPixmap(QRect(w, h, w * 4, h * 5), pixmap,
@@ -75,11 +114,6 @@ def createThemePreview(theme, screenRect, size=QSize(200, 120)):
     painter.setPen(Qt.white)
     painter.drawRect(QRect(w, h, w * 4, h * 5))
     painter.end()
-
-    # If theme is a themefile, we keep it in cache
-    if fromFile:
-        _thumbCache[theme] = [themeDatas, px]
-
     return px
 
 

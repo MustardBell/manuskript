@@ -45,6 +45,7 @@ from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
+from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
@@ -117,6 +118,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.externalToolPaths = ExternalToolPaths()
         self.projectHistory = ProjectHistory()
         self.themeRepository = ThemeRepository()
+        self.themePreviewRenderer = ThemePreviewRenderer()
         self.projectManager = ProjectManager(
             self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
@@ -828,6 +830,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self,
             self.settingsManager,
             theme_repository=self.themeRepository,
+            theme_preview_renderer=self.themePreviewRenderer,
         )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)

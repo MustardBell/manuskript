@@ -23,7 +23,7 @@ from manuskript.functions import (
 )
 from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.tabSplitter import tabSplitter
-from manuskript.ui.editors.themes import createThemePreview
+from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.settings_ui import Ui_Settings
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.textEditView import textEditView
@@ -37,13 +37,21 @@ class settingsWindow(QWidget, Ui_Settings):
         mainWindow,
         settings_manager,
         theme_repository=None,
+        theme_preview_renderer=None,
     ):
         QWidget.__init__(self)
         self.setupUi(self)
         self.mw = mainWindow
         self.settings = settings_manager
         self.themeRepository = (
-            theme_repository or ThemeRepository()
+            theme_repository
+            if theme_repository is not None
+            else ThemeRepository()
+        )
+        self.themePreviewRenderer = (
+            theme_preview_renderer
+            if theme_preview_renderer is not None
+            else ThemePreviewRenderer()
         )
 
         # UI
@@ -792,7 +800,10 @@ class settingsWindow(QWidget, Ui_Settings):
                 screenRect = qApp.desktop().screenGeometry(
                     currentScreen
                 )
-                thumb = createThemePreview(theme.path, screenRect)
+                thumb = self.themePreviewRenderer.render(
+                    theme.path,
+                    screenRect,
+                )
 
             icon = QPixmap(thumb).scaled(
                 200,
@@ -1048,7 +1059,11 @@ class settingsWindow(QWidget, Ui_Settings):
         currentScreen = qApp.desktop().screenNumber(self)
         screen = qApp.desktop().screenGeometry(currentScreen)
 
-        px = createThemePreview(self.themeEditor.data, screen, self.lblPreview.size())
+        px = self.themePreviewRenderer.render(
+            self.themeEditor.data,
+            screen,
+            self.lblPreview.size(),
+        )
         self.lblPreview.setPixmap(px)
 
     def setButtonColor(self, btn, color):
