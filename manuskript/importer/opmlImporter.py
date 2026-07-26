@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import qApp, QMessageBox
 from manuskript.models import outlineItem
 from manuskript.enums import Outline
 from lxml import etree as ET
-from manuskript.functions import mainWindow, safeTranslate
+from manuskript.functions import safeTranslate
 from manuskript.importer.abstractImporter import abstractImporter
 
 
