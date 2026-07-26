@@ -17,7 +17,7 @@ from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
-from manuskript.enums import Character, Plot, Outline
+from manuskript.enums import Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -35,16 +35,14 @@ from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
 from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
-from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.navigation_view import MainNavigationView
+from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
-from manuskript.ui.project_context_binding import ProjectContextBinding
-from manuskript.ui.project_feature_binding import ProjectFeatureBinding
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.views.MDEditView import MDEditView
@@ -89,7 +87,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
         )
-        self.projectConnections = SignalConnectionRegistry()
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
         self.worldController = WorldController(self)
@@ -103,8 +100,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.referenceService = None
         self.textEditorContext = None
-        self.projectContextBinding = ProjectContextBinding(self)
-        self.projectFeatureBinding = ProjectFeatureBinding(self)
+        self.projectBinding = ProjectBinding(self)
 
         self.readSettings()
 
@@ -567,144 +563,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         qApp.focusChanged.connect(self.focusChanged)
 
     def makeConnections(self):
-        if self.projectConnections:
-            raise RuntimeError(
-                "Project connections must be released before binding new models."
-            )
-        connect = self.projectConnections.connect
-
-        # Flat datas (Summary and general infos)
-        for widget, col in [
-            (self.txtSummarySituation, 0),
-            (self.txtSummarySentence, 1),
-            (self.txtSummarySentence_2, 1),
-            (self.txtSummaryPara, 2),
-            (self.txtSummaryPara_2, 2),
-            (self.txtPlotSummaryPara, 2),
-            (self.txtSummaryPage, 3),
-            (self.txtSummaryPage_2, 3),
-            (self.txtPlotSummaryPage, 3),
-            (self.txtSummaryFull, 4),
-            (self.txtPlotSummaryFull, 4),
-        ]:
-            widget.setModel(self.mdlFlatData)
-            widget.setColumn(col)
-            widget.setCurrentModelIndex(self.mdlFlatData.index(1, col))
-
-        for widget, col in [
-            (self.txtGeneralTitle, 0),
-            (self.txtGeneralSubtitle, 1),
-            (self.txtGeneralSerie, 2),
-            (self.txtGeneralVolume, 3),
-            (self.txtGeneralGenre, 4),
-            (self.txtGeneralLicense, 5),
-            (self.txtGeneralAuthor, 6),
-            (self.txtGeneralEmail, 7),
-        ]:
-            widget.setModel(self.mdlFlatData)
-            widget.setColumn(col)
-            widget.setCurrentModelIndex(self.mdlFlatData.index(0, col))
-
-        self.projectFeatureBinding.bind(connect)
-
-        # Outline
-        self.projectContextBinding.bind(connect)
-        self.referenceService = (
-            self.projectContextBinding.reference_service
-        )
-        self.textEditorContext = (
-            self.projectContextBinding.text_editor_context
-        )
-
-        connect(
-            self.treeOutlineOutline.selectionModel().selectionChanged,
-            self.outlineChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeOutlineOutline.selectionModel().selectionChanged,
-            self.outlineItemEditor.selectionChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeOutlineOutline.clicked,
-            self.outlineItemEditor.selectionChanged,
-            F.AUC,
-        )
-
-        # Sync selection
-        connect(
-            self.treeRedacOutline.selectionModel().selectionChanged,
-            self.redacOutlineChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeRedacOutline.selectionModel().selectionChanged,
-            self.redacMetadata.selectionChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeRedacOutline.clicked,
-            self.redacMetadata.selectionChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeRedacOutline.selectionModel().selectionChanged,
-            self.mainEditor.selectionChanged,
-            F.AUC,
-        )
-
-        # Debug
-        self.mdlFlatData.setVerticalHeaderLabels(["General info", "Summary"])
-        self.tblDebugFlatData.setModel(self.mdlFlatData)
-        self.tblDebugPersos.setModel(self.mdlCharacter)
-        self.tblDebugPersosInfos.setModel(self.mdlCharacter)
-        connect(
-            self.tblDebugPersos.selectionModel().currentChanged,
-            lambda: self.tblDebugPersosInfos.setRootIndex(
-                self.mdlCharacter.index(
-                    self.tblDebugPersos.selectionModel().currentIndex().row(),
-                    Character.name,
-                )
-            ),
-            F.AUC,
-        )
-
-        self.tblDebugPlots.setModel(self.mdlPlots)
-        self.tblDebugPlotsPersos.setModel(self.mdlPlots)
-        self.tblDebugSubPlots.setModel(self.mdlPlots)
-        connect(
-            self.tblDebugPlots.selectionModel().currentChanged,
-            lambda: self.tblDebugPlotsPersos.setRootIndex(
-                self.mdlPlots.index(
-                    self.tblDebugPlots.selectionModel().currentIndex().row(),
-                    Plot.characters,
-                )
-            ),
-            F.AUC,
-        )
-        connect(
-            self.tblDebugPlots.selectionModel().currentChanged,
-            lambda: self.tblDebugSubPlots.setRootIndex(
-                self.mdlPlots.index(
-                    self.tblDebugPlots.selectionModel().currentIndex().row(),
-                    Plot.steps,
-                )
-            ),
-            F.AUC,
-        )
-        self.treeDebugWorld.setModel(self.mdlWorld)
-        self.treeDebugOutline.setModel(self.mdlOutline)
-        self.lstDebugLabels.setModel(self.mdlLabels)
-        self.lstDebugStatus.setModel(self.mdlStatus)
+        self.projectBinding.bind()
+        self.referenceService = self.projectBinding.reference_service
+        self.textEditorContext = self.projectBinding.text_editor_context
 
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
-        self.projectFeatureBinding.unbind()
-        self.projectContextBinding.unbind()
+        self.projectBinding.unbind()
         self.textEditorContext = None
         self.referenceService = None
-        self.projectConnections.disconnect_all()
 
     ###############################################################################
     # HELP
