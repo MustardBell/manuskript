@@ -96,6 +96,8 @@ class basicExporter:
 
 class basicFormat:
 
+    name = ""
+    description = ""
     implemented = False
     InvalidBecause = ""
     requires = {
