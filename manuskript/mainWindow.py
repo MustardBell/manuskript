@@ -28,6 +28,7 @@ from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
 from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.models.worldModel import worldModel
+from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
@@ -1465,6 +1466,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     def doCompile(self):
-        self.dialog = exporterDialog(mw=self)
+        self.dialog = exporterDialog(
+            ExportContext(
+                project_file=self.currentProject,
+                outline_model=self.mdlOutline,
+                flat_data_model=self.mdlFlatData,
+                label_model=self.mdlLabels,
+                status_model=self.mdlStatus,
+                parent=self,
+            )
+        )
         self.dialog.show()
         self.centerChildWindow(self.dialog)

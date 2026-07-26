@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-from PyQt5.QtGui import QTextCharFormat, QFont
-from PyQt5.QtWidgets import QPlainTextEdit, QGroupBox, qApp, QVBoxLayout, QCheckBox
+from PyQt5.QtWidgets import QGroupBox, qApp, QVBoxLayout, QCheckBox
 
 from manuskript.exporter.manuskript.plainText import plainText
-from manuskript.functions import mainWindow, safeTranslate
+from manuskript.functions import safeTranslate
 from manuskript.ui.highlighters import MMDHighlighter
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
 
@@ -20,7 +19,7 @@ class markdown(plainText):
     icon = "text-x-markdown"
 
     def settingsWidget(self):
-        w = markdownSettings(self)
+        w = markdownSettings(self, self.context)
         w.loadSettings()
         return w
 
@@ -50,8 +49,8 @@ class markdown(plainText):
 
 
 class markdownSettings(exporterSettings):
-    def __init__(self, _format, parent=None):
-        exporterSettings.__init__(self, _format, parent)
+    def __init__(self, _format, context, parent=None):
+        exporterSettings.__init__(self, _format, context, parent)
 
         # Adds markdown syntax highlighter setting
         w = self.toolBox.widget(self.toolBox.count() - 1)
