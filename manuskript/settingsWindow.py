@@ -376,9 +376,9 @@ class settingsWindow(QWidget, Ui_Settings):
         if self.txtAutoSaveNoChanges.text() in ["", "0"]:
             self.txtAutoSaveNoChanges.setText("1")
 
-        sttgs = QSettings()
-        sttgs.setValue("autoLoad", True if self.chkAutoLoad.checkState() else False)
-        sttgs.sync()
+        self.mw.welcome.setAutoLoad(
+            True if self.chkAutoLoad.checkState() else False
+        )
 
         self.settings.autoSave = True if self.chkAutoSave.checkState() else False
         self.settings.autoSaveNoChanges = True if self.chkAutoSaveNoChanges.checkState() else False

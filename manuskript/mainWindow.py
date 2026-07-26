@@ -28,6 +28,7 @@ from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
+from manuskript.services.project_history import ProjectHistory
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
 from manuskript.ui.about import aboutDialog
@@ -113,12 +114,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel.hide()
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
         self.projectLifecycleView = ProjectLifecycleView(self)
+        self.projectHistory = ProjectHistory()
         self.projectManager = ProjectManager(
             self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
+            last_project_store=self.projectHistory,
         )
         self.welcome.set_context(
-            welcome_context_for(self, self.settingsManager)
+            welcome_context_for(
+                self,
+                self.settingsManager,
+                self.projectHistory,
+            )
         )
 
         # Welcome
