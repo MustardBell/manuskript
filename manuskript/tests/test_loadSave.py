@@ -8,14 +8,15 @@ from manuskript.services.project_persistence import (
 
 def test_save_dispatches_explicit_context_to_current_format():
     context = MagicMock()
+    cache = {}
 
     with patch.object(
         loadSave.v1, "saveProject", return_value=True
     ) as save_project:
-        result = loadSave.saveProject(context)
+        result = loadSave.saveProject(context, cache=cache)
 
     assert result
-    save_project.assert_called_once_with(context)
+    save_project.assert_called_once_with(context, cache=cache)
 
 
 def test_save_dispatches_explicit_context_to_legacy_format():
@@ -38,14 +39,19 @@ def test_load_dispatches_explicit_context_to_detected_format(tmp_path):
         models=MagicMock(),
         settings=MagicMock(),
     )
+    cache = {}
 
     with patch.object(
         loadSave.v1, "loadProject", return_value=[]
     ) as load_project:
-        result = loadSave.loadProject(context)
+        result = loadSave.loadProject(context, cache=cache)
 
     assert result == []
-    load_project.assert_called_once_with(context, zip=False)
+    load_project.assert_called_once_with(
+        context,
+        zip=False,
+        cache=cache,
+    )
 
 
 def test_persistence_facade_requires_explicit_context():
