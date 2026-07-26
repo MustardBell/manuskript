@@ -6,7 +6,7 @@ import re
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, QTimer, QSettings, Qt, QPoint,
-                          QRegExp, QUrl, QSize, QModelIndex)
+                          QRegExp, QUrl, QSize, QModelIndex, QSignalBlocker)
 from PyQt5.QtGui import QStandardItemModel, QIcon, QColor, QStandardItem
 from PyQt5.QtWidgets import QMainWindow, QHeaderView, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QDialog, QTableView
@@ -28,6 +28,7 @@ from manuskript.ui import style
 from manuskript.ui import characterInfoDialog
 from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
+from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
@@ -75,6 +76,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.sessionStartWordCount = 0  # Used to track session targets
         self.history = History()
         self._previousSelectionEmpty = True
+        self.projectConnections = SignalConnectionRegistry()
         self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
 
@@ -601,19 +603,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def updateCharacterPOVState(self, ID):
         c = self.mdlCharacter.getCharacterByID(ID)
-        self.disconnectAll(self.chkPersoPOV.stateChanged, self.lstCharacters.changeCharacterPOVState)
+        blocker = QSignalBlocker(self.chkPersoPOV)
 
         if c.pov():
             self.chkPersoPOV.setCheckState(Qt.Checked)
         else:
             self.chkPersoPOV.setCheckState(Qt.Unchecked)
 
-        try:
-            self.chkPersoPOV.stateChanged.connect(self.lstCharacters.changeCharacterPOVState, F.AUC)
-            self.chkPersoPOV.setEnabled(len(self.mdlOutline.findItemsByPOV(ID)) == 0)
-        except TypeError:
-            #don't know what's up with this
-            pass
+        del blocker
+        self.chkPersoPOV.setEnabled(len(self.mdlOutline.findItemsByPOV(ID)) == 0)
 
     def deleteCharacter(self):
         ID = self.lstCharacters.removeCharacters()
@@ -988,6 +986,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         qApp.focusChanged.connect(self.focusChanged)
 
     def makeConnections(self):
+        if self.projectConnections:
+            raise RuntimeError(
+                "Project connections must be released before binding new models."
+            )
+        connect = self.projectConnections.connect
 
         # Flat datas (Summary and general infos)
         for widget, col in [
@@ -1025,18 +1028,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.updatePersoInfoView(self.tblPersoInfos)
         self.lstCharacters.setCharactersModel(self.mdlCharacter)
         self.tblPersoInfos.setModel(self.mdlCharacter)
-        try:
-            self.btnAddPerso.clicked.connect(self.lstCharacters.addCharacter, F.AUC)
-            self.btnRmPerso.clicked.connect(self.deleteCharacter, F.AUC)
-
-            self.btnPersoColor.clicked.connect(self.lstCharacters.choseCharacterColor, F.AUC)
-            self.chkPersoPOV.stateChanged.connect(self.lstCharacters.changeCharacterPOVState, F.AUC)
-
-            self.btnPersoAddInfo.clicked.connect(self.lstCharacters.addCharacterInfo, F.AUC)
-            self.btnPersoRmInfo.clicked.connect(self.lstCharacters.removeCharacterInfo, F.AUC)
-        except TypeError:
-            # Connection has already been made
-            pass
+        connect(
+            self.btnAddPerso.clicked,
+            self.lstCharacters.addCharacter,
+            F.AUC,
+        )
+        connect(self.btnRmPerso.clicked, self.deleteCharacter, F.AUC)
+        connect(
+            self.btnPersoColor.clicked,
+            self.lstCharacters.choseCharacterColor,
+            F.AUC,
+        )
+        connect(
+            self.chkPersoPOV.stateChanged,
+            self.lstCharacters.changeCharacterPOVState,
+            F.AUC,
+        )
+        connect(
+            self.btnPersoAddInfo.clicked,
+            self.lstCharacters.addCharacterInfo,
+            F.AUC,
+        )
+        connect(
+            self.btnPersoRmInfo.clicked,
+            self.lstCharacters.removeCharacterInfo,
+            F.AUC,
+        )
 
         for w, c in [
             (self.txtPersoName, Character.name),
@@ -1059,15 +1076,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lstPlotPerso.setModel(self.mdlPlots)
         self.lstPlots.setPlotModel(self.mdlPlots)
         self._updatingSubPlot = False
-        self.btnAddPlot.clicked.connect(self.mdlPlots.addPlot, F.AUC)
-        self.btnRmPlot.clicked.connect(lambda:
-                                       self.mdlPlots.removePlot(self.lstPlots.currentPlotIndex()), F.AUC)
-        self.btnAddSubPlot.clicked.connect(self.mdlPlots.addSubPlot, F.AUC)
-        self.btnAddSubPlot.clicked.connect(self.updateSubPlotView, F.AUC)
-        self.btnRmSubPlot.clicked.connect(self.mdlPlots.removeSubPlot, F.AUC)
-        self.lstPlotPerso.selectionModel().selectionChanged.connect(self.plotPersoSelectionChanged)
-        self.btnRmPlotPerso.clicked.connect(self.mdlPlots.removePlotPerso, F.AUC)
-        self.lstSubPlots.selectionModel().currentRowChanged.connect(self.changeCurrentSubPlot, F.AUC)
+        connect(self.btnAddPlot.clicked, self.mdlPlots.addPlot, F.AUC)
+        connect(
+            self.btnRmPlot.clicked,
+            lambda: self.mdlPlots.removePlot(self.lstPlots.currentPlotIndex()),
+            F.AUC,
+        )
+        connect(self.btnAddSubPlot.clicked, self.mdlPlots.addSubPlot, F.AUC)
+        connect(self.btnAddSubPlot.clicked, self.updateSubPlotView, F.AUC)
+        connect(self.btnRmSubPlot.clicked, self.mdlPlots.removeSubPlot, F.AUC)
+        connect(
+            self.lstPlotPerso.selectionModel().selectionChanged,
+            self.plotPersoSelectionChanged,
+        )
+        connect(
+            self.btnRmPlotPerso.clicked,
+            self.mdlPlots.removePlotPerso,
+            F.AUC,
+        )
+        connect(
+            self.lstSubPlots.selectionModel().currentRowChanged,
+            self.changeCurrentSubPlot,
+            F.AUC,
+        )
 
         for w, c in [
             (self.txtPlotName, Plot.name),
@@ -1080,7 +1111,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.tabPlot.setEnabled(False)
         self.mdlPlots.updatePlotPersoButton()
-        self.mdlCharacter.dataChanged.connect(self.mdlPlots.updatePlotPersoButton)
+        connect(
+            self.mdlCharacter.dataChanged,
+            self.mdlPlots.updatePlotPersoButton,
+        )
         self.lstOutlinePlots.setPlotModel(self.mdlPlots)
         self.lstOutlinePlots.setShowSubPlot(True)
         self.plotCharacterDelegate = outlineCharacterDelegate(self.mdlCharacter, self)
@@ -1094,9 +1128,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.treeWorld.hideColumn(i)
         self.treeWorld.showColumn(0)
         self.btnWorldEmptyData.setMenu(self.mdlWorld.emptyDataMenu())
-        self.treeWorld.selectionModel().selectionChanged.connect(self.changeCurrentWorld, F.AUC)
-        self.btnAddWorld.clicked.connect(self.mdlWorld.addItem, F.AUC)
-        self.btnRmWorld.clicked.connect(self.mdlWorld.removeItem, F.AUC)
+        connect(
+            self.treeWorld.selectionModel().selectionChanged,
+            self.changeCurrentWorld,
+            F.AUC,
+        )
+        connect(self.btnAddWorld.clicked, self.mdlWorld.addItem, F.AUC)
+        connect(self.btnRmWorld.clicked, self.mdlWorld.removeItem, F.AUC)
         for w, c in [
             (self.txtWorldName, World.name),
             (self.txtWorldDescription, World.description),
@@ -1123,16 +1161,43 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # self.redacEditor.setModel(self.mdlOutline)
         self.storylineView.setModels(self.mdlOutline, self.mdlCharacter, self.mdlPlots)
 
-        self.treeOutlineOutline.selectionModel().selectionChanged.connect(self.outlineChanged, F.AUC)
-        self.treeOutlineOutline.selectionModel().selectionChanged.connect(self.outlineItemEditor.selectionChanged, F.AUC)
-        self.treeOutlineOutline.clicked.connect(self.outlineItemEditor.selectionChanged, F.AUC)
+        connect(
+            self.treeOutlineOutline.selectionModel().selectionChanged,
+            self.outlineChanged,
+            F.AUC,
+        )
+        connect(
+            self.treeOutlineOutline.selectionModel().selectionChanged,
+            self.outlineItemEditor.selectionChanged,
+            F.AUC,
+        )
+        connect(
+            self.treeOutlineOutline.clicked,
+            self.outlineItemEditor.selectionChanged,
+            F.AUC,
+        )
 
         # Sync selection
-        self.treeRedacOutline.selectionModel().selectionChanged.connect(self.redacOutlineChanged, F.AUC)
-        self.treeRedacOutline.selectionModel().selectionChanged.connect(self.redacMetadata.selectionChanged, F.AUC)
-        self.treeRedacOutline.clicked.connect(self.redacMetadata.selectionChanged, F.AUC)
-
-        self.treeRedacOutline.selectionModel().selectionChanged.connect(self.mainEditor.selectionChanged, F.AUC)
+        connect(
+            self.treeRedacOutline.selectionModel().selectionChanged,
+            self.redacOutlineChanged,
+            F.AUC,
+        )
+        connect(
+            self.treeRedacOutline.selectionModel().selectionChanged,
+            self.redacMetadata.selectionChanged,
+            F.AUC,
+        )
+        connect(
+            self.treeRedacOutline.clicked,
+            self.redacMetadata.selectionChanged,
+            F.AUC,
+        )
+        connect(
+            self.treeRedacOutline.selectionModel().selectionChanged,
+            self.mainEditor.selectionChanged,
+            F.AUC,
+        )
 
         # Cheat Sheet
         self.cheatSheet.setModels()
@@ -1142,102 +1207,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tblDebugFlatData.setModel(self.mdlFlatData)
         self.tblDebugPersos.setModel(self.mdlCharacter)
         self.tblDebugPersosInfos.setModel(self.mdlCharacter)
-        self.tblDebugPersos.selectionModel().currentChanged.connect(
-                lambda: self.tblDebugPersosInfos.setRootIndex(self.mdlCharacter.index(
-                        self.tblDebugPersos.selectionModel().currentIndex().row(),
-                        Character.name)), F.AUC)
+        connect(
+            self.tblDebugPersos.selectionModel().currentChanged,
+            lambda: self.tblDebugPersosInfos.setRootIndex(
+                self.mdlCharacter.index(
+                    self.tblDebugPersos.selectionModel().currentIndex().row(),
+                    Character.name,
+                )
+            ),
+            F.AUC,
+        )
 
         self.tblDebugPlots.setModel(self.mdlPlots)
         self.tblDebugPlotsPersos.setModel(self.mdlPlots)
         self.tblDebugSubPlots.setModel(self.mdlPlots)
-        self.tblDebugPlots.selectionModel().currentChanged.connect(
-                lambda: self.tblDebugPlotsPersos.setRootIndex(self.mdlPlots.index(
-                        self.tblDebugPlots.selectionModel().currentIndex().row(),
-                        Plot.characters)), F.AUC)
-        self.tblDebugPlots.selectionModel().currentChanged.connect(
-                lambda: self.tblDebugSubPlots.setRootIndex(self.mdlPlots.index(
-                        self.tblDebugPlots.selectionModel().currentIndex().row(),
-                        Plot.steps)), F.AUC)
+        connect(
+            self.tblDebugPlots.selectionModel().currentChanged,
+            lambda: self.tblDebugPlotsPersos.setRootIndex(
+                self.mdlPlots.index(
+                    self.tblDebugPlots.selectionModel().currentIndex().row(),
+                    Plot.characters,
+                )
+            ),
+            F.AUC,
+        )
+        connect(
+            self.tblDebugPlots.selectionModel().currentChanged,
+            lambda: self.tblDebugSubPlots.setRootIndex(
+                self.mdlPlots.index(
+                    self.tblDebugPlots.selectionModel().currentIndex().row(),
+                    Plot.steps,
+                )
+            ),
+            F.AUC,
+        )
         self.treeDebugWorld.setModel(self.mdlWorld)
         self.treeDebugOutline.setModel(self.mdlOutline)
         self.lstDebugLabels.setModel(self.mdlLabels)
         self.lstDebugStatus.setModel(self.mdlStatus)
 
-    def disconnectAll(self, signal, oldHandler=None):
-        # Disconnect all "oldHandler" slot connections for a signal
-        #
-        # Ref: PyQt Widget connect() and disconnect()
-        #      https://stackoverflow.com/questions/21586643/pyqt-widget-connect-and-disconnect
-        #
-        # The loop is needed for safely disconnecting a specific handler,
-        # because it may have been connected multiple times, and
-        # disconnect only removes one connection at a time.
-        while True:
-            try:
-                if oldHandler != None:
-                    signal.disconnect(oldHandler)
-                else:
-                    signal.disconnect()
-            except TypeError:
-                break
-
     def breakConnections(self):
-        # Break connections for UI elements that were connected in makeConnections()
-
-        # Characters
-        self.disconnectAll(self.btnAddPerso.clicked, self.lstCharacters.addCharacter)
-        self.disconnectAll(self.btnRmPerso.clicked, self.deleteCharacter)
-
-        self.disconnectAll(self.btnPersoColor.clicked, self.lstCharacters.choseCharacterColor)
-        self.disconnectAll(self.chkPersoPOV.stateChanged, self.lstCharacters.changeCharacterPOVState)
-
-        self.disconnectAll(self.btnPersoAddInfo.clicked, self.lstCharacters.addCharacterInfo)
-        self.disconnectAll(self.btnPersoRmInfo.clicked, self.lstCharacters.removeCharacterInfo)
-
-        # Plots
+        """Release every signal connection owned by the current project."""
         self._updatingSubPlot = False
-        self.disconnectAll(self.btnAddPlot.clicked, self.mdlPlots.addPlot)
-        self.disconnectAll(self.btnRmPlot.clicked, lambda:
-                                                   self.mdlPlots.removePlot(self.lstPlots.currentPlotIndex()))
-        self.disconnectAll(self.btnAddSubPlot.clicked, self.mdlPlots.addSubPlot)
-        self.disconnectAll(self.btnAddSubPlot.clicked, self.updateSubPlotView)
-        self.disconnectAll(self.btnRmSubPlot.clicked, self.mdlPlots.removeSubPlot)
-        self.disconnectAll(self.lstPlotPerso.selectionModel().selectionChanged, self.plotPersoSelectionChanged)
-        self.disconnectAll(self.lstSubPlots.selectionModel().currentRowChanged, self.changeCurrentSubPlot)
-        self.disconnectAll(self.btnRmPlotPerso.clicked, self.mdlPlots.removePlotPerso)
-
-        self.disconnectAll(self.mdlCharacter.dataChanged, self.mdlPlots.updatePlotPersoButton)
-
-        # World
-        self.disconnectAll(self.treeWorld.selectionModel().selectionChanged, self.changeCurrentWorld)
-        self.disconnectAll(self.btnAddWorld.clicked, self.mdlWorld.addItem)
-        self.disconnectAll(self.btnRmWorld.clicked, self.mdlWorld.removeItem)
-
-        # Outline
-        self.disconnectAll(self.treeOutlineOutline.selectionModel().selectionChanged, self.outlineItemEditor.selectionChanged)
-        self.disconnectAll(self.treeOutlineOutline.clicked, self.outlineItemEditor.selectionChanged)
-
-        # Sync selection
-        self.disconnectAll(self.treeRedacOutline.selectionModel().selectionChanged, self.redacMetadata.selectionChanged)
-        self.disconnectAll(self.treeRedacOutline.clicked, self.redacMetadata.selectionChanged)
-
-        self.disconnectAll(self.treeRedacOutline.selectionModel().selectionChanged, self.mainEditor.selectionChanged)
-
-        # Debug
-        self.disconnectAll(self.tblDebugPersos.selectionModel().currentChanged,
-                lambda: self.tblDebugPersosInfos.setRootIndex(self.mdlCharacter.index(
-                        self.tblDebugPersos.selectionModel().currentIndex().row(),
-                        Character.name)))
-        self.disconnectAll(self.tblDebugPlots.selectionModel().currentChanged,
-                lambda: self.tblDebugPlotsPersos.setRootIndex(self.mdlPlots.index(
-                        self.tblDebugPlots.selectionModel().currentIndex().row(),
-                        Plot.characters)))
-        self.disconnectAll(self.tblDebugPlots.selectionModel().currentChanged,
-                lambda: self.tblDebugSubPlots.setRootIndex(self.mdlPlots.index(
-                        self.tblDebugPlots.selectionModel().currentIndex().row(),
-                        Plot.steps)))
-        
-        self.disconnectAll(self.history.navigated)
+        self.projectConnections.disconnect_all()
 
     ###############################################################################
     # HELP

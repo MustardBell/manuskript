@@ -16,6 +16,7 @@ from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
 from manuskript.models.worldModel import worldModel
 from manuskript.enums import Outline
+from manuskript.ui.connections import SignalConnectionRegistry
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -25,8 +26,11 @@ class ProjectManager:
     def __init__(self, window):
         self.window = window
         self.session = ProjectSession()
+        self.modelConnections = SignalConnectionRegistry()
         self.saveTimer = QTimer()
         self.saveTimerNoChanges = QTimer()
+        self.saveTimer.timeout.connect(self.saveDatas)
+        self.saveTimerNoChanges.timeout.connect(self.saveDatas)
 
     @property
     def currentProject(self):
@@ -123,22 +127,24 @@ class ProjectManager:
         # Set autosave
         self.saveTimer.setInterval(self.window.settingsManager.autoSaveDelay * 60 * 1000)
         self.saveTimer.setSingleShot(False)
-        self.saveTimer.timeout.connect(self.saveDatas)
         if self.window.settingsManager.autoSave:
             self.saveTimer.start()
 
         # Set autosave if no changes
         self.saveTimerNoChanges.setInterval(self.window.settingsManager.autoSaveNoChangesDelay * 1000)
         self.saveTimerNoChanges.setSingleShot(True)
-        self.window.mdlFlatData.dataChanged.connect(self.startTimerNoChanges)
-        self.window.mdlOutline.dataChanged.connect(self.startTimerNoChanges)
-        self.window.mdlCharacter.dataChanged.connect(self.startTimerNoChanges)
-        self.window.mdlPlots.dataChanged.connect(self.startTimerNoChanges)
-        self.window.mdlWorld.dataChanged.connect(self.startTimerNoChanges)
-        self.window.mdlStatus.dataChanged.connect(self.startTimerNoChanges)
-        self.window.mdlLabels.dataChanged.connect(self.startTimerNoChanges)
-
-        self.saveTimerNoChanges.timeout.connect(self.saveDatas)
+        for model in [
+            self.window.mdlFlatData,
+            self.window.mdlOutline,
+            self.window.mdlCharacter,
+            self.window.mdlPlots,
+            self.window.mdlWorld,
+            self.window.mdlStatus,
+            self.window.mdlLabels,
+        ]:
+            self.modelConnections.connect(
+                model.dataChanged, self.startTimerNoChanges
+            )
         self.saveTimerNoChanges.stop()
 
         self.syncUiToState()
@@ -212,13 +218,14 @@ class ProjectManager:
         self.session.close()
         QSettings().setValue("lastProject", "")
 
-        # Clear datas
-        self.loadEmptyDatas()
         self.saveTimer.stop()
         self.saveTimerNoChanges.stop()
-        loadSave.clearSaveCache()
-
+        self.modelConnections.disconnect_all()
         self.window.breakConnections()
+
+        # Clear datas
+        self.loadEmptyDatas()
+        loadSave.clearSaveCache()
 
         self.syncUiToState()
 
