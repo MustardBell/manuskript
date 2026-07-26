@@ -11,6 +11,7 @@ from PyQt5.QtGui import QStyleHints
 from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListWidgetItem, QMessageBox
 from PyQt5.QtWidgets import qApp, QFileDialog
 
+from manuskript.domain.theme import ThemeEditorSession
 # Spell checker support
 from manuskript.enums import Outline
 from manuskript.functions import allPaths, iconColor, writablePath, appPath
@@ -291,7 +292,8 @@ class settingsWindow(QWidget, Ui_Settings):
         self.btnStatusRemove.clicked.connect(self.removeStatus)
 
         # Fullscreen
-        self._editingTheme = None
+        self.themeEditor = ThemeEditorSession()
+        self._loadingTheme = False
         self.btnThemeEditOK.setIcon(qApp.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.btnThemeEditOK.clicked.connect(self.saveTheme)
         self.btnThemeEditCancel.setIcon(qApp.style().standardIcon(QStyle.SP_DialogCancelButton))
@@ -309,6 +311,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.timerUpdateFSPreview.setSingleShot(True)
         self.timerUpdateFSPreview.setInterval(250)
         self.timerUpdateFSPreview.timeout.connect(self.updatePreview)
+        self._connectThemeEditorSignals()
 
         # Style - Tooltips  
         self.chkUseSystemTooltips.setChecked(self.settings.tooltipStyle["useSystemDefaultsForTooltips"])
@@ -809,87 +812,134 @@ class settingsWindow(QWidget, Ui_Settings):
             # select the last from the list
             self.lstThemes.setCurrentRow(self.lstThemes.count() - 1)
 
-    def loadTheme(self, theme):
-        self._editingTheme = theme
-        self._loadingTheme = True  # So we don't generate preview while loading
-
-        # Load datas
-        self._themeData = loadThemeDatas(theme)
-
+    def _connectThemeEditorSignals(self):
         # Window Background
-        self.btnThemWindowBackgroundColor.clicked.connect(lambda: self.getThemeColor("Background/Color"))
-        try:
-            self.cmbThemeBackgroundImage.disconnect()
-        except:
-            pass
-        self.populatesCmbBackgrounds(self.cmbThemeBackgroundImage)
-        self.cmbThemeBackgroundImage.currentIndexChanged.connect(self.updateThemeBackground)
-        self.cmbThemBackgroundType.currentIndexChanged.connect(lambda i: self.setSetting("Background/Type", i))
+        self.btnThemWindowBackgroundColor.clicked.connect(
+            lambda _checked=False: self.getThemeColor(
+                "Background/Color"
+            )
+        )
+        self.cmbThemeBackgroundImage.currentIndexChanged.connect(
+            self.updateThemeBackground
+        )
+        self.cmbThemBackgroundType.currentIndexChanged.connect(
+            lambda index: self.setSetting(
+                "Background/Type",
+                index,
+            )
+        )
 
         # Text Background
-        self.btnThemeTextBackgroundColor.clicked.connect(lambda: self.getThemeColor("Foreground/Color"))
-        self.spnThemeTextBackgroundOpacity.valueChanged.connect(lambda v: self.setSetting("Foreground/Opacity", v))
-        self.spnThemeTextMargins.valueChanged.connect(lambda v: self.setSetting("Foreground/Margin", v))
-        self.spnThemeTextPadding.valueChanged.connect(lambda v: self.setSetting("Foreground/Padding", v))
-        self.cmbThemeTextPosition.currentIndexChanged.connect(lambda i: self.setSetting("Foreground/Position", i))
-        self.spnThemeTextRadius.valueChanged.connect(lambda v: self.setSetting("Foreground/Rounding", v))
-        self.spnThemeTextWidth.valueChanged.connect(lambda v: self.setSetting("Foreground/Width", v))
+        self.btnThemeTextBackgroundColor.clicked.connect(
+            lambda _checked=False: self.getThemeColor(
+                "Foreground/Color"
+            )
+        )
+        for widget, key in [
+            (
+                self.spnThemeTextBackgroundOpacity,
+                "Foreground/Opacity",
+            ),
+            (self.spnThemeTextMargins, "Foreground/Margin"),
+            (self.spnThemeTextPadding, "Foreground/Padding"),
+            (self.cmbThemeTextPosition, "Foreground/Position"),
+            (self.spnThemeTextRadius, "Foreground/Rounding"),
+            (self.spnThemeTextWidth, "Foreground/Width"),
+            (
+                self.spnThemeLineSpacing,
+                "Spacings/LineSpacing",
+            ),
+            (self.spnThemeParaAbove, "Spacings/ParagraphAbove"),
+            (self.spnThemeParaBelow, "Spacings/ParagraphBelow"),
+            (self.spnThemeTabWidth, "Spacings/TabWidth"),
+        ]:
+            widget_value_changed = (
+                widget.valueChanged
+                if hasattr(widget, "valueChanged")
+                else widget.currentIndexChanged
+            )
+            widget_value_changed.connect(
+                lambda value, setting_key=key: self.setSetting(
+                    setting_key,
+                    value,
+                )
+            )
 
         # Text Options
-        self.btnThemeTextColor.clicked.connect(lambda: self.getThemeColor("Text/Color"))
-        self.cmbThemeFont.currentFontChanged.connect(self.updateThemeFont)
-        try:
-            self.cmbThemeFontSize.currentIndexChanged.disconnect(self.updateThemeFont)
-        except:
-            pass
-        self.populatesFontSize()
-        self.cmbThemeFontSize.currentIndexChanged.connect(self.updateThemeFont)
-        self.btnThemeMisspelledColor.clicked.connect(lambda: self.getThemeColor("Text/Misspelled"))
+        self.btnThemeTextColor.clicked.connect(
+            lambda _checked=False: self.getThemeColor("Text/Color")
+        )
+        self.cmbThemeFont.currentFontChanged.connect(
+            self.updateThemeFont
+        )
+        self.cmbThemeFontSize.currentIndexChanged.connect(
+            self.updateThemeFont
+        )
+        self.btnThemeMisspelledColor.clicked.connect(
+            lambda _checked=False: self.getThemeColor(
+                "Text/Misspelled"
+            )
+        )
 
         # Paragraph Options
-        self.chkThemeIndent.stateChanged.connect(lambda v: self.setSetting("Spacings/IndentFirstLine", v != 0))
-        self.cmbThemeAlignment.currentIndexChanged.connect(lambda i: self.setSetting("Spacings/Alignment", i))
-        self.cmbThemeLineSpacing.currentIndexChanged.connect(self.updateLineSpacing)
-        self.cmbThemeLineSpacing.currentIndexChanged.connect(self.updateLineSpacing)
-        self.spnThemeLineSpacing.valueChanged.connect(lambda v: self.setSetting("Spacings/LineSpacing", v))
-        self.spnThemeParaAbove.valueChanged.connect(lambda v: self.setSetting("Spacings/ParagraphAbove", v))
-        self.spnThemeParaBelow.valueChanged.connect(lambda v: self.setSetting("Spacings/ParagraphBelow", v))
-        self.spnThemeTabWidth.valueChanged.connect(lambda v: self.setSetting("Spacings/TabWidth", v))
+        self.chkThemeIndent.stateChanged.connect(
+            lambda value: self.setSetting(
+                "Spacings/IndentFirstLine",
+                value != 0,
+            )
+        )
+        self.cmbThemeAlignment.currentIndexChanged.connect(
+            lambda index: self.setSetting(
+                "Spacings/Alignment",
+                index,
+            )
+        )
+        self.cmbThemeLineSpacing.currentIndexChanged.connect(
+            self.updateLineSpacing
+        )
 
-        # Update UI
-        self.updateUIFromTheme()
+    def loadTheme(self, theme):
+        self.themeEditor.start(theme, loadThemeDatas(theme))
+        self._loadingTheme = True
+        try:
+            self.populatesCmbBackgrounds(
+                self.cmbThemeBackgroundImage
+            )
+            self.populatesFontSize()
+            self.updateUIFromTheme()
+        finally:
+            self._loadingTheme = False
 
-        # Generate preview
-        self._loadingTheme = False
         self.updatePreview()
 
     def setSetting(self, key, val):
-        self._themeData[key] = val
-        self.timerUpdateFSPreview.start()
+        self.themeEditor.update(key, val)
+        if not self._loadingTheme:
+            self.timerUpdateFSPreview.start()
 
     def updateUIFromTheme(self):
-        self.txtThemeName.setText(self._themeData["Name"])
+        self.txtThemeName.setText(self.themeEditor.data["Name"])
 
         # Window Background
-        self.setButtonColor(self.btnThemWindowBackgroundColor, self._themeData["Background/Color"])
-        i = self.cmbThemeBackgroundImage.findData(self._themeData["Background/ImageFile"], flags=Qt.MatchContains)
+        self.setButtonColor(self.btnThemWindowBackgroundColor, self.themeEditor.data["Background/Color"])
+        i = self.cmbThemeBackgroundImage.findData(self.themeEditor.data["Background/ImageFile"], flags=Qt.MatchContains)
         if i != -1:
             self.cmbThemeBackgroundImage.setCurrentIndex(i)
-        self.cmbThemBackgroundType.setCurrentIndex(self._themeData["Background/Type"])
+        self.cmbThemBackgroundType.setCurrentIndex(self.themeEditor.data["Background/Type"])
 
         # Text background
-        self.setButtonColor(self.btnThemeTextBackgroundColor, self._themeData["Foreground/Color"])
-        self.spnThemeTextBackgroundOpacity.setValue(self._themeData["Foreground/Opacity"])
-        self.spnThemeTextMargins.setValue(self._themeData["Foreground/Margin"])
-        self.spnThemeTextPadding.setValue(self._themeData["Foreground/Padding"])
-        self.cmbThemeTextPosition.setCurrentIndex(self._themeData["Foreground/Position"])
-        self.spnThemeTextRadius.setValue(self._themeData["Foreground/Rounding"])
-        self.spnThemeTextWidth.setValue(self._themeData["Foreground/Width"])
+        self.setButtonColor(self.btnThemeTextBackgroundColor, self.themeEditor.data["Foreground/Color"])
+        self.spnThemeTextBackgroundOpacity.setValue(self.themeEditor.data["Foreground/Opacity"])
+        self.spnThemeTextMargins.setValue(self.themeEditor.data["Foreground/Margin"])
+        self.spnThemeTextPadding.setValue(self.themeEditor.data["Foreground/Padding"])
+        self.cmbThemeTextPosition.setCurrentIndex(self.themeEditor.data["Foreground/Position"])
+        self.spnThemeTextRadius.setValue(self.themeEditor.data["Foreground/Rounding"])
+        self.spnThemeTextWidth.setValue(self.themeEditor.data["Foreground/Width"])
 
         # Text Options
-        self.setButtonColor(self.btnThemeTextColor, self._themeData["Text/Color"])
+        self.setButtonColor(self.btnThemeTextColor, self.themeEditor.data["Text/Color"])
         f = QFont()
-        f.fromString(self._themeData["Text/Font"])
+        f.fromString(self.themeEditor.data["Text/Font"])
         self.cmbThemeFont.setCurrentFont(f)
         i = self.cmbThemeFontSize.findText(str(f.pointSize()))
         if i != -1:
@@ -897,25 +947,25 @@ class settingsWindow(QWidget, Ui_Settings):
         else:
             self.cmbThemeFontSize.addItem(str(f.pointSize()))
             self.cmbThemeFontSize.setCurrentIndex(self.cmbThemeFontSize.count() - 1)
-        self.setButtonColor(self.btnThemeMisspelledColor, self._themeData["Text/Misspelled"])
+        self.setButtonColor(self.btnThemeMisspelledColor, self.themeEditor.data["Text/Misspelled"])
 
         # Paragraph Options
-        self.chkThemeIndent.setCheckState(Qt.Checked if self._themeData["Spacings/IndentFirstLine"] else Qt.Unchecked)
+        self.chkThemeIndent.setCheckState(Qt.Checked if self.themeEditor.data["Spacings/IndentFirstLine"] else Qt.Unchecked)
         self.spnThemeLineSpacing.setEnabled(False)
-        self.cmbThemeAlignment.setCurrentIndex(self._themeData["Spacings/Alignment"])
-        if self._themeData["Spacings/LineSpacing"] == 100:
+        self.cmbThemeAlignment.setCurrentIndex(self.themeEditor.data["Spacings/Alignment"])
+        if self.themeEditor.data["Spacings/LineSpacing"] == 100:
             self.cmbThemeLineSpacing.setCurrentIndex(0)
-        elif self._themeData["Spacings/LineSpacing"] == 150:
+        elif self.themeEditor.data["Spacings/LineSpacing"] == 150:
             self.cmbThemeLineSpacing.setCurrentIndex(1)
-        elif self._themeData["Spacings/LineSpacing"] == 200:
+        elif self.themeEditor.data["Spacings/LineSpacing"] == 200:
             self.cmbThemeLineSpacing.setCurrentIndex(2)
         else:
             self.cmbThemeLineSpacing.setCurrentIndex(3)
             self.spnThemeLineSpacing.setEnabled(True)
-            self.spnThemeLineSpacing.setValue(self._themeData["Spacings/LineSpacing"])
-        self.spnThemeParaAbove.setValue(self._themeData["Spacings/ParagraphAbove"])
-        self.spnThemeParaBelow.setValue(self._themeData["Spacings/ParagraphBelow"])
-        self.spnThemeTabWidth.setValue(self._themeData["Spacings/TabWidth"])
+            self.spnThemeLineSpacing.setValue(self.themeEditor.data["Spacings/LineSpacing"])
+        self.spnThemeParaAbove.setValue(self.themeEditor.data["Spacings/ParagraphAbove"])
+        self.spnThemeParaBelow.setValue(self.themeEditor.data["Spacings/ParagraphBelow"])
+        self.spnThemeTabWidth.setValue(self.themeEditor.data["Spacings/TabWidth"])
 
     def populatesFontSize(self):
         self.cmbThemeFontSize.clear()
@@ -929,20 +979,22 @@ class settingsWindow(QWidget, Ui_Settings):
         if s:
             f.setPointSize(int(s))
 
-        self._themeData["Text/Font"] = f.toString()
-        self.timerUpdateFSPreview.start()
+        self.themeEditor.update("Text/Font", f.toString())
+        if not self._loadingTheme:
+            self.timerUpdateFSPreview.start()
 
     def updateLineSpacing(self, i):
         if i == 0:
-            self._themeData["Spacings/LineSpacing"] = 100
+            self.themeEditor.data["Spacings/LineSpacing"] = 100
         elif i == 1:
-            self._themeData["Spacings/LineSpacing"] = 150
+            self.themeEditor.data["Spacings/LineSpacing"] = 150
         elif i == 2:
-            self._themeData["Spacings/LineSpacing"] = 200
+            self.themeEditor.data["Spacings/LineSpacing"] = 200
         elif i == 3:
-            self._themeData["Spacings/LineSpacing"] = self.spnThemeLineSpacing.value()
+            self.themeEditor.data["Spacings/LineSpacing"] = self.spnThemeLineSpacing.value()
         self.spnThemeLineSpacing.setEnabled(i == 3)
-        self.timerUpdateFSPreview.start()
+        if not self._loadingTheme:
+            self.timerUpdateFSPreview.start()
 
     def updateThemeBackground(self, i):
         # Check if combobox was reset
@@ -952,62 +1004,64 @@ class settingsWindow(QWidget, Ui_Settings):
         img = self.cmbThemeBackgroundImage.itemData(i)
 
         if img:
-            self._themeData["Background/ImageFile"] = os.path.split(img)[1]
+            self.themeEditor.data["Background/ImageFile"] = os.path.split(img)[1]
         else:
             txt = self.cmbThemeBackgroundImage.itemText(i)
             if txt == "":
-                self._themeData["Background/ImageFile"] = ""
+                self.themeEditor.data["Background/ImageFile"] = ""
             else:
                 img = self.addBackgroundImage()
                 if img:
                     self.populatesCmbBackgrounds(self.cmbThemeBackgroundImage)
-                    self._themeData["Background/ImageFile"] = img
-                i = self.cmbThemeBackgroundImage.findData(self._themeData["Background/ImageFile"], flags=Qt.MatchContains)
+                    self.themeEditor.data["Background/ImageFile"] = img
+                i = self.cmbThemeBackgroundImage.findData(self.themeEditor.data["Background/ImageFile"], flags=Qt.MatchContains)
                 if i != -1:
                     self.cmbThemeBackgroundImage.setCurrentIndex(i)
         self.updatePreview()
 
     def getThemeColor(self, key):
-        color = self._themeData[key]
+        color = self.themeEditor.data[key]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            self._themeData[key] = color.name()
+            self.themeEditor.data[key] = color.name()
             self.updateUIFromTheme()
             self.updatePreview()
 
     def updatePreview(self):
-        if self._loadingTheme:
+        if self._loadingTheme or not self.themeEditor.is_editing:
             return
 
         currentScreen = qApp.desktop().screenNumber(self)
         screen = qApp.desktop().screenGeometry(currentScreen)
 
-        px = createThemePreview(self._themeData, screen, self.lblPreview.size())
+        px = createThemePreview(self.themeEditor.data, screen, self.lblPreview.size())
         self.lblPreview.setPixmap(px)
 
     def setButtonColor(self, btn, color):
         btn.setStyleSheet("background:{};".format(color))
 
     def saveTheme(self):
-        settings = QSettings(self._editingTheme, QSettings.IniFormat)
+        settings = QSettings(self.themeEditor.path, QSettings.IniFormat)
 
-        self._themeData["Name"] = self.txtThemeName.text()
-        for key in self._themeData:
-            settings.setValue(key, self._themeData[key])
+        self.themeEditor.data["Name"] = self.txtThemeName.text()
+        for key in self.themeEditor.data:
+            settings.setValue(key, self.themeEditor.data[key])
 
         settings.sync()
         self.populatesThemesList()
         self.themeStack.setCurrentIndex(0)
-        self._editingTheme = None
+        self.timerUpdateFSPreview.stop()
+        self.themeEditor.finish()
 
     def cancelEdit(self):
         self.themeStack.setCurrentIndex(0)
-        self._editingTheme = None
+        self.timerUpdateFSPreview.stop()
+        self.themeEditor.cancel()
 
     def resizeEvent(self, event):
         QWidget.resizeEvent(self, event)
-        if self._editingTheme:
+        if self.themeEditor.is_editing:
             self.updatePreview()
 
         ####################################################################################################
