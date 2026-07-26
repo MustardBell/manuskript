@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import subprocess
-
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import qApp, QMessageBox
 
 from manuskript.exporter.basic import basicExporter, basicFormat
@@ -12,6 +8,7 @@ from manuskript.exporter.pandoc.PDF import PDF
 from manuskript.exporter.pandoc.outputFormats import ePub, OpenDocument, DocX
 from manuskript.exporter.pandoc.plainText import reST, markdown, latex, OPML
 from manuskript.functions import safeTranslate
+from manuskript.ui.busy_cursor import busy_cursor
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -80,6 +77,7 @@ class pandocExporter(basicExporter):
         arguments.append("--metadata=title:{}".format(title))
         return arguments
 
+    @busy_cursor
     def convert(self, src, args, outputfile=None):
         run = self.executable()
         if run is None:
@@ -90,29 +88,24 @@ class pandocExporter(basicExporter):
             args.append("--output={}".format(outputfile))
         args.extend(self.metadata_arguments())
 
-        qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
-        try:
-            p = subprocess.Popen(
-                args,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+        if not isinstance(src, bytes):
+            src = src.encode("utf-8")
+        result = self.process_runner.run(args, stdin=src)
+
+        if result.stderr or result.return_code != 0:
+            err_type = (
+                "ERROR" if result.return_code != 0 else "WARNING"
             )
-
-            if not type(src) == bytes:
-                src = src.encode("utf-8")  # assumes utf-8
-
-            stdout, stderr = p.communicate(src)
-        finally:
-            qApp.restoreOverrideCursor()
-
-        if stderr or p.returncode != 0:
-            err_type = "ERROR" if p.returncode != 0 else "WARNING"
             err = "%s on export\n" % err_type \
-                + "Return code: %d\n" % p.returncode \
-                + "Command and parameters:\n%s\n" % p.args \
-                + "Stderr content:\n" + stderr.decode("utf-8")
-            if p.returncode != 0:
+                + "Return code: %d\n" % result.return_code \
+                + "Command and parameters:\n%s\n" % (
+                    list(result.arguments),
+                ) \
+                + "Stderr content:\n" + result.stderr.decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            if result.return_code != 0:
                 LOGGER.error(err)
                 QMessageBox.critical(
                     self.context.parent,
@@ -123,4 +116,4 @@ class pandocExporter(basicExporter):
                 LOGGER.warning(err)
             return None
 
-        return stdout.decode("utf-8")
+        return result.stdout.decode("utf-8")
