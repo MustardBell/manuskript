@@ -1,14 +1,13 @@
 import os
 
-from PyQt5.QtCore import QSettings, QTimer, QSize
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtCore import QSettings, QTimer
 
 from manuskript.domain.project import (
+    CloseDecision,
     InvalidProjectStateTransition,
     ProjectSession,
 )
 from manuskript.logging import getLogFilePath
-from manuskript.enums import Outline
 from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.ui.connections import SignalConnectionRegistry
@@ -19,9 +18,9 @@ LOGGER = logging.getLogger(__name__)
 
 class ProjectManager:
     def __init__(
-            self, window, storage=None, status_reporter=None,
+            self, lifecycle_view, storage=None, status_reporter=None,
             model_factory=None):
-        self.window = window
+        self.ui = lifecycle_view
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
         self.models = None
@@ -47,24 +46,7 @@ class ProjectManager:
 
     def syncUiToState(self):
         """Enable project actions according to the current session state."""
-        project_open = self.session.is_open
-        for item in [self.window.actOpen, self.window.menuRecents]:
-            item.setEnabled(not project_open)
-        for item in [
-            self.window.actSave,
-            self.window.actSaveAs,
-            self.window.actCloseProject,
-            self.window.menuEdit,
-            self.window.menuView,
-            self.window.menuOrganize,
-            self.window.menuNavigate,
-            self.window.menuTools,
-            self.window.menuHelp,
-            self.window.actImport,
-            self.window.actCompile,
-            self.window.actSettings,
-        ]:
-            item.setEnabled(project_open)
+        self.ui.sync_to_state(self.session.is_open)
 
     def loadProject(self, project, loadFromFile=True):
         """Loads the project ``project``.
@@ -78,7 +60,7 @@ class ProjectManager:
         if loadFromFile and not os.path.exists(project):
             LOGGER.warning("The file {} does not exist. Has it been moved or deleted?".format(project))
             self.status_reporter(
-                    self.window.tr("The file {} does not exist. Has it been moved or deleted?").format(project), importance=3)
+                    self.ui.translate("The file {} does not exist. Has it been moved or deleted?").format(project), importance=3)
             return False
 
         if self.session.is_open:
@@ -91,7 +73,7 @@ class ProjectManager:
 
         if loadFromFile:
             # Reset settings to defaults
-            self.window.settingsManager.reset_to_defaults()
+            self.ui.settings.reset_to_defaults()
 
             # Load data
             self.loadEmptyDatas()
@@ -103,70 +85,31 @@ class ProjectManager:
                 return False
 
         self.session.open(project)
-        self.window.makeConnections()
-
-        # Load settings
-        if self.window.settingsManager.openIndexes and self.window.settingsManager.openIndexes != [""]:
-            self.window.mainEditor.tabSplitter.restoreOpenIndexes(self.window.settingsManager.openIndexes)
-        self.window.generateViewMenu()
-        self.window.mainEditor.sldCorkSizeFactor.setValue(self.window.settingsManager.corkSizeFactor)
-        self.window.actSpellcheck.setChecked(self.window.settingsManager.spellcheck)
-        self.window.toggleSpellcheck(self.window.settingsManager.spellcheck)
-        self.window.updateMenuDict()
-        self.window.setDictionary()
-
-        iconSize = self.window.settingsManager.viewSettings["Tree"]["iconSize"]
-        self.window.treeRedacOutline.setIconSize(QSize(iconSize, iconSize))
-        self.window.mainEditor.setFolderView(self.window.settingsManager.folderView)
-        self.window.mainEditor.updateFolderViewButtons(self.window.settingsManager.folderView)
-        self.window.mainEditor.tabSplitter.updateStyleSheet()
-        self.window.tabMain.setCurrentIndex(self.window.settingsManager.lastTab)
-        self.window.mainEditor.updateCorkBackground()
-        if self.window.settingsManager.viewMode == "simple":
-            self.window.setViewModeSimple()
-        else:
-            self.window.setViewModeFiction()
+        self.ui.connect_project()
+        self.ui.apply_loaded_settings()
 
         # Set autosave
-        self.saveTimer.setInterval(self.window.settingsManager.autoSaveDelay * 60 * 1000)
+        self.saveTimer.setInterval(
+            self.ui.settings.autoSaveDelay * 60 * 1000
+        )
         self.saveTimer.setSingleShot(False)
-        if self.window.settingsManager.autoSave:
+        if self.ui.settings.autoSave:
             self.saveTimer.start()
 
         # Set autosave if no changes
-        self.saveTimerNoChanges.setInterval(self.window.settingsManager.autoSaveNoChangesDelay * 1000)
+        self.saveTimerNoChanges.setInterval(
+            self.ui.settings.autoSaveNoChangesDelay * 1000
+        )
         self.saveTimerNoChanges.setSingleShot(True)
-        for model in [
-            self.window.mdlFlatData,
-            self.window.mdlOutline,
-            self.window.mdlCharacter,
-            self.window.mdlPlots,
-            self.window.mdlWorld,
-            self.window.mdlStatus,
-            self.window.mdlLabels,
-        ]:
+        for model in self.ui.change_models():
             self.modelConnections.connect(
                 model.dataChanged, self.startTimerNoChanges
             )
         self.saveTimerNoChanges.stop()
 
         self.syncUiToState()
-        # We force to emit even if it opens on the current tab
-        self.window.tabMain.currentChanged.emit(self.window.settingsManager.lastTab)
-
         QSettings().setValue("lastProject", project)
-
-        item = self.window.mdlOutline.rootItem
-        wc = item.data(Outline.wordCount)
-        self.window.sessionStartWordCount = int(wc) if wc != "" else 0
-        # Add project name to Window's name
-        self.window.setWindowTitle(self.window.projectName() + " - " + self.window.tr("Manuskript"))
-
-        # Reset history
-        self.window.history.reset()
-
-        # Show main Window
-        self.window.switchToProject()
+        self.ui.project_opened()
         return True
 
     def handleUnsavedChanges(self):
@@ -182,25 +125,12 @@ class ProjectManager:
         if not self.session.is_dirty:
             return True  # no unsaved changes, all is good
 
-        msg = QMessageBox(QMessageBox.Question,
-            self.window.tr("Save project?"),
-            "<p><b>" +
-                self.window.tr("Save changes to project \"{}\" before closing?").format(self.window.projectName()) +
-            "</b></p>" +
-            "<p>" +
-                self.window.tr("Your changes will be lost if you don't save them.") +
-            "</p>",
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
-
-        ret = msg.exec()
-
-        if ret == QMessageBox.Cancel:
-            return False  # the situation has not been handled, cancel action
-
-        if ret == QMessageBox.Save:
+        decision = self.ui.confirm_unsaved_changes()
+        if decision is CloseDecision.CANCEL:
+            return False
+        if decision is CloseDecision.SAVE:
             return self.saveDatas()
-
-        return True  # the situation has been handled
+        return True
 
 
     def closeProject(self):
@@ -209,14 +139,14 @@ class ProjectManager:
             return True
 
         # Make sure data is saved.
-        if self.session.is_dirty and self.window.settingsManager.saveOnQuit:
+        if self.session.is_dirty and self.ui.settings.saveOnQuit:
             if not self.saveDatas():
                 return False
         elif not self.handleUnsavedChanges():
             return False  # user cancelled action
 
         # Close open tabs in editor
-        self.window.mainEditor.closeAllTabs()
+        self.ui.prepare_close()
 
         self.session.close()
         QSettings().setValue("lastProject", "")
@@ -224,7 +154,7 @@ class ProjectManager:
         self.saveTimer.stop()
         self.saveTimerNoChanges.stop()
         self.modelConnections.disconnect_all()
-        self.window.breakConnections()
+        self.ui.disconnect_project()
 
         # Clear datas
         self.loadEmptyDatas()
@@ -232,14 +162,7 @@ class ProjectManager:
 
         self.syncUiToState()
 
-        # Set Window's name - no project loaded
-        self.window.setWindowTitle(self.window.tr("Manuskript"))
-
-        # Reload recent files
-        self.window.welcome.updateValues()
-
-        # Show welcome dialog
-        self.window.switchToWelcome()
+        self.ui.project_closed()
         return True
 
     def startTimerNoChanges(self):
@@ -252,7 +175,7 @@ class ProjectManager:
             LOGGER.warning("Ignoring a project change after the project was closed.")
             return False
 
-        if self.window.settingsManager.autoSaveNoChanges:
+        if self.ui.settings.autoSaveNoChanges:
             self.saveTimerNoChanges.start()
         return True
 
@@ -283,20 +206,24 @@ class ProjectManager:
             LOGGER.error("There is no current project to save.")
             return False
 
-        r = self.storage.save(self.window)
+        r = self.storage.save(self.ui.persistence_context)
 
         current_project_name = os.path.basename(self.currentProject)
         if r:
             self.session.mark_clean()
             QSettings().setValue("lastProject", self.currentProject)
 
-            feedback = self.window.tr("Project {} saved.").format(current_project_name)
+            feedback = self.ui.translate(
+                "Project {} saved."
+            ).format(current_project_name)
             self.status_reporter(feedback, importance=0)
             LOGGER.info("Project {} saved.".format(current_project_name))
         else:
             if projectName:
                 self.session.rename(previous_project)
-            feedback = self.window.tr("WARNING: Project {} not saved.").format(
+            feedback = self.ui.translate(
+                "WARNING: Project {} not saved."
+            ).format(
                 current_project_name
             )
             self.status_reporter(feedback, importance=3)
@@ -305,31 +232,34 @@ class ProjectManager:
 
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(
-            self.window,
-            self.window.settingsManager,
+            self.ui.model_parent,
+            self.ui.settings,
         )
-        self.models.install_on(self.window)
+        self.ui.install_models(self.models)
         return self.models
 
     def loadDatas(self, project):
-        errors = self.storage.load(project, self.window)
+        errors = self.storage.load(
+            project,
+            self.ui.persistence_context,
+        )
 
         # Giving some feedback
         if not errors:
             LOGGER.info("Project {} loaded.".format(project))
             self.status_reporter(
-                    self.window.tr("Project {} loaded.").format(project), 2000)
+                    self.ui.translate("Project {} loaded.").format(project), 2000)
         else:
             LOGGER.error("Project {} loaded with some errors:".format(project))
             for e in errors:
                 LOGGER.error(" * {} wasn't found in project file.".format(e))
             self.status_reporter(
-                    self.window.tr("Project {} loaded with some errors.").format(project), 5000, importance = 3)
+                    self.ui.translate("Project {} loaded with some errors.").format(project), 5000, importance = 3)
         
         if project in errors:
             LOGGER.error("Loading project {} failed.".format(project))
             self.status_reporter(
-                    self.window.tr("Loading project {} failed.").format(project), 5000, importance = 3)
+                    self.ui.translate("Loading project {} failed.").format(project), 5000, importance = 3)
 
             return False
         

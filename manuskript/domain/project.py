@@ -11,6 +11,12 @@ class ProjectState(Enum):
     DIRTY = "dirty"
 
 
+class CloseDecision(Enum):
+    SAVE = "save"
+    DISCARD = "discard"
+    CANCEL = "cancel"
+
+
 class ProjectSession:
     """Track the current project path and its finite lifecycle state."""
 
