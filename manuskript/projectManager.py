@@ -4,7 +4,6 @@ from PyQt5.QtCore import QSettings, QTimer, QSize
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtWidgets import QMessageBox
 
-from manuskript import loadSave
 from manuskript.domain.project import (
     InvalidProjectStateTransition,
     ProjectSession,
@@ -16,6 +15,7 @@ from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
 from manuskript.models.worldModel import worldModel
 from manuskript.enums import Outline
+from manuskript.services.project_storage import ProjectStorage
 from manuskript.ui.connections import SignalConnectionRegistry
 
 import logging
@@ -23,8 +23,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ProjectManager:
-    def __init__(self, window):
+    def __init__(self, window, storage=None):
         self.window = window
+        self.storage = storage if storage is not None else ProjectStorage()
         self.session = ProjectSession()
         self.modelConnections = SignalConnectionRegistry()
         self.saveTimer = QTimer()
@@ -96,7 +97,7 @@ class ProjectManager:
             if not self.loadDatas(project):
                 self.saveTimer.stop()
                 self.saveTimerNoChanges.stop()
-                loadSave.clearSaveCache()
+                self.storage.clear_cache()
                 return False
 
         self.session.open(project)
@@ -225,7 +226,7 @@ class ProjectManager:
 
         # Clear datas
         self.loadEmptyDatas()
-        loadSave.clearSaveCache()
+        self.storage.clear_cache()
 
         self.syncUiToState()
 
@@ -280,7 +281,7 @@ class ProjectManager:
             LOGGER.error("There is no current project to save.")
             return False
 
-        r = loadSave.saveProject()  # version=0
+        r = self.storage.save(self.window)
 
         current_project_name = os.path.basename(self.currentProject)
         if r:
@@ -310,7 +311,7 @@ class ProjectManager:
         self.window.mdlWorld = worldModel(self.window)
 
     def loadDatas(self, project):
-        errors = loadSave.loadProject(project)
+        errors = self.storage.load(project, self.window)
 
         # Giving some feedback
         if not errors:
@@ -332,3 +333,6 @@ class ProjectManager:
             return False
         
         return True
+
+    def clearSaveCache(self):
+        self.storage.clear_cache()

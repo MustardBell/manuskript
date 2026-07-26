@@ -12,22 +12,32 @@ import manuskript.load_save.version_1 as v1
 import logging
 LOGGER = logging.getLogger(__name__)
 
-def saveProject(version=None):
+
+def _resolve_window(window):
+    if window is not None:
+        return window
+    from manuskript.functions import mainWindow
+    return mainWindow()
+
+
+def saveProject(version=None, window=None):
+    window = _resolve_window(window)
 
     # While debugging, we don't save the project
     # return
 
     if version == 0:
-        return v0.saveProject()
+        return v0.saveProject(window)
     else:
-        return v1.saveProject()
+        return v1.saveProject(window)
 
 
 def clearSaveCache():
     v1.cache = {}
 
 
-def loadProject(project):
+def loadProject(project, window=None):
+    window = _resolve_window(window)
 
     # Detect version
     isZip = False
@@ -84,6 +94,6 @@ def loadProject(project):
         return errors
 
     if version == 0:
-        return v0.loadProject(project)
+        return v0.loadProject(project, window)
     else:
-        return v1.loadProject(project, zip=isZip)
+        return v1.loadProject(project, window, zip=isZip)
