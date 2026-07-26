@@ -501,17 +501,26 @@ class SymSpellDictionary(BasicDictionary):
         # Since 6.3.8
         self._dict.delete_dictionary_entry(word)
 
+def _language_tool_attribute(match, modern_name, legacy_name):
+    """Read an attribute across language_tool_python API generations."""
+    if hasattr(match, modern_name):
+        return getattr(match, modern_name)
+    return getattr(match, legacy_name)
+
+
 def get_languagetool_match_errorLength(match):
     if use_language_check:
         return match.errorlength
-    else:
-        return match.errorLength
+    return _language_tool_attribute(match, "error_length", "errorLength")
 
 def get_languagetool_match_ruleIssueType(match):
     if use_language_check:
         return match.locqualityissuetype
-    else:
-        return match.ruleIssueType
+    return _language_tool_attribute(
+        match,
+        "rule_issue_type",
+        "ruleIssueType",
+    )
 
 def get_languagetool_match_message(match):
     if use_language_check:
