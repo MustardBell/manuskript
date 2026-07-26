@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import re
-
-from PyQt5.QtCore import QRegExp
-from PyQt5.QtGui import QTextCursor
-
-import logging
-LOGGER = logging.getLogger(__name__)
+MARKUP_BY_STYLE = {
+    0: "**",
+    1: "*",
+    2: "`",
+}
 
 def MDFormatSelection(editor, style):
     """
@@ -17,5 +15,10 @@ def MDFormatSelection(editor, style):
         1: italic
         2: code
     """
-    LOGGER.error("Formatting: %s (Not implemented!)", style)
-    # FIXME
+    try:
+        markup = MARKUP_BY_STYLE[style]
+    except KeyError as error:
+        raise ValueError(
+            "Unknown Markdown selection style: {}".format(style)
+        ) from error
+    editor.insertFormattingMarkup(markup)

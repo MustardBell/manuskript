@@ -378,22 +378,25 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             # If we are given a fallback item to display, do so.
             if fallback:
                 self.setCurrentModelIndex(fallback)
+                self._syncActiveEditorSelection()
             else:
                 # After tab closing is implemented, any calls to `updateIndexFromID`
                 # should be re-evaluated to match the desired behaviour.
                 raise NotImplementedError("implement tab closing")
-
-            # FIXME: selection in the main outline tree is not updated
-            #        but we cannot simply setCurrentIndex through treeRedacOutline
-            #        because this might be a tab in the background / out of focus
-            #        Also the UI of mainEditor is not updated (so the folder icons
-            #        are not display, button "up" doesn't work, etc.).
 
         # Item has been moved
         elif idx != self.currentIndex:
             # We update the index
             self.currentIndex = idx
             self.setView()
+
+    def _syncActiveEditorSelection(self):
+        """Refresh global selection only when this is the visible tab."""
+        if (
+            self.main_editor is not None
+            and self.main_editor.currentEditor() is self
+        ):
+            self.main_editor.tabChanged()
 
     def modelDataChanged(self, topLeft, bottomRight):
         if not self.currentIndex.isValid():
