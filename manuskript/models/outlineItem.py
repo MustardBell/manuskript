@@ -11,8 +11,8 @@ from manuskript.models.abstractItem import abstractItem
 from manuskript.models.searchableItem import searchableItem
 from manuskript import enums
 from manuskript import functions as F
-from manuskript.settingsManager import SettingsManager
 from manuskript.converters import HTML2PlainText
+from manuskript.models.outline_settings import DefaultOutlineSettings
 from manuskript.searchLabels import OutlineSearchLabels
 from manuskript.enums import Outline, Model
 
@@ -33,13 +33,26 @@ class outlineItem(abstractItem, searchableItem):
     # Used for XML export
     name = "outlineItem"
 
-    def __init__(self, model=None, title="", _type="folder", xml=None, parent=None, ID=None):
+    def __init__(
+            self, model=None, title="", _type="folder", xml=None,
+            parent=None, ID=None, settings=None):
+        model_settings = getattr(model, "settings", None)
+        self.settings = (
+            settings
+            if settings is not None
+            else model_settings or DefaultOutlineSettings()
+        )
         abstractItem.__init__(self, model, title, _type, xml, parent, ID)
         searchableItem.__init__(self, OutlineSearchLabels)
 
         self.defaultTextType = None
         if not self._data.get(self.enum.compile):
             self._data[self.enum.compile] = 2
+
+    def setModel(self, model):
+        if model is not None and hasattr(model, "settings"):
+            self.settings = model.settings
+        abstractItem.setModel(self, model)
 
     #######################################################################
     # Properties
@@ -173,7 +186,7 @@ class outlineItem(abstractItem, searchableItem):
         # Stuff to do afterwards
         if column == E.text:
             wc = F.wordCount(data)
-            cc = F.charCount(data, SettingsManager().countSpaces)
+            cc = F.charCount(data, self.settings.countSpaces)
             self.setData(E.wordCount, wc)
             self.setData(E.charCount, cc)
 
@@ -437,7 +450,7 @@ class outlineItem(abstractItem, searchableItem):
             text))
 
     def addRevision(self):
-        if not SettingsManager().revisions["keep"]:
+        if not self.settings.revisions["keep"]:
             return
 
         if not self.enum.text in self._data:
@@ -447,7 +460,7 @@ class outlineItem(abstractItem, searchableItem):
                 time.time(),
                 self.text())
 
-        if SettingsManager().revisions["smartremove"]:
+        if self.settings.revisions["smartremove"]:
             self.cleanRevisions()
 
         self.emitDataChanged([self.enum.revisions])
@@ -466,7 +479,7 @@ class outlineItem(abstractItem, searchableItem):
         rev2 = []
         now = time.time()
 
-        rule = SettingsManager().revisions["rules"]
+        rule = self.settings.revisions["rules"]
 
         revs = {}
         for i in rule:

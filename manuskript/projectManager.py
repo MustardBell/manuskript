@@ -321,6 +321,7 @@ class ProjectManager:
                 self.window.mdlStatus,
                 self.window.mdlLabels,
             ),
+            settings=self.window.settingsManager,
         )
         self.window.mdlWorld = worldModel(self.window)
 

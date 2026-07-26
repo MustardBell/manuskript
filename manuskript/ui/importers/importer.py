@@ -232,7 +232,10 @@ class importerDialog(QWidget, Ui_importer):
             return
 
         # Creating a temporary outlineModel
-        previewModel = outlineModel(self)
+        previewModel = outlineModel(
+            self,
+            settings=self.context.settings,
+        )
         previewModel.loadFromXML(
             self.context.outline_model.saveToXML(),
             fromString=True)
