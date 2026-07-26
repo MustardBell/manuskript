@@ -34,6 +34,17 @@ class MDEditView(textEditView):
                               autoResize=autoResize, settings=settings,
                               highlighter_class=MarkdownHighlighter)
 
+        # Re-highlighting a document can emit hundreds of layout changes.
+        # Rebuild interactive link geometry once after those changes settle,
+        # rather than rescanning the complete document for every block.
+        self.clickRects = []
+        self.interactionRectUpdateTimer = QTimer(self)
+        self.interactionRectUpdateTimer.setSingleShot(True)
+        self.interactionRectUpdateTimer.setInterval(0)
+        self.interactionRectUpdateTimer.timeout.connect(
+            self.updateInteractionRects
+        )
+
         # Highlighter
         self._textFormat = "md"
 
@@ -46,10 +57,12 @@ class MDEditView(textEditView):
             self.scrollBarRangeChanged)
 
         # Clickable things
-        self.clickRects = []
-        self.textChanged.connect(self.getClickRects)
-        self.document().documentLayoutChanged.connect(self.getClickRects)
+        self.textChanged.connect(self.scheduleInteractionRectUpdate)
+        self.document().documentLayoutChanged.connect(
+            self.scheduleInteractionRectUpdate
+        )
         self.setMouseTracking(True)
+        self.scheduleInteractionRectUpdate()
 
     ###########################################################################
     # KEYPRESS
@@ -497,10 +510,18 @@ class MDEditView(textEditView):
 
     def resizeEvent(self, event):
         textEditView.resizeEvent(self, event)
-        self.getClickRects()
+        self.scheduleInteractionRectUpdate()
 
     def scrollContentsBy(self, dx, dy):
         textEditView.scrollContentsBy(self, dx, dy)
+        self.scheduleInteractionRectUpdate()
+
+    def scheduleInteractionRectUpdate(self, *_args):
+        """Coalesce document geometry changes into one rectangle rebuild."""
+        if hasattr(self, "interactionRectUpdateTimer"):
+            self.interactionRectUpdateTimer.start()
+
+    def updateInteractionRects(self):
         self.getClickRects()
 
     def getClickRects(self):
