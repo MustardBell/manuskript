@@ -97,10 +97,15 @@ class TestProjectManager(unittest.TestCase):
         self.project_manager.session.mark_dirty()
         self.storage.save.return_value = ProjectSaveResult()
 
-        result = self.project_manager.saveDatas()
+        with patch.object(
+            self.lifecycle_view,
+            "capture_project_state",
+        ) as capture_project_state:
+            result = self.project_manager.saveDatas()
 
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.CLEAN)
+        capture_project_state.assert_called_once_with()
         self.storage.save.assert_called_once()
         context = self.storage.save.call_args.args[0]
         self.assertEqual(context.project_file, "project.msk")
@@ -129,6 +134,24 @@ class TestProjectManager(unittest.TestCase):
 
         self.assertFalse(result)
         self.assertTrue(self.project_manager.session.is_open)
+
+    def test_save_on_quit_persists_even_when_content_is_clean(self):
+        self.project_manager.session.open("project.msk")
+        self.window.settingsManager.saveOnQuit = True
+
+        with patch.object(
+            self.project_manager,
+            "saveDatas",
+            return_value=True,
+        ) as save, patch.object(
+            self.project_manager,
+            "loadEmptyDatas",
+        ):
+            result = self.project_manager.closeProject()
+
+        self.assertTrue(result)
+        save.assert_called_once_with()
+        self.assertFalse(self.project_manager.session.is_open)
 
     def test_cancelled_unsaved_changes_prevent_project_close(self):
         self.project_manager.session.open("project.msk")
