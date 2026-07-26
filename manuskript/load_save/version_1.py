@@ -15,8 +15,11 @@ from collections import OrderedDict
 
 from PyQt5.QtCore import Qt, QModelIndex
 from PyQt5.QtGui import QColor, QStandardItem
-from PyQt5.QtWidgets import QListWidgetItem
 
+from manuskript.domain.persistence import (
+    ProjectLoadResult,
+    ProjectSaveResult,
+)
 from manuskript.enums import Character, World, Plot, PlotStep, Outline
 from manuskript.functions import iconColor, iconFromColorString
 from manuskript.converters import HTML2PlainText
@@ -25,7 +28,6 @@ from lxml import etree as ET
 from manuskript.load_save.version_0 import loadFilesFromZip
 from manuskript.models.characterModel import CharacterInfo
 from manuskript.models import outlineItem
-from manuskript.ui.listDialog import ListDialog
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -121,7 +123,7 @@ def saveProject(context, zip=None, cache=None):
     # Sanity check (see PR-583): make sure we actually have a current project.
     if project == None:
         LOGGER.error("Cannot save project because there is no current project in the UI.")
-        return False
+        return ProjectSaveResult(failed_files=(project,))
 
     # File format version
     files.append(("MANUSKRIPT", "1"))
@@ -300,10 +302,16 @@ def saveProject(context, zip=None, cache=None):
 
     # We check if the file exist and we have write access. If the file does
     # not exist, we check the parent folder, because it might be a new project.
-    if os.path.exists(project) and not os.access(project, os.W_OK) or \
-       not os.path.exists(project) and not os.access(os.path.dirname(project), os.W_OK):
+    project_parent = os.path.dirname(project) or os.curdir
+    if (
+        os.path.exists(project)
+        and not os.access(project, os.W_OK)
+    ) or (
+        not os.path.exists(project)
+        and not os.access(project_parent, os.W_OK)
+    ):
         LOGGER.error("You don't have write access to save this project there.")
-        return False
+        return ProjectSaveResult(failed_files=(project,))
 
     ####################################################################################################################
     # Save to zip
@@ -320,7 +328,7 @@ def saveProject(context, zip=None, cache=None):
             zf.writestr(filename, content, compress_type=compression)
 
         zf.close()
-        return True
+        return ProjectSaveResult()
 
     ####################################################################################################################
     # Save to plain text
@@ -391,7 +399,8 @@ def saveProject(context, zip=None, cache=None):
                         LOGGER.error("Cannot open file " + filename + " for writing: " + e.strerror)
                         filesWithPermissionErrors.append(filename)
 
-                cache[path] = content
+                if filename not in filesWithPermissionErrors:
+                    cache[path] = content
 
         # Removing phantoms
         for path in [p for p in cache if p not in [p for p, c in files]]:
@@ -426,18 +435,9 @@ def saveProject(context, zip=None, cache=None):
             LOGGER.error("Cannot open file " + project + " for writing: " + e.strerror)
             filesWithPermissionErrors.append(project)
 
-        if len(filesWithPermissionErrors) > 0:
-            dlg = ListDialog()
-            dlg.setModal(True)
-            dlg.setWindowTitle(dlg.tr("Files not saved"))
-            dlg.label.setText(dlg.tr("The following files were not saved and appear to be open in another program"))
-            for f in filesWithPermissionErrors:
-                QListWidgetItem(f, dlg.listWidget)
-            dlg.open()
-
-        if project in filesWithPermissionErrors:
-            return False
-        return True
+        return ProjectSaveResult(
+            failed_files=tuple(filesWithPermissionErrors)
+        )
 
 
 def addWorldItem(root, mdl, parent=QModelIndex()):
@@ -699,7 +699,6 @@ def loadProject(context, zip=None, cache=None):
                          
                     except PermissionError as e:
                         LOGGER.error("Cannot open file " + filename + ": " + e.strerror)
-                        errors.append(fo)
                         filesWithPermissionErrors.append(filename)
 
         # Saves to cache (only if we loaded from disk and not zip)
@@ -925,16 +924,10 @@ def loadProject(context, zip=None, cache=None):
     # Check IDS
     mdl.rootItem.checkIDs()
 
-    if len(filesWithPermissionErrors) > 0:
-        dlg = ListDialog()
-        dlg.setModal(True)
-        dlg.setWindowTitle(dlg.tr("Files not loaded"))
-        dlg.label.setText(dlg.tr("The following files were not loaded and appear to be open in another program"))
-        for f in filesWithPermissionErrors:
-            QListWidgetItem(f, dlg.listWidget)
-        dlg.open()
-
-    return errors
+    return ProjectLoadResult(
+        missing_files=tuple(errors),
+        unreadable_files=tuple(filesWithPermissionErrors),
+    )
 
 
 def addTextItems(mdl, odict, parent=None):

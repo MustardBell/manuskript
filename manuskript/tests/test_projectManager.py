@@ -1,6 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from manuskript.domain.persistence import (
+    ProjectLoadResult,
+    ProjectSaveResult,
+)
 from manuskript.domain.project import CloseDecision, ProjectState
 from manuskript.projectManager import ProjectManager
 from manuskript.settingsManager import SettingsManager
@@ -18,6 +22,8 @@ class TestProjectManager(unittest.TestCase):
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
         self.lifecycle_view = ProjectLifecycleView(self.window)
+        self.lifecycle_view.show_save_failures = MagicMock()
+        self.lifecycle_view.show_load_failures = MagicMock()
         self.project_manager = ProjectManager(
             self.lifecycle_view,
             storage=self.storage,
@@ -84,7 +90,7 @@ class TestProjectManager(unittest.TestCase):
     def test_successful_save_transitions_session_to_clean(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
-        self.storage.save.return_value = True
+        self.storage.save.return_value = ProjectSaveResult()
 
         result = self.project_manager.saveDatas()
 
@@ -99,7 +105,9 @@ class TestProjectManager(unittest.TestCase):
     def test_failed_save_preserves_dirty_state(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
-        self.storage.save.return_value = False
+        self.storage.save.return_value = ProjectSaveResult(
+            failed_files=("outline/scene.md",)
+        )
 
         result = self.project_manager.saveDatas()
 
@@ -161,7 +169,9 @@ class TestProjectManager(unittest.TestCase):
     def test_failed_save_as_restores_original_project_path(self):
         self.project_manager.session.open("original.msk")
         self.project_manager.session.mark_dirty()
-        self.storage.save.return_value = False
+        self.storage.save.return_value = ProjectSaveResult(
+            failed_files=("renamed.msk",)
+        )
 
         result = self.project_manager.saveDatas("renamed.msk")
 
@@ -194,6 +204,36 @@ class TestProjectManager(unittest.TestCase):
             self.window.settingsManager,
         )
         models.install_on.assert_called_once_with(self.window)
+
+    def test_save_permission_failures_are_presented_by_lifecycle_view(self):
+        self.project_manager.session.open("project.msk")
+        self.project_manager.session.mark_dirty()
+        failures = ("outline/scene.md", "world.opml")
+        self.storage.save.return_value = ProjectSaveResult(
+            failed_files=failures
+        )
+
+        with patch.object(
+            self.lifecycle_view, "show_save_failures"
+        ) as show_failures:
+            result = self.project_manager.saveDatas()
+
+        self.assertFalse(result)
+        show_failures.assert_called_once_with(failures)
+
+    def test_load_permission_failures_are_presented_by_lifecycle_view(self):
+        failures = ("outline/scene.md",)
+        self.storage.load.return_value = ProjectLoadResult(
+            unreadable_files=failures
+        )
+
+        with patch.object(
+            self.lifecycle_view, "show_load_failures"
+        ) as show_failures:
+            result = self.project_manager.loadDatas("project.msk")
+
+        self.assertTrue(result)
+        show_failures.assert_called_once_with(failures)
 
 if __name__ == '__main__':
     unittest.main()

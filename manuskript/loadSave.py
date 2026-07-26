@@ -8,6 +8,7 @@ import zipfile
 
 import manuskript.load_save.version_0 as v0
 import manuskript.load_save.version_1 as v1
+from manuskript.domain.persistence import ProjectLoadResult
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ def loadProject(context, cache=None):
     LOGGER.info("Detected file format version: {}. Zip: {}.".format(version, isZip))
 
     if len(errors) > 0:
-        return errors
+        return ProjectLoadResult(fatal_errors=tuple(errors))
 
     if version == 0:
         return v0.loadProject(context)

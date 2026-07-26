@@ -12,6 +12,10 @@ from PyQt5.QtGui import QColor, QStandardItem
 from PyQt5.QtWidgets import qApp
 from lxml import etree as ET
 
+from manuskript.domain.persistence import (
+    ProjectLoadResult,
+    ProjectSaveResult,
+)
 from manuskript.functions import iconColor, iconFromColorString
 from manuskript.models.characterModel import Character, CharacterInfo
 
@@ -54,6 +58,7 @@ def saveProject(context):
                   "settings.pickle"))
 
     saveFilesToZip(files, context.project_file)
+    return ProjectSaveResult()
 
 def saveFilesToZip(files, zipname):
     """Saves given files to zipname.
@@ -173,7 +178,7 @@ def loadProject(context):
     if "settings.pickle" in files:
         LOGGER.info("Pickle settings files are no longer supported for security reasons. You can delete it from your data.")
 
-    return errors
+    return ProjectLoadResult(missing_files=tuple(errors))
 
 
 def loadFilesFromZip(zipname):

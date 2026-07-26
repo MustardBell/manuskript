@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from manuskript.domain.persistence import ProjectSaveResult
 from manuskript.projectManager import ProjectManager
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 
@@ -28,6 +29,7 @@ class TestProjectManagerTimer(unittest.TestCase):
         self.mock_qtimer_class = patch("manuskript.projectManager.QTimer", side_effect=mock_qtimer_constructor).start()
 
         self.storage = MagicMock()
+        self.storage.save.return_value = ProjectSaveResult()
         self.project_manager = ProjectManager(
             ProjectLifecycleView(self.window),
             storage=self.storage,
@@ -100,13 +102,13 @@ class TestProjectManagerTimer(unittest.TestCase):
     def test_save_timer_no_changes_stops_after_saving(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=True)
         self.project_manager.startTimerNoChanges()
-        self.storage.save.return_value = True
+        self.storage.save.return_value = ProjectSaveResult()
         self.project_manager.saveDatas()
         self.mock_save_timer_no_changes.stop.assert_called()
 
     def test_save_timer_triggers_save_datas(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=False)
-        self.storage.save.return_value = True
+        self.storage.save.return_value = ProjectSaveResult()
         # Manually trigger the timeout signal
         self.project_manager.saveTimer.timeout.connect.call_args[0][0]()
         self.storage.save.assert_called_once()
@@ -118,7 +120,7 @@ class TestProjectManagerTimer(unittest.TestCase):
     def test_save_timer_no_changes_triggers_save_datas(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=True)
         self.project_manager.startTimerNoChanges()
-        self.storage.save.return_value = True
+        self.storage.save.return_value = ProjectSaveResult()
         # Manually trigger the timeout signal
         self.project_manager.saveTimerNoChanges.timeout.connect.call_args[0][0]()
         self.storage.save.assert_called_once()

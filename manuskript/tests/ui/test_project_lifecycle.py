@@ -38,3 +38,25 @@ def test_lifecycle_view_maps_qt_dialog_result_to_domain_decision():
         decision = view.confirm_unsaved_changes()
 
     assert decision is CloseDecision.SAVE
+
+
+def test_lifecycle_view_presents_failed_save_files():
+    window = MagicMock()
+    view = ProjectLifecycleView(window)
+    failures = ("outline/scene.md", "world.opml")
+
+    with patch.object(
+        project_lifecycle_module,
+        "ListDialog",
+    ) as dialog_type, patch.object(
+        project_lifecycle_module,
+        "QListWidgetItem",
+    ) as list_item:
+        view.show_save_failures(failures)
+
+    dialog = dialog_type.return_value
+    dialog_type.assert_called_once_with(window)
+    dialog.open.assert_called_once_with()
+    assert [call.args[0] for call in list_item.call_args_list] == list(
+        failures
+    )

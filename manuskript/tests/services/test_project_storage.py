@@ -1,5 +1,9 @@
 from unittest.mock import MagicMock, patch
 
+from manuskript.domain.persistence import (
+    ProjectLoadResult,
+    ProjectSaveResult,
+)
 from manuskript.services.project_storage import ProjectStorage
 
 
@@ -7,19 +11,21 @@ def test_storage_passes_explicit_context_to_persistence_facade():
     context = MagicMock()
     cache = {}
     storage = ProjectStorage(file_cache=cache)
+    load_result = ProjectLoadResult()
 
     with patch(
         "manuskript.services.project_storage.loadSave.loadProject",
-        return_value=[],
+        return_value=load_result,
     ) as load_project:
-        assert storage.load(context) == []
+        assert storage.load(context) is load_result
     load_project.assert_called_once_with(context, cache=cache)
 
+    save_result = ProjectSaveResult()
     with patch(
         "manuskript.services.project_storage.loadSave.saveProject",
-        return_value=True,
+        return_value=save_result,
     ) as save_project:
-        assert storage.save(context)
+        assert storage.save(context) is save_result
     save_project.assert_called_once_with(
         context,
         version=None,
