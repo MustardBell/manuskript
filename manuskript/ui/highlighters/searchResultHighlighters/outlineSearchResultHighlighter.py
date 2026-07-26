@@ -11,13 +11,14 @@ from manuskript.ui.collapsibleGroupBox2 import collapsibleGroupBox2
 
 
 class outlineSearchResultHighlighter(abstractSearchResultHighlighter):
-    def __init__(self):
+    def __init__(self, reference_service):
         super().__init__()
+        self._references = reference_service
         self.outline_index = None
 
     def openView(self, searchResult):
         r = Ref.textReference(searchResult.id())
-        Ref.open(r)
+        self._references.open(r)
 
     def retrieveWidget(self, searchResult):
         editors = {

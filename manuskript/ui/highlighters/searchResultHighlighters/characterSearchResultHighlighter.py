@@ -10,12 +10,13 @@ from manuskript.ui.highlighters.searchResultHighlighters.abstractSpecificSearchR
 
 
 class characterSearchResultHighlighter(abstractSearchResultHighlighter):
-    def __init__(self):
+    def __init__(self, reference_service):
         super().__init__()
+        self._references = reference_service
 
     def openView(self, searchResult):
         r = Ref.characterReference(searchResult.id())
-        Ref.open(r)
+        self._references.open(r)
         mainWindow().tabPersos.setEnabled(True)
 
     def retrieveWidget(self, searchResult):

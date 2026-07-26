@@ -18,6 +18,8 @@ class MDEditCompleter(MDEditView):
                               dict=dict, autoResize=autoResize)
 
         self.completer = None
+        self.referenceService = None
+        self.completionDataProvider = lambda: {}
         self.setMouseTracking(True)
         self.refRects = []
         self._noFocusMode = True
@@ -25,10 +27,18 @@ class MDEditCompleter(MDEditView):
         self.textChanged.connect(self.getRefRects)
         self.document().documentLayoutChanged.connect(self.getRefRects)
 
+    def setReferenceService(self, service, completion_data_provider=None):
+        self.referenceService = service
+        self.completionDataProvider = completion_data_provider or (lambda: {})
+        if self.completer is not None:
+            self.completer.setDataProvider(self.completionDataProvider)
+
     def setCurrentModelIndex(self, index):
         MDEditView.setCurrentModelIndex(self, index)
         if self._index and not self.completer:
-            self.setCompleter(completer())
+            self.setCompleter(
+                completer(data_provider=self.completionDataProvider)
+            )
 
     def setCompleter(self, completer):
         self.completer = completer
@@ -122,11 +132,14 @@ class MDEditCompleter(MDEditView):
 
         cursor = self.cursorForPosition(event.pos())
         ref = self.refUnderCursor(cursor)
-        if ref:
+        if ref and self.referenceService is not None:
             if not qApp.overrideCursor():
                 qApp.setOverrideCursor(Qt.PointingHandCursor)
 
-            self.showTooltip(self.mapToGlobal(event.pos()), Ref.tooltip(ref))
+            self.showTooltip(
+                self.mapToGlobal(event.pos()),
+                self.referenceService.tooltip(ref),
+            )
 
     def mouseReleaseEvent(self, event):
         MDEditView.mouseReleaseEvent(self, event)
@@ -134,8 +147,8 @@ class MDEditCompleter(MDEditView):
         if onRef:
             cursor = self.cursorForPosition(event.pos())
             ref = self.refUnderCursor(cursor)
-            if ref:
-                Ref.open(ref)
+            if ref and self.referenceService is not None:
+                self.referenceService.open(ref)
                 qApp.restoreOverrideCursor()
 
     def resizeEvent(self, event):

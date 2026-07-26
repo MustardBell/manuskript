@@ -6,11 +6,9 @@ from PyQt5.QtWidgets import QWidget, QListWidgetItem, QToolTip, QStyledItemDeleg
 
 from manuskript.enums import Character
 from manuskript.enums import Plot
-from manuskript.functions import mainWindow
 from manuskript.ui import style as S
 from manuskript.ui.cheatSheet_ui import Ui_cheatSheet
 from manuskript.models import references as Ref
-from manuskript.ui.editors.completer import completer
 
 
 class cheatSheet(QWidget, Ui_cheatSheet):
@@ -41,6 +39,7 @@ class cheatSheet(QWidget, Ui_cheatSheet):
         self.characterModel = None
         self.plotModel = None
         self.worldModel = None
+        self.referenceService = None
 
         self.populateTimer = QTimer(self)
         self.populateTimer.setSingleShot(True)
@@ -52,21 +51,45 @@ class cheatSheet(QWidget, Ui_cheatSheet):
 
         self.populate()
 
-    def setModels(self):
-        mw = mainWindow()
-        self.outlineModel = mw.mdlOutline
-        self.characterModel = mw.mdlCharacter
-        self.plotModel = mw.mdlPlots
-        self.worldModel = mw.mdlWorld
+    def setModels(
+        self,
+        outline_model,
+        character_model,
+        plot_model,
+        world_model,
+        reference_service,
+        connect=None,
+    ):
+        self.outlineModel = outline_model
+        self.characterModel = character_model
+        self.plotModel = plot_model
+        self.worldModel = world_model
+        self.referenceService = reference_service
 
-        self.outlineModel.dataChanged.connect(self.populateTimer.start)
-        self.characterModel.dataChanged.connect(self.populateTimer.start)
-        self.characterModel.rowsInserted.connect(self.populateTimer.start)
-        self.characterModel.rowsRemoved.connect(self.populateTimer.start)
-        self.plotModel.dataChanged.connect(self.populateTimer.start)
-        self.worldModel.dataChanged.connect(self.populateTimer.start)
+        def bind(signal, slot):
+            if connect is None:
+                signal.connect(slot)
+            else:
+                connect(signal, slot)
+
+        bind(self.outlineModel.dataChanged, self.populateTimer.start)
+        bind(self.characterModel.dataChanged, self.populateTimer.start)
+        bind(self.characterModel.rowsInserted, self.populateTimer.start)
+        bind(self.characterModel.rowsRemoved, self.populateTimer.start)
+        bind(self.plotModel.dataChanged, self.populateTimer.start)
+        bind(self.worldModel.dataChanged, self.populateTimer.start)
 
         self.populate()
+
+    def clearModels(self):
+        self.outlineModel = None
+        self.characterModel = None
+        self.plotModel = None
+        self.worldModel = None
+        self.referenceService = None
+        self.data.clear()
+        self.list.clear()
+        self.view.clear()
 
     def textChanged(self, text):
         if not text:
@@ -151,15 +174,19 @@ class cheatSheet(QWidget, Ui_cheatSheet):
         if self.list and len(self.txtFilter.text()) != 0:
             i = self.list.currentItem()
             ref = i.data(Qt.UserRole)
-            if ref:
-                self.view.setText(Ref.infos(ref))
+            if ref and self.referenceService is not None:
+                self.view.setText(self.referenceService.infos(ref))
 
     def openLink(self, link):
-        Ref.open(link)
+        if self.referenceService is not None:
+            self.referenceService.open(link)
 
     def linkHovered(self, link):
-        if link:
-            QToolTip.showText(QCursor.pos(), Ref.tooltip(link))
+        if link and self.referenceService is not None:
+            QToolTip.showText(
+                QCursor.pos(),
+                self.referenceService.tooltip(link),
+            )
 
     def keyPressEvent(self, event):
         if event.key() in [Qt.Key_Up, Qt.Key_Down]:

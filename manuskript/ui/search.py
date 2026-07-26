@@ -56,6 +56,9 @@ class search(QWidget, Ui_search):
         _translate("MainWindow", "Situation")
         _translate("MainWindow", "Status")
 
+    def setReferenceService(self, reference_service):
+        self.searchResultHighlighter.setReferenceService(reference_service)
+
     def nextSearchResult(self):
         if self.result.currentRow() < self.result.count() - 1:
             self.result.setCurrentRow(self.result.currentRow() + 1)
