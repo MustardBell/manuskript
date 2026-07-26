@@ -44,6 +44,7 @@ class exporterSettings(QWidget, Ui_exporterSettings):
                 item = QListWidgetItem(item.icon(), item.text())
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Checked)
+                item.setData(Qt.UserRole, i)
                 item.setSizeHint(QSize(100, h))
                 self.lstContentLabels.addItem(item)
 
@@ -60,6 +61,7 @@ class exporterSettings(QWidget, Ui_exporterSettings):
                 item = QListWidgetItem(item.icon(), item.text())
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Checked)
+                item.setData(Qt.UserRole, i)
                 item.setSizeHint(QSize(100, h))
                 self.lstContentStatus.addItem(item)
 
@@ -145,6 +147,46 @@ class exporterSettings(QWidget, Ui_exporterSettings):
     def getSettingsPath(self):
         return os.path.join(writablePath(), "exporter.ini")
 
+    @staticmethod
+    def _checkedRows(widget):
+        return [
+            widget.item(row).data(Qt.UserRole)
+            for row in range(widget.count())
+            if widget.item(row).checkState() == Qt.Checked
+        ]
+
+    @staticmethod
+    def _restoreCheckedRows(widget, rows):
+        selected = set(rows)
+        for row in range(widget.count()):
+            item = widget.item(row)
+            item.setCheckState(
+                Qt.Checked
+                if item.data(Qt.UserRole) in selected
+                else Qt.Unchecked
+            )
+
+    def _currentParentID(self):
+        index = self.cmbContentParent.view().currentIndex()
+        if not index.isValid():
+            index = self.context.outline_model.index(
+                self.cmbContentParent.currentIndex(),
+                0,
+                self.cmbContentParent.rootModelIndex(),
+            )
+        return (
+            self.context.outline_model.ID(index)
+            if index.isValid()
+            else ""
+        )
+
+    def _restoreParentID(self, item_id):
+        index = self.context.outline_model.getIndexByID(item_id)
+        if not index.isValid():
+            return
+        self.cmbContentParent.setRootModelIndex(index.parent())
+        self.cmbContentParent.setCurrentIndex(index.row())
+
     def updateFromSettings(self):
         settings = self.settings
 
@@ -170,11 +212,27 @@ class exporterSettings(QWidget, Ui_exporterSettings):
                 if item:
                     item.setCheckState(Qt.Checked if s["TextText"][i] else Qt.Unchecked)
 
-        self.chkContentIgnoreCompile.setChecked(s["IgnoreCompile"])
-        self.chkContentParent.setChecked(s["Parent"])
-        self.chkContentLabels.setChecked(s["Labels"])
-        self.chkContentStatus.setChecked(s["Status"])
-        # FIXME: parent, labels, status
+        self.chkContentIgnoreCompile.setChecked(
+            s.get("IgnoreCompile", False)
+        )
+        self.chkContentParent.setChecked(s.get("Parent", False))
+        self.chkContentLabels.setChecked(s.get("Labels", False))
+        self.chkContentStatus.setChecked(s.get("Status", False))
+        self._restoreParentID(s.get("ParentID", ""))
+        self._restoreCheckedRows(
+            self.lstContentLabels,
+            s.get(
+                "LabelValues",
+                list(range(self.lstContentLabels.count())),
+            ),
+        )
+        self._restoreCheckedRows(
+            self.lstContentStatus,
+            s.get(
+                "StatusValues",
+                list(range(self.lstContentStatus.count())),
+            ),
+        )
 
         # Separations
         s = settings["Separator"]
@@ -245,8 +303,14 @@ class exporterSettings(QWidget, Ui_exporterSettings):
         s["Parent"] = self.chkContentParent.isChecked()
         s["Labels"] = self.chkContentLabels.isChecked()
         s["Status"] = self.chkContentStatus.isChecked()
+        s["ParentID"] = self._currentParentID()
+        s["LabelValues"] = self._checkedRows(
+            self.lstContentLabels
+        )
+        s["StatusValues"] = self._checkedRows(
+            self.lstContentStatus
+        )
         self.settings["Content"] = s
-        # FIXME: parent, labels, status
 
         # Separations
         s = self.settings.get("Separator", {})

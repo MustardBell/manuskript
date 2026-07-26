@@ -862,7 +862,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 parent=self,
                 tool_paths=self.externalToolPaths,
                 process_runner=self.externalProcessRunner,
-            )
+            ),
+            preferences=self.applicationPreferences,
         )
         self.dialog.show()
         self.centerChildWindow(self.dialog)
