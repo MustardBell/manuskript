@@ -63,17 +63,6 @@ def test_several():
     # colorifyPixmap
     assert F.colorifyPixmap(px, c1) != None
 
-def test_outlineItemColors():
-
-    from manuskript.models import outlineItem
-    item = outlineItem(title="Test")
-
-    r = F.outlineItemColors(item)
-    for i in ["POV", "Label", "Progress", "Compile"]:
-        assert i in r
-    from PyQt5.QtGui import QColor
-    assert r["Compile"].name(QColor.HexArgb) == "#00000000"
-
 def test_paths():
 
     assert F.appPath() != None

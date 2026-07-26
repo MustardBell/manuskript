@@ -7,9 +7,9 @@ from PyQt5.QtWidgets import QStyledItemDelegate, qApp, QStyleOptionViewItem, QSt
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import mixColors, colorifyPixmap
-from manuskript.functions import outlineItemColors
 from manuskript.functions import toFloat
 from manuskript.ui import style as S
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 
 
 class treeTitleDelegate(QStyledItemDelegate):
@@ -17,9 +17,13 @@ class treeTitleDelegate(QStyledItemDelegate):
     in the treeview with proper colors according to settings.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, color_resolver=None):
         QStyledItemDelegate.__init__(self, parent)
         self._view = None
+        self.color_resolver = color_resolver or OutlineColorResolver()
+
+    def set_color_resolver(self, color_resolver):
+        self.color_resolver = color_resolver or OutlineColorResolver()
 
     def setView(self, view):
         self._view = view
@@ -27,7 +31,7 @@ class treeTitleDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
 
         item = index.internalPointer()
-        colors = outlineItemColors(item)
+        colors = self.color_resolver.colors_for(item)
 
         style = qApp.style()
 

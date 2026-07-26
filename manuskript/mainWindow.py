@@ -45,6 +45,7 @@ from manuskript.ui.search_context import SearchContext, SearchResultViewAdapter
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 from manuskript.ui.views.outline_context import OutlineViewContext
 from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
@@ -820,6 +821,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             character_model=self.mdlCharacter,
             label_model=self.mdlLabels,
             status_model=self.mdlStatus,
+            color_resolver=OutlineColorResolver(
+                self.mdlCharacter,
+                self.mdlLabels,
+            ),
             open_index=self.openIndex,
             open_indexes=self.openIndexes,
             selection_changed=self.redacMetadata.selectionChanged,

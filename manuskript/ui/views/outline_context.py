@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from manuskript.ui.views.outline_colors import OutlineColorResolver
+
 
 @dataclass(frozen=True)
 class OutlineViewContext:
@@ -9,6 +11,7 @@ class OutlineViewContext:
     character_model: object
     label_model: object
     status_model: object
+    color_resolver: OutlineColorResolver
     open_index: Callable
     open_indexes: Callable
     selection_changed: Optional[Callable] = None
