@@ -17,8 +17,8 @@ def closeProjectDiscardingChanges(MW):
 def closeProjectAfterTests():
     """Leave Qt with a closed project so teardown cannot show a save dialog."""
     yield
-    from manuskript import functions as F
-    closeProjectDiscardingChanges(F.mainWindow())
+    from manuskript.tests import MW as window
+    closeProjectDiscardingChanges(window)
 
 
 @pytest.fixture
@@ -26,12 +26,8 @@ def MW():
     """
     Returns the mainWindow
     """
-    from manuskript import functions as F
-    MW = F.mainWindow()
-    assert MW != None
-    assert MW == F.MW
-
-    return MW
+    from manuskript.tests import MW as window
+    return window
 
 @pytest.fixture
 def MWNoProject(MW):

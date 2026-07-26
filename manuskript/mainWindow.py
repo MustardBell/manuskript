@@ -18,7 +18,7 @@ from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
-from manuskript.functions import wordCount, appPath, findWidgetsOfClass, openURL, showInFolder
+from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.functions.history.History import History
 from manuskript.logging import getLogFilePath
@@ -1442,7 +1442,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # POV in metadata
         from manuskript.ui.views.propertiesView import propertiesView
-        for w in findWidgetsOfClass(propertiesView):
+        for w in self.findChildren(propertiesView):
             w.lblPOV.setVisible(val)
             w.cmbPOV.setVisible(val)
 
@@ -1451,7 +1451,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.settingsManager.outlineViewColumns.remove(Outline.POV)
 
         from manuskript.ui.views.outlineView import outlineView
-        for w in findWidgetsOfClass(outlineView):
+        for w in self.findChildren(outlineView):
             w.hideColumns()
 
         # TODO: clean up all other fiction things in non-fiction view mode
