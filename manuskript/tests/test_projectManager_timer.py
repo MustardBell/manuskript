@@ -79,7 +79,7 @@ class TestProjectManagerTimer(unittest.TestCase):
         self.mock_save_timer_no_changes.start.reset_mock()
         self.project_manager.startTimerNoChanges()
         self.mock_save_timer_no_changes.start.assert_called_once()
-        self.assertTrue(self.window.projectDirty)
+        self.assertTrue(self.project_manager.projectDirty)
 
     def test_save_timer_no_changes_does_not_start_with_autosave_disabled(self):
         self._load_project_helper(auto_save=False, auto_save_no_changes=False)

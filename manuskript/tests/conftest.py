@@ -5,6 +5,22 @@
 
 import pytest
 
+
+def closeProjectDiscardingChanges(MW):
+    """Close a test project without persisting fixture mutations."""
+    if MW.projectManager.session.is_dirty:
+        MW.projectManager.session.mark_clean()
+    assert MW.projectManager.closeProject()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def closeProjectAfterTests():
+    """Leave Qt with a closed project so teardown cannot show a save dialog."""
+    yield
+    from manuskript import functions as F
+    closeProjectDiscardingChanges(F.mainWindow())
+
+
 @pytest.fixture
 def MW():
     """
@@ -22,7 +38,7 @@ def MWNoProject(MW):
     """
     Take the MainWindow and close andy possibly open project.
     """
-    MW.projectManager.closeProject()
+    closeProjectDiscardingChanges(MW)
     assert MW.currentProject == None
     return MW
 
@@ -34,7 +50,7 @@ def MWEmptyProject(MW):
     import tempfile
     tf = tempfile.NamedTemporaryFile(suffix=".msk")
 
-    MW.projectManager.closeProject()
+    closeProjectDiscardingChanges(MW)
     assert MW.currentProject == None
     MW.welcome.createFile(tf.name, overwrite=True)
     assert MW.currentProject != None
@@ -66,6 +82,7 @@ def MWSampleProject(MW):
     import shutil
     shutil.copyfile(src, tf.name)
     shutil.copytree(src[:-4], tf.name[:-4])
+    closeProjectDiscardingChanges(MW)
     MW.projectManager.loadProject(tf.name)
     assert MW.currentProject != None
 

@@ -67,8 +67,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
 
         # Var
-        self.currentProject = None
-        self.projectDirty = None  # has the user made any unsaved changes ?
         self._lastFocus = None
         self._lastMDEditView = None
         self._defaultCursorFlashTime = 1000 # Overridden at startup with system
@@ -108,11 +106,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cmbSummary.currentIndexChanged.emit(0)
 
         # Main Menu
-        for i in [self.actSave, self.actSaveAs, self.actCloseProject,
-                  self.menuEdit, self.menuView, self.menuOrganize,
-                  self.menuNavigate, self.menuTools, self.menuHelp, self.actImport,
-                  self.actCompile, self.actSettings]:
-            i.setEnabled(False)
+        self.projectManager.syncUiToState()
 
         # Main Menu:: File
         self.actOpen.triggered.connect(self.welcome.openFile)
@@ -195,6 +189,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.bulkAffectedCharacters = []
         self.isPersoBulkModeEnabled = False
 
+    @property
+    def currentProject(self):
+        """Compatibility view of the active project path."""
+        return self.projectManager.currentProject
+
+    @property
+    def projectDirty(self):
+        """Compatibility view of whether the active project has unsaved changes."""
+        return self.projectManager.projectDirty
+
     def updateDockVisibility(self, restore=False):
         """
         Saves the state of the docks visibility. Or if `restore` is True,
@@ -249,6 +253,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Show the toolbar
         self.toolbar.setVisible(True)
         self.stack.setCurrentIndex(1)
+
+    def closeEvent(self, event):
+        """Close the application only after the project closes safely."""
+        if not self.projectManager.closeProject():
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     ###############################################################################
     # GENERAL / UI STUFF
