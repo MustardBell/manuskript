@@ -202,10 +202,13 @@ def mixColors(col1, col2, f=0.5):
 
 
 def colorifyPixmap(pixmap, color):
-    # FIXME: ugly
-    p = QPainter(pixmap)
-    p.setCompositionMode(p.CompositionMode_Overlay)
-    p.fillRect(pixmap.rect(), color)
+    """Tint the non-transparent pixels of ``pixmap`` in place."""
+    painter = QPainter(pixmap)
+    try:
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), color)
+    finally:
+        painter.end()
     return pixmap
 
 
