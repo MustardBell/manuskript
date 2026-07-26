@@ -20,7 +20,6 @@ from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, findWidgetsOfClass, openURL, showInFolder
 import manuskript.functions as F
-from manuskript import loadSave
 from manuskript.functions.history.History import History
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel

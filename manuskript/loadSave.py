@@ -13,16 +13,7 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
-def _resolve_window(window):
-    if window is not None:
-        return window
-    from manuskript.functions import mainWindow
-    return mainWindow()
-
-
-def saveProject(version=None, window=None):
-    window = _resolve_window(window)
-
+def saveProject(window, version=None):
     # While debugging, we don't save the project
     # return
 
@@ -36,9 +27,7 @@ def clearSaveCache():
     v1.cache = {}
 
 
-def loadProject(project, window=None):
-    window = _resolve_window(window)
-
+def loadProject(project, window):
     # Detect version
     isZip = False
     version = 0

@@ -9,7 +9,7 @@ def test_save_dispatches_explicit_context_to_current_format():
     with patch.object(
         loadSave.v1, "saveProject", return_value=True
     ) as save_project:
-        result = loadSave.saveProject(window=context)
+        result = loadSave.saveProject(context)
 
     assert result
     save_project.assert_called_once_with(context)
@@ -21,7 +21,7 @@ def test_save_dispatches_explicit_context_to_legacy_format():
     with patch.object(
         loadSave.v0, "saveProject", return_value=True
     ) as save_project:
-        result = loadSave.saveProject(version=0, window=context)
+        result = loadSave.saveProject(context, version=0)
 
     assert result
     save_project.assert_called_once_with(context)
@@ -35,21 +35,16 @@ def test_load_dispatches_explicit_context_to_detected_format(tmp_path):
     with patch.object(
         loadSave.v1, "loadProject", return_value=[]
     ) as load_project:
-        result = loadSave.loadProject(str(project), window=context)
+        result = loadSave.loadProject(str(project), context)
 
     assert result == []
     load_project.assert_called_once_with(str(project), context, zip=False)
 
 
-def test_facade_keeps_global_window_fallback_for_compatibility():
-    context = MagicMock()
-
-    with patch(
-        "manuskript.functions.mainWindow", return_value=context
-    ), patch.object(
-        loadSave.v1, "saveProject", return_value=True
-    ) as save_project:
-        result = loadSave.saveProject()
-
-    assert result
-    save_project.assert_called_once_with(context)
+def test_persistence_facade_requires_explicit_context():
+    try:
+        loadSave.saveProject()
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("saveProject accepted missing project context")

@@ -12,14 +12,14 @@ def test_storage_passes_explicit_context_to_persistence_facade():
         return_value=[],
     ) as load_project:
         assert storage.load("story.msk", context) == []
-    load_project.assert_called_once_with("story.msk", window=context)
+    load_project.assert_called_once_with("story.msk", context)
 
     with patch(
         "manuskript.services.project_storage.loadSave.saveProject",
         return_value=True,
     ) as save_project:
         assert storage.save(context)
-    save_project.assert_called_once_with(version=None, window=context)
+    save_project.assert_called_once_with(context, version=None)
 
 
 def test_storage_clears_persistence_cache():
