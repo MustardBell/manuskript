@@ -4,11 +4,12 @@ import os
 import shutil
 import subprocess
 
-from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtGui import QCursor
 
 from manuskript.converters.abstractConverter import abstractConverter
+from manuskript.services.external_tools import ExternalToolPaths
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -19,18 +20,18 @@ class pandocConverter(abstractConverter):
     cmd = "pandoc"
 
     @classmethod
-    def isValid(cls):
+    def isValid(cls, tool_paths=None):
         if cls.path() is not None:
             return 2
-        custom_path = cls.customPath()
+        custom_path = cls.customPath(tool_paths)
         if custom_path and os.path.exists(custom_path):
             return 1
         return 0
 
     @classmethod
-    def customPath(cls):
-        settings = QSettings()
-        return settings.value("Exporters/{}_customPath".format(cls.name), "")
+    def customPath(cls, tool_paths=None):
+        paths = tool_paths or ExternalToolPaths()
+        return paths.get(cls.name)
 
     @classmethod
     def path(cls):
@@ -39,12 +40,12 @@ class pandocConverter(abstractConverter):
     @classmethod
     def convert(
             cls, src, _from="markdown", to="html", args=None,
-            outputfile=None, on_error=None):
-        if not cls.isValid():
+            outputfile=None, on_error=None, tool_paths=None):
+        if not cls.isValid(tool_paths):
             LOGGER.error("pandocConverter is called but not valid.")
             return ""
 
-        cmd = [cls.runCmd()]
+        cmd = [cls.runCmd(tool_paths)]
 
         cmd += ["--from={}".format(_from)]
         cmd += ["--to={}".format(to)]
@@ -81,10 +82,10 @@ class pandocConverter(abstractConverter):
         return stdout.decode("utf-8")
 
     @classmethod
-    def runCmd(cls):
-        validity = cls.isValid()
+    def runCmd(cls, tool_paths=None):
+        validity = cls.isValid(tool_paths)
         if validity == 2:
             return cls.cmd
         if validity == 1:
-            return cls.customPath()
+            return cls.customPath(tool_paths)
         return None

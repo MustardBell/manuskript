@@ -81,11 +81,8 @@ class pandocExporter(basicExporter):
         return arguments
 
     def convert(self, src, args, outputfile=None):
-        if self.isValid() == 2:
-            run = self.cmd
-        elif self.isValid() == 1:
-            run = self.customPath
-        else:
+        run = self.executable()
+        if run is None:
             LOGGER.error("No command for pandoc.")
             return None
         args = [run] + args
