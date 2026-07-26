@@ -26,6 +26,7 @@ from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
+from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.models.worldModel import worldModel
 from manuskript.projectManager import ProjectManager
 from manuskript.settingsWindow import settingsWindow
@@ -38,12 +39,14 @@ from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
+from manuskript.ui.reference_navigation import reference_navigation_for
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
 from manuskript.ui.views.outline_context import OutlineViewContext
 from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
+from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 from manuskript.ui.statusLabel import statusLabel
 
 # Spellcheck support
@@ -90,6 +93,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.worldController = WorldController(self)
         self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
+        self.referenceService = None
 
         self.readSettings()
 
@@ -604,6 +608,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Project connections must be released before binding new models."
             )
         connect = self.projectConnections.connect
+        self.referenceService = ReferenceService(
+            ReferenceModels(
+                outline=self.mdlOutline,
+                characters=self.mdlCharacter,
+                plots=self.mdlPlots,
+                world=self.mdlWorld,
+                statuses=self.mdlStatus,
+                labels=self.mdlLabels,
+            ),
+            reference_navigation_for(self),
+        )
 
         # Flat datas (Summary and general infos)
         for widget, col in [
@@ -804,7 +819,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.treeOutlineOutline.setModel(self.mdlOutline)
         # self.redacEditor.setModel(self.mdlOutline)
-        self.storylineView.setModels(self.mdlOutline, self.mdlCharacter, self.mdlPlots)
+        self.storylineView.setModels(
+            self.mdlOutline,
+            self.mdlCharacter,
+            self.mdlPlots,
+            self.referenceService,
+            connect=connect,
+        )
 
         connect(
             self.treeOutlineOutline.selectionModel().selectionChanged,
@@ -845,7 +866,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
 
         # Cheat Sheet
-        self.cheatSheet.setModels()
+        self.cheatSheet.setModels(
+            self.mdlOutline,
+            self.mdlCharacter,
+            self.mdlPlots,
+            self.mdlWorld,
+            self.referenceService,
+            connect=connect,
+        )
+        completion_data = lambda: self.cheatSheet.data
+        for editor in self.findChildren(MDEditCompleter):
+            editor.setReferenceService(
+                self.referenceService,
+                completion_data,
+            )
+        self.widget.setReferenceService(self.referenceService)
 
         # Debug
         self.mdlFlatData.setVerticalHeaderLabels(["General info", "Summary"])
@@ -899,6 +934,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.treeRedacOutline.set_outline_context(None)
         self.treeOutlineOutline.set_outline_context(None)
         self.mainEditor.clear_context()
+        for editor in self.findChildren(MDEditCompleter):
+            editor.setReferenceService(None)
+        self.widget.setReferenceService(None)
+        self.cheatSheet.clearModels()
+        self.storylineView.clearModels()
+        self.referenceService = None
         self.projectConnections.disconnect_all()
 
     ###############################################################################

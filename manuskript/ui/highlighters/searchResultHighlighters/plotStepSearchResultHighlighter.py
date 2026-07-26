@@ -10,12 +10,13 @@ from manuskript.ui.highlighters.searchResultHighlighters.abstractSpecificSearchR
 
 
 class plotStepSearchResultHighlighter(abstractSearchResultHighlighter):
-    def __init__(self):
+    def __init__(self, reference_service):
         super().__init__()
+        self._references = reference_service
 
     def openView(self, searchResult):
         r = Ref.plotReference(searchResult.id())
-        Ref.open(r)
+        self._references.open(r)
         mainWindow().tabPlot.setEnabled(True)
 
     def retrieveWidget(self, searchResult):

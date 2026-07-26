@@ -14,20 +14,34 @@ from manuskript.enums import Model
 class searchResultHighlighter(abstractSearchResultHighlighter):
     def __init__(self):
         super().__init__()
+        self._reference_service = None
+
+    def setReferenceService(self, reference_service):
+        self._reference_service = reference_service
 
     def highlightSearchResult(self, searchResult):
         if searchResult.type() == Model.Character:
-            highlighter = characterSearchResultHighlighter()
+            highlighter = characterSearchResultHighlighter(
+                self._reference_service
+            )
         elif searchResult.type() == Model.FlatData:
             highlighter = flatDataSearchResultHighlighter()
         elif searchResult.type() == Model.Outline:
-            highlighter = outlineSearchResultHighlighter()
+            highlighter = outlineSearchResultHighlighter(
+                self._reference_service
+            )
         elif searchResult.type() == Model.World:
-            highlighter = worldSearchResultHighlighter()
+            highlighter = worldSearchResultHighlighter(
+                self._reference_service
+            )
         elif searchResult.type() == Model.Plot:
-            highlighter = plotSearchResultHighlighter()
+            highlighter = plotSearchResultHighlighter(
+                self._reference_service
+            )
         elif searchResult.type() == Model.PlotStep:
-            highlighter = plotStepSearchResultHighlighter()
+            highlighter = plotStepSearchResultHighlighter(
+                self._reference_service
+            )
         else:
             raise NotImplementedError
 
