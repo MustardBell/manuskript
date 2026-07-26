@@ -8,14 +8,16 @@ from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import colorifyPixmap
 from manuskript.functions import mixColors
-from manuskript.functions import outlineItemColors
 from manuskript.ui import style as S
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 
 
 class corkDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None, status_model=None):
+    def __init__(
+            self, parent=None, status_model=None, color_resolver=None):
         QStyledItemDelegate.__init__(self, parent)
         self.status_model = status_model
+        self.color_resolver = color_resolver or OutlineColorResolver()
         self.factor = SettingsManager().corkSizeFactor / 100.
         self.lastPos = None
         self.editing = None
@@ -25,6 +27,9 @@ class corkDelegate(QStyledItemDelegate):
 
     def set_status_model(self, status_model):
         self.status_model = status_model
+
+    def set_color_resolver(self, color_resolver):
+        self.color_resolver = color_resolver or OutlineColorResolver()
 
     def status_item(self, status):
         if self.status_model is None:
@@ -228,7 +233,7 @@ class corkDelegate(QStyledItemDelegate):
 
         item = index.internalPointer()
         self.updateRects(option, index)
-        colors = outlineItemColors(item)
+        colors = self.color_resolver.colors_for(item)
 
         style = qApp.style()
 
@@ -419,7 +424,7 @@ class corkDelegate(QStyledItemDelegate):
 
         item = index.internalPointer()
         self.updateRects(option, index)
-        colors = outlineItemColors(item)
+        colors = self.color_resolver.colors_for(item)
 
         style = qApp.style()
 

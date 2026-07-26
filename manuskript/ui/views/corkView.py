@@ -28,6 +28,9 @@ class corkView(QListView, dndView, outlineBasics):
     def set_outline_context(self, context):
         outlineBasics.set_outline_context(self, context)
         self.cork_delegate.set_status_model(self.modelStatus)
+        self.cork_delegate.set_color_resolver(
+            context.color_resolver if context is not None else None
+        )
 
     def updateBackground(self):
         if SettingsManager().corkBackground["image"] != "":

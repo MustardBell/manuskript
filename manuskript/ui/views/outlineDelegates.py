@@ -7,14 +7,19 @@ from PyQt5.QtWidgets import qApp
 
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, Outline
-from manuskript.functions import outlineItemColors, mixColors, colorifyPixmap, toInt, toFloat, drawProgress
+from manuskript.functions import mixColors, colorifyPixmap, toInt, toFloat, drawProgress
 from manuskript.ui import style as S
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 
 
 class outlineTitleDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, color_resolver=None):
         QStyledItemDelegate.__init__(self, parent)
         self._view = None
+        self.color_resolver = color_resolver or OutlineColorResolver()
+
+    def set_color_resolver(self, color_resolver):
+        self.color_resolver = color_resolver or OutlineColorResolver()
 
     def setView(self, view):
         self._view = view
@@ -22,7 +27,7 @@ class outlineTitleDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
 
         item = index.internalPointer()
-        colors = outlineItemColors(item)
+        colors = self.color_resolver.colors_for(item)
 
         style = qApp.style()
 

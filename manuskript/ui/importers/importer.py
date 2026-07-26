@@ -15,6 +15,7 @@ from manuskript.models import outlineModel, outlineItem
 from manuskript.enums import Outline
 from manuskript.exporter.pandoc import pandocExporter
 from manuskript.ui.editors.editor_context import EditorContext
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 from manuskript.ui.views.outline_context import OutlineViewContext
 
 class importerDialog(QWidget, Ui_importer):
@@ -244,6 +245,10 @@ class importerDialog(QWidget, Ui_importer):
                 character_model=self.context.character_model,
                 label_model=self.context.label_model,
                 status_model=self.context.status_model,
+                color_resolver=OutlineColorResolver(
+                    self.context.character_model,
+                    self.context.label_model,
+                ),
                 open_index=self.tree.setCurrentIndex,
                 open_indexes=lambda indexes: (
                     self.tree.setCurrentIndex(indexes[0])

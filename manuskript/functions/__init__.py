@@ -13,8 +13,6 @@ from PyQt5.QtGui import QBrush, QIcon, QPainter, QColor, QImage, QPixmap
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import qApp, QFileDialog
 
-from manuskript.enums import Outline
-
 import logging
 LOGGER = logging.getLogger(__name__)
 
@@ -214,47 +212,6 @@ def mixColors(col1, col2, f=0.5):
     b = int(col1.blue() * f + col2.blue() * f2)
 
     return QColor(r, g, b) if not fromString else QColor(r, g, b).name()
-
-
-def outlineItemColors(item):
-    from manuskript.ui import style as S
-
-    """Takes an OutlineItem and returns a dict of colors."""
-    colors = {}
-    mw = mainWindow()
-
-    # POV
-    colors["POV"] = QColor(Qt.transparent)
-    POV = item.data(Outline.POV)
-    if POV == "":
-        col = QColor(Qt.transparent)
-    else:
-        for i in range(mw.mdlCharacter.rowCount()):
-            if mw.mdlCharacter.ID(i) == POV:
-                colors["POV"] = iconColor(mw.mdlCharacter.icon(i))
-
-    # Label
-    lbl = item.data(Outline.label)
-    if lbl == "":
-        col = QColor(Qt.transparent)
-    else:
-        col = iconColor(mw.mdlLabels.item(toInt(lbl)).icon())
-    # if col == Qt.black:
-    #     # Don't know why, but transparent is rendered as black
-    #     col = QColor(Qt.transparent)
-    colors["Label"] = col
-
-    # Progress
-    pg = item.data(Outline.goalPercentage) if item.data(Outline.setGoal) else None
-    colors["Progress"] = colorFromProgress(pg)
-
-    # Compile
-    if item.compile() in [0, "0"]:
-        colors["Compile"] = mixColors(QColor(S.text), QColor(S.window))
-    else:
-        colors["Compile"] = QColor(Qt.transparent) # will use default
-
-    return colors
 
 
 def colorifyPixmap(pixmap, color):

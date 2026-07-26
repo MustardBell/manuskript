@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from manuskript.ui.editors.editor_context import EditorContext
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 from manuskript.ui.views.corkView import corkView
 from manuskript.ui.views.outlineBasics import outlineBasics
 from manuskript.ui.views.outline_context import OutlineViewContext
@@ -11,6 +12,7 @@ def make_outline_context():
         character_model=MagicMock(name="characters"),
         label_model=MagicMock(name="labels"),
         status_model=MagicMock(name="statuses"),
+        color_resolver=OutlineColorResolver(),
         open_index=MagicMock(name="open_index"),
         open_indexes=MagicMock(name="open_indexes"),
         selection_changed=MagicMock(name="selection_changed"),
@@ -61,6 +63,7 @@ def test_cork_delegate_receives_status_model_from_outline_context():
     view.set_outline_context(context)
 
     assert view.cork_delegate.status_model is context.status_model
+    assert view.cork_delegate.color_resolver is context.color_resolver
     assert view.cork_delegate.status_item("2") is status_item
     context.status_model.item.assert_called_once_with(2, 0)
 
