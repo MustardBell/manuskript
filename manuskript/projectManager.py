@@ -132,7 +132,7 @@ class ProjectManager:
             return True
 
         # Make sure data is saved.
-        if self.session.is_dirty and self.ui.settings.saveOnQuit:
+        if self.ui.settings.saveOnQuit:
             if not self.saveDatas():
                 return False
         elif not self.handleUnsavedChanges():
@@ -197,6 +197,7 @@ class ProjectManager:
             LOGGER.error("There is no current project to save.")
             return False
 
+        self.ui.capture_project_state()
         result = self.storage.save(
             self.persistence_context(self.currentProject)
         )
