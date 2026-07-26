@@ -7,7 +7,6 @@ from PyQt5.QtCore import QTimer, QModelIndex, Qt, QEvent, pyqtSignal, QLocale, Q
 from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QFont, QColor, QIcon, QMouseEvent, QTextCursor
 from PyQt5.QtWidgets import QWidget, QTextEdit, qApp, QAction, QMenu, QToolTip
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.commands import DocumentCommand
 from manuskript.enums import Outline, World, Character, Plot
 from manuskript import functions as F
@@ -16,6 +15,9 @@ from manuskript.ui.highlighters import BasicHighlighter
 from manuskript.ui import style as S
 from manuskript.functions import Spellchecker
 from manuskript.models.characterModel import Character, CharacterInfo
+from manuskript.ui.views.text_editor_settings import (
+    DefaultTextEditorSettings,
+)
 
 
 import logging
@@ -27,7 +29,8 @@ PLAIN_TRANSLATION_TABLE = {0x2028: "\n", 0x2029: "\n", 0xfdd0: "\n", 0xfdd1: "\n
 class textEditView(QTextEdit):
 
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
-                 highlighting=False, dict="", autoResize=False):
+                 highlighting=False, dict="", autoResize=False,
+                 settings=None):
         QTextEdit.__init__(self, parent)
         self._column = Outline.text
         self._index = None
@@ -44,7 +47,11 @@ class textEditView(QTextEdit):
         self._themeData = None
         self._highlighterClass = BasicHighlighter
         self.text_editor_context = None
-        self.settings = SettingsManager()
+        self.settings = (
+            settings
+            if settings is not None
+            else DefaultTextEditorSettings()
+        )
 
         if spellcheck == None:
             spellcheck = self.settings.spellcheck

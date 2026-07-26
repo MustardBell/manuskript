@@ -42,7 +42,8 @@ class fullScreenEditor(QWidget):
                                 index=index,
                                 spellcheck=self.settings.spellcheck,
                                 highlighting=True,
-                                dict=self.settings.dict)
+                                dict=self.settings.dict,
+                                settings=self.settings)
         if text_editor_context is not None:
             self.editor.set_text_editor_context(text_editor_context)
         self.editor.setFrameStyle(QFrame.NoFrame)

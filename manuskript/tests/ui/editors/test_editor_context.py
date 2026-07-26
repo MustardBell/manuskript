@@ -24,6 +24,8 @@ def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
     assert editor.settings is window.settingsManager
     assert window.mdlOutline.settings is window.settingsManager
     assert item.settings is window.settingsManager
+    assert window.lstPlots.settings is window.settingsManager
+    assert window.lstOutlinePlots.settings is window.settingsManager
     assert (
         editor.txtRedacText.text_editor_context
         is window.textEditorContext
