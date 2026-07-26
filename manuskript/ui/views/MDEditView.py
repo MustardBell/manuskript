@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import qApp, QToolTip
 
 from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.highlighters import MarkdownHighlighter
-from manuskript.settingsManager import SettingsManager
 from manuskript.ui.highlighters.markdownEnums import MarkdownState as MS
 from manuskript.ui.highlighters.markdownTokenizer import MarkdownTokenizer as MT
 from manuskript import functions as F
@@ -188,7 +187,7 @@ class MDEditView(textEditView):
     def cursorPositionHasChanged(self):
         self.centerCursor()
         # Focus mode
-        if self.highlighter and SettingsManager().textEditor["focusMode"]:
+        if self.highlighter and self.settings.textEditor["focusMode"]:
             if self._lastCursorPosition:
                 block = self.document().findBlock(self._lastCursorPosition)
                 self.highlighter.rehighlightBlock(block)
@@ -200,7 +199,7 @@ class MDEditView(textEditView):
         cursor = self.cursorRect()
         scrollbar = self.verticalScrollBar()
         viewport = self.viewport().rect()
-        if (force or SettingsManager().textEditor["alwaysCenter"]
+        if (force or self.settings.textEditor["alwaysCenter"]
                 or cursor.bottom() >= viewport.bottom()
                 or cursor.top() <= viewport.top()):
             offset = viewport.center() - cursor.center()
@@ -211,7 +210,7 @@ class MDEditView(textEditView):
         Adds viewport height to scrollbar max so that we can center cursor
         on screen.
         """
-        if SettingsManager().textEditor["alwaysCenter"]:
+        if self.settings.textEditor["alwaysCenter"]:
             self.verticalScrollBar().blockSignals(True)
             self.verticalScrollBar().setMaximum(max + self.viewport().height())
             self.verticalScrollBar().blockSignals(False)

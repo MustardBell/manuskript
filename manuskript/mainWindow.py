@@ -54,6 +54,7 @@ from manuskript.ui.statusLabel import statusLabel
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
+from manuskript.ui.views.text_editor_context import text_editor_context_for
 from manuskript.functions import Spellchecker
 
 import logging
@@ -100,6 +101,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             lambda: self._defaultCursorFlashTime
         )
         self.referenceService = None
+        self.textEditorContext = None
 
         self.readSettings()
 
@@ -799,6 +801,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.treeWorld.expandAll()
 
         # Outline
+        self.textEditorContext = text_editor_context_for(
+            self,
+            self.settingsManager,
+        )
+        for editor in self.findChildren(textEditView):
+            editor.set_text_editor_context(self.textEditorContext)
+
         outline_view_context = OutlineViewContext(
             character_model=self.mdlCharacter,
             label_model=self.mdlLabels,
@@ -811,6 +820,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             outline_model=self.mdlOutline,
             outline_tree=self.treeRedacOutline,
             outline_views=outline_view_context,
+            text_editor=self.textEditorContext,
         )
         self.treeRedacOutline.set_outline_context(outline_view_context)
         self.treeOutlineOutline.set_outline_context(outline_view_context)
@@ -952,6 +962,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.treeRedacOutline.set_outline_context(None)
         self.treeOutlineOutline.set_outline_context(None)
         self.mainEditor.clear_context()
+        for editor in self.findChildren(textEditView):
+            editor.set_text_editor_context(None)
+        self.textEditorContext = None
         for editor in self.findChildren(MDEditCompleter):
             editor.setReferenceService(None)
         self.widget.clearContext()
