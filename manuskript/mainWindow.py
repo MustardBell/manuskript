@@ -6,12 +6,13 @@ import re
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, QTimer, QSettings, Qt, QPoint,
-                          QRegExp, QUrl, QSize, QModelIndex)
+                          QRegExp, QUrl, QSize)
 from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtWidgets import QMainWindow, QHeaderView, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
+from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
 from manuskript.controllers.character_controller import CharacterController
+from manuskript.controllers.plot_controller import PlotController
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, findWidgetsOfClass, openURL, showInFolder
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._previousSelectionEmpty = True
         self.projectConnections = SignalConnectionRegistry()
         self.characterController = CharacterController(self)
+        self.plotController = PlotController(self)
         self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
 
@@ -278,9 +280,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if tabIndex == self.TabPersos:
             self.characterController.record_current_selection()
         elif tabIndex == self.TabPlots:
-            id = self.lstPlots.currentPlotID()
-            self.pushHistory(("plot", id))
-            self._previousSelectionEmpty = id is None
+            self.plotController.record_current_selection()
         elif tabIndex == self.TabWorld:
             index = self.mdlWorld.selectedIndex()
 
@@ -367,86 +367,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def outlineRemoveItemsOutline(self):
         self.treeOutlineOutline.delete()
-
-    ###############################################################################
-    # CHARACTERS
-    ###############################################################################
-
-    ###############################################################################
-    # PLOTS
-    ###############################################################################
-
-    def changeCurrentPlot(self):
-        index = self.lstPlots.currentPlotIndex()
-        id = self.lstPlots.currentPlotID()
-
-        if not index.isValid():
-            self.tabPlot.setEnabled(False)
-            self.pushHistory(("plot", None))
-            self._previousSelectionEmpty = True
-            return
-
-        self.pushHistory(("plot", id))
-        self._previousSelectionEmpty = False
-
-        self.tabPlot.setEnabled(True)
-        self.txtPlotName.setCurrentModelIndex(index)
-        self.txtPlotDescription.setCurrentModelIndex(index)
-        self.txtPlotResult.setCurrentModelIndex(index)
-        self.sldPlotImportance.setCurrentModelIndex(index)
-        self.lstPlotPerso.setRootIndex(index.sibling(index.row(),
-                                                     Plot.characters))
-
-        # Slider importance
-        self.updatePlotImportance(index.row())
-
-        subplotindex = index.sibling(index.row(), Plot.steps)
-        self.lstSubPlots.setRootIndex(subplotindex)
-        if self.mdlPlots.rowCount(subplotindex):
-            self.updateSubPlotView()
-
-        self.txtSubPlotSummary.setCurrentModelIndex(QModelIndex())
-        self.lstPlotPerso.selectionModel().clear()
-
-    def updateSubPlotView(self):
-        # Hide columns
-        # FIXME: when columns are hidden, and drag and drop InternalMove is enabled
-        #        as well as selectionBehavior=SelectRows, then when moving a row
-        #        hidden cells (here: summary and ID) are deleted...
-        #        So instead we set their width to 0.
-        #for i in range(self.mdlPlots.columnCount()):
-            #self.lstSubPlots.hideColumn(i)
-        #self.lstSubPlots.showColumn(PlotStep.name)
-        #self.lstSubPlots.showColumn(PlotStep.meta)
-
-        self.lstSubPlots.horizontalHeader().setSectionResizeMode(
-                PlotStep.ID, QHeaderView.Fixed)
-        self.lstSubPlots.horizontalHeader().setSectionResizeMode(
-                PlotStep.summary, QHeaderView.Fixed)
-        self.lstSubPlots.horizontalHeader().resizeSection(
-                PlotStep.ID, 0)
-        self.lstSubPlots.horizontalHeader().resizeSection(
-                PlotStep.summary, 0)
-
-        self.lstSubPlots.horizontalHeader().setSectionResizeMode(
-                PlotStep.name, QHeaderView.Stretch)
-        self.lstSubPlots.horizontalHeader().setSectionResizeMode(
-                PlotStep.meta, QHeaderView.ResizeToContents)
-        self.lstSubPlots.verticalHeader().hide()
-
-    def updatePlotImportance(self, row):
-        imp = self.mdlPlots.getPlotImportanceByRow(row)
-        self.sldPlotImportance.setValue(int(imp))
-
-    def changeCurrentSubPlot(self, index):
-        index = index.sibling(index.row(), PlotStep.summary)
-        self.txtSubPlotSummary.setColumn(PlotStep.summary)
-        self.txtSubPlotSummary.setCurrentModelIndex(index)
-
-    def plotPersoSelectionChanged(self):
-        "Enables or disables remove plot perso button."
-        self.btnRmPlotPerso.setEnabled(
-                len(self.lstPlotPerso.selectedIndexes()) != 0)
 
     ###############################################################################
     # WORLD
@@ -720,8 +640,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Plots
         self.txtPlotFilter.textChanged.connect(self.lstPlots.setFilter, F.AUC)
-        self.lstPlots.currentItemChanged.connect(self.changeCurrentPlot, F.AUC)
-        self.lstSubPlots.clicked.connect(self.changeCurrentSubPlot, F.AUC)
+        self.lstPlots.currentItemChanged.connect(
+            self.plotController.handle_plot_selection_changed,
+            F.AUC,
+        )
 
         # Outline
         self.btnRedacAddFolder.clicked.connect(self.treeRedacOutline.addFolder, F.AUC)
@@ -832,28 +754,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lstSubPlots.setModel(self.mdlPlots)
         self.lstPlotPerso.setModel(self.mdlPlots)
         self.lstPlots.setPlotModel(self.mdlPlots)
-        self._updatingSubPlot = False
-        connect(self.btnAddPlot.clicked, self.mdlPlots.addPlot, F.AUC)
+        connect(self.btnAddPlot.clicked, self.plotController.add_plot, F.AUC)
         connect(
             self.btnRmPlot.clicked,
-            lambda: self.mdlPlots.removePlot(self.lstPlots.currentPlotIndex()),
+            self.plotController.remove_current_plot,
             F.AUC,
         )
-        connect(self.btnAddSubPlot.clicked, self.mdlPlots.addSubPlot, F.AUC)
-        connect(self.btnAddSubPlot.clicked, self.updateSubPlotView, F.AUC)
-        connect(self.btnRmSubPlot.clicked, self.mdlPlots.removeSubPlot, F.AUC)
+        connect(
+            self.btnAddSubPlot.clicked,
+            self.plotController.add_sub_plot,
+            F.AUC,
+        )
+        connect(
+            self.btnRmSubPlot.clicked,
+            self.plotController.remove_selected_sub_plots,
+            F.AUC,
+        )
         connect(
             self.lstPlotPerso.selectionModel().selectionChanged,
-            self.plotPersoSelectionChanged,
+            self.plotController.handle_plot_character_selection,
         )
         connect(
             self.btnRmPlotPerso.clicked,
-            self.mdlPlots.removePlotPerso,
+            self.plotController.remove_selected_plot_characters,
             F.AUC,
         )
         connect(
             self.lstSubPlots.selectionModel().currentRowChanged,
-            self.changeCurrentSubPlot,
+            self.plotController.change_current_sub_plot,
             F.AUC,
         )
 
@@ -867,10 +795,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             w.setColumn(c)
 
         self.tabPlot.setEnabled(False)
-        self.mdlPlots.updatePlotPersoButton()
+        self.plotController.refresh_character_menu()
         connect(
             self.mdlCharacter.dataChanged,
-            self.mdlPlots.updatePlotPersoButton,
+            self.plotController.refresh_character_menu,
         )
         self.lstOutlinePlots.setPlotModel(self.mdlPlots)
         self.lstOutlinePlots.setShowSubPlot(True)
@@ -1005,8 +933,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
-        self._updatingSubPlot = False
         self.characterController.reset()
+        self.plotController.reset()
         self.projectConnections.disconnect_all()
 
     ###############################################################################

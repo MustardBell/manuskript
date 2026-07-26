@@ -37,11 +37,31 @@ class plotTreeView(QTreeWidget):
         self.updateItems()
 
     def setPlotModel(self, model):
+        if model is self._model:
+            self.updateItems()
+            return
+        self._disconnectPlotModel()
         self._model = model
+        if self._model is None:
+            self.clear()
+            return
         self._model.dataChanged.connect(self.updateMaybe)
         self._model.rowsInserted.connect(self.updateMaybe2)
         self._model.rowsRemoved.connect(self.updateMaybe2)
         self.updateItems()
+
+    def _disconnectPlotModel(self):
+        if self._model is None:
+            return
+        for signal, slot in [
+            (self._model.dataChanged, self.updateMaybe),
+            (self._model.rowsInserted, self.updateMaybe2),
+            (self._model.rowsRemoved, self.updateMaybe2),
+        ]:
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
 
     def setFilter(self, text):
         self._filter = text

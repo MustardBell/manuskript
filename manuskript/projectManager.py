@@ -306,7 +306,10 @@ class ProjectManager:
         self.window.mdlCharacter = characterModel(self.window)
         self.window.mdlLabels = QStandardItemModel(self.window)
         self.window.mdlStatus = QStandardItemModel(self.window)
-        self.window.mdlPlots = plotModel(self.window)
+        self.window.mdlPlots = plotModel(
+            self.window,
+            character_lookup=self.window.mdlCharacter.getCharacterByID,
+        )
         self.window.mdlOutline = outlineModel(self.window)
         self.window.mdlWorld = worldModel(self.window)
 
