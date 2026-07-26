@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
+from contextlib import contextmanager
+
 from manuskript.models.abstractModel import abstractModel
 from manuskript.models.searchableModel import searchableModel
 from manuskript.models.outlineItem import outlineItem
@@ -23,6 +25,30 @@ class outlineModel(abstractModel, searchableModel):
             ID="0",
             settings=self.settings,
         )
+        self._word_count_batch_depth = 0
+        self._word_count_dirty = False
+
+    @property
+    def wordCountUpdatesDeferred(self):
+        return self._word_count_batch_depth > 0
+
+    def deferWordCountUpdate(self):
+        self._word_count_dirty = True
+
+    @contextmanager
+    def batchWordCountUpdates(self):
+        """Defer aggregate word counts until a model mutation completes."""
+        self._word_count_batch_depth += 1
+        try:
+            yield
+        finally:
+            self._word_count_batch_depth -= 1
+            if (
+                self._word_count_batch_depth == 0
+                and self._word_count_dirty
+            ):
+                self._word_count_dirty = False
+                self.rootItem.recalculateWordCount(recursive=True)
 
 
     def findItemsByPOV(self, POV):

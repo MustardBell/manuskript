@@ -209,15 +209,43 @@ class outlineItem(abstractItem, searchableItem):
 
     def insertChild(self, row, child):
         abstractItem.insertChild(self, row, child)
-        self.updateWordCount()
+        if self._wordCountUpdatesDeferred():
+            self._model.deferWordCountUpdate()
+        else:
+            self.updateWordCount()
 
     def removeChild(self, row):
         r = abstractItem.removeChild(self, row)
-        self.updateWordCount()
+        if self._wordCountUpdatesDeferred():
+            self._model.deferWordCountUpdate()
+        else:
+            self.updateWordCount()
         return r
 
-    def updateWordCount(self):
+    def _wordCountUpdatesDeferred(self):
+        return (
+            self._model is not None
+            and getattr(
+                self._model,
+                "wordCountUpdatesDeferred",
+                False,
+            )
+        )
+
+    def recalculateWordCount(self, recursive=False):
+        """Recalculate this item, optionally working bottom-up."""
+        if recursive:
+            for child in self.children():
+                child.recalculateWordCount(recursive=True)
+        self.updateWordCount(propagate=False)
+
+    def updateWordCount(self, propagate=True):
         """Update word count for item and parents."""
+        deferred = self._wordCountUpdatesDeferred()
+        if deferred and self.isFolder():
+            self._model.deferWordCountUpdate()
+            return
+
         if not self.isFolder():
             setGoal = F.toInt(self.data(self.enum.setGoal))
             goal = F.toInt(self.data(self.enum.goal))
@@ -259,7 +287,9 @@ class outlineItem(abstractItem, searchableItem):
                               self.enum.wordCount, self.enum.charCount,
                               self.enum.goalPercentage])
 
-        if self.parent():
+        if deferred:
+            self._model.deferWordCountUpdate()
+        elif propagate and self.parent():
             self.parent().updateWordCount()
 
     def stats(self):

@@ -181,7 +181,6 @@ class importerDialog(QWidget, Ui_importer):
         # We check if we have to open an URL
         data = self.cmbImporters.currentData()
         if data and data[:7] == "::URL::" and data[7:]:
-            # FIXME: use functions.openURL after merge with feature/Exporters
             openURL(data[7:])
             return
 
@@ -298,37 +297,37 @@ class importerDialog(QWidget, Ui_importer):
         Is used by preview and by doImport (actual import).
 
         `outlineModel` is the model where the imported items are added.
-
-        FIXME: Optimisation: when adding many outlineItems, outlineItem.updateWordCount
-        is a bottleneck. It gets called a crazy number of time, and its not
-        necessary.
         """
+        with outlineModel.batchWordCountUpdates():
+            items = []
 
-        items = []
+            # We find the current selected format
+            F = self._format
 
-        # We find the current selected format
-        F = self._format
+            # Parent item
+            ID = self.settingsWidget.importUnderID()
+            parentItem = outlineModel.getItemByID(ID)
 
-        # Parent item
-        ID = self.settingsWidget.importUnderID()
-        parentItem = outlineModel.getItemByID(ID)
+            # Import in top-level folder?
+            if self.settingsWidget.importInTopLevelFolder():
+                parent = outlineItem(
+                    title=os.path.basename(self.fileName),
+                    parent=parentItem,
+                )
+                parentItem = parent
+                items.append(parent)
 
-        # Import in top-level folder?
-        if self.settingsWidget.importInTopLevelFolder():
-            parent = outlineItem(title=os.path.basename(self.fileName),
-                                 parent=parentItem)
-            parentItem = parent
-            items.append(parent)
+            # Calling the importer
+            rItems = F.startImport(
+                self.fileName,
+                parentItem,
+                self.settingsWidget,
+            )
 
-        # Calling the importer
-        rItems = F.startImport(self.fileName,
-                              parentItem,
-                              self.settingsWidget)
+            items.extend(rItems)
 
-        items.extend(rItems)
-
-        # Do transformations
-        items = self.doTransformations(items)
+            # Do transformations
+            items = self.doTransformations(items)
 
         return True
 

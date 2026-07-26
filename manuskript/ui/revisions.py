@@ -14,6 +14,28 @@ from manuskript.ui.revisions_ui import Ui_revisions
 from manuskript.models import references as Ref
 
 
+def numberedDiff(before, after):
+    """Return Differ entries with real before/after line numbers."""
+    old_line = 0
+    new_line = 0
+    entries = []
+    for entry in difflib.Differ().compare(before, after):
+        operation = entry[:2]
+        if operation == "? ":
+            continue
+        if operation == "  ":
+            old_line += 1
+            new_line += 1
+        elif operation == "- ":
+            old_line += 1
+        elif operation == "+ ":
+            new_line += 1
+        entries.append(
+            (operation, entry[2:], old_line, new_line)
+        )
+    return entries
+
+
 class revisions(QWidget, Ui_revisions):
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
@@ -110,10 +132,10 @@ class revisions(QWidget, Ui_revisions):
             return self.tr("{} years ago").format(str(int(delta.days / 365)))
         elif delta.days > 30:
             return self.tr("{} months ago").format(str(int(delta.days / 30.5)))
+        elif delta.days == 1:
+            return self.tr("1 day ago")
         elif delta.days > 0:
             return self.tr("{} days ago").format(str(delta.days))
-        if delta.days == 1:
-            return self.tr("1 day ago")
         elif delta.seconds > 60 * 60:
             return self.tr("{} hours ago").format(str(int(delta.seconds / 60 / 60)))
         elif delta.seconds > 60:
@@ -126,7 +148,6 @@ class revisions(QWidget, Ui_revisions):
         self.actShowSpaces.setEnabled(self.actShowDiff.isChecked())
         self.actDiffOnly.setEnabled(self.actShowDiff.isChecked())
 
-        # FIXME: Errors in line number
         i = self.list.currentItem()
 
         if not i:
@@ -150,8 +171,7 @@ class revisions(QWidget, Ui_revisions):
         textNow = textNow.splitlines()
         textBefore = textBefore.splitlines()
 
-        d = difflib.Differ()
-        diff = list(d.compare(textBefore, textNow))
+        diff = numberedDiff(textBefore, textNow)
 
         if self.actShowSpaces.isChecked():
             _format = lambda x: x.replace(" ", "␣ ")
@@ -159,15 +179,14 @@ class revisions(QWidget, Ui_revisions):
             _format = lambda x: x
 
         extra = "<br>"
-        diff = [d for d in diff if d and not d[:2] == "? "]
         mydiff = ""
         skip = False
-        for n, l in enumerate(diff):
-            l = diff[n]
-            op = l[:2]
-            txt = l[2:]
-            op2 = diff[n + 1][:2] if n + 1 < len(diff) else None
-            txt2 = diff[n + 1][2:] if n + 1 < len(diff) else None
+        for n, entry in enumerate(diff):
+            op, txt, old_line, new_line = entry
+            if n + 1 < len(diff):
+                op2, txt2, _, next_new_line = diff[n + 1]
+            else:
+                op2 = txt2 = next_new_line = None
 
             if skip:
                 skip = False
@@ -180,7 +199,9 @@ class revisions(QWidget, Ui_revisions):
             elif op == "- " and op2 == "+ ":
                 if self.actDiffOnly.isChecked():
                     mydiff += "<br><span style='color: blue;'>{}</span><br>".format(
-                            self.tr("Line {}:").format(str(n)))
+                            self.tr("Line {}:").format(
+                                str(next_new_line or old_line)
+                            ))
                 s = difflib.SequenceMatcher(None, txt, txt2, autojunk=True)
                 newline = ""
                 for tag, i1, i2, j1, j2 in s.get_opcodes():
@@ -212,11 +233,11 @@ class revisions(QWidget, Ui_revisions):
                 skip = True
             elif op == "- ":
                 if self.actDiffOnly.isChecked():
-                    mydiff += "<br>{}:<br>".format(str(n))
+                    mydiff += "<br>{}:<br>".format(str(old_line))
                 mydiff += "<span style='color:red;'>{}</span>{}".format(txt, extra)
             elif op == "+ ":
                 if self.actDiffOnly.isChecked():
-                    mydiff += "<br>{}:<br>".format(str(n))
+                    mydiff += "<br>{}:<br>".format(str(new_line))
                 mydiff += "<span style='color:green;'>{}</span>{}".format(txt, extra)
 
         self.view.setText(mydiff)

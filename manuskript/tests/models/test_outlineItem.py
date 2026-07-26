@@ -4,6 +4,7 @@
 """Tests for outlineItem"""
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from PyQt5.QtCore import QModelIndex, Qt
@@ -225,3 +226,37 @@ def test_outline_model_exposes_consistent_drag_and_drop_flags():
     assert text_flags & Qt.ItemIsDragEnabled
     assert not text_flags & Qt.ItemIsDropEnabled
     assert not count_flags & Qt.ItemIsEditable
+
+
+def test_word_count_batch_recomputes_nested_folders_once():
+    model = outlineModel()
+    root = model.rootItem
+
+    with patch.object(
+        root,
+        "updateWordCount",
+        wraps=root.updateWordCount,
+    ) as root_update:
+        with model.batchWordCountUpdates():
+            chapter = outlineItem(
+                title="Chapter",
+                parent=root,
+            )
+            for number in range(5):
+                scene = outlineItem(
+                    title="Scene {}".format(number),
+                    _type="md",
+                    parent=chapter,
+                )
+                scene.setData(
+                    Outline.text,
+                    "two words",
+                )
+
+            assert root_update.call_count == 0
+            assert model.wordCountUpdatesDeferred
+
+    assert root_update.call_count == 1
+    assert chapter.wordCount() == 10
+    assert root.wordCount() == 10
+    assert not model.wordCountUpdatesDeferred
