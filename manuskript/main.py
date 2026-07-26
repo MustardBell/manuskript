@@ -12,6 +12,9 @@ from PyQt5.QtGui import QIcon, QColor, QPalette
 from PyQt5.QtWidgets import QApplication, qApp, QStyleFactory
 
 from manuskript.functions import appPath, writablePath, resetTranslation
+from manuskript.services.application_preferences import (
+    ApplicationPreferences,
+)
 from manuskript.version import getVersion
 
 try:
@@ -50,11 +53,9 @@ def prepare(arguments, tests=False):
 
     app.setStyle("Fusion")
 
-    # Load style from QSettings
-    settings = QSettings(app.organizationName(), app.applicationName())
-    if settings.contains("applicationStyle"):
-        style = settings.value("applicationStyle")
-        app.setStyle(style)
+    preferences = ApplicationPreferences()
+    if preferences.style is not None:
+        app.setStyle(preferences.style)
 
     # Translation process
     appTranslator = QTranslator(app)
@@ -109,9 +110,9 @@ def prepare(arguments, tests=False):
     # Load application translation
     translation = ""
     source = "default"
-    if settings.contains("applicationTranslation"):
+    if preferences.translation is not None:
         # Use the language configured by the user.
-        translation = settings.value("applicationTranslation")
+        translation = preferences.translation
         source = "user setting"
     else:
         # Auto-detect based on system locale.
@@ -174,15 +175,18 @@ def prepare(arguments, tests=False):
     QIcon.setThemeName("NumixMsk")
 
     # Font size
-    if settings.contains("appFontSize"):
+    if preferences.font_size is not None:
         f = qApp.font()
-        f.setPointSize(settings.value("appFontSize", type=int))
+        f.setPointSize(preferences.font_size)
         app.setFont(f)
 
     # Main window
     from manuskript.mainWindow import MainWindow
 
-    MW = MainWindow(settings_manager)
+    MW = MainWindow(
+        settings_manager,
+        application_preferences=preferences,
+    )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary
     MW._defaultCursorFlashTime = qApp.cursorFlashTime()

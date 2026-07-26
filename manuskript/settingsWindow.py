@@ -4,7 +4,7 @@ import os
 import shutil
 from collections import OrderedDict
 
-from PyQt5.QtCore import QSize, QSettings, QRegExp, QTranslator, QObject
+from PyQt5.QtCore import QSize, QRegExp, QTranslator, QObject
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIntValidator, QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
 from PyQt5.QtGui import QStyleHints
@@ -12,6 +12,9 @@ from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListW
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
+from manuskript.services.application_preferences import (
+    ApplicationPreferences,
+)
 from manuskript.services.theme_repository import ThemeRepository
 # Spell checker support
 from manuskript.enums import Outline
@@ -38,6 +41,7 @@ class settingsWindow(QWidget, Ui_Settings):
         settings_manager,
         theme_repository=None,
         theme_preview_renderer=None,
+        application_preferences=None,
     ):
         QWidget.__init__(self)
         self.setupUi(self)
@@ -52,6 +56,11 @@ class settingsWindow(QWidget, Ui_Settings):
             theme_preview_renderer
             if theme_preview_renderer is not None
             else ThemePreviewRenderer()
+        )
+        self.applicationPreferences = (
+            application_preferences
+            if application_preferences is not None
+            else ApplicationPreferences()
         )
 
         # UI
@@ -125,13 +134,12 @@ class settingsWindow(QWidget, Ui_Settings):
         for name in tr:
             self.cmbTranslation.addItem(name, tr[name])
 
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        if (sttgs.contains("applicationTranslation")
-            and sttgs.value("applicationTranslation") in tr.values()):
+        translation = self.applicationPreferences.translation
+        if translation is not None and translation in tr.values():
             # Sets the correct translation
             self.cmbTranslation.setCurrentText(
                 [i for i in tr
-                 if tr[i] == sttgs.value("applicationTranslation")][0])
+                 if tr[i] == translation][0])
 
         self.cmbTranslation.currentIndexChanged.connect(self.setTranslation)
 
@@ -364,16 +372,12 @@ class settingsWindow(QWidget, Ui_Settings):
     ####################################################################################################
 
     def setStyle(self, style):
-        # Save style to Qt Settings
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        sttgs.setValue("applicationStyle", style)
+        self.applicationPreferences.style = style
         qApp.setStyle(style)
 
     def setTranslation(self, index):
         path = self.cmbTranslation.currentData()
-        # Save settings
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        sttgs.setValue("applicationTranslation", path)
+        self.applicationPreferences.translation = path
 
         # QMessageBox.information(self, "Warning", "You'll have to restart manuskript.")
 
@@ -385,8 +389,7 @@ class settingsWindow(QWidget, Ui_Settings):
         f.setPointSize(val)
         qApp.setFont(f)
         self.mw.setFont(f)
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        sttgs.setValue("appFontSize", val)
+        self.applicationPreferences.font_size = val
 
     def charSettingsChanged(self):
         self.settings.progressChars = True if self.chkProgressChars.checkState() else False
