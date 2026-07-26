@@ -5,66 +5,15 @@
 import os
 import re
 
-from PyQt5.QtCore import QSettings, QRect, QSize, Qt, QPoint, QFile, QIODevice, QTextStream
+from PyQt5.QtCore import QRect, QSize, Qt, QPoint, QFile, QIODevice, QTextStream
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QBrush, QImage, QTextBlockFormat, QTextCharFormat, QFont, qGray
 from PyQt5.QtWidgets import qApp, QFrame
 
 from manuskript.functions import allPaths, appPath, findBackground, findFirstFile
+from manuskript.theme_data import getThemeName, loadThemeDatas
 from manuskript.ui.views.MDEditView import MDEditView
 
 _thumbCache = {}
-
-def loadThemeDatas(themeFile):
-    settings = QSettings(themeFile, QSettings.IniFormat)
-    _themeData = {}
-
-    # Theme name
-    _themeData["Name"] = getThemeName(themeFile)
-
-    # Window Background
-    loadThemeSetting(_themeData, settings, "Background/Color", "#000000")
-    loadThemeSetting(_themeData, settings, "Background/ImageFile", "")
-    loadThemeSetting(_themeData, settings, "Background/Type", 0)
-
-    # Text Background
-    loadThemeSetting(_themeData, settings, "Foreground/Color", "#ffffff")
-    loadThemeSetting(_themeData, settings, "Foreground/Opacity", 50)
-    loadThemeSetting(_themeData, settings, "Foreground/Margin", 40)
-    loadThemeSetting(_themeData, settings, "Foreground/Padding", 10)
-    loadThemeSetting(_themeData, settings, "Foreground/Position", 1)
-    loadThemeSetting(_themeData, settings, "Foreground/Rounding", 5)
-    loadThemeSetting(_themeData, settings, "Foreground/Width", 700)
-
-    # Text Options
-    loadThemeSetting(_themeData, settings, "Text/Color", "#ffffff")
-    loadThemeSetting(_themeData, settings, "Text/Font", qApp.font().toString())
-    loadThemeSetting(_themeData, settings, "Text/Misspelled", "#ff0000")
-
-    # Paragraph Options
-    loadThemeSetting(_themeData, settings, "Spacings/Alignment", 0)
-    loadThemeSetting(_themeData, settings, "Spacings/IndentFirstLine", False)
-    loadThemeSetting(_themeData, settings, "Spacings/LineSpacing", 100)
-    loadThemeSetting(_themeData, settings, "Spacings/ParagraphAbove", 0)
-    loadThemeSetting(_themeData, settings, "Spacings/ParagraphBelow", 0)
-    loadThemeSetting(_themeData, settings, "Spacings/TabWidth", 48)
-
-    return _themeData
-
-
-def loadThemeSetting(datas, settings, key, default):
-    """
-    Loads data from ini file, using default value if the key is absent,
-    and casting to the proper type based on default.
-    """
-    datas[key] = settings.value(key, default, type(default))
-
-def getThemeName(theme):
-    settings = QSettings(theme, QSettings.IniFormat)
-
-    if settings.contains("Name"):
-        return settings.value("Name")
-    else:
-        return os.path.splitext(os.path.split(theme)[1])[0]
 
 
 def themeTextRect(themeDatas, screenRect):
