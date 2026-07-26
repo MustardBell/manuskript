@@ -3,6 +3,7 @@
 import importlib
 import os
 import re
+from functools import partial
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, QTimer, QSettings, Qt, QPoint,
@@ -11,6 +12,7 @@ from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
+from manuskript.commands import DocumentCommand, DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
@@ -77,6 +79,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.sessionStartWordCount = 0  # Used to track session targets
         self.history = History()
         self._previousSelectionEmpty = True
+        self.documentCommands = DocumentCommandRouter(
+            lambda: self._lastFocus
+        )
         self.projectConnections = SignalConnectionRegistry()
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
@@ -124,13 +129,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actQuit.triggered.connect(self.close)
 
         # Main menu:: Edit
-        self.actCopy.triggered.connect(self.documentsCopy)
-        self.actCut.triggered.connect(self.documentsCut)
-        self.actPaste.triggered.connect(self.documentsPaste)
+        for action, command in [
+            (self.actCopy, DocumentCommand.COPY),
+            (self.actCut, DocumentCommand.CUT),
+            (self.actPaste, DocumentCommand.PASTE),
+            (self.actRename, DocumentCommand.RENAME),
+            (self.actDuplicate, DocumentCommand.DUPLICATE),
+            (self.actDelete, DocumentCommand.DELETE),
+        ]:
+            action.triggered.connect(
+                partial(self.documentCommands.dispatch, command)
+            )
         self.actSearch.triggered.connect(self.doSearch)
-        self.actRename.triggered.connect(self.documentsRename)
-        self.actDuplicate.triggered.connect(self.documentsDuplicate)
-        self.actDelete.triggered.connect(self.documentsDelete)
         self.actLabels.triggered.connect(self.settingsLabel)
         self.actStatus.triggered.connect(self.settingsStatus)
         self.actSettings.triggered.connect(self.settingsWindow)
@@ -158,11 +168,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actFormatClear.triggered.connect(self.formatClear)
 
         # Main menu:: Organize
-        self.actMoveUp.triggered.connect(self.documentsMoveUp)
-        self.actMoveDown.triggered.connect(self.documentsMoveDown)
-        self.actSplitDialog.triggered.connect(self.documentsSplitDialog)
-        self.actSplitCursor.triggered.connect(self.documentsSplitCursor)
-        self.actMerge.triggered.connect(self.documentsMerge)
+        for action, command in [
+            (self.actMoveUp, DocumentCommand.MOVE_UP),
+            (self.actMoveDown, DocumentCommand.MOVE_DOWN),
+            (self.actSplitDialog, DocumentCommand.SPLIT_DIALOG),
+            (self.actSplitCursor, DocumentCommand.SPLIT_CURSOR),
+            (self.actMerge, DocumentCommand.MERGE),
+        ]:
+            action.triggered.connect(
+                partial(self.documentCommands.dispatch, command)
+            )
 
         # Main menu:: Navigate
         self.actBack.triggered.connect(self.navigateBack)
@@ -384,21 +399,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # Menu #############################################################
 
-    # Functions called by the menus
-    # self._lastFocus is the last editor that had focus (either treeView or
-    # mainEditor). So we just pass along the signal.
-
-    # Edit
-
-    def documentsCopy(self):
-        "Copy selected item(s)."
-        if self._lastFocus: self._lastFocus.copy()
-    def documentsCut(self):
-        "Cut selected item(s)."
-        if self._lastFocus: self._lastFocus.cut()
-    def documentsPaste(self):
-        "Paste clipboard item(s) into selected item."
-        if self._lastFocus: self._lastFocus.paste()
     def doSearch(self):
         "Do a global search."
         self.dckSearch.show()
@@ -406,24 +406,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         searchTextInput = self.dckSearch.findChild(QLineEdit, 'searchTextInput')
         searchTextInput.setFocus()
         searchTextInput.selectAll()
-    def documentsRename(self):
-        "Rename selected item."
-        if self._lastFocus: self._lastFocus.rename()
-    def documentsDuplicate(self):
-        "Duplicate selected item(s)."
-        if self._lastFocus: self._lastFocus.duplicate()
-    def documentsDelete(self):
-        "Delete selected item(s)."
-        if self._lastFocus: self._lastFocus.delete()
 
     # Formats
-    def callLastMDEditView(self, functionName, param=[]):
+    def callLastMDEditView(self, functionName, params=()):
         """
         If last focused widget was MDEditView, call the given function.
         """
         if self._lastMDEditView:
             function = getattr(self._lastMDEditView, functionName)
-            function(*param)
+            function(*params)
     def formatSetext1(self): self.callLastMDEditView("titleSetext", [1])
     def formatSetext2(self): self.callLastMDEditView("titleSetext", [2])
     def formatAtx1(self): self.callLastMDEditView("titleATX", [1])
@@ -444,34 +435,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def formatBlockquote(self): self.callLastMDEditView("blockquote")
     def formatCommentBlock(self): self.callLastMDEditView("comment")
     def formatClear(self): self.callLastMDEditView("clearFormat")
-
-    # Organize
-
-    def documentsMoveUp(self):
-        "Move up selected item(s)."
-        if self._lastFocus: self._lastFocus.moveUp()
-    def documentsMoveDown(self):
-        "Move Down selected item(s)."
-        if self._lastFocus: self._lastFocus.moveDown()
-
-    def documentsSplitDialog(self):
-        "Opens a dialog to split selected items."
-        if self._lastFocus: self._lastFocus.splitDialog()
-        # current items or selected items?
-        pass
-        # use outlineBasics, to do that on all selected items.
-        # use editorWidget to do that on selected text.
-
-    def documentsSplitCursor(self):
-        """
-        Split current item (open in text editor) at cursor position. If there is
-        a text selection, that selection becomes the title of the new scene.
-        """
-        if self._lastFocus and self._lastFocus == self.mainEditor:
-            self.mainEditor.splitCursor()
-    def documentsMerge(self):
-        "Merges selected item(s)."
-        if self._lastFocus: self._lastFocus.merge()
 
     # Navigate
     

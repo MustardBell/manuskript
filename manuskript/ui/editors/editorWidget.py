@@ -5,6 +5,7 @@ from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QWidget, QFrame, QSpacerItem, QSizePolicy
 from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 
+from manuskript.commands import DocumentCommand
 from manuskript.settingsManager import SettingsManager
 from manuskript.functions import AUC, mainWindow
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
@@ -397,7 +398,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.dictChanged.emit(dct)
 
     ###############################################################################
-    # FUNCTIONS FOR MENU ACCESS
+    # DOCUMENT COMMAND ROUTING
     ###############################################################################
 
     def getCurrentItemView(self):
@@ -416,22 +417,14 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         else:
             return None
 
-    def copy(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().copy()
-    def cut(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().cut()
-    def paste(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().paste()
-    def rename(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().rename()
-    def duplicate(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().duplicate()
-    def delete(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().delete()
-    def moveUp(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().moveUp()
-    def moveDown(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().moveDown()
+    def document_command_target(self, command):
+        if command in {
+            DocumentCommand.SPLIT_DIALOG,
+            DocumentCommand.SPLIT_CURSOR,
+            DocumentCommand.MERGE,
+        }:
+            return self
+        return self.getCurrentItemView()
 
     def splitDialog(self):
         """
