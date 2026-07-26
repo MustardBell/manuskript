@@ -262,52 +262,11 @@ class mainEditor(QWidget, Ui_mainEditor):
         return title
 
     ###############################################################################
-    # FUNCTIONS FOR MENU ACCESS
+    # DOCUMENT COMMAND ROUTING
     ###############################################################################
 
-    def copy(self):
-        if self.currentEditor():
-            self.currentEditor().copy()
-    
-    def cut(self):
-        if self.currentEditor():
-            self.currentEditor().cut()
-    
-    def paste(self):
-        if self.currentEditor():
-            self.currentEditor().paste()
-    
-    def rename(self):
-        if self.currentEditor():
-            self.currentEditor().rename()
-    
-    def duplicate(self):
-        if self.currentEditor():
-            self.currentEditor().duplicate()
-    
-    def delete(self):
-        if self.currentEditor():
-            self.currentEditor().delete()
-    
-    def moveUp(self):
-        if self.currentEditor():
-            self.currentEditor().moveUp()
-    
-    def moveDown(self):
-        if self.currentEditor():
-            self.currentEditor().moveDown()
-    
-    def splitDialog(self):
-        if self.currentEditor():
-            self.currentEditor().splitDialog()
-    
-    def splitCursor(self):
-        if self.currentEditor():
-            self.currentEditor().splitCursor()
-    
-    def merge(self):
-        if self.currentEditor():
-            self.currentEditor().merge()
+    def document_command_target(self, _command):
+        return self.currentEditor()
 
     ###############################################################################
     # UI
