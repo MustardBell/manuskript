@@ -3,7 +3,13 @@
 
 """Tests for outlineItem"""
 
+from types import SimpleNamespace
+
 import pytest
+
+from manuskript.enums import Outline
+from manuskript.models import outlineItem, outlineModel
+from manuskript.models.outline_settings import default_revision_settings
 
 
 @pytest.fixture
@@ -153,3 +159,42 @@ def test_modelStuff(outlineModelBasic):
     assert text3.ID() == "0"
     root.checkIDs()
     assert text3.ID() != "0"
+
+
+def test_outline_items_inherit_model_editing_settings():
+    settings = SimpleNamespace(
+        countSpaces=False,
+        revisions=default_revision_settings(),
+    )
+    model = outlineModel(settings=settings)
+    item = outlineItem(
+        title="Scene",
+        _type="md",
+        parent=model.rootItem,
+    )
+
+    item.setData(Outline.text, "a b")
+
+    assert item.settings is settings
+    assert item.data(Outline.charCount) == 2
+
+
+def test_revision_policy_is_read_from_assigned_model_settings():
+    revisions = default_revision_settings()
+    revisions["keep"] = True
+    revisions["smartremove"] = False
+    settings = SimpleNamespace(
+        countSpaces=True,
+        revisions=revisions,
+    )
+    model = outlineModel(settings=settings)
+    item = outlineItem(
+        title="Scene",
+        _type="md",
+        parent=model.rootItem,
+    )
+    item.setData(Outline.text, "First")
+
+    item.setData(Outline.text, "Second")
+
+    assert item.revisions()[-1][1] == "First"
