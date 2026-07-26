@@ -90,7 +90,11 @@ class TestProjectManager(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.CLEAN)
-        self.storage.save.assert_called_once_with(self.window)
+        self.storage.save.assert_called_once()
+        context = self.storage.save.call_args.args[0]
+        self.assertEqual(context.project_file, "project.msk")
+        self.assertIs(context.models, self.project_manager.models)
+        self.assertIs(context.settings, self.window.settingsManager)
 
     def test_failed_save_preserves_dirty_state(self):
         self.project_manager.session.open("project.msk")

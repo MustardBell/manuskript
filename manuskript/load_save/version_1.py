@@ -94,7 +94,7 @@ def slugify(name):
     return newName
 
 
-def saveProject(mw, zip=None):
+def saveProject(context, zip=None):
     """
     Saves the project. If zip is False, the project is saved as a multitude of plain-text files for the most parts
     and some XML or zip? for settings and stuff.
@@ -105,7 +105,7 @@ def saveProject(mw, zip=None):
     @return: True if successful, False otherwise.
     """
     if zip == None:
-        zip = mw.settingsManager.saveToZip
+        zip = context.settings.saveToZip
 
     LOGGER.info("Saving to: %s", "zip" if zip else "folder")
 
@@ -116,7 +116,7 @@ def saveProject(mw, zip=None):
     # List of files to be moved
     moves = []
 
-    project = mw.currentProject
+    project = context.project_file
 
     # Sanity check (see PR-583): make sure we actually have a current project.
     if project == None:
@@ -141,7 +141,7 @@ def saveProject(mw, zip=None):
             ("Author", 6),
             ("Email", 7),
             ]:
-        item = mw.mdlFlatData.item(0, col)
+        item = context.models.flat_data.item(0, col)
         if item:
             val = item.text().strip()
         else:
@@ -168,7 +168,7 @@ def saveProject(mw, zip=None):
             ("Page", 3),
             ("Full", 4),
             ]:
-        item = mw.mdlFlatData.item(1, col)
+        item = context.models.flat_data.item(1, col)
         if item:
             val = item.text().strip()
         else:
@@ -184,8 +184,8 @@ def saveProject(mw, zip=None):
     # In plain text
 
     for mdl, path in [
-        (mw.mdlStatus, "status.txt"),
-        (mw.mdlLabels, "labels.txt")
+        (context.models.statuses, "status.txt"),
+        (context.models.labels, "labels.txt")
     ]:
 
         content = ""
@@ -212,7 +212,7 @@ def saveProject(mw, zip=None):
     # In a character folder
 
     path = os.path.join("characters", "{name}.txt")
-    mdl = mw.mdlCharacter
+    mdl = context.models.characters
 
     # Review characters
     for c in mdl.characters:
@@ -250,7 +250,7 @@ def saveProject(mw, zip=None):
     # Texts
     # In an outline folder
 
-    mdl = mw.mdlOutline
+    mdl = context.models.outline
 
     # Go through the tree
     f, m, r = exportOutlineItem(mdl.rootItem)
@@ -259,7 +259,7 @@ def saveProject(mw, zip=None):
     removes += r
 
     # Writes revisions (if asked for)
-    if mw.settingsManager.revisions["keep"]:
+    if context.settings.revisions["keep"]:
         files.append(("revisions.xml", mdl.saveToXML()))
 
     ####################################################################################################################
@@ -268,7 +268,7 @@ def saveProject(mw, zip=None):
     # More probably text, since there might be writing done in third-party.
 
     path = "world.opml"
-    mdl = mw.mdlWorld
+    mdl = context.models.world
 
     root = ET.Element("opml")
     root.attrib["version"] = "1.0"
@@ -278,12 +278,12 @@ def saveProject(mw, zip=None):
     files.append((path, content))
 
     ####################################################################################################################
-    # Plots (mw.mdlPlots)
+    # Plots (context.models.plots)
     # Either in XML or lots of plain texts?
     # More probably XML since there is not really a lot if writing to do (third-party)
 
     path = "plots.xml"
-    mdl = mw.mdlPlots
+    mdl = context.models.plots
 
     root = ET.Element("root")
     addPlotItem(root, mdl)
@@ -296,7 +296,7 @@ def saveProject(mw, zip=None):
     # Maybe include them only if zipped?
     # Well, for now, we keep them here...
 
-    files.append(("settings.txt", mw.settingsManager.save(protocol=0)))
+    files.append(("settings.txt", context.settings.save(protocol=0)))
 
     # We check if the file exist and we have write access. If the file does
     # not exist, we check the parent folder, because it might be a new project.
@@ -427,7 +427,7 @@ def saveProject(mw, zip=None):
             filesWithPermissionErrors.append(project)
 
         if len(filesWithPermissionErrors) > 0:
-            dlg = ListDialog(mw)
+            dlg = ListDialog()
             dlg.setModal(True)
             dlg.setWindowTitle(dlg.tr("Files not saved"))
             dlg.label.setText(dlg.tr("The following files were not saved and appear to be open in another program"))
@@ -635,13 +635,14 @@ def outlineToMMD(item):
 # LOAD
 ########################################################################################################################
 
-def loadProject(project, mw, zip=None):
+def loadProject(context, zip=None):
     """
     Loads a project.
-    @param project: the filename of the project to open.
+    @param context: the project path, models, and settings to hydrate.
     @param zip: whether the project is a zipped or not.
     @return: an array of errors, empty if None.
     """
+    project = context.project_file
 
     errors = list()
     filesWithPermissionErrors = list()
@@ -712,18 +713,18 @@ def loadProject(project, mw, zip=None):
     # Settings
 
     if "settings.txt" in files:
-        mw.settingsManager.load(files["settings.txt"], fromString=True, protocol=0)
+        context.settings.load(files["settings.txt"], fromString=True, protocol=0)
     else:
         errors.append("settings.txt")
 
     # Just to be sure
-    mw.settingsManager.saveToZip = True if zip else False
-    mw.settingsManager.defaultTextType = "md"
+    context.settings.saveToZip = True if zip else False
+    context.settings.defaultTextType = "md"
 
     ####################################################################################################################
     # Labels
 
-    mdl = mw.mdlLabels
+    mdl = context.models.labels
     mdl.appendRow(QStandardItem(""))  # Empty = No labels
     if "labels.txt" in files:
         LOGGER.debug("Reading labels:")
@@ -744,7 +745,7 @@ def loadProject(project, mw, zip=None):
     ####################################################################################################################
     # Status
 
-    mdl = mw.mdlStatus
+    mdl = context.models.statuses
     mdl.appendRow(QStandardItem(""))  # Empty = No status
     if "status.txt" in files:
         LOGGER.debug("Reading status:")
@@ -759,7 +760,7 @@ def loadProject(project, mw, zip=None):
     ####################################################################################################################
     # Infos
 
-    mdl = mw.mdlFlatData
+    mdl = context.models.flat_data
     if "infos.txt" in files:
         md, body = parseMMDFile(files["infos.txt"], asDict=True)
 
@@ -775,7 +776,7 @@ def loadProject(project, mw, zip=None):
     ####################################################################################################################
     # Summary
 
-    mdl = mw.mdlFlatData
+    mdl = context.models.flat_data
     if "summary.txt" in files:
         md, body = parseMMDFile(files["summary.txt"], asDict=True)
 
@@ -791,7 +792,7 @@ def loadProject(project, mw, zip=None):
     ####################################################################################################################
     # Plots
 
-    mdl = mw.mdlPlots
+    mdl = context.models.plots
     if "plots.xml" in files:
         LOGGER.debug("Reading plots:")
         # xml = bytearray(files["plots.xml"], "utf-8")
@@ -827,7 +828,7 @@ def loadProject(project, mw, zip=None):
     ####################################################################################################################
     # World
 
-    mdl = mw.mdlWorld
+    mdl = context.models.world
     if "world.opml" in files:
         LOGGER.debug("Reading World:")
         # xml = bytearray(files["plots.xml"], "utf-8")
@@ -844,7 +845,7 @@ def loadProject(project, mw, zip=None):
     ####################################################################################################################
     # Characters
 
-    mdl = mw.mdlCharacter
+    mdl = context.models.characters
     LOGGER.debug("Reading Characters:")
     for f in [f for f in files if "characters" in f]:
         md, body = parseMMDFile(files[f])
@@ -878,7 +879,7 @@ def loadProject(project, mw, zip=None):
     # We read outline form the outline folder. If revisions are saved, then there's also a revisions.xml which contains
     # everything, but the outline folder takes precedence (in cases it's been edited outside of manuskript.
 
-    mdl = mw.mdlOutline
+    mdl = context.models.outline
     LOGGER.debug("Reading outline:")
     paths = [f for f in files if "outline" in f]
     outline = OrderedDict()
@@ -923,7 +924,7 @@ def loadProject(project, mw, zip=None):
     mdl.rootItem.checkIDs()
 
     if len(filesWithPermissionErrors) > 0:
-        dlg = ListDialog(mw)
+        dlg = ListDialog()
         dlg.setModal(True)
         dlg.setWindowTitle(dlg.tr("Files not loaded"))
         dlg.label.setText(dlg.tr("The following files were not loaded and appear to be open in another program"))
