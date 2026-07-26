@@ -94,6 +94,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.worldController = WorldController(self)
         self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
+        self.settingsManager.configure_cursor_flash_time(
+            lambda: self._defaultCursorFlashTime
+        )
         self.referenceService = None
 
         self.readSettings()
@@ -1276,7 +1279,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsWindow(4)
 
     def settingsWindow(self, tab=None):
-        self.sw = settingsWindow(self)
+        self.sw = settingsWindow(self, self.settingsManager)
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)
         self.sw.setWindowFlags(Qt.Dialog)
