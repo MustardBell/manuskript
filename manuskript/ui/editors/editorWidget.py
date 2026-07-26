@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 
 from manuskript.commands import DocumentCommand
 from manuskript.settingsManager import SettingsManager
-from manuskript.functions import AUC, mainWindow
+from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import splitDialog
@@ -44,9 +44,16 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
     _maxTabTitleLength = 24
 
-    def __init__(self, parent):
+    def __init__(self, parent, editor_context=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self.main_editor = (
+            parent if hasattr(parent, "updateTargets") else None
+        )
+        self.editor_context = None
+        self.outline_context = None
+        if editor_context is not None:
+            self.set_context(editor_context)
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
@@ -57,7 +64,6 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.currentDict = ""
         self.spellcheck = SettingsManager().spellcheck
         self.folderView = "cork"
-        self.mw = mainWindow()
         self._tabWidget = None  # set by mainEditor on creation
 
         self._model = None
@@ -70,6 +76,12 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # def setModel(self, model):
         # self._model = model
         # self.setView()
+
+    def set_context(self, editor_context):
+        self.editor_context = editor_context
+        self.outline_context = editor_context.outline_views
+        self.corkView.set_outline_context(self.outline_context)
+        self.outlineView.set_outline_context(self.outline_context)
 
     def resizeEvent(self, event):
         """
@@ -155,11 +167,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             return title
 
     def setView(self):
-        # index = mainWindow().treeRedacOutline.currentIndex()
-
         # Counting the number of other selected items
         # sel = []
-        # for i in mainWindow().treeRedacOutline.selectionModel().selection().indexes():
+        # for i in the main outline tree selection:
         # if i.column() != 0: continue
         # if i not in sel: sel.append(i)
 
@@ -167,14 +177,18 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # item = index.internalPointer()
         # else:
         # index = QModelIndex()
-        # item = self.mw.mdlOutline.rootItem
+        # item = self.editor_context.outline_model.rootItem
 
         # self.currentIndex = index
 
         if self.currentIndex.isValid():
             item = self.currentIndex.internalPointer()
         else:
-            item = self.mw.mdlOutline.rootItem
+            item = (
+                self.editor_context.outline_model.rootItem
+                if self.editor_context is not None
+                else self._model.rootItem
+            )
 
         self.updateTabTitle()
 
@@ -265,24 +279,45 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.corkView.setModel(self._model)
             self.corkView.setRootIndex(self.currentIndex)
             try:
-                self.corkView.selectionModel().selectionChanged.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.corkView.clicked.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.corkView.clicked.connect(mainWindow().mainEditor.updateTargets, AUC)
+                selection_changed = self.outline_context.selection_changed
+                if selection_changed is not None:
+                    self.corkView.selectionModel().selectionChanged.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                    self.corkView.clicked.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                if self.main_editor is not None:
+                    self.corkView.clicked.connect(
+                        self.main_editor.updateTargets,
+                        AUC,
+                    )
             except TypeError:
                 pass
 
         elif item and item.isFolder() and self.folderView == "outline":
             self.stack.setCurrentIndex(3)
-            self.outlineView.setModelCharacters(mainWindow().mdlCharacter)
-            self.outlineView.setModelLabels(mainWindow().mdlLabels)
-            self.outlineView.setModelStatus(mainWindow().mdlStatus)
             self.outlineView.setModel(self._model)
             self.outlineView.setRootIndex(self.currentIndex)
 
             try:
-                self.outlineView.selectionModel().selectionChanged.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.outlineView.clicked.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.outlineView.clicked.connect(mainWindow().mainEditor.updateTargets, AUC)
+                selection_changed = self.outline_context.selection_changed
+                if selection_changed is not None:
+                    self.outlineView.selectionModel().selectionChanged.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                    self.outlineView.clicked.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                if self.main_editor is not None:
+                    self.outlineView.clicked.connect(
+                        self.main_editor.updateTargets,
+                        AUC,
+                    )
             except TypeError:
                 pass
 
@@ -332,7 +367,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                 # should be re-evaluated to match the desired behaviour.
                 raise NotImplementedError("implement tab closing")
 
-            # FIXME: selection in self.mw.treeRedacOutline is not updated
+            # FIXME: selection in the main outline tree is not updated
             #        but we cannot simply setCurrentIndex through treeRedacOutline
             #        because this might be a tab in the background / out of focus
             #        Also the UI of mainEditor is not updated (so the folder icons
@@ -380,14 +415,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.updateIndexFromID(fallback=parent, ignore=self.currentIndex.internalPointer())
 
     def updateStatusBar(self):
-        # Update progress
-        # if self.currentIndex and self.currentIndex.isValid():
-        # if self._model:
-        mw = mainWindow()
-        if not mw:
-            return
-
-        mw.mainEditor.tabChanged()
+        if self.main_editor is not None:
+            self.main_editor.tabChanged()
 
     def toggleSpellcheck(self, v):
         self.spellcheck = v

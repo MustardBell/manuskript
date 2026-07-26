@@ -5,7 +5,6 @@ from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QTreeView, QAction
 
 from manuskript.enums import Outline
-from manuskript.functions import mainWindow
 from manuskript.ui.views.dndView import dndView
 from manuskript.ui.views.outlineBasics import outlineBasics
 from manuskript.ui.views.treeDelegates import treeTitleDelegate

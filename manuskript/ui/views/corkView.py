@@ -53,9 +53,8 @@ class corkView(QListView, dndView, outlineBasics):
         if self.selectedIndexes() == []:
             idx = self.rootIndex()
             parent = idx.parent()
-            
-            from manuskript.functions import MW
-            MW.openIndex(parent)
+            if self.outline_context is not None:
+                self.outline_context.open_index(parent)
             #self.setRootIndex(parent)
         else:
             r = QListView.mouseDoubleClickEvent(self, event)

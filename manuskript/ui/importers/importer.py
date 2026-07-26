@@ -15,6 +15,8 @@ from manuskript import importer
 from manuskript.models import outlineModel, outlineItem
 from manuskript.enums import Outline
 from manuskript.exporter.pandoc import pandocExporter
+from manuskript.ui.editors.editor_context import EditorContext
+from manuskript.ui.views.outline_context import OutlineViewContext
 
 class importerDialog(QWidget, Ui_importer):
 
@@ -239,6 +241,24 @@ class importerDialog(QWidget, Ui_importer):
         result = self.startImport(previewModel)
 
         if result:
+            outline_view_context = OutlineViewContext(
+                character_model=self.mw.mdlCharacter,
+                label_model=self.mw.mdlLabels,
+                status_model=self.mw.mdlStatus,
+                open_index=self.tree.setCurrentIndex,
+                open_indexes=lambda indexes: (
+                    self.tree.setCurrentIndex(indexes[0])
+                    if indexes
+                    else None
+                ),
+            )
+            self.editor.set_context(
+                EditorContext(
+                    outline_model=previewModel,
+                    outline_tree=self.tree,
+                    outline_views=outline_view_context,
+                )
+            )
             self.tree.setModel(previewModel)
             for i in range(1, previewModel.columnCount()):
                 self.tree.hideColumn(i)
