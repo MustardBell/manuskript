@@ -13,6 +13,7 @@ class ExportContext:
     status_model: object
     parent: object
     tool_paths: object = None
+    process_runner: object = None
 
     @property
     def project_path(self):

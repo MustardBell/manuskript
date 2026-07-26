@@ -2,14 +2,11 @@
 # --!-- coding: utf8 --!--
 import os
 import shutil
-import subprocess
-
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import qApp
-from PyQt5.QtGui import QCursor
 
 from manuskript.converters.abstractConverter import abstractConverter
+from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
+from manuskript.ui.busy_cursor import busy_cursor
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -38,9 +35,11 @@ class pandocConverter(abstractConverter):
         return shutil.which(cls.cmd)
 
     @classmethod
+    @busy_cursor
     def convert(
             cls, src, _from="markdown", to="html", args=None,
-            outputfile=None, on_error=None, tool_paths=None):
+            outputfile=None, on_error=None, tool_paths=None,
+            process_runner=None):
         if not cls.isValid(tool_paths):
             LOGGER.error("pandocConverter is called but not valid.")
             return ""
@@ -56,30 +55,19 @@ class pandocConverter(abstractConverter):
         if outputfile:
             cmd.append("--output={}".format(outputfile))
 
-        qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+        if not isinstance(src, bytes):
+            src = src.encode("utf-8")
+        runner = process_runner or ExternalProcessRunner()
+        result = runner.run(cmd, stdin=src)
 
-            if not isinstance(src, bytes):
-                src = src.encode("utf-8")
-
-            stdout, stderr = process.communicate(src)
-        finally:
-            qApp.restoreOverrideCursor()
-
-        if stderr:
-            err = stderr.decode("utf-8", errors="replace")
+        if result.stderr:
+            err = result.stderr.decode("utf-8", errors="replace")
             LOGGER.error(err)
             if on_error is not None:
                 on_error(err)
             return None
 
-        return stdout.decode("utf-8")
+        return result.stdout.decode("utf-8")
 
     @classmethod
     def runCmd(cls, tool_paths=None):

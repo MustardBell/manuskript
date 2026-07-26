@@ -2,6 +2,7 @@
 # --!-- coding: utf8 --!--
 from PyQt5.QtWidgets import QWidget
 
+from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalTool
 
 import logging
@@ -28,6 +29,14 @@ class basicExporter:
             self.cmd or self.name,
             self.cmd,
             paths=paths,
+        )
+        self.process_runner = (
+            context.process_runner
+            if (
+                context is not None
+                and context.process_runner is not None
+            )
+            else ExternalProcessRunner()
         )
 
     @property

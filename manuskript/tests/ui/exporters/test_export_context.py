@@ -1,3 +1,4 @@
+import importlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,10 +8,18 @@ from manuskript import exporter
 from manuskript.exporter.context import ExportContext
 from manuskript.exporter.pandoc import pandocExporter
 
+busy_cursor_module = importlib.import_module(
+    "manuskript.ui.busy_cursor"
+)
 
-def make_context(project_file="/tmp/novel.msk"):
+
+def make_context(
+    project_file="/tmp/novel.msk",
+    process_runner=None,
+):
     tool_paths = MagicMock()
     tool_paths.get.return_value = ""
+    process_runner = process_runner or MagicMock()
     return ExportContext(
         project_file=project_file,
         outline_model=MagicMock(),
@@ -19,6 +28,7 @@ def make_context(project_file="/tmp/novel.msk"):
         status_model=MagicMock(),
         parent=MagicMock(),
         tool_paths=tool_paths,
+        process_runner=process_runner,
     )
 
 
@@ -93,12 +103,17 @@ def test_pandoc_metadata_supplies_nonempty_default_title():
 
 
 def test_pandoc_restores_cursor_when_process_start_fails():
-    pandoc = pandocExporter(make_context())
+    runner = MagicMock()
+    runner.run.side_effect = OSError("pandoc failed")
+    pandoc = pandocExporter(
+        make_context(process_runner=runner)
+    )
 
-    with patch.object(pandoc, "isValid", return_value=2), patch(
-        "manuskript.exporter.pandoc.subprocess.Popen",
-        side_effect=OSError("pandoc failed"),
-    ), patch("manuskript.exporter.pandoc.qApp") as application:
+    with patch.object(
+        pandoc, "isValid", return_value=2
+    ), patch.object(
+        busy_cursor_module, "qApp"
+    ) as application:
         with pytest.raises(OSError, match="pandoc failed"):
             pandoc.convert("content", [])
 
