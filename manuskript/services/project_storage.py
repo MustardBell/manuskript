@@ -1,10 +1,19 @@
+import logging
+
 from manuskript import loadSave
+from manuskript.domain.persistence import (
+    ProjectLoadResult,
+    ProjectSaveResult,
+)
 from manuskript.load_save.legacy_archive import Version0ProjectArchive
 from manuskript.load_save.project_files import Version1ProjectFiles
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class ProjectStorage:
-    """Persistence boundary used by the project lifecycle."""
+    """Persistence boundary and exception shield for the project lifecycle."""
 
     def __init__(
         self,
@@ -27,21 +36,43 @@ class ProjectStorage:
         )
 
     def load(self, context):
-        return loadSave.loadProject(
-            context,
-            cache=self._file_cache,
-            file_access=self._file_access,
-            legacy_file_access=self._legacy_file_access,
-        )
+        try:
+            return loadSave.loadProject(
+                context,
+                cache=self._file_cache,
+                file_access=self._file_access,
+                legacy_file_access=self._legacy_file_access,
+            )
+        except Exception as error:
+            message = self._failure_message("load", context, error)
+            LOGGER.exception(message)
+            return ProjectLoadResult(fatal_errors=(message,))
 
     def save(self, context, version=None):
-        return loadSave.saveProject(
-            context,
-            version=version,
-            cache=self._file_cache,
-            file_access=self._file_access,
-            legacy_file_access=self._legacy_file_access,
-        )
+        try:
+            return loadSave.saveProject(
+                context,
+                version=version,
+                cache=self._file_cache,
+                file_access=self._file_access,
+                legacy_file_access=self._legacy_file_access,
+            )
+        except Exception as error:
+            LOGGER.exception(
+                self._failure_message("save", context, error)
+            )
+            return ProjectSaveResult(
+                failed_files=(context.project_file,)
+            )
 
     def clear_cache(self):
         self._file_cache.clear()
+
+    @staticmethod
+    def _failure_message(operation, context, error):
+        return "Cannot {} project {}: {}: {}".format(
+            operation,
+            context.project_file,
+            type(error).__name__,
+            error,
+        )
