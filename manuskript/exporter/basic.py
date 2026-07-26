@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import os
-import shutil
-import subprocess
-
-from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QWidget
+
+from manuskript.services.external_tools import ExternalTool
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -16,20 +13,29 @@ class basicExporter:
     description = ""
     exportTo = []
     cmd = ""
-    customPath = ""
     icon = ""
     absentTip = ""  # A tip displayed when exporter is absent.
     absentURL = ""  # URL to open if exporter is absent.
 
     def __init__(self, context=None):
         self.context = context
-        settings = QSettings()
-        self.customPath = settings.value("Exporters/{}_customPath".format(self.name), "")
+        paths = (
+            context.tool_paths
+            if context is not None
+            else None
+        )
+        self.tool = ExternalTool(
+            self.cmd or self.name,
+            self.cmd,
+            paths=paths,
+        )
+
+    @property
+    def customPath(self):
+        return self.tool.custom_path
 
     def setCustomPath(self, path):
-        self.customPath = path
-        settings = QSettings()
-        settings.setValue("Exporters/{}_customPath".format(self.name), self.customPath)
+        self.tool.custom_path = path
 
     def getFormatByName(self, name):
         for f in self.exportTo:
@@ -39,29 +45,30 @@ class basicExporter:
         return None
 
     def isValid(self):
-        if self.path() != None:
-            return 2
-        elif self.customPath and os.path.exists(self.customPath):
-            return 1
-        else:
-            return 0
+        return self.tool.availability
 
     def version(self):
         return ""
 
     def path(self):
-        return shutil.which(self.cmd)
+        return self.tool.system_path
+
+    def executable(self):
+        availability = self.isValid()
+        if availability == 2:
+            return self.cmd
+        if availability == 1:
+            return self.customPath
+        return None
 
     def run(self, args):
-        if self.isValid() == 2:
-            run = self.cmd
-        elif self.isValid() == 1:
-            run = self.customPath
-        else:
+        result = self.tool.run_text(
+            args,
+            executable=self.executable(),
+        )
+        if result is None:
             LOGGER.error("No command for %s.", self.name)
-            return None
-        r = subprocess.check_output([run] + args)  # timeout=.2
-        return r.decode("utf-8")
+        return result
 
         # Example of how to run a command
         #

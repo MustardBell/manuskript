@@ -12,6 +12,7 @@ class ExportContext:
     label_model: object
     status_model: object
     parent: object
+    tool_paths: object = None
 
     @property
     def project_path(self):

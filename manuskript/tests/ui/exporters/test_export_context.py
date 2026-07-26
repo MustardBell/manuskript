@@ -9,6 +9,8 @@ from manuskript.exporter.pandoc import pandocExporter
 
 
 def make_context(project_file="/tmp/novel.msk"):
+    tool_paths = MagicMock()
+    tool_paths.get.return_value = ""
     return ExportContext(
         project_file=project_file,
         outline_model=MagicMock(),
@@ -16,6 +18,7 @@ def make_context(project_file="/tmp/novel.msk"):
         label_model=MagicMock(),
         status_model=MagicMock(),
         parent=MagicMock(),
+        tool_paths=tool_paths,
     )
 
 

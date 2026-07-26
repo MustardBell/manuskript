@@ -28,6 +28,7 @@ from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
+from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.project_history import ProjectHistory
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel.hide()
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
         self.projectLifecycleView = ProjectLifecycleView(self)
+        self.externalToolPaths = ExternalToolPaths()
         self.projectHistory = ProjectHistory()
         self.projectManager = ProjectManager(
             self.projectLifecycleView,
@@ -1540,6 +1542,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 label_model=self.mdlLabels,
                 status_model=self.mdlStatus,
                 parent=self,
+                tool_paths=self.externalToolPaths,
             )
         )
         self.dialog.show()
