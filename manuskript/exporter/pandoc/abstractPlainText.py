@@ -222,20 +222,28 @@ class pandocSettings(markdownSettings):
                                       minVersion="1.10"),
 
         # PDF
-        "latex-ps":     pandocSetting("--variable=papersize:", "combo", "pdf latex",  # FIXME: does not work with default template
+        "latex-ps":     pandocSetting("--variable=papersize:", "combo", "pdf latex",
                                       safeTranslate(qApp, "Export", "Paper size:"),
-                                      vals="letter|A4|A5", specific=True, minVersion="1.4"),
-        "latex-fs":     pandocSetting("--variable=fontsize:", "number", "pdf latex",  # FIXME: does not work with default template
+                                      vals="letter|a4|a5", specific=True, minVersion="1.4"),
+        "latex-fs":     pandocSetting("--variable=fontsize:", "combo", "pdf latex",
                                       safeTranslate(qApp, "Export", "Font size:"),
-                                      min=8, max=88, default=12, suffix="pt", specific=True, minVersion="1.4"),
+                                      vals="10pt|11pt|12pt", specific=True, minVersion="1.4"),
         "latex-class":  pandocSetting("--variable=documentclass:", "combo", "pdf latex",
                                      safeTranslate(qApp, "Export", "Class:"),
-                                     vals="article|report|book|memoir", specific=True, minVersion="1.4"),
+                                     vals="article|report|book|memoir|scrartcl|scrreprt|scrbook",
+                                     specific=True, minVersion="1.4"),
         "latex-ls":     pandocSetting("--variable=linestretch:", "combo", "pdf latex",
                                      safeTranslate(qApp, "Export", "Line spacing:"),
                                      vals="1|1.25|1.5|2", specific=True, minVersion="1.4"),
-
-        # FIXME: complete with http://pandoc.org/README.html#variables-for-latex
+        "latex-pagestyle": pandocSetting("--variable=pagestyle:", "combo", "pdf latex",
+                                        safeTranslate(qApp, "Export", "Page style:"),
+                                        vals="plain|empty|headings", specific=True, minVersion="1.4"),
+        "latex-indent": pandocSetting("--variable=indent", "checkbox", "pdf latex",
+                                     safeTranslate(qApp, "Export", "Use document-class paragraph indentation"),
+                                     specific=True, minVersion="1.4"),
+        "latex-block-headings": pandocSetting("--variable=block-headings", "checkbox", "pdf latex",
+                                             safeTranslate(qApp, "Export", "Use free-standing paragraph headings"),
+                                             specific=True, minVersion="2.0"),
     }
 
 
