@@ -10,6 +10,9 @@ from PyQt5.QtWidgets import QWidget, QPushButton, qApp
 from manuskript.functions import appPath
 from manuskript.ui import style
 from manuskript.ui.editors.tabSplitter_ui import Ui_tabSplitter
+from manuskript.ui.views.text_editor_settings import (
+    DefaultTextEditorSettings,
+)
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -44,6 +47,12 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.editor_context = editor_context
+        self.settings = (
+            editor_context.text_editor.settings
+            if editor_context is not None
+            and editor_context.text_editor is not None
+            else DefaultTextEditorSettings()
+        )
 
         # try:
         #     self.tab.setTabBarAutoHide(True)
@@ -91,6 +100,9 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
     def set_context(self, context):
         self.editor_context = context
+        if context is not None and context.text_editor is not None:
+            self.settings = context.text_editor.settings
+            self.updateStyleSheet()
         if self.secondTab is not None:
             self.secondTab.set_context(context)
 
@@ -115,7 +127,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         event.accept()
 
     def updateStyleSheet(self):
-        self.setStyleSheet(style.mainEditorTabSS())
+        self.setStyleSheet(style.mainEditorTabSS(self.settings))
         if self.secondTab:
             self.secondTab.updateStyleSheet()
 
@@ -284,7 +296,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             #     border:1px solid darkblue;
             #     }}""".format(self.splitter.objectName()))
 
-            self.setStyleSheet(style.mainEditorTabSS() + """
+            self.setStyleSheet(style.mainEditorTabSS(self.settings) + """
                 QSplitter#{name},
                 QSplitter#{name} > QWidget > QSplitter{{
                     border:3px solid {color};
@@ -299,5 +311,5 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             #     border: 1px solid transparent;
             #     }}""".format(self.splitter.objectName()))
 
-            self.setStyleSheet(style.mainEditorTabSS())
+            self.setStyleSheet(style.mainEditorTabSS(self.settings))
         return QWidget.eventFilter(self, object, event)
