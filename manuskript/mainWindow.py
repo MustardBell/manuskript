@@ -3,16 +3,15 @@
 import importlib
 import os
 import re
-from functools import partial
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
                           QRegExp, QUrl, QSize, QModelIndex)
 from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
+from PyQt5.QtWidgets import QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
-from manuskript.commands import DocumentCommand, DocumentCommandRouter
+from manuskript.commands import DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
@@ -45,6 +44,9 @@ from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
+from manuskript.ui.main_window_action_binding import (
+    MainWindowActionBinding,
+)
 from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
@@ -179,91 +181,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cmbSummary.setCurrentIndex(0)
         self.cmbSummary.currentIndexChanged.emit(0)
 
-        # Main Menu
-        self.projectManager.syncUiToState()
-
-        # Main Menu:: File
-        self.actOpen.triggered.connect(self.welcome.openFile)
-        self.actSave.triggered.connect(self.projectManager.saveDatas)
-        self.actSaveAs.triggered.connect(self.welcome.saveAsFile)
-        self.actImport.triggered.connect(self.doImport)
-        self.actCompile.triggered.connect(self.doCompile)
-        self.actCloseProject.triggered.connect(self.projectManager.closeProject)
-        self.actQuit.triggered.connect(self.close)
-
-        # Main menu:: Edit
-        for action, command in [
-            (self.actCopy, DocumentCommand.COPY),
-            (self.actCut, DocumentCommand.CUT),
-            (self.actPaste, DocumentCommand.PASTE),
-            (self.actRename, DocumentCommand.RENAME),
-            (self.actDuplicate, DocumentCommand.DUPLICATE),
-            (self.actDelete, DocumentCommand.DELETE),
-        ]:
-            action.triggered.connect(
-                partial(self.documentCommands.dispatch, command)
-            )
-        self.actSearch.triggered.connect(self.doSearch)
-        self.actLabels.triggered.connect(self.settingsLabel)
-        self.actStatus.triggered.connect(self.settingsStatus)
-        self.actSettings.triggered.connect(self.settingsWindow)
-
-        # Main menu:: Edit:: Format
-        self.actHeaderSetextL1.triggered.connect(self.formatSetext1)
-        self.actHeaderSetextL2.triggered.connect(self.formatSetext2)
-        self.actHeaderAtxL1.triggered.connect(self.formatAtx1)
-        self.actHeaderAtxL2.triggered.connect(self.formatAtx2)
-        self.actHeaderAtxL3.triggered.connect(self.formatAtx3)
-        self.actHeaderAtxL4.triggered.connect(self.formatAtx4)
-        self.actHeaderAtxL5.triggered.connect(self.formatAtx5)
-        self.actHeaderAtxL6.triggered.connect(self.formatAtx6)
-        self.actFormatBold.triggered.connect(self.formatBold)
-        self.actFormatItalic.triggered.connect(self.formatItalic)
-        self.actFormatStrike.triggered.connect(self.formatStrike)
-        self.actFormatVerbatim.triggered.connect(self.formatVerbatim)
-        self.actFormatSuperscript.triggered.connect(self.formatSuperscript)
-        self.actFormatSubscript.triggered.connect(self.formatSubscript)
-        self.actFormatCommentLines.triggered.connect(self.formatCommentLines)
-        self.actFormatList.triggered.connect(self.formatList)
-        self.actFormatOrderedList.triggered.connect(self.formatOrderedList)
-        self.actFormatBlockquote.triggered.connect(self.formatBlockquote)
-        self.actFormatCommentBlock.triggered.connect(self.formatCommentBlock)
-        self.actFormatClear.triggered.connect(self.formatClear)
-
-        # Main menu:: Organize
-        for action, command in [
-            (self.actMoveUp, DocumentCommand.MOVE_UP),
-            (self.actMoveDown, DocumentCommand.MOVE_DOWN),
-            (self.actSplitDialog, DocumentCommand.SPLIT_DIALOG),
-            (self.actSplitCursor, DocumentCommand.SPLIT_CURSOR),
-            (self.actMerge, DocumentCommand.MERGE),
-        ]:
-            action.triggered.connect(
-                partial(self.documentCommands.dispatch, command)
-            )
-
-        # Main menu:: Navigate
-        self.actBack.triggered.connect(self.navigationController.back)
-        self.actForward.triggered.connect(
-            self.navigationController.forward
-        )
-
-        # Main Menu:: view
-        self.generateViewMenu()
-        self.actModeGroup = QActionGroup(self)
-        self.actModeSimple.setActionGroup(self.actModeGroup)
-        self.actModeFiction.setActionGroup(self.actModeGroup)
-        self.actModeSimple.triggered.connect(self.setViewModeSimple)
-        self.actModeFiction.triggered.connect(self.setViewModeFiction)
-
-        # Main Menu:: Tool
-        self.actToolFrequency.triggered.connect(self.frequencyAnalyzer)
-        self.actToolTargets.triggered.connect(self.sessionTargets)
-        self.actSupport.triggered.connect(self.support)
-        self.actLocateLog.triggered.connect(self.locateLogFile)
-        self.actAbout.triggered.connect(self.about)
-
-        self.makeUIConnections()
+        self.actionBinding = MainWindowActionBinding(self)
+        self.actionBinding.bind()
 
         # Tools non-modal windows
         self.td = None  # Targets Dialog
@@ -489,39 +408,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def navigated(self, event):
         self.navigationController.navigated(event)
-
-    ###############################################################################
-    # MAIN CONNECTIONS
-    ###############################################################################
-
-    def makeUIConnections(self):
-        "Connections that have to be made once only, even when a new project is loaded."
-        # Characters
-        self.txtPersosFilter.textChanged.connect(self.lstCharacters.setFilter, F.AUC)
-        self.lstCharacters.itemSelectionChanged.connect(
-            self.characterController.handle_selection_changed,
-            F.AUC,
-        )
-
-        # Plots
-        self.txtPlotFilter.textChanged.connect(self.lstPlots.setFilter, F.AUC)
-        self.lstPlots.currentItemChanged.connect(
-            self.plotController.handle_plot_selection_changed,
-            F.AUC,
-        )
-
-        # Outline
-        self.btnRedacAddFolder.clicked.connect(self.treeRedacOutline.addFolder, F.AUC)
-        self.btnOutlineAddFolder.clicked.connect(self.treeOutlineOutline.addFolder, F.AUC)
-        self.btnRedacAddText.clicked.connect(self.treeRedacOutline.addText, F.AUC)
-        self.btnOutlineAddText.clicked.connect(self.treeOutlineOutline.addText, F.AUC)
-        self.btnRedacRemoveItem.clicked.connect(self.outlineRemoveItemsRedac, F.AUC)
-        self.btnOutlineRemoveItem.clicked.connect(self.outlineRemoveItemsOutline, F.AUC)
-
-        self.tabMain.currentChanged.connect(self.toolbar.setCurrentGroup)
-        self.tabMain.currentChanged.connect(self.tabMainChanged)
-
-        qApp.focusChanged.connect(self.focusChanged)
 
     def makeConnections(self):
         self.projectBinding.bind()
