@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import os
-from collections import OrderedDict
-
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QWidget, QListWidgetItem, QFileDialog
 
-from manuskript import exporter
 from manuskript.ui.exporters.exportersManager_ui import Ui_ExportersManager
 from manuskript.ui import style as S
 
@@ -17,17 +13,18 @@ class exportersManager(QWidget, Ui_ExportersManager):
 
     exportersMightHaveChanged = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, exporters, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.lblExporterName.setStyleSheet(S.titleLabelSS())
 
         # Var
+        self.exporters = exporters
         self.currentExporter = None
 
         # Populates lite
         self.lstExporters.clear()
-        for E in exporter.exporters:
+        for E in self.exporters:
             item = QListWidgetItem(QIcon(E.icon), E.name)
             self.lstExporters.addItem(item)
 
@@ -48,7 +45,10 @@ class exportersManager(QWidget, Ui_ExportersManager):
         self.txtPath.editingFinished.connect(self.updateAppPath)
 
     def updateUi(self, name):
-        E = exporter.getExporterByName(name)
+        E = next(
+            (item for item in self.exporters if item.name == name),
+            None,
+        )
         self.currentExporter = E
 
         if not E:
@@ -147,4 +147,3 @@ class exportersManager(QWidget, Ui_ExportersManager):
 
             self.updateUi(E.name)
             self.exportersMightHaveChanged.emit()
-

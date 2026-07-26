@@ -2,14 +2,12 @@
 # --!-- coding: utf8 --!--
 import re
 from PyQt5.QtGui import QFont, QTextCharFormat
-from PyQt5.QtWidgets import QPlainTextEdit, qApp, QFrame, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QPlainTextEdit, qApp, QFrame, QMessageBox
 
 from manuskript.exporter.basic import basicFormat
-from manuskript.functions import mainWindow, getSaveFileNameWithSuffix, safeTranslate
+from manuskript.functions import getSaveFileNameWithSuffix, safeTranslate
 from manuskript.models import outlineItem
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
-import codecs
-
 import logging
 LOGGER = logging.getLogger(__name__)
 
@@ -29,11 +27,11 @@ class plainText(basicFormat):
     exportFilter = "Text files (*.txt);; Any files (*)"
     exportDefaultSuffix = ".txt"  # qt ignores the period, but it is clearer in our code to have it
 
-    def __init__(self):
-        pass
+    def __init__(self, context):
+        super().__init__(context=context)
 
     def settingsWidget(self):
-        w = exporterSettings(self)
+        w = exporterSettings(self, self.context)
         w.loadSettings()
         return w
 
@@ -46,10 +44,20 @@ class plainText(basicFormat):
     def output(self, settingsWidget):
         settings = settingsWidget.getSettings()
         try:
-            return self.concatenate(mainWindow().mdlOutline.rootItem, settings)
+            return self.concatenate(
+                self.context.outline_model.rootItem,
+                settings,
+            )
         except re.error as e:
-            QMessageBox.warning(mainWindow().dialog, safeTranslate(qApp, "Export", "Error"),
-                                safeTranslate(qApp, "Export", "Could not process regular expression: \n{}").format(str(e)))
+            QMessageBox.warning(
+                self.context.parent,
+                safeTranslate(qApp, "Export", "Error"),
+                safeTranslate(
+                    qApp,
+                    "Export",
+                    "Could not process regular expression: \n{}",
+                ).format(str(e)),
+            )
             return ""
 
     def getExportFilename(self, settingsWidget, varName=None, filter=None):
