@@ -263,5 +263,19 @@ class TestProjectManager(unittest.TestCase):
         self.assertTrue(result)
         show_failures.assert_called_once_with(failures)
 
+    def test_fatal_load_failure_is_reported_without_success_feedback(self):
+        self.storage.load.return_value = ProjectLoadResult(
+            fatal_errors=("Malformed plots.xml",)
+        )
+
+        result = self.project_manager.loadDatas("project.msk")
+
+        self.assertFalse(result)
+        self.status_reporter.assert_called_once()
+        assert self.status_reporter.call_args.args[1] == 5000
+        assert self.status_reporter.call_args.kwargs == {
+            "importance": 3
+        }
+
 if __name__ == '__main__':
     unittest.main()
