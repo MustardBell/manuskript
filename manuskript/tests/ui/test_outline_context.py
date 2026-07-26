@@ -16,6 +16,7 @@ def make_outline_context():
         open_index=MagicMock(name="open_index"),
         open_indexes=MagicMock(name="open_indexes"),
         selection_changed=MagicMock(name="selection_changed"),
+        show_status=MagicMock(name="show_status"),
     )
 
 
@@ -52,6 +53,18 @@ def test_cleared_outline_context_makes_open_commands_inert():
 
     context.open_index.assert_not_called()
     context.open_indexes.assert_not_called()
+
+
+def test_outline_validation_reports_through_assigned_context():
+    view = outlineBasics()
+    context = make_outline_context()
+    view.set_outline_context(context)
+    view.selectedIndexes = MagicMock(return_value=[])
+
+    view.merge()
+
+    context.show_status.assert_called_once()
+    assert context.show_status.call_args.kwargs["importance"] == 2
 
 
 def test_cork_delegate_receives_status_model_from_outline_context():

@@ -51,6 +51,7 @@ from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 from manuskript.ui.statusLabel import statusLabel
+from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
@@ -96,13 +97,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
         self.worldController = WorldController(self)
-        self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
-        )
-        self.welcome.set_context(
-            welcome_context_for(self, self.settingsManager)
         )
         self.referenceService = None
         self.textEditorContext = None
@@ -114,6 +111,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
+        self.statusPresenter = StatusPresenter(self, self.statusLabel)
+        self.projectManager = ProjectManager(
+            self,
+            status_reporter=self.statusPresenter.show,
+        )
+        self.welcome.set_context(
+            welcome_context_for(self, self.settingsManager)
+        )
 
         # Welcome
         self.welcome.updateValues()
@@ -828,6 +833,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             open_index=self.openIndex,
             open_indexes=self.openIndexes,
             selection_changed=self.redacMetadata.selectionChanged,
+            show_status=self.statusPresenter.show,
         )
         editor_context = EditorContext(
             outline_model=self.mdlOutline,
@@ -1498,7 +1504,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     if self.treeRedacOutline.selectedIndexes()
                     else QModelIndex()
                 ),
-                show_status=F.statusMessage,
+                show_status=self.statusPresenter.show,
             )
         )
         self.dialog.show()
