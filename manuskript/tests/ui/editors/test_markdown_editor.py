@@ -28,6 +28,21 @@ def test_unbound_markdown_editor_installs_markdown_highlighter():
     assert isinstance(editor.highlighter, MarkdownHighlighter)
 
 
+def test_interaction_rectangle_updates_are_coalesced():
+    editor = make_editor()
+    qApp.processEvents()
+    updates = []
+    editor.interactionRectUpdateTimer.timeout.connect(
+        lambda: updates.append(True)
+    )
+
+    for _ in range(20):
+        editor.document().documentLayoutChanged.emit()
+    qApp.processEvents()
+
+    assert updates == [True]
+
+
 def test_setext_heading_is_highlighted_and_reported():
     editor = make_editor()
     headings = []

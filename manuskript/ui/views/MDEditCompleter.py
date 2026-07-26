@@ -24,9 +24,6 @@ class MDEditCompleter(MDEditView):
         self.refRects = []
         self._noFocusMode = True
 
-        self.textChanged.connect(self.getRefRects)
-        self.document().documentLayoutChanged.connect(self.getRefRects)
-
     def setReferenceService(self, service, completion_data_provider=None):
         self.referenceService = service
         self.completionDataProvider = completion_data_provider or (lambda: {})
@@ -151,8 +148,8 @@ class MDEditCompleter(MDEditView):
                 self.referenceService.open(ref)
                 qApp.restoreOverrideCursor()
 
-    def resizeEvent(self, event):
-        MDEditView.resizeEvent(self, event)
+    def updateInteractionRects(self):
+        MDEditView.updateInteractionRects(self)
         self.getRefRects()
 
     def getRefRects(self):
