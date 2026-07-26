@@ -1,9 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from manuskript.domain.project import ProjectState
+from manuskript.domain.project import CloseDecision, ProjectState
 from manuskript.projectManager import ProjectManager
 from manuskript.settingsManager import SettingsManager
+from manuskript.ui.project_lifecycle import ProjectLifecycleView
 
 
 class TestProjectManager(unittest.TestCase):
@@ -16,8 +17,9 @@ class TestProjectManager(unittest.TestCase):
         self.window.settingsManager = settings_manager
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
+        self.lifecycle_view = ProjectLifecycleView(self.window)
         self.project_manager = ProjectManager(
-            self.window,
+            self.lifecycle_view,
             storage=self.storage,
             status_reporter=self.status_reporter,
         )
@@ -124,6 +126,27 @@ class TestProjectManager(unittest.TestCase):
         self.assertFalse(result)
         self.assertTrue(self.project_manager.session.is_open)
         self.assertTrue(self.project_manager.session.is_dirty)
+
+    def test_unsaved_change_decision_is_supplied_by_lifecycle_view(self):
+        self.project_manager.session.open("project.msk")
+        self.project_manager.session.mark_dirty()
+        with patch.object(
+            self.lifecycle_view,
+            "confirm_unsaved_changes",
+            return_value=CloseDecision.CANCEL,
+        ):
+            self.assertFalse(
+                self.project_manager.handleUnsavedChanges()
+            )
+
+        with patch.object(
+            self.lifecycle_view,
+            "confirm_unsaved_changes",
+            return_value=CloseDecision.DISCARD,
+        ):
+            self.assertTrue(
+                self.project_manager.handleUnsavedChanges()
+            )
 
     def test_change_signal_after_close_is_ignored(self):
         result = self.project_manager.startTimerNoChanges()

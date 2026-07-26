@@ -39,6 +39,7 @@ from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
+from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.reference_navigation import reference_navigation_for
 from manuskript.ui.search_context import SearchContext, SearchResultViewAdapter
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
@@ -111,8 +112,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
+        self.projectLifecycleView = ProjectLifecycleView(self)
         self.projectManager = ProjectManager(
-            self,
+            self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
         )
         self.welcome.set_context(

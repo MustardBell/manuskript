@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from manuskript.projectManager import ProjectManager
+from manuskript.ui.project_lifecycle import ProjectLifecycleView
 
 class TestProjectManagerTimer(unittest.TestCase):
 
@@ -27,7 +28,10 @@ class TestProjectManagerTimer(unittest.TestCase):
         self.mock_qtimer_class = patch("manuskript.projectManager.QTimer", side_effect=mock_qtimer_constructor).start()
 
         self.storage = MagicMock()
-        self.project_manager = ProjectManager(self.window, storage=self.storage)
+        self.project_manager = ProjectManager(
+            ProjectLifecycleView(self.window),
+            storage=self.storage,
+        )
 
     def tearDown(self):
         patch.stopall()
