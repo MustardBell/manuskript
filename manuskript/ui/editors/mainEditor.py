@@ -7,7 +7,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter, QIcon
 from PyQt5.QtWidgets import QWidget, qApp, QDesktopWidget
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import AUC, drawProgress, appPath, uiParse
 from manuskript.ui import style
@@ -70,6 +69,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._fullScreen = None
 
         self.editor_context = None
+        self.settings = None
 
         # Connections --------------------------------------------------------
 
@@ -107,6 +107,8 @@ class mainEditor(QWidget, Ui_mainEditor):
 
     def set_context(self, context):
         self.editor_context = context
+        if context.text_editor is not None:
+            self.settings = context.text_editor.settings
         self.tabSplitter.set_context(context)
 
     def clear_context(self):
@@ -347,7 +349,7 @@ class mainEditor(QWidget, Ui_mainEditor):
             del p
             self.lblRedacProgress.setPixmap(self.px)
 
-            if SettingsManager().progressChars:
+            if self.settings.progressChars:
                 self.lblRedacWC.setText(self.tr("({} chars) {}  words / {} ").format(
                         locale.format_string("%d", cc, grouping=True),
                         locale.format_string("%d", wc, grouping=True),
@@ -362,7 +364,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         else:
             self.lblRedacProgress.hide()
 
-            if SettingsManager().progressChars:
+            if self.settings.progressChars:
                 self.lblRedacWC.setText(self.tr("{} chars ").format(
                         locale.format_string("%d", cc, grouping=True)))
                 self.lblRedacWC.setToolTip("")
@@ -383,7 +385,7 @@ class mainEditor(QWidget, Ui_mainEditor):
     def setCorkSizeFactor(self, val):
         for w in self.allAllTabs():
             w.setCorkSizeFactor(val)
-        SettingsManager().corkSizeFactor = val
+        self.settings.corkSizeFactor = val
 
     def updateCorkView(self):
         for w in self.allAllTabs():
@@ -402,6 +404,8 @@ class mainEditor(QWidget, Ui_mainEditor):
             currentScreenNumber = QDesktopWidget().screenNumber(widget=self)
             self._fullScreen = fullScreenEditor(
                 self.currentEditor().currentIndex,
+                settings=self.settings,
+                text_editor_context=self.editor_context.text_editor,
                 screenNumber=currentScreenNumber)
             # Clean the variable when closing fullscreen prevent errors
             self._fullScreen.exited.connect(self.clearFullScreen)
