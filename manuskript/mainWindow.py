@@ -51,6 +51,7 @@ from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 from manuskript.ui.statusLabel import statusLabel
+from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
@@ -99,6 +100,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsManager = SettingsManager()
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
+        )
+        self.welcome.set_context(
+            welcome_context_for(self, self.settingsManager)
         )
         self.referenceService = None
         self.textEditorContext = None
@@ -229,6 +233,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def projectDirty(self):
         """Compatibility view of whether the active project has unsaved changes."""
         return self.projectManager.projectDirty
+
+    def consumeAutoLoadProject(self):
+        project = self._autoLoadProject
+        self._autoLoadProject = None
+        return project
 
     def updateDockVisibility(self, restore=False):
         """

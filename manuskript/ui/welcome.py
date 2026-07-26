@@ -2,21 +2,14 @@
 # --!-- coding: utf8 --!--
 
 import locale
-import importlib
 import os
 
 from PyQt5.QtCore import QSettings, QRegExp, Qt, QDir
-from PyQt5.QtGui import QIcon, QBrush, QColor, QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QIcon, QBrush, QColor
 from PyQt5.QtWidgets import QWidget, QAction, QFileDialog, QSpinBox, QLineEdit, QLabel, QPushButton, QTreeWidgetItem, \
     qApp, QMessageBox
 
-from manuskript.settingsManager import SettingsManager
-from manuskript.enums import Outline
-from manuskript.functions import mainWindow, iconFromColor, appPath
-from manuskript.models.characterModel import characterModel
-from manuskript.models import outlineItem, outlineModel
-from manuskript.models.plotModel import plotModel
-from manuskript.models.worldModel import worldModel
+from manuskript.functions import appPath
 from manuskript.ui.welcome_ui import Ui_welcome
 from manuskript.ui import style as S
 
@@ -34,8 +27,7 @@ class welcome(QWidget, Ui_welcome):
         self.setupUi(self)
 
         self.template = []
-
-        self.mw = mainWindow()
+        self.context = None
         self.btnOpen.clicked.connect(self.openFile)
         self.btnCreate.clicked.connect(self.createFile)
         self.chkLoadLastProject.toggled.connect(self.setAutoLoad)
@@ -46,6 +38,14 @@ class welcome(QWidget, Ui_welcome):
 
         self.populateTemplates()
         self._templates = self.templates()
+
+    def set_context(self, context):
+        self.context = context
+
+    def project_manager(self):
+        if self.context is None:
+            raise RuntimeError("Welcome context has not been configured.")
+        return self.context.project_manager
 
     def updateValues(self):
         # Auto load
@@ -77,14 +77,13 @@ class welcome(QWidget, Ui_welcome):
         # Auto load last project
         autoLoad, last = self.getAutoLoadValues()
 
-        if self.mw._autoLoadProject:
-            project = self.mw._autoLoadProject
-            self.mw._autoLoadProject = None
+        project = self.context.consume_auto_load_project()
+        if project:
             self.appendToRecentFiles(project)
-            self.mw.projectManager.loadProject(project)
+            self.project_manager().loadProject(project)
 
         elif autoLoad and last:
-            self.mw.projectManager.loadProject(last)
+            self.project_manager().loadProject(last)
 
     def getAutoLoadValues(self):
         """
@@ -113,19 +112,20 @@ class welcome(QWidget, Ui_welcome):
 
     def loadRecents(self):
         sttgns = QSettings()
-        self.mw.menuRecents.setIcon(QIcon.fromTheme("folder-recent"))
+        recent_menu = self.context.recent_menu
+        recent_menu.setIcon(QIcon.fromTheme("folder-recent"))
         if sttgns.contains("recentFiles"):
             lst = sttgns.value("recentFiles")
-            self.mw.menuRecents.clear()
+            recent_menu.clear()
             for f in [f for f in lst if os.path.exists(f)]:
                 name = os.path.split(f)[1]
                 a = QAction(name, self)
                 a.setData(f)
                 a.setStatusTip(f)
                 a.triggered.connect(self.loadRecentFile)
-                self.mw.menuRecents.addAction(a)
+                recent_menu.addAction(a)
 
-            self.btnRecent.setMenu(self.mw.menuRecents)
+            self.btnRecent.setMenu(recent_menu)
 
     def appendToRecentFiles(self, project):
         sttgns = QSettings()
@@ -142,10 +142,10 @@ class welcome(QWidget, Ui_welcome):
 
     def loadRecentFile(self):
         act = self.sender()
-        if not self.mw.projectManager.closeProject():
+        if not self.project_manager().closeProject():
             return
         self.appendToRecentFiles(act.data())
-        self.mw.projectManager.loadProject(act.data())
+        self.project_manager().loadProject(act.data())
 
     ###############################################################################
     # DIALOGS
@@ -162,7 +162,7 @@ class welcome(QWidget, Ui_welcome):
         if filename:
             self.setLastAccessedDirectory(os.path.dirname(filename))
             self.appendToRecentFiles(filename)
-            self.mw.projectManager.loadProject(filename)
+            self.project_manager().loadProject(filename)
 
     def saveAsFile(self):
         lastDirectory = self.getLastAccessedDirectory()
@@ -180,13 +180,15 @@ class welcome(QWidget, Ui_welcome):
                 filename += ".msk"
             self.appendToRecentFiles(filename)
             # Ensure all file(s) are saved under the new filename.
-            self.mw.projectManager.clearSaveCache()
-            self.mw.projectManager.saveDatas(filename)
+            self.project_manager().clearSaveCache()
+            self.project_manager().saveDatas(filename)
             # Update Window's project name with new filename
             pName = os.path.split(filename)[1]
             if pName.endswith('.msk'):
                 pName=pName[:-4]
-            self.mw.setWindowTitle(pName + " - " + self.tr("Manuskript"))
+            self.context.set_window_title(
+                pName + " - " + self.tr("Manuskript")
+            )
 
     def createFile(self, filename=None, overwrite=False):
         lastDirectory = self.getLastAccessedDirectory()
@@ -214,7 +216,10 @@ class welcome(QWidget, Ui_welcome):
             # Create new project
             self.appendToRecentFiles(filename)
             self.loadDefaultDatas()
-            self.mw.projectManager.loadProject(filename, loadFromFile=False)
+            self.project_manager().loadProject(
+                filename,
+                loadFromFile=False,
+            )
 
     ###############################################################################
     # TEMPLATES
@@ -269,7 +274,9 @@ class welcome(QWidget, Ui_welcome):
             # Change button text
             self.btnCreate.setText("Open {}".format(name))
             # Load project
-            self.mw.projectManager.loadProject(appPath(os.path.join("sample-projects", name)))
+            self.project_manager().loadProject(
+                appPath(os.path.join("sample-projects", name))
+            )
 
     def updateTemplate(self):
         # Clear layout
@@ -437,76 +444,32 @@ class welcome(QWidget, Ui_welcome):
 
     def loadDefaultDatas(self):
         """Initialize a basic Manuskript project."""
-
-        # Empty settings
-        SettingsManager().reset_to_defaults()
-        self.mw.projectManager.loadEmptyDatas()
-
+        non_fiction = False
         if self.template:
-            t = [i for i in self._templates if i[0] == self.template[0]]
-            if t and t[0][2] == "Non-fiction":
-                SettingsManager().viewMode = "simple"
+            selected = [
+                value for value in self._templates
+                if value[0] == self.template[0]
+            ]
+            non_fiction = bool(
+                selected and selected[0][2] == "Non-fiction"
+            )
 
-        # Tasks
-        self.mw.mdlFlatData.setRowCount(2)     # data from: infos.txt, summary.txt
-        self.mw.mdlFlatData.setColumnCount(8)  # version_1.py: len(infos.txt) == 8
-
-        # Labels
-        for color, text in [
-            (Qt.transparent, ""),
-            (Qt.yellow, self.tr("Idea")),
-            (Qt.green, self.tr("Note")),
-            (Qt.blue, self.tr("Chapter")),
-            (Qt.red, self.tr("Scene")),
-            (Qt.cyan, self.tr("Research"))
-        ]:
-            self.mw.mdlLabels.appendRow(QStandardItem(iconFromColor(color), text))
-
-        # Status
-        for text in [
-            "",
-            self.tr("TODO"),
-            self.tr("First draft"),
-            self.tr("Second draft"),
-            self.tr("Final")
-        ]:
-            self.mw.mdlStatus.appendRow(QStandardItem(text))
-
-        # Plot (nothing special needed)
-
-        # Outline
-
-        root = self.mw.mdlOutline.rootItem
-        _type = "md"
-
-        def addElement(parent, datas):
-            if len(datas) == 2 and datas[1][1] == None or \
-                            len(datas) == 1:
-                # Next item is word count
-                n = 0
-                for i in range(datas[0][0]):
-                    n += 1
-                    item = outlineItem(title="{} {}".format(
-                            datas[0][1],
-                            str(n)),
-                            _type=_type,
-                            parent=parent)
-                    if len(datas) == 2:
-                        item.setData(Outline.setGoal, datas[1][0])
-                        # parent.appendChild(item)
-            else:
-                n = 0
-                for i in range(datas[0][0]):
-                    n += 1
-                    item = outlineItem(title="{} {}".format(
-                            datas[0][1],
-                            str(n)),
-                            _type="folder",
-                            parent=parent)
-                    # parent.appendChild(item)
-                    addElement(item, datas[1:])
-
-        if self.template and self.template[1]:
-            addElement(root, self.template[1])
-
-        # World (nothing special needed)
+        self.context.template_initializer.initialize(
+            self.template,
+            non_fiction=non_fiction,
+            labels=[
+                (Qt.transparent, ""),
+                (Qt.yellow, self.tr("Idea")),
+                (Qt.green, self.tr("Note")),
+                (Qt.blue, self.tr("Chapter")),
+                (Qt.red, self.tr("Scene")),
+                (Qt.cyan, self.tr("Research")),
+            ],
+            statuses=[
+                "",
+                self.tr("TODO"),
+                self.tr("First draft"),
+                self.tr("Second draft"),
+                self.tr("Final"),
+            ],
+        )
