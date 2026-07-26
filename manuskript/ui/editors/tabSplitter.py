@@ -7,7 +7,7 @@ from PyQt5.QtGui import QIcon, QPalette
 from PyQt5.QtGui import QDropEvent, QDragEnterEvent
 from PyQt5.QtWidgets import QWidget, QPushButton, qApp
 
-from manuskript.functions import mainWindow, appPath
+from manuskript.functions import appPath
 from manuskript.ui import style
 from manuskript.ui.editors.tabSplitter_ui import Ui_tabSplitter
 
@@ -35,9 +35,15 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         selected outlineItem in any other views.
     """
 
-    def __init__(self, parent=None, mainEditor=None):
+    def __init__(
+        self,
+        parent=None,
+        mainEditor=None,
+        editor_context=None,
+    ):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self.editor_context = editor_context
 
         # try:
         #     self.tab.setTabBarAutoHide(True)
@@ -83,6 +89,11 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
         self.setAcceptDrops(True)
 
+    def set_context(self, context):
+        self.editor_context = context
+        if self.secondTab is not None:
+            self.secondTab.set_context(context)
+
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasFormat('application/xml'):
             event.accept()
@@ -90,9 +101,18 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             event.ignore()
 
     def dropEvent(self, event: QDropEvent) -> None:
-        itemID = mainWindow().mdlOutline.decodeMimeData(event.mimeData())[0].ID()
-        itemIndex = mainWindow().mdlOutline.getIndexByID(itemID)
+        if self.editor_context is None:
+            event.ignore()
+            return
+        outline_model = self.editor_context.outline_model
+        items = outline_model.decodeMimeData(event.mimeData())
+        if not items:
+            event.ignore()
+            return
+        itemID = items[0].ID()
+        itemIndex = outline_model.getIndexByID(itemID)
         self.mainEditor.setCurrentModelIndex(itemIndex, tabWidget = self.tab)
+        event.accept()
 
     def updateStyleSheet(self):
         self.setStyleSheet(style.mainEditorTabSS())
@@ -110,9 +130,12 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         w.deleteLater()
 
     def tabOpenIndexes(self):
+        if self.editor_context is None:
+            return []
+        outline_model = self.editor_context.outline_model
         sel = []
         for i in range(self.tab.count()):
-            sel.append(mainWindow().mdlOutline.ID(self.tab.widget(i).currentIndex))
+            sel.append(outline_model.ID(self.tab.widget(i).currentIndex))
         return sel
 
     def openIndexes(self):
@@ -129,8 +152,11 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             if openIndexes[1]:
                 self.split(state=openIndexes[0])
 
+            if self.editor_context is None:
+                return
+            outline_model = self.editor_context.outline_model
             for i in openIndexes[1]:
-                idx = mainWindow().mdlOutline.getIndexByID(i)
+                idx = outline_model.getIndexByID(i)
                 self.mainEditor.setCurrentModelIndex(idx, newTab=True)
 
             if openIndexes[2]:
@@ -185,7 +211,10 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             self.closeSplit()
 
     def addSecondTab(self):
-        self.secondTab = tabSplitter(mainEditor=self.mainEditor)
+        self.secondTab = tabSplitter(
+            mainEditor=self.mainEditor,
+            editor_context=self.editor_context,
+        )
         self.secondTab.setObjectName(self.objectName() + "_")
         self.secondTab.splitter.setObjectName(self.splitter.objectName() + "_")
 
