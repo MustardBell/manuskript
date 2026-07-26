@@ -7,21 +7,29 @@ from PyQt5.QtWidgets import QStyledItemDelegate, QLineEdit, QPlainTextEdit, QFra
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import colorifyPixmap
-from manuskript.functions import mainWindow
 from manuskript.functions import mixColors
 from manuskript.functions import outlineItemColors
 from manuskript.ui import style as S
 
 
 class corkDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, status_model=None):
         QStyledItemDelegate.__init__(self, parent)
+        self.status_model = status_model
         self.factor = SettingsManager().corkSizeFactor / 100.
         self.lastPos = None
         self.editing = None
         self.margin = 5
 
         self.bgColors = {}
+
+    def set_status_model(self, status_model):
+        self.status_model = status_model
+
+    def status_item(self, status):
+        if self.status_model is None:
+            return None
+        return self.status_model.item(int(status), 0)
 
     def newStyle(self):
         return SettingsManager().corkStyle == "new"
@@ -370,7 +378,7 @@ class corkDelegate(QStyledItemDelegate):
         # Draw status
         status = item.data(Outline.status)
         if status:
-            it = mainWindow().mdlStatus.item(int(status), 0)
+            it = self.status_item(status)
             if it != None:
                 p.save()
                 p.setClipRegion(QRegion(self.cardRect))
@@ -567,7 +575,7 @@ class corkDelegate(QStyledItemDelegate):
         mainRect = self.mainRect
         status = item.data(Outline.status)
         if status:
-            it = mainWindow().mdlStatus.item(int(status), 0)
+            it = self.status_item(status)
             if it != None:
                 p.save()
                 p.setClipRegion(QRegion(mainRect))

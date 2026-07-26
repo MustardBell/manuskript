@@ -17,12 +17,17 @@ class corkView(QListView, dndView, outlineBasics):
 
         self.setResizeMode(QListView.Adjust)
         self.setWrapping(True)
-        self.setItemDelegate(corkDelegate())
+        self.cork_delegate = corkDelegate(self)
+        self.setItemDelegate(self.cork_delegate)
         self.setSpacing(5)
         self.setVerticalScrollMode(self.ScrollPerPixel)
         self.setFlow(self.LeftToRight)
         self.setSelectionBehavior(self.SelectRows)
         self.updateBackground()
+
+    def set_outline_context(self, context):
+        outlineBasics.set_outline_context(self, context)
+        self.cork_delegate.set_status_model(self.modelStatus)
 
     def updateBackground(self):
         if SettingsManager().corkBackground["image"] != "":
