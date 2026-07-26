@@ -37,9 +37,6 @@ try:
 except:
     compression = zipfile.ZIP_STORED
 
-cache = {}
-
-
 characterMap = OrderedDict([
     (Character.name, "Name"),
     (Character.ID,   "ID"),
@@ -94,7 +91,7 @@ def slugify(name):
     return newName
 
 
-def saveProject(context, zip=None):
+def saveProject(context, zip=None, cache=None):
     """
     Saves the project. If zip is False, the project is saved as a multitude of plain-text files for the most parts
     and some XML or zip? for settings and stuff.
@@ -104,6 +101,9 @@ def saveProject(context, zip=None):
     settings.
     @return: True if successful, False otherwise.
     """
+    if cache is None:
+        cache = {}
+
     if zip == None:
         zip = context.settings.saveToZip
 
@@ -326,7 +326,6 @@ def saveProject(context, zip=None):
     # Save to plain text
 
     else:
-        global cache
         filesWithPermissionErrors = list()
 
         # Project path
@@ -365,7 +364,8 @@ def saveProject(context, zip=None):
                 if f2 != f:
                     LOGGER.debug("  * Updating cache: %s, %s", f, f2)
                 cache2[f2] = cache[f]
-            cache = cache2
+            cache.clear()
+            cache.update(cache2)
 
         # Writing files
         for path, content in files:
@@ -635,7 +635,7 @@ def outlineToMMD(item):
 # LOAD
 ########################################################################################################################
 
-def loadProject(context, zip=None):
+def loadProject(context, zip=None, cache=None):
     """
     Loads a project.
     @param context: the project path, models, and settings to hydrate.
@@ -643,6 +643,8 @@ def loadProject(context, zip=None):
     @return: an array of errors, empty if None.
     """
     project = context.project_file
+    if cache is None:
+        cache = {}
 
     errors = list()
     filesWithPermissionErrors = list()
@@ -701,8 +703,8 @@ def loadProject(context, zip=None):
                         filesWithPermissionErrors.append(filename)
 
         # Saves to cache (only if we loaded from disk and not zip)
-        global cache
-        cache = files
+        cache.clear()
+        cache.update(files)
 
         # FIXME: watch directory for changes
 

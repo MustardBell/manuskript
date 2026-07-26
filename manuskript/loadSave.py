@@ -13,21 +13,17 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
-def saveProject(context, version=None):
+def saveProject(context, version=None, cache=None):
     # While debugging, we don't save the project
     # return
 
     if version == 0:
         return v0.saveProject(context)
     else:
-        return v1.saveProject(context)
+        return v1.saveProject(context, cache=cache)
 
 
-def clearSaveCache():
-    v1.cache = {}
-
-
-def loadProject(context):
+def loadProject(context, cache=None):
     project = context.project_file
     # Detect version
     isZip = False
@@ -86,4 +82,4 @@ def loadProject(context):
     if version == 0:
         return v0.loadProject(context)
     else:
-        return v1.loadProject(context, zip=isZip)
+        return v1.loadProject(context, zip=isZip, cache=cache)
