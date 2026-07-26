@@ -8,7 +8,7 @@ from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
                           QRegExp, QUrl, QSize, QModelIndex)
 from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtWidgets import QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
 from manuskript.commands import DocumentCommandRouter
@@ -231,8 +231,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self.projectManager.closeProject():
             event.ignore()
             return
+        self.closeAuxiliaryWindows()
         self.windowState.save()
         super().closeEvent(event)
+
+    def closeAuxiliaryWindows(self):
+        """Close every application window other than the main window."""
+        for window in QApplication.topLevelWidgets():
+            if window is not self:
+                window.close()
 
     ###############################################################################
     # GENERAL / UI STUFF
