@@ -13,6 +13,7 @@ from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
+from manuskript.models.outline_search_context import OutlineSearchContext
 from manuskript.models.worldModel import worldModel
 from manuskript.enums import Outline
 from manuskript.services.project_storage import ProjectStorage
@@ -310,7 +311,14 @@ class ProjectManager:
             self.window,
             character_lookup=self.window.mdlCharacter.getCharacterByID,
         )
-        self.window.mdlOutline = outlineModel(self.window)
+        self.window.mdlOutline = outlineModel(
+            self.window,
+            search_context=OutlineSearchContext.from_models(
+                self.window.mdlCharacter,
+                self.window.mdlStatus,
+                self.window.mdlLabels,
+            ),
+        )
         self.window.mdlWorld = worldModel(self.window)
 
     def loadDatas(self, project):
