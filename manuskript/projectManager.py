@@ -1,7 +1,6 @@
 import os
 
 from PyQt5.QtCore import QSettings, QTimer, QSize
-from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtWidgets import QMessageBox
 
 from manuskript.domain.project import (
@@ -9,12 +8,8 @@ from manuskript.domain.project import (
     ProjectSession,
 )
 from manuskript.logging import getLogFilePath
-from manuskript.models.characterModel import characterModel
-from manuskript.models import outlineModel
-from manuskript.models.plotModel import plotModel
-from manuskript.models.outline_search_context import OutlineSearchContext
-from manuskript.models.worldModel import worldModel
 from manuskript.enums import Outline
+from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.ui.connections import SignalConnectionRegistry
 
@@ -24,9 +19,12 @@ LOGGER = logging.getLogger(__name__)
 
 class ProjectManager:
     def __init__(
-            self, window, storage=None, status_reporter=None):
+            self, window, storage=None, status_reporter=None,
+            model_factory=None):
         self.window = window
         self.storage = storage if storage is not None else ProjectStorage()
+        self.model_factory = model_factory or ProjectModelFactory()
+        self.models = None
         self.status_reporter = status_reporter or (
             lambda message, duration=5000, importance=1: None
         )
@@ -306,24 +304,12 @@ class ProjectManager:
         return bool(r)
 
     def loadEmptyDatas(self):
-        self.window.mdlFlatData = QStandardItemModel(self.window)
-        self.window.mdlCharacter = characterModel(self.window)
-        self.window.mdlLabels = QStandardItemModel(self.window)
-        self.window.mdlStatus = QStandardItemModel(self.window)
-        self.window.mdlPlots = plotModel(
+        self.models = self.model_factory.create(
             self.window,
-            character_lookup=self.window.mdlCharacter.getCharacterByID,
+            self.window.settingsManager,
         )
-        self.window.mdlOutline = outlineModel(
-            self.window,
-            search_context=OutlineSearchContext.from_models(
-                self.window.mdlCharacter,
-                self.window.mdlStatus,
-                self.window.mdlLabels,
-            ),
-            settings=self.window.settingsManager,
-        )
-        self.window.mdlWorld = worldModel(self.window)
+        self.models.install_on(self.window)
+        return self.models
 
     def loadDatas(self, project):
         errors = self.storage.load(project, self.window)

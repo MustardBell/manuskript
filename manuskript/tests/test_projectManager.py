@@ -152,5 +152,21 @@ class TestProjectManager(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(self.project_manager.currentProject, "first.msk")
 
+    def test_empty_project_models_are_requested_from_factory(self):
+        factory = MagicMock()
+        models = MagicMock()
+        factory.create.return_value = models
+        self.project_manager.model_factory = factory
+
+        result = self.project_manager.loadEmptyDatas()
+
+        self.assertIs(result, models)
+        self.assertIs(self.project_manager.models, models)
+        factory.create.assert_called_once_with(
+            self.window,
+            self.window.settingsManager,
+        )
+        models.install_on.assert_called_once_with(self.window)
+
 if __name__ == '__main__':
     unittest.main()

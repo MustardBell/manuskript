@@ -26,9 +26,6 @@ class TestProjectManagerTimer(unittest.TestCase):
             
         self.mock_qtimer_class = patch("manuskript.projectManager.QTimer", side_effect=mock_qtimer_constructor).start()
 
-        # Patch QStandardItemModel to avoid TypeError
-        self.mock_qstandarditemmodel_class = patch("manuskript.projectManager.QStandardItemModel", autospec=True).start()
-
         self.storage = MagicMock()
         self.project_manager = ProjectManager(self.window, storage=self.storage)
 
