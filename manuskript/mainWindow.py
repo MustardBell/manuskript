@@ -31,6 +31,9 @@ from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
+from manuskript.services.application_preferences import (
+    ApplicationPreferences,
+)
 from manuskript.services.project_history import ProjectHistory
 from manuskript.services.theme_repository import ThemeRepository
 from manuskript.settingsWindow import settingsWindow
@@ -80,7 +83,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     SHOW_DEBUG_TAB = False
 
-    def __init__(self, settings_manager):
+    def __init__(
+        self,
+        settings_manager,
+        application_preferences=None,
+    ):
         QMainWindow.__init__(self)
         self.setupUi(self)
 
@@ -103,6 +110,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.history = self.navigationController.history
         self.settingsManager = settings_manager
+        self.applicationPreferences = (
+            application_preferences
+            if application_preferences is not None
+            else ApplicationPreferences()
+        )
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
         )
@@ -847,6 +859,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.settingsManager,
             theme_repository=self.themeRepository,
             theme_preview_renderer=self.themePreviewRenderer,
+            application_preferences=self.applicationPreferences,
         )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)
