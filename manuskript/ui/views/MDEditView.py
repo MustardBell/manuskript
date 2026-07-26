@@ -27,15 +27,15 @@ class MDEditView(textEditView):
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
                  highlighting=False, dict="", autoResize=False,
                  settings=None):
+        self._noFocusMode = False
+        self._lastCursorPosition = None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
-                              autoResize=autoResize, settings=settings)
+                              autoResize=autoResize, settings=settings,
+                              highlighter_class=MarkdownHighlighter)
 
         # Highlighter
         self._textFormat = "md"
-        self._highlighterClass = MarkdownHighlighter
-        self._noFocusMode = False
-        self._lastCursorPosition = None
 
         if index:
             # We have to setup things anew, for the highlighter notably
@@ -76,13 +76,9 @@ class MDEditView(textEditView):
 
         # TAB
         elif k == Qt.Key_Tab:
-            #self.indentText()
-            # FIXME
-            textEditView.keyPressEvent(self, event)
+            self.indentText()
         elif k == Qt.Key_Backtab:
-            #self.unindentText()
-            # FIXME
-            textEditView.keyPressEvent(self, event)
+            self.unindentText()
 
         else:
             textEditView.keyPressEvent(self, event)
@@ -176,6 +172,77 @@ class MDEditView(textEditView):
             return text[itemRegex.matchedLength():]
 
         return ""
+
+    def indentText(self):
+        self._changeBlockIndentation(increase=True)
+
+    def unindentText(self):
+        self._changeBlockIndentation(increase=False)
+
+    def _changeBlockIndentation(self, increase):
+        """Indent or unindent every block touched by the cursor."""
+        cursor = self.textCursor()
+        original_position = cursor.position()
+        original_anchor = cursor.anchor()
+        selection_start = cursor.selectionStart()
+        selection_end = cursor.selectionEnd()
+        last_position = (
+            max(selection_start, selection_end - 1)
+            if cursor.hasSelection()
+            else selection_start
+        )
+
+        block = self.document().findBlock(selection_start)
+        last_block = self.document().findBlock(last_position)
+        blocks = []
+        while block.isValid():
+            blocks.append(block)
+            if block == last_block:
+                break
+            block = block.next()
+
+        edits = []
+        cursor.beginEditBlock()
+        for block in reversed(blocks):
+            block_cursor = QTextCursor(block)
+            block_position = block.position()
+            if increase:
+                block_cursor.insertText("    ")
+                edits.append((block_position, 0, 4))
+                continue
+
+            text = block.text()
+            remove_count = 1 if text.startswith("\t") else min(
+                4,
+                len(text) - len(text.lstrip(" ")),
+            )
+            if remove_count:
+                block_cursor.movePosition(
+                    QTextCursor.NextCharacter,
+                    QTextCursor.KeepAnchor,
+                    remove_count,
+                )
+                block_cursor.removeSelectedText()
+                edits.append((block_position, remove_count, 0))
+        cursor.endEditBlock()
+
+        def adjusted(position):
+            shift = 0
+            for edit_position, removed, inserted in sorted(edits):
+                if removed and edit_position < position:
+                    if position <= edit_position + removed:
+                        return edit_position + shift
+                    shift -= removed
+                elif inserted and edit_position <= position:
+                    shift += inserted
+            return position + shift
+
+        cursor.setPosition(adjusted(original_anchor))
+        cursor.setPosition(
+            adjusted(original_position),
+            QTextCursor.KeepAnchor,
+        )
+        self.setTextCursor(cursor)
 
     ###########################################################################
     # TypeWriterScrolling
@@ -342,38 +409,13 @@ class MDEditView(textEditView):
         cursor.insertText(text)
 
     def clearedFormat(self, text):
-        # FIXME: clear also block formats
-        for reg, rep, flags in [
-            (r"\*\*(.*?)\*\*", "\\1", None), # bold
-            ("__(.*?)__", "\\1", None), # bold
-            (r"\*(.*?)\*", "\\1", None), # emphasis
-            ("_(.*?)_", "\\1", None), # emphasis
-            ("`(.*?)`", "\\1", None), # verbatim
-            ("~~(.*?)~~", "\\1", None), # strike
-            (r"\^(.*?)\^", "\\1", None), # superscript
-            ("~(.*?)~", "\\1", None), # subscript
-            (r"<!--\s*(.*?)\s*-->", "\\1", re.S), # comments
-
-            # LINES OR BLOCKS
-            (r"^#*\s*(.+?)\s*", "\\1", re.M), # ATX
-            (r"^[=-]*$", "", re.M), # Setext
-            (r"^`*$", "", re.M), # Code block fenced
-            (r"^\s*[-+*]\s*(.*?)\s*$", "\\1", re.M), # Bullet List
-            (r"^\s*[0-9a-z](\.|\))\s*(.*?)\s*$", "\\2", re.M), # Bullet List
-            (r"\s*[>\s]*(.*?)\s*$", "\\1", re.M), # Code block and blockquote
-
-            ]:
-            text = re.sub(reg, rep, text, flags if flags else 0)
-        return text
+        return F.clearMarkdownFormatting(text)
 
     def clearedFormatForStats(self, text):
-        # Remove stuff that musn't be counted
-        # FIXME: clear also block formats
-        for reg, rep, flags in [
-            ("<!--.*-->", "", re.S), # comments
-            ]:
-            text = re.sub(reg, rep, text, flags if flags else 0)
-        return text
+        return F.clearMarkdownFormatting(
+            text,
+            remove_comments=True,
+        )
 
     def titleSetext(self, level):
         cursor = self.textCursor()

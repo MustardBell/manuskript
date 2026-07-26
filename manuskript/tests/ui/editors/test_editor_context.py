@@ -75,3 +75,19 @@ def test_full_screen_editor_receives_existing_editor_context(
         screenNumber=0,
     )
     window.mainEditor.closeAllTabs()
+
+
+def test_active_editor_selection_sync_refreshes_main_editor(
+        MWEmptyProject):
+    window = MWEmptyProject
+    item = outlineItem(title="Chapter")
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    editor = window.mainEditor.currentEditor()
+
+    with patch.object(window.mainEditor, "tabChanged") as tab_changed:
+        editor._syncActiveEditorSelection()
+
+    tab_changed.assert_called_once_with()
+    window.mainEditor.closeAllTabs()

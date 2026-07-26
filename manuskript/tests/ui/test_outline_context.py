@@ -77,6 +77,16 @@ def test_outline_validation_reports_through_assigned_context():
     assert context.show_status.call_args.kwargs["importance"] == 2
 
 
+def test_bulk_rename_pattern_supports_title_and_sequence():
+    assert outlineBasics.bulkRenameTitles(
+        ["Arrival", "Departure"],
+        "Scene {number}: {title}",
+    ) == [
+        "Scene 1: Arrival",
+        "Scene 2: Departure",
+    ]
+
+
 def test_cork_delegate_receives_status_model_from_outline_context():
     view = corkView()
     context = make_outline_context()

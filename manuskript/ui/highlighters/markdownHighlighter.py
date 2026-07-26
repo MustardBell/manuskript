@@ -27,8 +27,6 @@ GW_FADE_ALPHA = 140
 # Highlighter based on GhostWriter (http://wereturtle.github.io/ghostwriter/).
 # GPLV3+.
 
-#FIXME: Setext heading don't work anymore
-
 class MarkdownHighlighter(BasicHighlighter):
 
     highlightBlockAtPosition = pyqtSignal(int)
@@ -179,16 +177,15 @@ class MarkdownHighlighter(BasicHighlighter):
 
             self.inBlockquote = self.tokenizer.getState() == MS.MarkdownStateBlockquote
 
-            # STATE FORMATTING
-            # FIXME: generic
-            if self.currentBlockState() in [
-                    MS.MarkdownStatePipeTableHeader,
-                    MS.MarkdownStatePipeTableDivider,
-                    MS.MarkdownStatePipeTableRow]:
-                fmt = QTextCharFormat()
-                f = fmt.font()
-                f.setFamily("Monospace")
-                fmt.setFont(f)
+            block_theme = self.theme["blockStates"].get(
+                self.currentBlockState()
+            )
+            if block_theme:
+                fmt, _ = self.formatsFromTheme(
+                    block_theme,
+                    QTextCharFormat(),
+                    QTextCharFormat(),
+                )
                 self.setFormat(0, len(text), fmt)
 
             # Monospace the blank chars
@@ -280,7 +277,19 @@ class MarkdownHighlighter(BasicHighlighter):
 
 
         theme = {
-            "markup": markup}
+            "markup": markup,
+            "blockStates": {
+                MS.MarkdownStatePipeTableHeader: {
+                    "monospace": True,
+                },
+                MS.MarkdownStatePipeTableDivider: {
+                    "monospace": True,
+                },
+                MS.MarkdownStatePipeTableRow: {
+                    "monospace": True,
+                },
+            },
+        }
 
         #Example:
             #"color": Qt.red,
@@ -399,7 +408,10 @@ class MarkdownHighlighter(BasicHighlighter):
             "color": markup}
         theme[MTT.TokenCodeFenceEnd] = {
             "color": markup}
-        theme[MTT.TokenMention] = {} # FIXME
+        theme[MTT.TokenMention] = {
+            "color": highlightedTextDark,
+            "bold": True,
+        }
         theme[MTT.TokenTableHeader] = {
             "color": light, "monospace":True}
         theme[MTT.TokenTableDivider] = {
@@ -710,12 +722,6 @@ class MarkdownHighlighter(BasicHighlighter):
                      " unexpected token: {}".format(token.getType()))
             return
 
-        # FIXME: TypeError: could not convert 'TextBlockData' to 'QTextBlockUserData'
-        # blockData = self.currentBlockUserData()
-        # if blockData == None:
-        #     blockData = TextBlockData(self.document(), self.currentBlock())
-        #
-        # self.setCurrentBlockUserData(blockData)
         self.headingFound.emit(level, headingText, self.currentBlock())
 
     def isHeadingBlockState(self, state):
