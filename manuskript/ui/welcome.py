@@ -10,7 +10,6 @@ from PyQt5.QtGui import QIcon, QBrush, QColor, QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QWidget, QAction, QFileDialog, QSpinBox, QLineEdit, QLabel, QPushButton, QTreeWidgetItem, \
     qApp, QMessageBox
 
-from manuskript import loadSave
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import mainWindow, iconFromColor, appPath
@@ -180,7 +179,8 @@ class welcome(QWidget, Ui_welcome):
             if filename[-4:] != ".msk":
                 filename += ".msk"
             self.appendToRecentFiles(filename)
-            loadSave.clearSaveCache()  # Ensure all file(s) are saved under new filename
+            # Ensure all file(s) are saved under the new filename.
+            self.mw.projectManager.clearSaveCache()
             self.mw.projectManager.saveDatas(filename)
             # Update Window's project name with new filename
             pName = os.path.split(filename)[1]

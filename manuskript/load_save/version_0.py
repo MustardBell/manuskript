@@ -12,8 +12,7 @@ from PyQt5.QtGui import QColor, QStandardItem
 from PyQt5.QtWidgets import qApp
 from lxml import etree as ET
 
-from manuskript.settingsManager import SettingsManager
-from manuskript.functions import iconColor, iconFromColorString, mainWindow
+from manuskript.functions import iconColor, iconFromColorString
 from manuskript.models.characterModel import Character, CharacterInfo
 
 import logging
@@ -30,14 +29,12 @@ except:
 # SAVE
 ###########################################################################################
 
-def saveProject():
+def saveProject(mw):
     """
     Saves the whole project. Call this function to save the project in Version 0 format.
     """
 
     files = []
-    mw = mainWindow()
-
     files.append((saveStandardItemModelXML(mw.mdlFlatData),
                   "flatModel.xml"))
     LOGGER.error("File format 0 does not save characters!")
@@ -53,7 +50,7 @@ def saveProject():
                   "plots.xml"))
     files.append((mw.mdlOutline.saveToXML(),
                   "outline.xml"))
-    files.append((SettingsManager().save(),
+    files.append((mw.settingsManager.save(),
                   "settings.pickle"))
 
     saveFilesToZip(files, mw.currentProject)
@@ -121,10 +118,9 @@ def saveItem(root, mdl, parent=QModelIndex()):
 # LOAD
 ###########################################################################################
 
-def loadProject(project):
+def loadProject(project, mw):
 
     files = loadFilesFromZip(project)
-    mw = mainWindow()
 
     errors = []
 
@@ -169,7 +165,7 @@ def loadProject(project):
         errors.append("outline.xml")
 
     if "settings.txt" in files:
-        SettingsManager().load(files["settings.txt"], fromString=True, protocol=0)
+        mw.settingsManager.load(files["settings.txt"], fromString=True, protocol=0)
     else:
         errors.append("settings.txt")
 
@@ -265,7 +261,6 @@ def loadStandardItemModelXMLForCharacters(mdl, xml):
     @param xml: the content of the xml
     @return: nothing
     """
-    mdl = mainWindow().mdlCharacter
     root = ET.fromstring(xml)
     data = root.find("data")
 

@@ -14,7 +14,8 @@ class TestProjectManager(unittest.TestCase):
         with patch.object(settings_manager, "apply_loaded_settings_effects"):
             settings_manager.reset_to_defaults()
         self.window.settingsManager = settings_manager
-        self.project_manager = ProjectManager(self.window)
+        self.storage = MagicMock()
+        self.project_manager = ProjectManager(self.window, storage=self.storage)
 
     @patch('manuskript.functions.statusMessage')
     @patch('os.path.exists')
@@ -73,25 +74,24 @@ class TestProjectManager(unittest.TestCase):
         self.assertEqual(self.project_manager.session.state, ProjectState.DIRTY)
 
     @patch("manuskript.projectManager.F.statusMessage")
-    @patch("manuskript.projectManager.loadSave.saveProject", return_value=True)
     def test_successful_save_transitions_session_to_clean(
-        self, mock_save_project, mock_status_message
+        self, mock_status_message
     ):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
+        self.storage.save.return_value = True
 
         result = self.project_manager.saveDatas()
 
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.CLEAN)
+        self.storage.save.assert_called_once_with(self.window)
 
     @patch("manuskript.projectManager.F.statusMessage")
-    @patch("manuskript.projectManager.loadSave.saveProject", return_value=False)
-    def test_failed_save_preserves_dirty_state(
-        self, mock_save_project, mock_status_message
-    ):
+    def test_failed_save_preserves_dirty_state(self, mock_status_message):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
+        self.storage.save.return_value = False
 
         result = self.project_manager.saveDatas()
 
@@ -130,12 +130,12 @@ class TestProjectManager(unittest.TestCase):
         self.assertEqual(self.project_manager.session.state, ProjectState.CLOSED)
 
     @patch("manuskript.projectManager.F.statusMessage")
-    @patch("manuskript.projectManager.loadSave.saveProject", return_value=False)
     def test_failed_save_as_restores_original_project_path(
-        self, mock_save_project, mock_status_message
+        self, mock_status_message
     ):
         self.project_manager.session.open("original.msk")
         self.project_manager.session.mark_dirty()
+        self.storage.save.return_value = False
 
         result = self.project_manager.saveDatas("renamed.msk")
 
