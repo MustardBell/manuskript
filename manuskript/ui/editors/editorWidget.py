@@ -50,6 +50,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.main_editor = (
             parent if hasattr(parent, "updateTargets") else None
         )
+        self.settings = SettingsManager()
         self.editor_context = None
         self.outline_context = None
         if editor_context is not None:
@@ -62,7 +63,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.dictChanged.connect(self.txtRedacText.setDict, AUC)
         self.txtRedacText.setHighlighting(True)
         self.currentDict = ""
-        self.spellcheck = SettingsManager().spellcheck
+        self.spellcheck = self.settings.spellcheck
         self.folderView = "cork"
         self._tabWidget = None  # set by mainEditor on creation
 
@@ -80,6 +81,13 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def set_context(self, editor_context):
         self.editor_context = editor_context
         self.outline_context = editor_context.outline_views
+        if editor_context.text_editor is not None:
+            self.settings = editor_context.text_editor.settings
+            self.txtRedacText.set_text_editor_context(
+                editor_context.text_editor
+            )
+            for editor in getattr(self, "txtEdits", []):
+                editor.set_text_editor_context(editor_context.text_editor)
         self.corkView.set_outline_context(self.outline_context)
         self.outlineView.set_outline_context(self.outline_context)
 
@@ -115,7 +123,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.folderView = "text"
 
         # Saving value
-        SettingsManager().folderView = self.folderView
+        self.settings.folderView = self.folderView
 
         if oldV != self.folderView and self.currentIndex:
             self.setCurrentModelIndex(self.currentIndex)
@@ -195,6 +203,10 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         def addTitle(itm):
             edt = MDEditView(self, html="<h{l}>{t}</h{l}>".format(l=min(itm.level() + 1, 5), t=itm.title()),
                                autoResize=True)
+            if self.editor_context.text_editor is not None:
+                edt.set_text_editor_context(
+                    self.editor_context.text_editor
+                )
             edt.setFrameShape(QFrame.NoFrame)
             self.txtEdits.append(edt)
             l.addWidget(edt)
@@ -209,9 +221,13 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             edt = MDEditView(self,
                                index=itm.index(),
                                spellcheck=self.spellcheck,
-                               dict=SettingsManager().dict,
+                               dict=self.settings.dict,
                                highlighting=True,
                                autoResize=True)
+            if self.editor_context.text_editor is not None:
+                edt.set_text_editor_context(
+                    self.editor_context.text_editor
+                )
             edt.setFrameShape(QFrame.NoFrame)
             edt.setStatusTip("{}".format(itm.path()))
             self.toggledSpellcheck.connect(edt.toggleSpellcheck, AUC)
@@ -257,7 +273,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             w = QWidget()
             w.setObjectName("editorWidgetFolderText")
             l = QVBoxLayout(w)
-            opt = SettingsManager().textEditor
+            opt = self.settings.textEditor
             background = (opt["background"] if not opt["backgroundTransparent"]
                           else "transparent")
             w.setStyleSheet("background: {};".format(background))
