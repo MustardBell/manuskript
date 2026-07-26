@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QSt
 
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.plot_controller import PlotController
+from manuskript.controllers.world_controller import WorldController
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, findWidgetsOfClass, openURL, showInFolder
@@ -79,6 +80,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.projectConnections = SignalConnectionRegistry()
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
+        self.worldController = WorldController(self)
         self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
 
@@ -282,15 +284,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         elif tabIndex == self.TabPlots:
             self.plotController.record_current_selection()
         elif tabIndex == self.TabWorld:
-            index = self.mdlWorld.selectedIndex()
-
-            if index.isValid():
-                id = self.mdlWorld.ID(index)
-                self.pushHistory(("world", id))
-                self._previousSelectionEmpty = id is not None
-            else:
-                self.pushHistory(("world", None))
-                self._previousSelectionEmpty = True
+            self.worldController.record_current_selection()
         elif tabIndex == self.TabOutline:
             index = self.treeOutlineOutline.selectionModel().currentIndex()
             if index.isValid():
@@ -367,28 +361,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def outlineRemoveItemsOutline(self):
         self.treeOutlineOutline.delete()
-
-    ###############################################################################
-    # WORLD
-    ###############################################################################
-
-    def changeCurrentWorld(self):
-        index = self.mdlWorld.selectedIndex()
-
-        if not index.isValid():
-            self.tabWorld.setEnabled(False)
-            self.pushHistory(("world", None))
-            self._previousSelectionEmpty = True
-            return
-
-        self.pushHistory(("world", self.mdlWorld.ID(index)))
-        self._previousSelectionEmpty = False
-
-        self.tabWorld.setEnabled(True)
-        self.txtWorldName.setCurrentModelIndex(index)
-        self.txtWorldDescription.setCurrentModelIndex(index)
-        self.txtWorldPassion.setCurrentModelIndex(index)
-        self.txtWorldConflict.setCurrentModelIndex(index)
 
     ###############################################################################
     # EDITOR
@@ -551,11 +523,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 if event.entry[1] is None:
                     self.treeWorld.selectionModel().clear()
                 else:
-                    index = self.mdlWorld.selectedIndex()
-                    if index and self.mdlWorld.ID(index) != event.entry[1]:
-                        world = self.mdlWorld.indexByID(event.entry[1])
-                        if world != None:
-                            self.treeWorld.setCurrentIndex(world)
+                    index = self.worldController.current_index()
+                    if (
+                        not index.isValid()
+                        or self.mdlWorld.ID(index) != event.entry[1]
+                    ):
+                        self.worldController.select_by_id(event.entry[1])
             elif first_entry == "outline":
                 if self.tabMain.currentIndex() != self.TabOutline:
                     self.tabMain.setCurrentIndex(self.TabOutline)
@@ -812,14 +785,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in range(self.mdlWorld.columnCount()):
             self.treeWorld.hideColumn(i)
         self.treeWorld.showColumn(0)
-        self.btnWorldEmptyData.setMenu(self.mdlWorld.emptyDataMenu())
+        self.worldController.build_data_set_menu()
         connect(
             self.treeWorld.selectionModel().selectionChanged,
-            self.changeCurrentWorld,
+            self.worldController.handle_selection_changed,
             F.AUC,
         )
-        connect(self.btnAddWorld.clicked, self.mdlWorld.addItem, F.AUC)
-        connect(self.btnRmWorld.clicked, self.mdlWorld.removeItem, F.AUC)
+        connect(
+            self.btnAddWorld.clicked,
+            self.worldController.add_item,
+            F.AUC,
+        )
+        connect(
+            self.btnRmWorld.clicked,
+            self.worldController.remove_selected_items,
+            F.AUC,
+        )
         for w, c in [
             (self.txtWorldName, World.name),
             (self.txtWorldDescription, World.description),
@@ -935,6 +916,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Release every signal connection owned by the current project."""
         self.characterController.reset()
         self.plotController.reset()
+        self.worldController.reset()
         self.projectConnections.disconnect_all()
 
     ###############################################################################

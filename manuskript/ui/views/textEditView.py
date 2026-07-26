@@ -537,9 +537,7 @@ class textEditView(QTextEdit):
         LOGGER.debug(f'New world item: {text}')
         mw = F.mainWindow()
         mw.tabMain.setCurrentIndex(mw.TabWorld)
-        item = mw.mdlWorld.addItem(title=text)
-        mw.treeWorld.setCurrentIndex(
-            mw.mdlWorld.indexFromItem(item))
+        mw.worldController.add_item(title=text)
 
 
     def appendContextMenuEntriesForWord(self, popup_menu, selectedWord):

@@ -4,10 +4,9 @@ from PyQt5.QtCore import QModelIndex, QSize
 from PyQt5.QtCore import Qt, QMimeData, QByteArray
 from PyQt5.QtGui import QStandardItem, QBrush, QFontMetrics
 from PyQt5.QtGui import QStandardItemModel, QColor
-from PyQt5.QtWidgets import QMenu, QAction, qApp
+from PyQt5.QtWidgets import qApp
 
 from manuskript.enums import World, Model
-from manuskript.functions import mainWindow
 from manuskript.ui import style as S
 from manuskript.models.searchableModel import searchableModel
 from manuskript.models.searchableItem import searchableItem
@@ -15,32 +14,10 @@ from manuskript.searchLabels import WorldSearchLabels
 
 
 class worldModel(QStandardItemModel, searchableModel):
-    def __init__(self, parent):
+    """Hierarchical world-building data independent of its tree view."""
+
+    def __init__(self, parent=None):
         QStandardItemModel.__init__(self, 0, len(World), parent)
-        self.mw = mainWindow()
-
-    ###############################################################################
-    # SELECTION
-    ###############################################################################
-
-    def selectedItem(self):
-        """Returns the item selected in mw.treeWorld. invisibleRootItem if None."""
-        index = self.selectedIndex()
-        item = self.itemFromIndex(index)
-        if item:
-            return item
-        else:
-            return self.invisibleRootItem()
-
-    def selectedIndex(self):
-        """Returns the selected index in the treeView."""
-        if self.mw.treeWorld.selectedIndexes():
-            return self.mw.treeWorld.currentIndex()
-        else:
-            return QModelIndex()
-
-    def selectedIndexes(self):
-        return self.mw.treeWorld.selectedIndexes()
 
     ###############################################################################
     # GETTERS
@@ -99,7 +76,8 @@ class worldModel(QStandardItemModel, searchableModel):
 
     def indexByID(self, ID):
         """Returns the index of item whose ID is ID."""
-        return self.indexFromItem(self.itemByID(ID))
+        item = self.itemByID(ID)
+        return self.indexFromItem(item) if item is not None else QModelIndex()
 
     def itemByID(self, ID):
         """Returns the item whose ID is ID."""
@@ -130,17 +108,14 @@ class worldModel(QStandardItemModel, searchableModel):
 
     def addItem(self, title=None, parent=None):
         """Adds an item, and returns it."""
-        if not parent:
-            parent = self.selectedItem()
+        if parent is None:
+            parent = self.invisibleRootItem()
         if not title:
             title = self.tr("New item")
         name = QStandardItem(title)
         _id = QStandardItem(self.getUniqueID())
         row = [name, _id] + [QStandardItem() for i in range(2, len(World))]
         parent.appendRow(row)
-
-        self.mw.treeWorld.setExpanded(self.selectedIndex(), True)
-        self.mw.treeWorld.setCurrentIndex(self.indexFromItem(name))
         return name
 
     def getUniqueID(self):
@@ -162,10 +137,47 @@ class worldModel(QStandardItemModel, searchableModel):
             k += 1
         return str(k)
 
-    def removeItem(self):
-        while self.selectedIndexes():
-            index = self.selectedIndexes()[0]
-            self.removeRows(index.row(), 1, index.parent())
+    def removeItems(self, indexes):
+        """Remove explicit world rows and return the number removed.
+
+        Duplicate columns and descendants of selected ancestors are normalized
+        before mutation so shifting indexes cannot remove unintended rows.
+        """
+        nameIndexes = []
+        for index in indexes:
+            if not index.isValid() or index.model() is not self:
+                continue
+            nameIndex = index.sibling(index.row(), World.name)
+            if nameIndex not in nameIndexes:
+                nameIndexes.append(nameIndex)
+
+        topLevelIndexes = []
+        for index in nameIndexes:
+            parent = index.parent()
+            hasSelectedAncestor = False
+            while parent.isValid():
+                if parent in nameIndexes:
+                    hasSelectedAncestor = True
+                    break
+                parent = parent.parent()
+            if not hasSelectedAncestor:
+                topLevelIndexes.append(index)
+
+        items = [self.itemFromIndex(index) for index in topLevelIndexes]
+        items = [item for item in items if item is not None]
+
+        def depth(item):
+            result = 0
+            while item.parent() is not None:
+                result += 1
+                item = item.parent()
+            return result
+
+        items.sort(key=lambda item: (depth(item), item.row()), reverse=True)
+        for item in items:
+            parent = item.parent() or self.invisibleRootItem()
+            parent.removeRow(item.row())
+        return len(items)
 
     ###############################################################################
     # DRAG & DROP
@@ -295,30 +307,25 @@ class worldModel(QStandardItemModel, searchableModel):
         }
         return dataset
 
-    def emptyDataMenu(self):
-        """Returns a menu with the empty data sets."""
-        self.menu = QMenu("menu")
-        for name in self.dataSets():
-            a = QAction(name, self.menu)
-            a.triggered.connect(self.setEmptyData)
-            self.menu.addAction(a)
-        return self.menu
+    def populateDataSet(self, name):
+        """Populate a named world-building template and return added items."""
+        data = self.dataSets().get(name)
+        if data is None:
+            return []
 
-    def setEmptyData(self):
-        """Called from the menu generated with ``emptyDataMenu``."""
-        act = self.sender()
-        data = self.dataSets()[act.text()]
+        addedItems = []
 
-        def addItems(data, parent):
-            for d in data:
-                if len(d) == 1 or type(d) == str:
-                    self.addItem(d, parent)
-                else:
-                    i = self.addItem(d[0], parent)
-                    addItems(d[1], i)
+        def addItems(entries, parent):
+            for entry in entries:
+                if isinstance(entry, str):
+                    addedItems.append(self.addItem(entry, parent))
+                    continue
+                item = self.addItem(entry[0], parent)
+                addedItems.append(item)
+                addItems(entry[1], item)
 
         addItems(data, self.invisibleRootItem())
-        self.mw.treeWorld.expandAll()
+        return addedItems
 
     ###############################################################################
     # APPEARANCE
@@ -405,4 +412,3 @@ class WorldItemSearchWrapper(searchableItem):
 
     def searchData(self, column):
         return self.getColumnData(self.itemIndex.sibling(self.itemIndex.row(), column))
-
