@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from manuskript.ui.editors.editor_context import EditorContext
+from manuskript.ui.views.corkView import corkView
 from manuskript.ui.views.outlineBasics import outlineBasics
 from manuskript.ui.views.outline_context import OutlineViewContext
 
@@ -49,6 +50,24 @@ def test_cleared_outline_context_makes_open_commands_inert():
 
     context.open_index.assert_not_called()
     context.open_indexes.assert_not_called()
+
+
+def test_cork_delegate_receives_status_model_from_outline_context():
+    view = corkView()
+    context = make_outline_context()
+    status_item = MagicMock()
+    context.status_model.item.return_value = status_item
+
+    view.set_outline_context(context)
+
+    assert view.cork_delegate.status_model is context.status_model
+    assert view.cork_delegate.status_item("2") is status_item
+    context.status_model.item.assert_called_once_with(2, 0)
+
+    view.set_outline_context(None)
+
+    assert view.cork_delegate.status_model is None
+    assert view.cork_delegate.status_item("2") is None
 
 
 def test_editor_context_groups_outline_model_tree_and_view_dependencies():
