@@ -3,7 +3,7 @@
 from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QVariant
 from PyQt5.QtGui import QIcon, QPixmap, QColor
 
-from manuskript.functions import randomColor, iconColor, mainWindow, search
+from manuskript.functions import randomColor, iconColor, search
 from manuskript.enums import Character as C, Model
 from manuskript.searchLabels import CharacterSearchLabels
 
@@ -209,19 +209,14 @@ class characterModel(QAbstractItemModel, searchableModel):
             else:
                 return C(section).name
 
-    def addCharacterInfo(self, ID):
+    def addCharacterInfo(self, ID, description=None, value=None):
         c = self.getCharacterByID(ID)
-        self.beginInsertRows(c.index(), len(c.infos), len(c.infos))
-        c.infos.append(CharacterInfo(
-            c,
-            description=self.tr("Description"),
-            value=self.tr("Value")
-        ))
-        self.endInsertRows()
-
-        mainWindow().updatePersoInfoView()
-    def addCharacterInfo(self, ID, description, value):
-        c = self.getCharacterByID(ID)
+        if c is None:
+            return False
+        if description is None:
+            description = self.tr("Description")
+        if value is None:
+            value = self.tr("Value")
         self.beginInsertRows(c.index(), len(c.infos), len(c.infos))
         c.infos.append(CharacterInfo(
             c,
@@ -229,23 +224,17 @@ class characterModel(QAbstractItemModel, searchableModel):
             value=self.tr(value)
         ))
         self.endInsertRows()
+        return True
 
-        mainWindow().updatePersoInfoView(mainWindow().tblPersoInfos)
-
-    def removeCharacterInfo(self, ID):
+    def removeCharacterInfo(self, ID, rows):
         c = self.getCharacterByID(ID)
-
-        rm = []
-        for idx in mainWindow().tblPersoInfos.selectedIndexes():
-            if not idx.row() in rm:
-                rm.append(idx.row())
-
-        rm.sort()
-        rm.reverse()
-        for r in rm:
+        if c is None:
+            return False
+        for r in sorted(set(rows), reverse=True):
             self.beginRemoveRows(c.index(), r, r)
             c.infos.pop(r)
             self.endRemoveRows()
+        return True
 
     def searchableItems(self):
         return self.characters

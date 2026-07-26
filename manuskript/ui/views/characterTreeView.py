@@ -2,12 +2,10 @@
 # --!-- coding: utf8 --!--
 from PyQt5.QtCore import QSize, QModelIndex, Qt
 from PyQt5.QtGui import QPixmap, QColor, QIcon, QBrush
-from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QColorDialog, QDialog, QMessageBox
+from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem
 
 from manuskript.enums import Character
-from manuskript.functions import iconColor, mainWindow
 from manuskript.ui import style as S
-from manuskript.ui import characterInfoDialog
 
 
 class characterTreeView(QTreeWidget):
@@ -137,72 +135,6 @@ class characterTreeView(QTreeWidget):
                 curr_importance = curr_character.importance()
 
         self._model.addCharacter(importance=curr_importance)
-
-    def removeCharacters(self):
-        """
-        Removes selected characters.
-        """
-        IDs = self.currentCharacterIDs()
-
-        # If none of the IDs are valid, do nothing.
-        if not any(IDs):
-            return None
-
-        #Get confirmation from user
-        confirm = QMessageBox.warning(
-            self, "Delete selected character(s)?",
-            "Are you sure you want to delete the selected character(s)?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if confirm != QMessageBox.Yes:
-            return None
-
-        #Delete all selected characters
-        for ID in IDs:
-            self._model.removeCharacter(ID)
-        return IDs
-
-    def choseCharacterColor(self):
-        ID = self.currentCharacterID()
-        c = self._model.getCharacterByID(ID)
-
-        if c:
-            color = iconColor(c.icon)
-        else:
-            color = Qt.white
-
-        self.colorDialog = QColorDialog(color, mainWindow())
-        color = self.colorDialog.getColor(color)
-
-        if color.isValid():
-            c.setColor(color)
-            mainWindow().updateCharacterColor(ID)
-
-    def changeCharacterPOVState(self, state):
-        ID = self.currentCharacterID()
-        c = self._model.getCharacterByID(ID)
-        c.setPOVEnabled(state == Qt.Checked)
-        mainWindow().updateCharacterPOVState(ID)
-
-    def addCharacterInfo(self):
-        #Setting up dialog
-        charInfoDialog = QDialog()
-        charInfoUi = characterInfoDialog.Ui_characterInfoDialog()
-        charInfoUi.setupUi(charInfoDialog)
-
-        if charInfoDialog.exec_() == QDialog.Accepted:
-            # User clicked OK, get the input values
-            description = charInfoUi.descriptionLineEdit.text()
-            value = charInfoUi.valueLineEdit.text()
-
-            # Add the character info with the input values
-            ID = self.currentCharacterID()
-            self._model.addCharacterInfo(ID, description, value)
-
-
-
-    def removeCharacterInfo(self):
-        self._model.removeCharacterInfo(self.currentCharacterID())
 
     def currentCharacterID(self):
         ID = None

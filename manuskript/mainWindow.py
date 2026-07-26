@@ -6,11 +6,12 @@ import re
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, QTimer, QSettings, Qt, QPoint,
-                          QRegExp, QUrl, QSize, QModelIndex, QSignalBlocker)
-from PyQt5.QtGui import QStandardItemModel, QIcon, QColor, QStandardItem
+                          QRegExp, QUrl, QSize, QModelIndex)
+from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QMainWindow, QHeaderView, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
-    QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QDialog, QTableView
+    QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
+from manuskript.controllers.character_controller import CharacterController
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, findWidgetsOfClass, openURL, showInFolder
@@ -25,7 +26,6 @@ from manuskript.models.worldModel import worldModel
 from manuskript.projectManager import ProjectManager
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
-from manuskript.ui import characterInfoDialog
 from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
 from manuskript.ui.connections import SignalConnectionRegistry
@@ -39,7 +39,6 @@ from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
 from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
-from manuskript.ui.bulkInfoManager import Ui_BulkInfoManager
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
@@ -77,6 +76,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.history = History()
         self._previousSelectionEmpty = True
         self.projectConnections = SignalConnectionRegistry()
+        self.characterController = CharacterController(self)
         self.projectManager = ProjectManager(self)
         self.settingsManager = SettingsManager()
 
@@ -185,11 +185,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.td = None  # Targets Dialog
         self.fw = None  # Frequency Window
 
-        # Bulk Character Info Management
-        self.tabsData = self.saveCharacterTabs()  # Used for restoring tabsData with loadCharacterTabs() methods.
-        self.BulkManageUi = None
-        self.bulkAffectedCharacters = []
-        self.isPersoBulkModeEnabled = False
+        self.characterController.capture_tabs()
 
     @property
     def currentProject(self):
@@ -280,16 +276,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         tabIndex = self.tabMain.currentIndex()
 
         if tabIndex == self.TabPersos:
-            selectedCharacters = self.lstCharacters.currentCharacters()
-            characterSelectionIsEmpty = not any(selectedCharacters)
-
-            if characterSelectionIsEmpty:
-                self.pushHistory(("character", None))
-                self._previousSelectionEmpty = True
-            else:
-                character = selectedCharacters[0]
-                self.pushHistory(("character", character.ID()))
-                self._previousSelectionEmpty = False
+            self.characterController.record_current_selection()
         elif tabIndex == self.TabPlots:
             id = self.lstPlots.currentPlotID()
             self.pushHistory(("plot", id))
@@ -384,243 +371,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
     # CHARACTERS
     ###############################################################################
-
-    def setPersoBulkMode(self, enabled: bool):
-        if enabled and self.BulkManageUi is None: # Delete all tabs and create the manager one
-            # Create the widget
-            bulkPersoInfoManager = QWidget()
-            bulkPersoInfoManagerUi = Ui_BulkInfoManager()
-            bulkPersoInfoManagerUi.setupUi(bulkPersoInfoManager)
-
-            self.BulkManageUi = bulkPersoInfoManagerUi  # for global use
-
-            model = QStandardItemModel()
-
-            # Set the column headers
-            model.setColumnCount(2)
-            model.setHorizontalHeaderLabels([self.tr("Name"), self.tr("Value")])
-
-            # Set the width
-            self.updatePersoInfoView(bulkPersoInfoManagerUi.tableView)
-
-            bulkPersoInfoManagerUi.tableView.setModel(model)  # Set the model of tableView
-
-            self.tabPersos.clear()
-            self.tabPersos.addTab(bulkPersoInfoManager, self.tr("Bulk Info Manager"))
-            self.isPersoBulkModeEnabled = True
-            self.refreshBulkAffectedCharacters()
-
-            # Showing the character names on the label
-            labelText = self.createCharacterSelectionString()
-            bulkPersoInfoManagerUi.lblCharactersDynamic.setText(labelText)
-
-            # Making the connections
-            self.makeBulkInfoConnections(bulkPersoInfoManagerUi)
-
-        elif enabled and self.BulkManageUi is not None:  # If yet another character is selected, refresh the label
-            labelText = self.createCharacterSelectionString()
-            self.BulkManageUi.lblCharactersDynamic.setText(labelText)
-
-        else:  # Delete manager tab and restore the others
-            if self.BulkManageUi is not None:
-                self.tabPersos.clear()
-                self.loadCharacterTabs()
-            self.BulkManageUi = None
-            self.bulkAffectedCharacters.clear()
-
-    def createCharacterSelectionString(self):
-        self.refreshBulkAffectedCharacters()
-        labelText = ""
-        length = len(self.bulkAffectedCharacters)
-        for i in range(length-1):
-            labelText += '"' + self.bulkAffectedCharacters[i] + '"' + ", "
-
-        labelText += '"' + self.bulkAffectedCharacters[length-1] + '"'
-
-        return labelText
-
-    def makeBulkInfoConnections(self, bulkUi):
-        # A lambda has to be used to pass in the argument
-        bulkUi.btnPersoBulkAddInfo.clicked.connect(lambda: self.addBulkInfo(bulkUi))
-        bulkUi.btnPersoBulkRmInfo.clicked.connect(lambda: self.removeBulkInfo(bulkUi))
-        bulkUi.btnPersoBulkApply.clicked.connect(lambda: self.applyBulkInfo(bulkUi))
-
-    def applyBulkInfo(self, bulkUi):
-        selectedItems = self.lstCharacters.currentCharacterIDs()
-
-        # Get the data from the tableview
-        model = bulkUi.tableView.model()
-        if model.rowCount() == 0:
-            QMessageBox.warning(self, self.tr("No Entries!"),
-                                self.tr("Please add entries to apply to the selected characters."))
-            return
-
-        # Loop through each selected character and add the bulk info to them
-        for ID in selectedItems:
-            for row in range(model.rowCount()):
-                description = model.item(row, 0).text()
-                value = model.item(row, 1).text()
-                self.lstCharacters._model.addCharacterInfo(ID, description, value)
-
-        QMessageBox.information(self, self.tr("Bulk Info Applied"),
-                                self.tr("The bulk info has been applied to the selected characters."))
-
-        # Remove all rows from the table
-        model.removeRows(0, model.rowCount())
-
-    def addBulkInfo(self, bulkUi): # Adds an item to the list
-        charInfoDialog = QDialog()
-        charInfoUi = characterInfoDialog.Ui_characterInfoDialog()
-        charInfoUi.setupUi(charInfoDialog)
-
-        if charInfoDialog.exec_() == QDialog.Accepted:
-            # User clicked OK, get the input values
-            description = charInfoUi.descriptionLineEdit.text()
-            value = charInfoUi.valueLineEdit.text()
-
-            # Add a new row to the model with the description and value
-            row = [QStandardItem(description), QStandardItem(value)]
-
-            bulkUi.tableView.model().appendRow(row)
-
-            bulkUi.tableView.update()
-
-    def removeBulkInfo(self, bulkUi):
-        # Get the selected rows
-        selection = bulkUi.tableView.selectionModel().selectedRows()
-
-        # Iterate over the rows and remove them (reversed, so the iteration is not affected)
-        for index in reversed(selection):
-            bulkUi.tableView.model().removeRow(index.row())
-
-    def saveCharacterTabs(self):
-        tabsData = []
-        for i in range(self.tabPersos.count()):
-            tabData = {}
-            widget = self.tabPersos.widget(i)
-            tabData['widget'] = widget
-            tabData['title'] = self.tabPersos.tabText(i)
-            tabsData.append(tabData)
-        return tabsData
-
-    def loadCharacterTabs(self):
-        for tabData in self.tabsData:
-            widget = tabData['widget']
-            title = tabData['title']
-            self.tabPersos.addTab(widget, title)
-
-    def handleCharacterSelectionChanged(self):
-        selectedCharacters = self.lstCharacters.currentCharacters()
-        characterSelectionIsEmpty = not any(selectedCharacters)
-        if characterSelectionIsEmpty:
-            self.pushHistory(("character", None))
-            self.tabPersos.setEnabled(False)
-            self._previousSelectionEmpty = True
-            return
-
-        cList = list(filter(None, self.lstCharacters.currentCharacters())) #cList contains all valid characters
-        character = cList[0]
-        self.changeCurrentCharacter(character)
-
-        self.pushHistory(("character", character.ID()))
-        self._previousSelectionEmpty = False
-
-        if len(selectedCharacters) > 1:
-            self.setPersoBulkMode(True)
-        else:
-            if self.BulkManageUi is not None:
-                self.refreshBulkAffectedCharacters()
-                self.BulkManageUi.lblCharactersDynamic.setText( self.createCharacterSelectionString() )
-
-                tableview_model = self.BulkManageUi.tableView.model()
-                if tableview_model.rowCount() > 0:
-                    confirm = QMessageBox.warning(
-                        self, self.tr("Un-applied data!"),
-                        self.tr("There are un-applied entries in this tab. Discard them?"),
-                        QMessageBox.Yes | QMessageBox.No,
-                        defaultButton = QMessageBox.No
-                    )
-                    if confirm != QMessageBox.Yes:
-                        return
-
-            self.setPersoBulkMode(False)
-        self.tabPersos.setEnabled(True)
-
-    def refreshBulkAffectedCharacters(self): # Characters affected by a potential bulk-info modification
-        self.bulkAffectedCharacters = []
-        for character in self.lstCharacters.currentCharacters():
-            self.bulkAffectedCharacters.append(character.name())
-
-    def changeCurrentCharacter(self, character):
-        if character is None:
-            return
-
-        index = character.index()
-
-        for w in [
-            self.txtPersoName,
-            self.sldPersoImportance,
-            self.txtPersoMotivation,
-            self.txtPersoGoal,
-            self.txtPersoConflict,
-            self.txtPersoEpiphany,
-            self.txtPersoSummarySentence,
-            self.txtPersoSummaryPara,
-            self.txtPersoSummaryFull,
-            self.txtPersoNotes,
-        ]:
-            w.setCurrentModelIndex(index)
-
-        # Button color
-        self.updateCharacterColor(character.ID())
-
-        # Slider importance
-        self.updateCharacterImportance(character.ID())
-
-        # POV state
-        self.updateCharacterPOVState(character.ID())
-
-        # Character Infos
-        self.tblPersoInfos.setRootIndex(index)
-
-        if self.mdlCharacter.rowCount(index):
-            self.updatePersoInfoView(self.tblPersoInfos)
-
-    def updatePersoInfoView(self, infoView):
-        infoView.horizontalHeader().setStretchLastSection(True)
-        infoView.horizontalHeader().setMinimumSectionSize(20)
-        infoView.horizontalHeader().setMaximumSectionSize(500)
-        infoView.verticalHeader().hide()
-
-    def updateCharacterColor(self, ID):
-        c = self.mdlCharacter.getCharacterByID(ID)
-        color = c.color().name()
-        self.btnPersoColor.setStyleSheet("background:{};".format(color))
-
-    def updateCharacterImportance(self, ID):
-        c = self.mdlCharacter.getCharacterByID(ID)
-        self.sldPersoImportance.setValue(int(c.importance()))
-
-    def updateCharacterPOVState(self, ID):
-        c = self.mdlCharacter.getCharacterByID(ID)
-        blocker = QSignalBlocker(self.chkPersoPOV)
-
-        if c.pov():
-            self.chkPersoPOV.setCheckState(Qt.Checked)
-        else:
-            self.chkPersoPOV.setCheckState(Qt.Unchecked)
-
-        del blocker
-        self.chkPersoPOV.setEnabled(len(self.mdlOutline.findItemsByPOV(ID)) == 0)
-
-    def deleteCharacter(self):
-        ID = self.lstCharacters.removeCharacters()
-        if ID is None:
-            return
-        for itemID in self.mdlOutline.findItemsByPOV(ID):
-            item = self.mdlOutline.getItemByID(itemID)
-            if item:
-                item.resetPOV()
 
     ###############################################################################
     # PLOTS
@@ -963,7 +713,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         "Connections that have to be made once only, even when a new project is loaded."
         # Characters
         self.txtPersosFilter.textChanged.connect(self.lstCharacters.setFilter, F.AUC)
-        self.lstCharacters.itemSelectionChanged.connect(self.handleCharacterSelectionChanged, F.AUC)
+        self.lstCharacters.itemSelectionChanged.connect(
+            self.characterController.handle_selection_changed,
+            F.AUC,
+        )
 
         # Plots
         self.txtPlotFilter.textChanged.connect(self.lstPlots.setFilter, F.AUC)
@@ -1025,7 +778,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             widget.setCurrentModelIndex(self.mdlFlatData.index(0, col))
 
         # Characters
-        self.updatePersoInfoView(self.tblPersoInfos)
+        self.characterController.configure_info_view(self.tblPersoInfos)
         self.lstCharacters.setCharactersModel(self.mdlCharacter)
         self.tblPersoInfos.setModel(self.mdlCharacter)
         connect(
@@ -1033,25 +786,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.lstCharacters.addCharacter,
             F.AUC,
         )
-        connect(self.btnRmPerso.clicked, self.deleteCharacter, F.AUC)
+        connect(
+            self.btnRmPerso.clicked,
+            self.characterController.delete_characters,
+            F.AUC,
+        )
         connect(
             self.btnPersoColor.clicked,
-            self.lstCharacters.choseCharacterColor,
+            self.characterController.choose_character_color,
             F.AUC,
         )
         connect(
             self.chkPersoPOV.stateChanged,
-            self.lstCharacters.changeCharacterPOVState,
+            self.characterController.change_character_pov_state,
             F.AUC,
         )
         connect(
             self.btnPersoAddInfo.clicked,
-            self.lstCharacters.addCharacterInfo,
+            self.characterController.add_character_info,
             F.AUC,
         )
         connect(
             self.btnPersoRmInfo.clicked,
-            self.lstCharacters.removeCharacterInfo,
+            self.characterController.remove_character_info,
             F.AUC,
         )
 
@@ -1249,6 +1006,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
         self._updatingSubPlot = False
+        self.characterController.reset()
         self.projectConnections.disconnect_all()
 
     ###############################################################################
