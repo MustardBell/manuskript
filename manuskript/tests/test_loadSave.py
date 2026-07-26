@@ -23,6 +23,7 @@ def test_save_dispatches_explicit_context_to_current_format():
             context,
             cache=cache,
             file_access=file_access,
+            legacy_file_access=MagicMock(),
         )
 
     assert result is expected
@@ -36,14 +37,19 @@ def test_save_dispatches_explicit_context_to_current_format():
 def test_save_dispatches_explicit_context_to_legacy_format():
     context = MagicMock()
     expected = ProjectSaveResult()
+    archive = MagicMock()
 
     with patch.object(
         loadSave.v0, "saveProject", return_value=expected
     ) as save_project:
-        result = loadSave.saveProject(context, version=0)
+        result = loadSave.saveProject(
+            context,
+            version=0,
+            legacy_file_access=archive,
+        )
 
     assert result is expected
-    save_project.assert_called_once_with(context)
+    save_project.assert_called_once_with(context, archive=archive)
 
 
 def test_load_dispatches_explicit_context_to_detected_format(tmp_path):
@@ -65,6 +71,7 @@ def test_load_dispatches_explicit_context_to_detected_format(tmp_path):
             context,
             cache=cache,
             file_access=file_access,
+            legacy_file_access=MagicMock(),
         )
 
     assert result is expected
