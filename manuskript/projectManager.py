@@ -5,6 +5,10 @@ from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtWidgets import QMessageBox
 
 from manuskript import loadSave
+from manuskript.domain.project import (
+    InvalidProjectStateTransition,
+    ProjectSession,
+)
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
@@ -20,8 +24,40 @@ LOGGER = logging.getLogger(__name__)
 class ProjectManager:
     def __init__(self, window):
         self.window = window
+        self.session = ProjectSession()
         self.saveTimer = QTimer()
         self.saveTimerNoChanges = QTimer()
+
+    @property
+    def currentProject(self):
+        return self.session.path
+
+    @property
+    def projectDirty(self):
+        if not self.session.is_open:
+            return None
+        return self.session.is_dirty
+
+    def syncUiToState(self):
+        """Enable project actions according to the current session state."""
+        project_open = self.session.is_open
+        for item in [self.window.actOpen, self.window.menuRecents]:
+            item.setEnabled(not project_open)
+        for item in [
+            self.window.actSave,
+            self.window.actSaveAs,
+            self.window.actCloseProject,
+            self.window.menuEdit,
+            self.window.menuView,
+            self.window.menuOrganize,
+            self.window.menuNavigate,
+            self.window.menuTools,
+            self.window.menuHelp,
+            self.window.actImport,
+            self.window.actCompile,
+            self.window.actSettings,
+        ]:
+            item.setEnabled(project_open)
 
     def loadProject(self, project, loadFromFile=True):
         """Loads the project ``project``.
@@ -36,7 +72,15 @@ class ProjectManager:
             LOGGER.warning("The file {} does not exist. Has it been moved or deleted?".format(project))
             F.statusMessage(
                     self.window.tr("The file {} does not exist. Has it been moved or deleted?").format(project), importance=3)
-            return
+            return False
+
+        if self.session.is_open:
+            LOGGER.error(
+                "Cannot load project %s while project %s is still open.",
+                project,
+                self.currentProject,
+            )
+            return False
 
         if loadFromFile:
             # Reset settings to defaults
@@ -46,9 +90,12 @@ class ProjectManager:
             self.loadEmptyDatas()
             
             if not self.loadDatas(project):
-                self.closeProject()
-                return
+                self.saveTimer.stop()
+                self.saveTimerNoChanges.stop()
+                loadSave.clearSaveCache()
+                return False
 
+        self.session.open(project)
         self.window.makeConnections()
 
         # Load settings
@@ -94,21 +141,10 @@ class ProjectManager:
         self.saveTimerNoChanges.timeout.connect(self.saveDatas)
         self.saveTimerNoChanges.stop()
 
-        # UI
-        for i in [self.window.actOpen, self.window.menuRecents]:
-            i.setEnabled(False)
-        for i in [self.window.actSave, self.window.actSaveAs, self.window.actCloseProject,
-                  self.window.menuEdit, self.window.menuView, self.window.menuOrganize,
-                  self.window.menuNavigate,
-                  self.window.menuTools, self.window.menuHelp, self.window.actImport,
-                  self.window.actCompile, self.window.actSettings]:
-            i.setEnabled(True)
+        self.syncUiToState()
         # We force to emit even if it opens on the current tab
         self.window.tabMain.currentChanged.emit(self.window.settingsManager.lastTab)
 
-        # Make sure we can update the window title later.
-        self.window.currentProject = project
-        self.window.projectDirty = False
         QSettings().setValue("lastProject", project)
 
         item = self.window.mdlOutline.rootItem
@@ -122,6 +158,7 @@ class ProjectManager:
 
         # Show main Window
         self.window.switchToProject()
+        return True
 
     def handleUnsavedChanges(self):
         """
@@ -133,7 +170,7 @@ class ProjectManager:
         Sometimes it is best to just ask.
         """
 
-        if not self.window.projectDirty:
+        if not self.session.is_dirty:
             return True  # no unsaved changes, all is good
 
         msg = QMessageBox(QMessageBox.Question,
@@ -152,27 +189,27 @@ class ProjectManager:
             return False  # the situation has not been handled, cancel action
 
         if ret == QMessageBox.Save:
-            self.saveDatas()
+            return self.saveDatas()
 
         return True  # the situation has been handled
 
 
     def closeProject(self):
 
-        if not self.window.currentProject:
-            return
+        if not self.session.is_open:
+            return True
 
         # Make sure data is saved.
-        if (self.window.projectDirty and self.window.settingsManager.saveOnQuit == True):
-             self.saveDatas()
+        if self.session.is_dirty and self.window.settingsManager.saveOnQuit:
+            if not self.saveDatas():
+                return False
         elif not self.handleUnsavedChanges():
-             return  # user cancelled action
+            return False  # user cancelled action
 
         # Close open tabs in editor
         self.window.mainEditor.closeAllTabs()
 
-        self.window.currentProject = None
-        self.window.projectDirty = None
+        self.session.close()
         QSettings().setValue("lastProject", "")
 
         # Clear datas
@@ -183,14 +220,7 @@ class ProjectManager:
 
         self.window.breakConnections()
 
-        # UI
-        for i in [self.window.actOpen, self.window.menuRecents]:
-            i.setEnabled(True)
-        for i in [self.window.actSave, self.window.actSaveAs, self.window.actCloseProject,
-                  self.window.menuEdit, self.window.menuView, self.window.menuOrganize,
-                  self.window.menuTools, self.window.menuHelp, self.window.actImport,
-                  self.window.actCompile, self.window.actSettings]:
-            i.setEnabled(False)
+        self.syncUiToState()
 
         # Set Window's name - no project loaded
         self.window.setWindowTitle(self.window.tr("Manuskript"))
@@ -200,15 +230,21 @@ class ProjectManager:
 
         # Show welcome dialog
         self.window.switchToWelcome()
+        return True
 
     def startTimerNoChanges(self):
         """
         Something changed in the project that requires auto-saving.
         """
-        self.window.projectDirty = True
+        try:
+            self.session.mark_dirty()
+        except InvalidProjectStateTransition:
+            LOGGER.warning("Ignoring a project change after the project was closed.")
+            return False
 
         if self.window.settingsManager.autoSaveNoChanges:
             self.saveTimerNoChanges.start()
+        return True
 
     def saveDatas(self, projectName=None):
         """Saves the current project (in self.currentProject).
@@ -217,35 +253,45 @@ class ProjectManager:
         In other words, it "saves as...".
         """
 
+        previous_project = self.currentProject
         if projectName:
-            self.window.currentProject = projectName
-            QSettings().setValue("lastProject", projectName)
+            try:
+                self.session.rename(projectName)
+            except InvalidProjectStateTransition:
+                LOGGER.error("There is no current project to save as %s.", projectName)
+                return False
 
         # Stop the timer before saving: if auto-saving fails (bugs out?) we don't want it
         # to keep trying and continuously hitting the failure condition. Nor do we want to
         # risk a scenario where the timer somehow triggers a new save while saving.
         self.saveTimerNoChanges.stop()
 
-        if self.window.currentProject is None:
+        if not self.session.is_open:
             # No UI feedback here as this code path indicates a race condition that happens
             # after the user has already closed the project through some way. But in that
             # scenario, this code should not be reachable to begin with.
             LOGGER.error("There is no current project to save.")
-            return
+            return False
 
         r = loadSave.saveProject()  # version=0
 
-        projectName = os.path.basename(self.window.currentProject)
+        current_project_name = os.path.basename(self.currentProject)
         if r:
-            self.window.projectDirty = False  # successful save, clear dirty flag
+            self.session.mark_clean()
+            QSettings().setValue("lastProject", self.currentProject)
 
-            feedback = self.window.tr("Project {} saved.").format(projectName)
+            feedback = self.window.tr("Project {} saved.").format(current_project_name)
             F.statusMessage(feedback, importance=0)
-            LOGGER.info("Project {} saved.".format(projectName))
+            LOGGER.info("Project {} saved.".format(current_project_name))
         else:
-            feedback = self.window.tr("WARNING: Project {} not saved.").format(projectName)
+            if projectName:
+                self.session.rename(previous_project)
+            feedback = self.window.tr("WARNING: Project {} not saved.").format(
+                current_project_name
+            )
             F.statusMessage(feedback, importance=3)
-            LOGGER.warning("Project {} not saved.".format(projectName))
+            LOGGER.warning("Project {} not saved.".format(current_project_name))
+        return bool(r)
 
     def loadEmptyDatas(self):
         self.window.mdlFlatData = QStandardItemModel(self.window)
