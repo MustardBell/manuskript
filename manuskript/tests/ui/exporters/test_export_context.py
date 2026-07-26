@@ -104,6 +104,57 @@ def test_pandoc_metadata_supplies_nonempty_default_title():
     assert pandoc.metadata_arguments() == ["--metadata=title:Untitled"]
 
 
+def test_pandoc_exposes_bbcode_when_selected_binary_supports_it():
+    pandoc = pandocExporter(make_context())
+    pandoc.run = MagicMock(
+        return_value="html\nmarkdown\nbbcode\n"
+    )
+
+    bbcode = pandoc.getFormatByName("BBCode")
+
+    assert bbcode.toFormat == "bbcode"
+    assert bbcode.exportDefaultSuffix == ".bbcode"
+    assert bbcode.isValid()
+    assert pandoc.output_formats() == frozenset(
+        {"html", "markdown", "bbcode"}
+    )
+    pandoc.run.assert_called_once_with(
+        ["--list-output-formats"]
+    )
+
+
+def test_pandoc_hides_bbcode_when_selected_binary_lacks_writer():
+    pandoc = pandocExporter(make_context())
+    pandoc.run = MagicMock(return_value="html\nmarkdown\n")
+
+    bbcode = pandoc.getFormatByName("BBCode")
+
+    assert not bbcode.isValid()
+    assert "3.8.3" in bbcode.InvalidBecause
+
+
+def test_pandoc_refreshes_output_formats_after_path_change():
+    context = make_context()
+    pandoc = pandocExporter(context)
+    pandoc.run = MagicMock(
+        side_effect=[
+            "html\n",
+            "html\nbbcode\n",
+        ]
+    )
+
+    assert not pandoc.supports_output_format("bbcode")
+
+    pandoc.setCustomPath("/opt/pandoc/bin/pandoc")
+
+    assert pandoc.supports_output_format("bbcode")
+    assert pandoc.run.call_count == 2
+    context.tool_paths.set.assert_called_once_with(
+        "pandoc",
+        "/opt/pandoc/bin/pandoc",
+    )
+
+
 def test_pandoc_restores_cursor_when_process_start_fails():
     runner = MagicMock()
     runner.run.side_effect = OSError("pandoc failed")

@@ -121,7 +121,7 @@ class exportersManager(QWidget, Ui_ExportersManager):
 
                 if not f.isValid():
                     desc += "<br><br>" + \
-                            self.tr("<b>Status:</b> uninstalled.") + \
+                            self.tr("<b>Status:</b> unavailable.") + \
                             "<br><br>" + \
                             self.tr("<b>Requires:</b> ") + f.InvalidBecause
 
