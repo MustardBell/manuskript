@@ -7,7 +7,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import qApp
 
-from manuskript.settingsManager import SettingsManager
 from manuskript import functions as F
 
 # Loading palette colors.
@@ -157,8 +156,8 @@ def collapsibleGroupBoxButton():
     return s2
 
 
-def mainEditorTabSS():
-    if not SettingsManager().textEditor["backgroundTransparent"]:
+def mainEditorTabSS(settings):
+    if not settings.textEditor["backgroundTransparent"]:
         SS = """
             QTabWidget::pane{{
                 margin-top: -{bw}px;
@@ -189,8 +188,8 @@ def mainEditorTabSS():
             }}
             """.format(
                 bgColor=textLighter,
-                bgColorSelected=SettingsManager().textEditor["background"],
-                foreground=SettingsManager().textEditor["fontColor"],
+                bgColorSelected=settings.textEditor["background"],
+                foreground=settings.textEditor["fontColor"],
                 borderColor=mid,
                 highlight=highlight,
                 highlightedText=highlightedText,

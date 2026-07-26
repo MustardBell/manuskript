@@ -16,7 +16,6 @@ from manuskript.commands import DocumentCommand, DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, PlotStep, Plot, World, Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
@@ -77,7 +76,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     SHOW_DEBUG_TAB = False
 
-    def __init__(self):
+    def __init__(self, settings_manager):
         QMainWindow.__init__(self)
         self.setupUi(self)
 
@@ -97,7 +96,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
         self.worldController = WorldController(self)
-        self.settingsManager = SettingsManager()
+        self.settingsManager = settings_manager
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
         )

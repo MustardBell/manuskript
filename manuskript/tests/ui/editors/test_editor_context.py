@@ -34,6 +34,10 @@ def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
         window.mainEditor.tabSplitter.editor_context
         is window.mainEditor.editor_context
     )
+    assert (
+        window.mainEditor.tabSplitter.settings
+        is window.settingsManager
+    )
     assert window.mainEditor.tabSplitter.tabOpenIndexes() == [item.ID()]
 
     window.mainEditor.tabSplitter.split(state=1)
