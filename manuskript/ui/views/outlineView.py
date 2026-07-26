@@ -23,18 +23,6 @@ class outlineView(QTreeView, dndView, outlineBasics):
 
         self.header().setStretchLastSection(False)
 
-    def setModelCharacters(self, model):
-        # This is used by outlineCharacterDelegate to select character
-        self.modelCharacters = model
-
-    def setModelLabels(self, model):
-        # This is used by outlineLabelDelegate to display labels
-        self.modelLabels = model
-
-    def setModelStatus(self, model):
-        # This is used by outlineStatusDelegate to display statuses
-        self.modelStatus = model
-
     def setModel(self, model):
         QTreeView.setModel(self, model)
 

@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QWidget, qApp, QDesktopWidget
 
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
-from manuskript.functions import AUC, mainWindow, drawProgress, appPath, uiParse
+from manuskript.functions import AUC, drawProgress, appPath, uiParse
 from manuskript.ui import style
 from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.fullScreenEditor import fullScreenEditor
@@ -69,7 +69,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._updating = False
         self._fullScreen = None
 
-        self.mw = mainWindow()
+        self.editor_context = None
 
         # Connections --------------------------------------------------------
 
@@ -104,6 +104,12 @@ class mainEditor(QWidget, Ui_mainEditor):
         for btn in [self.btnRedacFolderCork, self.btnRedacFolderText, self.btnRedacFolderOutline]:
             btn.setToolTip(btn.text())
             btn.setText("")
+
+    def set_context(self, context):
+        self.editor_context = context
+
+    def clear_context(self):
+        self.editor_context = None
 
     ###############################################################################
     # TABS
@@ -142,11 +148,11 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.updateThingsVisible(index)
 
     def updateMainTreeView(self, index):
-        if not index.isValid():
+        if not index.isValid() or self.editor_context is None:
             return
 
         self._updating = True
-        self.mw.treeRedacOutline.setCurrentIndex(index)
+        self.editor_context.outline_tree.setCurrentIndex(index)
         self._updating = False
 
     def closeAllTabs(self):
@@ -192,12 +198,16 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         # This might be called during a drag n drop operation, or while deleting
         # items. If so, we don't want to do anything.
-        if not self.mw.mdlOutline._removingRows:
-            if len(self.mw.treeRedacOutline.selectionModel().
+        if self.editor_context is None:
+            return
+        outline_model = self.editor_context.outline_model
+        outline_tree = self.editor_context.outline_tree
+        if not outline_model._removingRows:
+            if len(outline_tree.selectionModel().
                 selection().indexes()) == 0:
                 idx = QModelIndex()
             else:
-                idx = self.mw.treeRedacOutline.currentIndex()
+                idx = outline_tree.currentIndex()
 
             self.setCurrentModelIndex(idx)
             self.updateThingsVisible(idx)
@@ -207,11 +217,13 @@ class mainEditor(QWidget, Ui_mainEditor):
             self.setCurrentModelIndex(i, newTab)
 
     def goToParentItem(self):
-        if self.currentEditor():
+        if self.currentEditor() and self.editor_context is not None:
             idx = self.currentEditor().currentIndex
-            self.mw.treeRedacOutline.setCurrentIndex(idx.parent())
+            self.editor_context.outline_tree.setCurrentIndex(idx.parent())
 
     def setCurrentModelIndex(self, index, newTab=False, tabWidget=None):
+        if self.editor_context is None:
+            return
 
         title = self.getIndexTitle(index)
 
@@ -233,7 +245,7 @@ class mainEditor(QWidget, Ui_mainEditor):
             newTab = True
 
         if newTab or not tabWidget.count():
-            editor = editorWidget(self)
+            editor = editorWidget(self, self.editor_context)
             editor.setCurrentModelIndex(index)
             editor._tabWidget = tabWidget
             i = tabWidget.addTab(editor, editor.ellidedTitle(title))
@@ -294,7 +306,7 @@ class mainEditor(QWidget, Ui_mainEditor):
 
     def updateStats(self):
 
-        if not self.currentEditor():
+        if not self.currentEditor() or self.editor_context is None:
             return
 
         index = self.currentEditor().currentIndex
@@ -302,10 +314,10 @@ class mainEditor(QWidget, Ui_mainEditor):
         if index.isValid():
             item = index.internalPointer()
         else:
-            item = self.mw.mdlOutline.rootItem
+            item = self.editor_context.outline_model.rootItem
 
         if not item:
-            item = self.mw.mdlOutline.rootItem
+            item = self.editor_context.outline_model.rootItem
 
         cc = item.data(Outline.charCount)
         wc = item.data(Outline.wordCount)

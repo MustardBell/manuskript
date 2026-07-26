@@ -33,6 +33,7 @@ from manuskript.ui import style
 from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
 from manuskript.ui.connections import SignalConnectionRegistry
+from manuskript.ui.editors.editor_context import EditorContext
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
@@ -40,6 +41,7 @@ from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
+from manuskript.ui.views.outline_context import OutlineViewContext
 from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
@@ -776,10 +778,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.treeWorld.expandAll()
 
         # Outline
+        outline_view_context = OutlineViewContext(
+            character_model=self.mdlCharacter,
+            label_model=self.mdlLabels,
+            status_model=self.mdlStatus,
+            open_index=self.openIndex,
+            open_indexes=self.openIndexes,
+            selection_changed=self.redacMetadata.selectionChanged,
+        )
+        editor_context = EditorContext(
+            outline_model=self.mdlOutline,
+            outline_tree=self.treeRedacOutline,
+            outline_views=outline_view_context,
+        )
+        self.treeRedacOutline.set_outline_context(outline_view_context)
+        self.treeOutlineOutline.set_outline_context(outline_view_context)
+        self.mainEditor.set_context(editor_context)
+
         self.treeRedacOutline.setModel(self.mdlOutline)
-        self.treeOutlineOutline.setModelCharacters(self.mdlCharacter)
-        self.treeOutlineOutline.setModelLabels(self.mdlLabels)
-        self.treeOutlineOutline.setModelStatus(self.mdlStatus)
 
         self.redacMetadata.setModels(self.mdlOutline, self.mdlCharacter,
                                      self.mdlLabels, self.mdlStatus)
@@ -880,6 +896,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.characterController.reset()
         self.plotController.reset()
         self.worldController.reset()
+        self.treeRedacOutline.set_outline_context(None)
+        self.treeOutlineOutline.set_outline_context(None)
+        self.mainEditor.clear_context()
         self.projectConnections.disconnect_all()
 
     ###############################################################################

@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QAbstractItemView, qApp, QMenu, QAction, \
 
 from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
-from manuskript.functions import mainWindow, statusMessage
+from manuskript.functions import statusMessage
 from manuskript.functions import toInt, customIcons, safeTranslate
 from manuskript.models import outlineItem
 from manuskript.ui.tools.splitDialog import splitDialog
@@ -18,6 +18,19 @@ class outlineBasics(QAbstractItemView):
     def __init__(self, parent=None):
         self._indexesToOpen = None
         self.menuCustomIcons = None
+        self.outline_context = None
+
+    def set_outline_context(self, context):
+        self.outline_context = context
+        self.modelCharacters = (
+            context.character_model if context is not None else None
+        )
+        self.modelLabels = (
+            context.label_model if context is not None else None
+        )
+        self.modelStatus = (
+            context.status_model if context is not None else None
+        )
 
     def getSelection(self):
         sel = []
@@ -38,6 +51,10 @@ class outlineBasics(QAbstractItemView):
         # call their respective mother class.
 
     def makePopupMenu(self):
+        if self.outline_context is None:
+            raise RuntimeError(
+                "Outline view context must be configured before use."
+            )
         index = self.currentIndex()
         sel = self.getSelection()
         clipboard = qApp.clipboard()
@@ -132,7 +149,6 @@ class outlineBasics(QAbstractItemView):
 
         # POV
         self.menuPOV = QMenu(safeTranslate(qApp, "outlineBasics", "Set POV"), menu)
-        mw = mainWindow()
         a = QAction(QIcon.fromTheme("dialog-no"), safeTranslate(qApp, "outlineBasics", "None"), self.menuPOV)
         a.triggered.connect(lambda: self.setPOV(""))
         self.menuPOV.addAction(a)
@@ -147,12 +163,13 @@ class outlineBasics(QAbstractItemView):
             self.menuPOV.addMenu(m)
 
         mpr = QSignalMapper(self.menuPOV)
-        for i in range(mw.mdlCharacter.rowCount()):
-            a = QAction(mw.mdlCharacter.icon(i), mw.mdlCharacter.name(i), self.menuPOV)
+        character_model = self.outline_context.character_model
+        for i in range(character_model.rowCount()):
+            a = QAction(character_model.icon(i), character_model.name(i), self.menuPOV)
             a.triggered.connect(mpr.map)
-            mpr.setMapping(a, int(mw.mdlCharacter.ID(i)))
+            mpr.setMapping(a, int(character_model.ID(i)))
 
-            imp = toInt(mw.mdlCharacter.importance(i))
+            imp = toInt(character_model.importance(i))
 
             menus[2 - imp].addAction(a)
 
@@ -167,8 +184,9 @@ class outlineBasics(QAbstractItemView):
         # self.menuStatus.addSeparator()
 
         mpr = QSignalMapper(self.menuStatus)
-        for i in range(mw.mdlStatus.rowCount()):
-            a = QAction(mw.mdlStatus.item(i, 0).text(), self.menuStatus)
+        status_model = self.outline_context.status_model
+        for i in range(status_model.rowCount()):
+            a = QAction(status_model.item(i, 0).text(), self.menuStatus)
             a.triggered.connect(mpr.map)
             mpr.setMapping(a, i)
             self.menuStatus.addAction(a)
@@ -178,9 +196,10 @@ class outlineBasics(QAbstractItemView):
         # Labels
         self.menuLabel = QMenu(safeTranslate(qApp, "outlineBasics", "Set Label"), menu)
         mpr = QSignalMapper(self.menuLabel)
-        for i in range(mw.mdlLabels.rowCount()):
-            a = QAction(mw.mdlLabels.item(i, 0).icon(),
-                        mw.mdlLabels.item(i, 0).text(),
+        label_model = self.outline_context.label_model
+        for i in range(label_model.rowCount()):
+            a = QAction(label_model.item(i, 0).icon(),
+                        label_model.item(i, 0).text(),
                         self.menuLabel)
             a.triggered.connect(mpr.map)
             mpr.setMapping(a, i)
@@ -250,12 +269,12 @@ class outlineBasics(QAbstractItemView):
     def openItem(self):
         #idx = self.currentIndex()
         idx = self._indexesToOpen[0]
-        from manuskript.functions import MW
-        MW.openIndex(idx)
+        if self.outline_context is not None:
+            self.outline_context.open_index(idx)
 
     def openItemsInNewTabs(self):
-        from manuskript.functions import MW
-        MW.openIndexes(self._indexesToOpen)
+        if self.outline_context is not None:
+            self.outline_context.open_indexes(self._indexesToOpen)
 
     def rename(self):
         if len(self.getSelection()) == 1:
