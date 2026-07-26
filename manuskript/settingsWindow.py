@@ -12,14 +12,18 @@ from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListW
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
+from manuskript.services.theme_repository import ThemeRepository
 # Spell checker support
 from manuskript.enums import Outline
-from manuskript.functions import allPaths, iconColor, writablePath, appPath
+from manuskript.functions import (
+    allPaths,
+    appPath,
+    iconColor,
+    writablePath,
+)
 from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.tabSplitter import tabSplitter
 from manuskript.ui.editors.themes import createThemePreview
-from manuskript.ui.editors.themes import getThemeName
-from manuskript.ui.editors.themes import loadThemeDatas
 from manuskript.ui.settings_ui import Ui_Settings
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.textEditView import textEditView
@@ -28,11 +32,19 @@ from manuskript.ui import style as S
 
 
 class settingsWindow(QWidget, Ui_Settings):
-    def __init__(self, mainWindow, settings_manager):
+    def __init__(
+        self,
+        mainWindow,
+        settings_manager,
+        theme_repository=None,
+    ):
         QWidget.__init__(self)
         self.setupUi(self)
         self.mw = mainWindow
         self.settings = settings_manager
+        self.themeRepository = (
+            theme_repository or ThemeRepository()
+        )
 
         # UI
         for l in [self.lblTitleGeneral,
@@ -739,20 +751,10 @@ class settingsWindow(QWidget, Ui_Settings):
             self.btnThemeRemove.setEnabled(False)
 
     def newTheme(self):
-        path = writablePath(os.path.join("resources", "themes"))
-        name = self.tr("newtheme")
-        if os.path.exists(os.path.join(path, "{}.theme".format(name))):
-            i = 1
-            while os.path.exists(os.path.join(path, "{}_{}.theme".format(name, i))):
-                i += 1
-            name = os.path.join(path, "{}_{}.theme".format(name, i))
-        else:
-            name = os.path.join(path, "{}.theme".format(name))
-
-        settings = QSettings(name, QSettings.IniFormat)
-        settings.setValue("Name", self.tr("New theme"))
-        settings.sync()
-
+        self.themeRepository.create(
+            self.tr("newtheme"),
+            self.tr("New theme"),
+        )
         self.populatesThemesList()
 
     def editTheme(self):
@@ -764,47 +766,55 @@ class settingsWindow(QWidget, Ui_Settings):
     def removeTheme(self):
         item = self.lstThemes.currentItem()
         theme = item.data(Qt.UserRole)
-        os.remove(theme)
+        self.themeRepository.remove(theme)
         self.populatesThemesList()
 
     def populatesThemesList(self):
-        paths = allPaths(os.path.join("resources", "themes"))
         current = self.settings.fullScreenTheme
         self.lstThemes.clear()
 
-        for p in paths:
-            lst = [i for i in os.listdir(p) if os.path.splitext(i)[1] == ".theme"]
-            for t in lst:
-                theme = os.path.join(p, t)
-                editable = not appPath() in theme
-                n = getThemeName(theme)
+        for theme in self.themeRepository.list():
+            item = QListWidgetItem(theme.name)
+            item.setData(Qt.UserRole, theme.path)
+            item.setData(Qt.UserRole + 1, theme.editable)
+            item.setToolTip("{}{}".format(
+                theme.name,
+                self.tr(" (read-only)")
+                if not theme.editable
+                else "",
+            ))
 
-                item = QListWidgetItem(n)
-                item.setData(Qt.UserRole, theme)
-                item.setData(Qt.UserRole + 1, editable)
-                item.setToolTip("{}{}".format(
-                    n,
-                    self.tr(" (read-only)") if not editable else ""))
+            thumb = os.path.splitext(theme.path)[0] + ".jpg"
+            px = QPixmap(200, 120)
+            px.fill(Qt.white)
+            if not os.path.exists(thumb):
+                currentScreen = qApp.desktop().screenNumber(self)
+                screenRect = qApp.desktop().screenGeometry(
+                    currentScreen
+                )
+                thumb = createThemePreview(theme.path, screenRect)
 
-                thumb = os.path.join(p, t.replace(".theme", ".jpg"))
-                px = QPixmap(200, 120)
-                px.fill(Qt.white)
-                if not os.path.exists(thumb):
-                    currentScreen = qApp.desktop().screenNumber(self)
-                    screenRect = qApp.desktop().screenGeometry(currentScreen)
-                    thumb = createThemePreview(theme, screenRect)
+            icon = QPixmap(thumb).scaled(
+                200,
+                120,
+                Qt.KeepAspectRatio,
+            )
+            painter = QPainter(px)
+            painter.drawPixmap(
+                px.rect().center() - icon.rect().center(),
+                icon,
+            )
+            painter.end()
+            item.setIcon(QIcon(px))
 
-                icon = QPixmap(thumb).scaled(200, 120, Qt.KeepAspectRatio)
-                painter = QPainter(px)
-                painter.drawPixmap(px.rect().center() - icon.rect().center(), icon)
-                painter.end()
-                item.setIcon(QIcon(px))
+            self.lstThemes.addItem(item)
 
-                self.lstThemes.addItem(item)
-
-                if current and current in t:
-                    self.lstThemes.setCurrentItem(item)
-                    current = None
+            if (
+                current
+                and current in os.path.basename(theme.path)
+            ):
+                self.lstThemes.setCurrentItem(item)
+                current = None
 
         self.lstThemes.setIconSize(QSize(200, 120))
 
@@ -899,7 +909,10 @@ class settingsWindow(QWidget, Ui_Settings):
         )
 
     def loadTheme(self, theme):
-        self.themeEditor.start(theme, loadThemeDatas(theme))
+        self.themeEditor.start(
+            theme,
+            self.themeRepository.load(theme),
+        )
         self._loadingTheme = True
         try:
             self.populatesCmbBackgrounds(
@@ -1042,13 +1055,11 @@ class settingsWindow(QWidget, Ui_Settings):
         btn.setStyleSheet("background:{};".format(color))
 
     def saveTheme(self):
-        settings = QSettings(self.themeEditor.path, QSettings.IniFormat)
-
         self.themeEditor.data["Name"] = self.txtThemeName.text()
-        for key in self.themeEditor.data:
-            settings.setValue(key, self.themeEditor.data[key])
-
-        settings.sync()
+        self.themeRepository.save(
+            self.themeEditor.path,
+            self.themeEditor.data,
+        )
         self.populatesThemesList()
         self.themeStack.setCurrentIndex(0)
         self.timerUpdateFSPreview.stop()

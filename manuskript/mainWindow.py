@@ -31,6 +31,7 @@ from manuskript.projectManager import ProjectManager
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.project_history import ProjectHistory
+from manuskript.services.theme_repository import ThemeRepository
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
 from manuskript.ui.about import aboutDialog
@@ -119,6 +120,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
         self.projectHistory = ProjectHistory()
+        self.themeRepository = ThemeRepository()
         self.projectManager = ProjectManager(
             self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
@@ -1332,7 +1334,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsWindow(4)
 
     def settingsWindow(self, tab=None):
-        self.sw = settingsWindow(self, self.settingsManager)
+        self.sw = settingsWindow(
+            self,
+            self.settingsManager,
+            theme_repository=self.themeRepository,
+        )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)
         self.sw.setWindowFlags(Qt.Dialog)
