@@ -11,7 +11,7 @@ from manuskript.enums import Outline
 from manuskript.functions import statusMessage
 from manuskript.functions import toInt, customIcons, safeTranslate
 from manuskript.models import outlineItem
-from manuskript.ui.tools.splitDialog import splitDialog
+from manuskript.ui.tools.splitDialog import open_split_dialog
 
 
 class outlineBasics(QAbstractItemView):
@@ -432,7 +432,7 @@ class outlineBasics(QAbstractItemView):
             # No selection, we use parent
             indexes = [self.rootIndex()]
 
-        splitDialog(self, indexes)
+        open_split_dialog(self, indexes, self.model().rootItem)
 
     def merge(self):
         """
