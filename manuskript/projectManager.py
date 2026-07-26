@@ -1,13 +1,15 @@
 import os
 
-from PyQt5.QtCore import QSettings, QTimer
-
 from manuskript.domain.project import (
     CloseDecision,
     InvalidProjectStateTransition,
     ProjectSession,
 )
 from manuskript.logging import getLogFilePath
+from manuskript.services.last_project_store import LastProjectStore
+from manuskript.services.project_autosave import (
+    ProjectAutosaveScheduler,
+)
 from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_persistence import (
     ProjectPersistenceContext,
@@ -22,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 class ProjectManager:
     def __init__(
             self, lifecycle_view, storage=None, status_reporter=None,
-            model_factory=None):
+            model_factory=None, autosave=None, last_project_store=None):
         self.ui = lifecycle_view
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
@@ -32,10 +34,12 @@ class ProjectManager:
         )
         self.session = ProjectSession()
         self.modelConnections = SignalConnectionRegistry()
-        self.saveTimer = QTimer()
-        self.saveTimerNoChanges = QTimer()
-        self.saveTimer.timeout.connect(self.saveDatas)
-        self.saveTimerNoChanges.timeout.connect(self.saveDatas)
+        self.autosave = autosave or ProjectAutosaveScheduler(
+            self.saveDatas
+        )
+        self.last_project_store = (
+            last_project_store or LastProjectStore()
+        )
 
     @property
     def currentProject(self):
@@ -82,8 +86,7 @@ class ProjectManager:
             self.loadEmptyDatas()
             
             if not self.loadDatas(project):
-                self.saveTimer.stop()
-                self.saveTimerNoChanges.stop()
+                self.autosave.stop()
                 self.storage.clear_cache()
                 return False
 
@@ -91,27 +94,14 @@ class ProjectManager:
         self.ui.connect_project()
         self.ui.apply_loaded_settings()
 
-        # Set autosave
-        self.saveTimer.setInterval(
-            self.ui.settings.autoSaveDelay * 60 * 1000
-        )
-        self.saveTimer.setSingleShot(False)
-        if self.ui.settings.autoSave:
-            self.saveTimer.start()
-
-        # Set autosave if no changes
-        self.saveTimerNoChanges.setInterval(
-            self.ui.settings.autoSaveNoChangesDelay * 1000
-        )
-        self.saveTimerNoChanges.setSingleShot(True)
+        self.reconfigureAutosave()
         for model in self.ui.change_models():
             self.modelConnections.connect(
                 model.dataChanged, self.startTimerNoChanges
             )
-        self.saveTimerNoChanges.stop()
 
         self.syncUiToState()
-        QSettings().setValue("lastProject", project)
+        self.last_project_store.remember(project)
         self.ui.project_opened()
         return True
 
@@ -152,10 +142,9 @@ class ProjectManager:
         self.ui.prepare_close()
 
         self.session.close()
-        QSettings().setValue("lastProject", "")
+        self.last_project_store.clear()
 
-        self.saveTimer.stop()
-        self.saveTimerNoChanges.stop()
+        self.autosave.stop()
         self.modelConnections.disconnect_all()
         self.ui.disconnect_project()
 
@@ -178,8 +167,7 @@ class ProjectManager:
             LOGGER.warning("Ignoring a project change after the project was closed.")
             return False
 
-        if self.ui.settings.autoSaveNoChanges:
-            self.saveTimerNoChanges.start()
+        self.autosave.schedule_after_change()
         return True
 
     def saveDatas(self, projectName=None):
@@ -200,7 +188,7 @@ class ProjectManager:
         # Stop the timer before saving: if auto-saving fails (bugs out?) we don't want it
         # to keep trying and continuously hitting the failure condition. Nor do we want to
         # risk a scenario where the timer somehow triggers a new save while saving.
-        self.saveTimerNoChanges.stop()
+        self.autosave.saving_started()
 
         if not self.session.is_open:
             # No UI feedback here as this code path indicates a race condition that happens
@@ -218,7 +206,7 @@ class ProjectManager:
         current_project_name = os.path.basename(self.currentProject)
         if result.succeeded:
             self.session.mark_clean()
-            QSettings().setValue("lastProject", self.currentProject)
+            self.last_project_store.remember(self.currentProject)
 
             feedback = self.ui.translate(
                 "Project {} saved."
@@ -274,6 +262,17 @@ class ProjectManager:
 
     def clearSaveCache(self):
         self.storage.clear_cache()
+
+    def reconfigureAutosave(self):
+        settings = self.ui.settings
+        self.autosave.configure(
+            periodic_enabled=settings.autoSave,
+            periodic_delay_minutes=settings.autoSaveDelay,
+            after_change_enabled=settings.autoSaveNoChanges,
+            after_change_delay_seconds=(
+                settings.autoSaveNoChangesDelay
+            ),
+        )
 
     def persistence_context(self, project_file):
         return ProjectPersistenceContext(

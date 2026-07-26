@@ -5,129 +5,106 @@ from manuskript.domain.persistence import ProjectSaveResult
 from manuskript.projectManager import ProjectManager
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 
-class TestProjectManagerTimer(unittest.TestCase):
+
+class TestProjectManagerAutosave(unittest.TestCase):
 
     def setUp(self):
         self.window = MagicMock()
-        self.window.tr = lambda x: x
-
-        # Create separate mocks for each timer instance
-        self.mock_save_timer = MagicMock()
-        self.mock_save_timer.timeout = MagicMock()
-        self.mock_save_timer_no_changes = MagicMock()
-        self.mock_save_timer_no_changes.timeout = MagicMock()
-        
-        # Mock QTimer to return different instances for each call
-        self.timer_instances = [self.mock_save_timer, self.mock_save_timer_no_changes]
-        self.timer_call_count = 0
-        
-        def mock_qtimer_constructor():
-            timer = self.timer_instances[self.timer_call_count]
-            self.timer_call_count += 1
-            return timer
-            
-        self.mock_qtimer_class = patch("manuskript.projectManager.QTimer", side_effect=mock_qtimer_constructor).start()
-
+        self.window.tr = lambda text: text
         self.storage = MagicMock()
         self.storage.save.return_value = ProjectSaveResult()
+        self.autosave = MagicMock()
+        self.last_project_store = MagicMock()
         self.project_manager = ProjectManager(
             ProjectLifecycleView(self.window),
             storage=self.storage,
+            autosave=self.autosave,
+            last_project_store=self.last_project_store,
         )
 
-    def tearDown(self):
-        patch.stopall()
+    def _load_project(self, auto_save=True, after_change=True):
+        settings = self.window.settingsManager
+        settings.autoSave = auto_save
+        settings.autoSaveDelay = 15
+        settings.autoSaveNoChanges = after_change
+        settings.autoSaveNoChangesDelay = 3
+        settings.openIndexes = []
+        settings.viewSettings = {"Tree": {"iconSize": 24}}
+        settings.lastTab = 0
+        settings.corkSizeFactor = 100
+        settings.spellcheck = False
+        settings.folderView = False
+        settings.viewMode = "fiction"
 
-    def _load_project_helper(self, auto_save, auto_save_no_changes):
-        with patch("os.path.exists", return_value=True), \
-             patch.object(self.project_manager, "loadDatas", return_value=True), \
-             patch.object(self.project_manager, "loadEmptyDatas"), \
-             patch.object(self.window, "makeConnections"), \
-             patch.object(self.window.settingsManager, "reset_to_defaults"):
-            # Configure the settingsManager directly
-            self.window.settingsManager.autoSave = auto_save
-            self.window.settingsManager.autoSaveDelay = 15
-            self.window.settingsManager.autoSaveNoChanges = auto_save_no_changes
-            self.window.settingsManager.autoSaveNoChangesDelay = 3
-            self.window.settingsManager.openIndexes = []
-            self.window.settingsManager.viewSettings = {"Tree": {"iconSize": 24}}
-            self.window.settingsManager.lastTab = 0
-            self.window.settingsManager.corkSizeFactor = 100
-            self.window.settingsManager.spellcheck = False
-            self.window.settingsManager.folderView = False
-            self.window.settingsManager.viewMode = "fiction"
+        with patch("os.path.exists", return_value=True), patch.object(
+            self.project_manager, "loadDatas", return_value=True
+        ), patch.object(
+            self.project_manager, "loadEmptyDatas"
+        ), patch.object(
+            self.window.settingsManager, "reset_to_defaults"
+        ):
+            return self.project_manager.loadProject(
+                "dummy_project.msk"
+            )
 
-            self.project_manager.loadProject("dummy_project.msk")
+    def test_load_configures_autosave_policy(self):
+        self.assertTrue(self._load_project())
 
-    def test_save_timer_starts_on_load_with_autosave_enabled(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=False)
-        # Timer interval is always set during loadProject
-        self.mock_save_timer.setInterval.assert_called_with(15 * 60 * 1000)
-        # Timer only starts if autoSave is enabled
-        self.mock_save_timer.start.assert_called_once()
+        self.autosave.configure.assert_called_once_with(
+            periodic_enabled=True,
+            periodic_delay_minutes=15,
+            after_change_enabled=True,
+            after_change_delay_seconds=3,
+        )
 
-    def test_save_timer_does_not_start_with_autosave_disabled(self):
-        self._load_project_helper(auto_save=False, auto_save_no_changes=False)
-        self.mock_save_timer.start.assert_not_called()
-
-    def test_save_timer_stops_on_project_close(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=False)
-        with patch.object(self.project_manager, "handleUnsavedChanges", return_value=True), \
-             patch.object(self.project_manager, "loadEmptyDatas"):
-            self.project_manager.closeProject()
-        self.mock_save_timer.stop.assert_called_once()
-
-    def test_save_timer_no_changes_starts_on_data_change(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=True)
-        # Reset the mock to ignore calls made during project loading
-        self.mock_save_timer_no_changes.start.reset_mock()
+    def test_project_change_delegates_idle_save_scheduling(self):
+        self._load_project()
         self.project_manager.startTimerNoChanges()
-        self.mock_save_timer_no_changes.start.assert_called_once()
+
+        self.autosave.schedule_after_change.assert_called_once_with()
         self.assertTrue(self.project_manager.projectDirty)
 
-    def test_save_timer_no_changes_does_not_start_with_autosave_disabled(self):
-        self._load_project_helper(auto_save=False, auto_save_no_changes=False)
-        # settingsManager already configured in _load_project_helper
-        self.project_manager.startTimerNoChanges()
-        self.mock_save_timer_no_changes.start.assert_not_called()
+    def test_save_stops_pending_idle_schedule(self):
+        self._load_project()
 
-    def test_save_timer_no_changes_stops_on_project_close(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=True)
-        self.project_manager.startTimerNoChanges()
-        with patch.object(self.project_manager, "handleUnsavedChanges", return_value=True), \
-             patch.object(self.project_manager, "loadEmptyDatas"):
-            self.project_manager.closeProject()
-        self.mock_save_timer_no_changes.stop.assert_called()
-
-    def test_save_timer_no_changes_stops_after_saving(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=True)
-        self.project_manager.startTimerNoChanges()
-        self.storage.save.return_value = ProjectSaveResult()
         self.project_manager.saveDatas()
-        self.mock_save_timer_no_changes.stop.assert_called()
 
-    def test_save_timer_triggers_save_datas(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=False)
-        self.storage.save.return_value = ProjectSaveResult()
-        # Manually trigger the timeout signal
-        self.project_manager.saveTimer.timeout.connect.call_args[0][0]()
-        self.storage.save.assert_called_once()
-        self.assertEqual(
-            self.storage.save.call_args.args[0].project_file,
-            "dummy_project.msk",
+        self.autosave.saving_started.assert_called_once_with()
+
+    def test_close_stops_all_autosave_schedules(self):
+        self._load_project()
+
+        with patch.object(
+            self.project_manager,
+            "handleUnsavedChanges",
+            return_value=True,
+        ), patch.object(
+            self.project_manager,
+            "loadEmptyDatas",
+        ):
+            self.project_manager.closeProject()
+
+        self.autosave.stop.assert_called_once_with()
+
+    def test_last_project_path_tracks_load_save_and_close(self):
+        self._load_project()
+        self.last_project_store.remember.assert_called_once_with(
+            "dummy_project.msk"
         )
 
-    def test_save_timer_no_changes_triggers_save_datas(self):
-        self._load_project_helper(auto_save=True, auto_save_no_changes=True)
-        self.project_manager.startTimerNoChanges()
-        self.storage.save.return_value = ProjectSaveResult()
-        # Manually trigger the timeout signal
-        self.project_manager.saveTimerNoChanges.timeout.connect.call_args[0][0]()
-        self.storage.save.assert_called_once()
-        self.assertEqual(
-            self.storage.save.call_args.args[0].project_file,
-            "dummy_project.msk",
+        self.project_manager.session.mark_dirty()
+        self.project_manager.saveDatas("renamed.msk")
+        self.last_project_store.remember.assert_called_with(
+            "renamed.msk"
         )
+
+        with patch.object(
+            self.project_manager,
+            "loadEmptyDatas",
+        ):
+            self.project_manager.closeProject()
+        self.last_project_store.clear.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()
