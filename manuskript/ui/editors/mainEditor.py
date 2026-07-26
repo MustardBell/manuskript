@@ -107,8 +107,10 @@ class mainEditor(QWidget, Ui_mainEditor):
 
     def set_context(self, context):
         self.editor_context = context
+        self.tabSplitter.set_context(context)
 
     def clear_context(self):
+        self.tabSplitter.set_context(None)
         self.editor_context = None
 
     ###############################################################################
