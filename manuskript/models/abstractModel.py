@@ -15,7 +15,6 @@ from manuskript.settingsManager import SettingsManager
 from lxml import etree as ET
 
 from manuskript.enums import Outline
-from manuskript.functions import mainWindow, toInt, wordCount
 from manuskript.models import outlineItem
 
 try:
@@ -109,7 +108,12 @@ class abstractModel(QAbstractItemModel):
         if not self.rootItem:
             return list()
 
-        return self.rootItem.findItemsContaining(text, columns, mainWindow(), caseSensitive)
+        return self.rootItem.findItemsContaining(
+            text,
+            columns,
+            search_context=getattr(self, "search_context", None),
+            caseSensitive=caseSensitive,
+        )
 
     def getItemByID(self, ID, ignore=None):
         """Returns the item whose ID is `ID`, unless this item matches `ignore`."""

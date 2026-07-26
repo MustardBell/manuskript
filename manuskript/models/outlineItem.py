@@ -369,40 +369,51 @@ class outlineItem(abstractItem, searchableItem):
 
         return lst
 
-    def findItemsContaining(self, text, columns, mainWindow=F.mainWindow(), caseSensitive=False, recursive=True):
+    def findItemsContaining(
+        self,
+        text,
+        columns,
+        search_context=None,
+        caseSensitive=False,
+        recursive=True,
+    ):
         """Returns a list if IDs of all subitems
         containing ``text`` in columns ``columns``
         (being a list of int).
         """
-        lst = self.itemContains(text, columns, mainWindow, caseSensitive)
+        lst = self.itemContains(
+            text,
+            columns,
+            search_context=search_context,
+            caseSensitive=caseSensitive,
+        )
 
         if recursive:
             for c in self.children():
-                lst.extend(c.findItemsContaining(text, columns, mainWindow, caseSensitive))
+                lst.extend(
+                    c.findItemsContaining(
+                        text,
+                        columns,
+                        search_context=search_context,
+                        caseSensitive=caseSensitive,
+                    )
+                )
 
         return lst
 
-    def itemContains(self, text, columns, mainWindow=F.mainWindow(), caseSensitive=False):
+    def itemContains(
+        self,
+        text,
+        columns,
+        search_context=None,
+        caseSensitive=False,
+    ):
         lst = []
+        text = str(text)
         text = text.lower() if not caseSensitive else text
         for c in columns:
-            if c == self.enum.POV and self.POV():
-                character = mainWindow.mdlCharacter.getCharacterByID(self.POV())
-                if character:
-                    searchIn = character.name()
-                else:
-                    searchIn = ""
-                    LOGGER.error("Character POV not found: %s", self.POV())
-
-            elif c == self.enum.status:
-                searchIn = mainWindow.mdlStatus.item(F.toInt(self.status()), 0).text()
-
-            elif c == self.enum.label:
-                searchIn = mainWindow.mdlLabels.item(F.toInt(self.label()), 0).text()
-
-            else:
-                searchIn = self.data(c)
-
+            searchIn = self._searchData(c, search_context)
+            searchIn = "" if searchIn is None else str(searchIn)
             searchIn = searchIn.lower() if not caseSensitive else searchIn
             if text in searchIn:
                 if not self.ID() in lst:
@@ -542,22 +553,12 @@ class outlineItem(abstractItem, searchableItem):
         return [self.translate("Outline")] + self.path().split(' > ') + [self.translate(self.searchColumnLabel(column))]
 
     def searchData(self, column):
-        mainWindow = F.mainWindow()
+        return self._searchData(
+            column,
+            getattr(self._model, "search_context", None),
+        )
 
-        searchData = None
-
-        if column == self.enum.POV and self.POV():
-            character = mainWindow.mdlCharacter.getCharacterByID(self.POV())
-            if character:
-                searchData = character.name()
-
-        elif column == self.enum.status:
-            searchData = mainWindow.mdlStatus.item(F.toInt(self.status()), 0).text()
-
-        elif column == self.enum.label:
-            searchData = mainWindow.mdlLabels.item(F.toInt(self.label()), 0).text()
-
-        else:
-            searchData = self.data(column)
-
-        return searchData
+    def _searchData(self, column, search_context=None):
+        if search_context is not None:
+            return search_context.value_for(self, column)
+        return self.data(column)

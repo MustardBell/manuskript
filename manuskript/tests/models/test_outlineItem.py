@@ -117,11 +117,18 @@ def test_modelStuff(outlineModelBasic):
     folder.setData(folder.enum.label, 1)  # Idea
     folder.setData(folder.enum.status, 4) # Final
     text2.setData(text2.enum.text, "Some final value.")
-    from manuskript.functions import MW
     cols = [folder.enum.text, folder.enum.POV,
             folder.enum.label, folder.enum.status]
-    assert folder.findItemsContaining("VALUE", cols,  MW, True) == []
-    assert folder.findItemsContaining("VALUE", cols,  MW, False) == [text2.ID()]
+    assert folder.findItemsContaining(
+        "VALUE",
+        cols,
+        caseSensitive=True,
+    ) == []
+    assert folder.findItemsContaining(
+        "VALUE",
+        cols,
+        caseSensitive=False,
+    ) == [text2.ID()]
 
     # Model, count and copy    
     k = folder._model
