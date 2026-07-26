@@ -40,6 +40,7 @@ from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.reference_navigation import reference_navigation_for
+from manuskript.ui.search_context import SearchContext, SearchResultViewAdapter
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
@@ -880,7 +881,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.referenceService,
                 completion_data,
             )
-        self.widget.setReferenceService(self.referenceService)
+        self.widget.setContext(
+            SearchContext.from_models(
+                outline=self.mdlOutline,
+                characters=self.mdlCharacter,
+                flat_data=self.mdlFlatData,
+                world=self.mdlWorld,
+                plots=self.mdlPlots,
+                result_views=SearchResultViewAdapter(
+                    self,
+                    self.referenceService,
+                ),
+            )
+        )
 
         # Debug
         self.mdlFlatData.setVerticalHeaderLabels(["General info", "Summary"])
@@ -936,7 +949,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.mainEditor.clear_context()
         for editor in self.findChildren(MDEditCompleter):
             editor.setReferenceService(None)
-        self.widget.setReferenceService(None)
+        self.widget.clearContext()
         self.cheatSheet.clearModels()
         self.storylineView.clearModels()
         self.referenceService = None
