@@ -43,6 +43,9 @@ def test_export_dialog_loads_manager_and_restores_format(
     E.openManager()
     EM = E.dialog
     assert EM.isVisible()
+    EM.updateUi("Manuskript")
+    EM.updateFormatDescription("OPML")
+    assert EM.lblExportToDescription.text() == "<b>OPML:</b> "
     EM.hide()
 
     EM.close()
