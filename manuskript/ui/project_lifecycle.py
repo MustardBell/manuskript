@@ -1,8 +1,9 @@
 from PyQt5.QtCore import QSize
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import QListWidgetItem, QMessageBox
 
 from manuskript.domain.project import CloseDecision
 from manuskript.enums import Outline
+from manuskript.ui.listDialog import ListDialog
 
 
 class ProjectLifecycleView:
@@ -133,6 +134,35 @@ class ProjectLifecycleView:
         if result == QMessageBox.Discard:
             return CloseDecision.DISCARD
         return CloseDecision.CANCEL
+
+    def show_save_failures(self, files):
+        self._show_file_failures(
+            self.window.tr("Files not saved"),
+            self.window.tr(
+                "The following files were not saved and appear "
+                "to be open in another program"
+            ),
+            files,
+        )
+
+    def show_load_failures(self, files):
+        self._show_file_failures(
+            self.window.tr("Files not loaded"),
+            self.window.tr(
+                "The following files were not loaded and appear "
+                "to be open in another program"
+            ),
+            files,
+        )
+
+    def _show_file_failures(self, title, message, files):
+        dialog = ListDialog(self.window)
+        dialog.setModal(True)
+        dialog.setWindowTitle(title)
+        dialog.label.setText(message)
+        for filename in files:
+            QListWidgetItem(filename, dialog.listWidget)
+        dialog.open()
 
     def prepare_close(self):
         self.window.mainEditor.closeAllTabs()

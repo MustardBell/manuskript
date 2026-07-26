@@ -209,12 +209,14 @@ class ProjectManager:
             LOGGER.error("There is no current project to save.")
             return False
 
-        r = self.storage.save(
+        result = self.storage.save(
             self.persistence_context(self.currentProject)
         )
+        if result.failed_files:
+            self.ui.show_save_failures(result.failed_files)
 
         current_project_name = os.path.basename(self.currentProject)
-        if r:
+        if result.succeeded:
             self.session.mark_clean()
             QSettings().setValue("lastProject", self.currentProject)
 
@@ -233,7 +235,7 @@ class ProjectManager:
             )
             self.status_reporter(feedback, importance=3)
             LOGGER.warning("Project {} not saved.".format(current_project_name))
-        return bool(r)
+        return result.succeeded
 
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(
@@ -244,7 +246,10 @@ class ProjectManager:
         return self.models
 
     def loadDatas(self, project):
-        errors = self.storage.load(self.persistence_context(project))
+        result = self.storage.load(self.persistence_context(project))
+        if result.unreadable_files:
+            self.ui.show_load_failures(result.unreadable_files)
+        errors = result.issues
 
         # Giving some feedback
         if not errors:
@@ -258,7 +263,7 @@ class ProjectManager:
             self.status_reporter(
                     self.ui.translate("Project {} loaded with some errors.").format(project), 5000, importance = 3)
         
-        if project in errors:
+        if not result.succeeded:
             LOGGER.error("Loading project {} failed.".format(project))
             self.status_reporter(
                     self.ui.translate("Loading project {} failed.").format(project), 5000, importance = 3)
