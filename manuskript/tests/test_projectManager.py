@@ -21,6 +21,8 @@ class TestProjectManager(unittest.TestCase):
         self.window.settingsManager = settings_manager
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
+        self.autosave = MagicMock()
+        self.last_project_store = MagicMock()
         self.lifecycle_view = ProjectLifecycleView(self.window)
         self.lifecycle_view.show_save_failures = MagicMock()
         self.lifecycle_view.show_load_failures = MagicMock()
@@ -28,6 +30,8 @@ class TestProjectManager(unittest.TestCase):
             self.lifecycle_view,
             storage=self.storage,
             status_reporter=self.status_reporter,
+            autosave=self.autosave,
+            last_project_store=self.last_project_store,
         )
 
     @patch('os.path.exists')
@@ -86,6 +90,7 @@ class TestProjectManager(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.DIRTY)
+        self.autosave.schedule_after_change.assert_called_once_with()
 
     def test_successful_save_transitions_session_to_clean(self):
         self.project_manager.session.open("project.msk")
