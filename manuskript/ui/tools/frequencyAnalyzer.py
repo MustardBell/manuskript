@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-from PyQt5.QtCore import QVariant, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtWidgets import QWidget, QTextEdit, QTableWidgetItem, QHeaderView
+from PyQt5.QtWidgets import QWidget, QHeaderView
 
-from manuskript.settingsManager import SettingsManager
-from manuskript.enums import Outline
+from manuskript.services.frequency_analysis import (
+    phrase_frequencies,
+    word_frequencies,
+)
 from manuskript.ui.tools.frequency_ui import Ui_FrequencyAnalyzer
-import re
-from collections import Counter
 
 class frequencyAnalyzer(QWidget, Ui_FrequencyAnalyzer):
-    def __init__(self, mainWindow):
-        QWidget.__init__(self)
+    def __init__(self, outline_model, settings, parent=None):
+        QWidget.__init__(self, parent)
         self.setupUi(self)
-        self.mw = mainWindow
+        self.outline_model = outline_model
+        self.settings = settings
 
         self.splitter.setSizes([10, 100])
         self.splitter.setStretchFactor(1, 10)
@@ -28,42 +29,29 @@ class frequencyAnalyzer(QWidget, Ui_FrequencyAnalyzer):
         self.btnAnalyzePhrase.clicked.connect(self.analyzePhrase)
 
         # Settings
-        self.spnWordMin.setValue(SettingsManager().frequencyAnalyzer["wordMin"])
-        self.txtWordExclude.setPlainText(SettingsManager().frequencyAnalyzer["wordExclude"])
-        self.spnPhraseMin.setValue(SettingsManager().frequencyAnalyzer["phraseMin"])
-        self.spnPhraseMax.setValue(SettingsManager().frequencyAnalyzer["phraseMax"])
+        self.spnWordMin.setValue(
+            self.settings.frequencyAnalyzer["wordMin"]
+        )
+        self.txtWordExclude.setPlainText(
+            self.settings.frequencyAnalyzer["wordExclude"]
+        )
+        self.spnPhraseMin.setValue(
+            self.settings.frequencyAnalyzer["phraseMin"]
+        )
+        self.spnPhraseMax.setValue(
+            self.settings.frequencyAnalyzer["phraseMax"]
+        )
         self.spnWordMin.valueChanged.connect(self.updateSettings)
         self.txtWordExclude.textChanged.connect(self.updateSettings)
         self.spnPhraseMin.valueChanged.connect(self.updateSettings)
         self.spnPhraseMax.valueChanged.connect(self.updateSettings)
 
     def analyzePhrase(self):
-        root = self.mw.mdlOutline.rootItem
-        nMin = self.spnPhraseMin.value()
-        nMax = self.spnPhraseMax.value()
-
-        def listPhrases(item, nMin, nMax):
-            txt = item.text()
-
-            # Split into words
-            lst = re.findall(r"[\w']+", txt)            # Ignores punctuation
-            # lst = re.findall(r"[\w']+|[.,!?;]", txt)  # Includes punctuation
-            phrases = []
-
-            # Make tuples of n-length
-            for n in range(nMin, nMax + 1):
-                for l in range(len(lst) - n + 1):
-                    phrases.append(tuple(lst[l:l+n]))
-
-            for c in item.children():
-                phrases += listPhrases(c, nMin, nMax)
-
-            return phrases
-
-        lst = listPhrases(root, nMin, nMax)
-
-        # Count
-        count = Counter(lst)
+        count = phrase_frequencies(
+            self.outline_model.rootItem,
+            self.spnPhraseMin.value(),
+            self.spnPhraseMax.value(),
+        )
 
         # Showing
         mdl = QStandardItemModel()
@@ -78,30 +66,12 @@ class frequencyAnalyzer(QWidget, Ui_FrequencyAnalyzer):
         self.tblPhrase.setModel(mdl)
 
     def analyzeWord(self):
-        root = self.mw.mdlOutline.rootItem
-
         exclude = self.txtWordExclude.toPlainText().split(",")
-        exclude = [e.strip().lower() for e in exclude]
-
-        def listWords(item):
-            txt = item.text()
-
-            lst = re.findall(r"[\w']+", txt)
-            for c in item.children():
-                lst += listWords(c)
-
-            return lst
-
-        lst = listWords(root)
-        lst2 = []
-
-        # Cleaning
-        for i in lst:
-            if len(i) >= self.spnWordMin.value() and not i.lower() in exclude:
-                lst2.append(i.lower())
-
-        # Count
-        count = Counter(lst2)
+        count = word_frequencies(
+            self.outline_model.rootItem,
+            minimum_length=self.spnWordMin.value(),
+            excluded=exclude,
+        )
 
         # Showing
         mdl = QStandardItemModel()
@@ -115,7 +85,15 @@ class frequencyAnalyzer(QWidget, Ui_FrequencyAnalyzer):
         self.tblWord.setModel(mdl)
 
     def updateSettings(self):
-        SettingsManager().frequencyAnalyzer["wordMin"] = self.spnWordMin.value()
-        SettingsManager().frequencyAnalyzer["wordExclude"] = self.txtWordExclude.toPlainText()
-        SettingsManager().frequencyAnalyzer["phraseMin"] = self.spnPhraseMin.value()
-        SettingsManager().frequencyAnalyzer["phraseMax"] = self.spnPhraseMax.value()
+        self.settings.frequencyAnalyzer[
+            "wordMin"
+        ] = self.spnWordMin.value()
+        self.settings.frequencyAnalyzer[
+            "wordExclude"
+        ] = self.txtWordExclude.toPlainText()
+        self.settings.frequencyAnalyzer[
+            "phraseMin"
+        ] = self.spnPhraseMin.value()
+        self.settings.frequencyAnalyzer[
+            "phraseMax"
+        ] = self.spnPhraseMax.value()

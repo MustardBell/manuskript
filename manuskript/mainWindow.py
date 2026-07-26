@@ -1328,7 +1328,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
 
     def frequencyAnalyzer(self):
-        self.fw = frequencyAnalyzer(self)
+        self.fw = frequencyAnalyzer(
+            self.mdlOutline,
+            self.settingsManager,
+            parent=self,
+        )
         self.fw.show()
         self.centerChildWindow(self.fw)
 
