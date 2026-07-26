@@ -17,7 +17,7 @@ from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
-from manuskript.enums import Character, PlotStep, Plot, World, Outline
+from manuskript.enums import Character, Plot, Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -44,10 +44,9 @@ from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_context_binding import ProjectContextBinding
+from manuskript.ui.project_feature_binding import ProjectFeatureBinding
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
-from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
-from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
@@ -105,6 +104,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.referenceService = None
         self.textEditorContext = None
         self.projectContextBinding = ProjectContextBinding(self)
+        self.projectFeatureBinding = ProjectFeatureBinding(self)
 
         self.readSettings()
 
@@ -605,151 +605,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             widget.setColumn(col)
             widget.setCurrentModelIndex(self.mdlFlatData.index(0, col))
 
-        # Characters
-        self.characterController.configure_info_view(self.tblPersoInfos)
-        self.lstCharacters.setCharactersModel(self.mdlCharacter)
-        self.tblPersoInfos.setModel(self.mdlCharacter)
-        connect(
-            self.btnAddPerso.clicked,
-            self.lstCharacters.addCharacter,
-            F.AUC,
-        )
-        connect(
-            self.btnRmPerso.clicked,
-            self.characterController.delete_characters,
-            F.AUC,
-        )
-        connect(
-            self.btnPersoColor.clicked,
-            self.characterController.choose_character_color,
-            F.AUC,
-        )
-        connect(
-            self.chkPersoPOV.stateChanged,
-            self.characterController.change_character_pov_state,
-            F.AUC,
-        )
-        connect(
-            self.btnPersoAddInfo.clicked,
-            self.characterController.add_character_info,
-            F.AUC,
-        )
-        connect(
-            self.btnPersoRmInfo.clicked,
-            self.characterController.remove_character_info,
-            F.AUC,
-        )
-
-        for w, c in [
-            (self.txtPersoName, Character.name),
-            (self.sldPersoImportance, Character.importance),
-            (self.txtPersoMotivation, Character.motivation),
-            (self.txtPersoGoal, Character.goal),
-            (self.txtPersoConflict, Character.conflict),
-            (self.txtPersoEpiphany, Character.epiphany),
-            (self.txtPersoSummarySentence, Character.summarySentence),
-            (self.txtPersoSummaryPara, Character.summaryPara),
-            (self.txtPersoSummaryFull, Character.summaryFull),
-            (self.txtPersoNotes, Character.notes)
-        ]:
-            w.setModel(self.mdlCharacter)
-            w.setColumn(c)
-        self.tabPersos.setEnabled(False)
-
-        # Plots
-        self.lstSubPlots.setModel(self.mdlPlots)
-        self.lstPlotPerso.setModel(self.mdlPlots)
-        self.lstPlots.setPlotModel(
-            self.mdlPlots,
-            settings=self.settingsManager,
-        )
-        connect(self.btnAddPlot.clicked, self.plotController.add_plot, F.AUC)
-        connect(
-            self.btnRmPlot.clicked,
-            self.plotController.remove_current_plot,
-            F.AUC,
-        )
-        connect(
-            self.btnAddSubPlot.clicked,
-            self.plotController.add_sub_plot,
-            F.AUC,
-        )
-        connect(
-            self.btnRmSubPlot.clicked,
-            self.plotController.remove_selected_sub_plots,
-            F.AUC,
-        )
-        connect(
-            self.lstPlotPerso.selectionModel().selectionChanged,
-            self.plotController.handle_plot_character_selection,
-        )
-        connect(
-            self.btnRmPlotPerso.clicked,
-            self.plotController.remove_selected_plot_characters,
-            F.AUC,
-        )
-        connect(
-            self.lstSubPlots.selectionModel().currentRowChanged,
-            self.plotController.change_current_sub_plot,
-            F.AUC,
-        )
-
-        for w, c in [
-            (self.txtPlotName, Plot.name),
-            (self.txtPlotDescription, Plot.description),
-            (self.txtPlotResult, Plot.result),
-            (self.sldPlotImportance, Plot.importance),
-        ]:
-            w.setModel(self.mdlPlots)
-            w.setColumn(c)
-
-        self.tabPlot.setEnabled(False)
-        self.plotController.refresh_character_menu()
-        connect(
-            self.mdlCharacter.dataChanged,
-            self.plotController.refresh_character_menu,
-        )
-        self.lstOutlinePlots.setPlotModel(
-            self.mdlPlots,
-            settings=self.settingsManager,
-        )
-        self.lstOutlinePlots.setShowSubPlot(True)
-        self.plotCharacterDelegate = outlineCharacterDelegate(self.mdlCharacter, self)
-        self.lstPlotPerso.setItemDelegate(self.plotCharacterDelegate)
-        self.plotDelegate = plotDelegate(self)
-        self.lstSubPlots.setItemDelegateForColumn(PlotStep.meta, self.plotDelegate)
-
-        # World
-        self.treeWorld.setModel(self.mdlWorld)
-        for i in range(self.mdlWorld.columnCount()):
-            self.treeWorld.hideColumn(i)
-        self.treeWorld.showColumn(0)
-        self.worldController.build_data_set_menu()
-        connect(
-            self.treeWorld.selectionModel().selectionChanged,
-            self.worldController.handle_selection_changed,
-            F.AUC,
-        )
-        connect(
-            self.btnAddWorld.clicked,
-            self.worldController.add_item,
-            F.AUC,
-        )
-        connect(
-            self.btnRmWorld.clicked,
-            self.worldController.remove_selected_items,
-            F.AUC,
-        )
-        for w, c in [
-            (self.txtWorldName, World.name),
-            (self.txtWorldDescription, World.description),
-            (self.txtWorldPassion, World.passion),
-            (self.txtWorldConflict, World.conflict),
-        ]:
-            w.setModel(self.mdlWorld)
-            w.setColumn(c)
-        self.tabWorld.setEnabled(False)
-        self.treeWorld.expandAll()
+        self.projectFeatureBinding.bind(connect)
 
         # Outline
         self.projectContextBinding.bind(connect)
@@ -844,9 +700,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
-        self.characterController.reset()
-        self.plotController.reset()
-        self.worldController.reset()
+        self.projectFeatureBinding.unbind()
         self.projectContextBinding.unbind()
         self.textEditorContext = None
         self.referenceService = None
