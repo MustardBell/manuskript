@@ -196,11 +196,7 @@ def prepare(arguments, tests=False):
 
     return app, MW
 
-def launch(arguments, app, MW = None):
-    if MW == None:
-        from manuskript.functions import mainWindow
-        MW = mainWindow()
-
+def launch(arguments, app, MW):
     MW.show()
 
     # Support for IPython Jupyter QT Console as a debugging aid.

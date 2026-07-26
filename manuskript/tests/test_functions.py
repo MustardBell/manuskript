@@ -73,18 +73,6 @@ def test_paths():
     assert os.path.join("resources", "backgrounds", "spacedreams.jpg") in f
     assert len(F.customIcons()) > 1
 
-def test_mainWindow():
-
-    from PyQt5.QtWidgets import QWidget, QLCDNumber
-
-    assert F.mainWindow() != None
-    assert F.MW != None
-
-    F.printObjects()
-    assert len(F.findWidgetsOfClass(QWidget)) > 0
-    assert len(F.findWidgetsOfClass(QLCDNumber)) == 0
-
-
 def test_search_noMatch():
     assert F.search(re.compile("text"), "foo") == []
 

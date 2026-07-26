@@ -7,7 +7,7 @@ import sys
 import pathlib
 from random import *
 
-from PyQt5.QtCore import Qt, QRect, QStandardPaths, QObject, QProcess, QRegExp
+from PyQt5.QtCore import Qt, QRect, QStandardPaths, QProcess
 from PyQt5.QtCore import QDir, QUrl
 from PyQt5.QtGui import QBrush, QIcon, QPainter, QColor, QImage, QPixmap
 from PyQt5.QtGui import QDesktopServices
@@ -18,7 +18,6 @@ LOGGER = logging.getLogger(__name__)
 
 # Used to detect multiple connections
 AUC = Qt.AutoConnection | Qt.UniqueConnection
-MW = None
 
 
 translationCache = dict()
@@ -127,18 +126,6 @@ def colorFromProgress(progress):
         return c4
     else:
         return c3
-
-
-def mainWindow():
-    global MW
-    if not MW:
-        for i in qApp.topLevelWidgets():
-            if i.objectName() == "MainWindow":
-                MW = i
-                return MW
-        return None
-    else:
-        return MW
 
 
 def iconColor(icon):
@@ -253,23 +240,6 @@ def allPaths(suffix=None):
 def tempFile(name):
     "Returns a temp file."
     return os.path.join(QDir.tempPath(), name)
-
-
-def totalObjects():
-    return len(mainWindow().findChildren(QObject))
-
-
-def printObjects():
-    print("Objects:", str(totalObjects()))
-
-
-def findWidgetsOfClass(cls):
-    """
-    Returns all widgets, children of MainWindow, whose class is cls.
-    @param cls: a class
-    @return: list of QWidgets
-    """
-    return mainWindow().findChildren(cls, QRegExp())
 
 
 def findBackground(filename):
