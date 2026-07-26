@@ -97,4 +97,36 @@ def test_invalid_project_marker_is_a_fatal_load_result(tmp_path):
     result = loadSave.loadProject(context)
 
     assert not result.succeeded
-    assert result.fatal_errors == (str(project),)
+    assert len(result.fatal_errors) == 1
+    assert "Invalid project marker" in result.fatal_errors[0]
+
+
+def test_unknown_project_version_is_not_dispatched(tmp_path):
+    project = tmp_path / "story.msk"
+    project.write_text("42", encoding="utf-8")
+    context = ProjectPersistenceContext(
+        project_file=str(project),
+        models=MagicMock(),
+        settings=MagicMock(),
+    )
+
+    with patch.object(loadSave.v1, "loadProject") as load_project:
+        result = loadSave.loadProject(context)
+
+    assert not result.succeeded
+    assert "Unsupported project format version: 42" in (
+        result.fatal_errors[0]
+    )
+    load_project.assert_not_called()
+
+
+def test_unknown_save_version_fails_closed():
+    context = MagicMock()
+    context.project_file = "story.msk"
+
+    with patch.object(loadSave.v1, "saveProject") as save_project:
+        result = loadSave.saveProject(context, version=42)
+
+    assert not result.succeeded
+    assert result.failed_files == ("story.msk",)
+    save_project.assert_not_called()
