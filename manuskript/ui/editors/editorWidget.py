@@ -8,6 +8,9 @@ from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 from manuskript.commands import DocumentCommand
 from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
+from manuskript.ui.editors.markdownModeToolButton import (
+    MarkdownModeToolButton,
+)
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import open_split_dialog
 from manuskript.ui.editors.markdownPresentation import (
@@ -66,6 +69,13 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtRedacText.setPresentationState(
             self.markdownPresentation
         )
+        self.markdownModeButton = MarkdownModeToolButton(
+            self.markdownPresentation,
+            self,
+        )
+        self.markdownModeButton.resize(38, 28)
+        self._positionMarkdownModeButton()
+        self.markdownModeButton.raise_()
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
@@ -117,8 +127,16 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         r.setWidth(w)
         r.moveRight(self.geometry().width())
         self.txtEditScrollBar.setGeometry(r)
+        self._positionMarkdownModeButton()
+        self.markdownModeButton.raise_()
 
         QWidget.resizeEvent(self, event)
+
+    def _positionMarkdownModeButton(self):
+        self.markdownModeButton.move(
+            max(0, self.width() - self.markdownModeButton.width() - 12),
+            4,
+        )
 
     def setScrollBarVisibility(self, *_args):
         """
@@ -146,6 +164,13 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
         if oldV != self.folderView and self.currentIndex:
             self.setCurrentModelIndex(self.currentIndex)
+
+        self._updateMarkdownModeButtonVisibility()
+
+    def _updateMarkdownModeButtonVisibility(self):
+        self.markdownModeButton.setVisible(
+            self.stack.currentIndex() in (0, 1)
+        )
 
     def setCorkSizeFactor(self, v):
         self.corkView.itemDelegate().setCorkSizeFactor(v)
@@ -371,6 +396,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             pass
 
         self.updateStatusBar()
+        self._updateMarkdownModeButtonVisibility()
+        self.markdownModeButton.raise_()
 
     def setCurrentModelIndex(self, index=None):
         if index and index.isValid():

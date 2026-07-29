@@ -178,4 +178,23 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
         == "Live Preview"
     )
     assert window.actMarkdownLivePreview.isChecked()
+    assert (
+        first_editor.markdownModeButton.toolTip()
+        == "Switch to Reading"
+    )
+
+    first_editor.markdownModeButton.click()
+
+    assert (
+        first_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.READING
+    )
+    assert (
+        first_editor.markdownModeButton.toolTip()
+        == "Switch to Live Preview"
+    )
+    assert (
+        second_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
     window.mainEditor.closeAllTabs()
