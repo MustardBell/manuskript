@@ -1,16 +1,17 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import QEvent, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import (
     QFont,
-    QKeyEvent,
     QTextCharFormat,
     QTextCursor,
 )
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtTest import QTest
 
+from manuskript.enums import Outline
+from manuskript.models.outlineItem import outlineItem
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationDefaults,
@@ -376,6 +377,7 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
         settings=SettingsManager(),
     )
     editor.setPlainText("**first**\nsecond")
+    editor.setEnabled(True)
     cursor = editor.textCursor()
     cursor.movePosition(QTextCursor.End)
     editor.setTextCursor(cursor)
@@ -386,13 +388,7 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
     editor.show()
     try:
         qApp.processEvents()
-        event = QKeyEvent(
-            QEvent.KeyPress,
-            Qt.Key_X,
-            Qt.NoModifier,
-            "x",
-        )
-        editor.livePreviewView.keyPressEvent(event)
+        QTest.keyClicks(editor.livePreviewView, "x")
 
         assert editor.toPlainText() == "**first**\nsecondx"
         assert "secondx" in editor.livePreviewView.toPlainText()
@@ -438,6 +434,109 @@ def test_live_preview_click_activates_the_rendered_source_block():
         assert "**second**" not in projection.toPlainText()
     finally:
         editor.hide()
+
+
+def test_live_preview_click_preserves_source_and_viewport_anchor():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    source_lines = [
+        "Paragraph {} has **stable prose**.".format(number)
+        for number in range(100)
+    ]
+    source_lines[70] = (
+        "Anchor 70 "
+        + " ".join(
+            "[short](https://example.com/a/very/long/destination/{})".format(
+                number
+            )
+            for number in range(12)
+        )
+    )
+    source = "\n\n".join(source_lines)
+    editor.setPlainText(source)
+    editor.setEnabled(True)
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        projection = editor.livePreviewView
+        target = projection.document().find("Anchor 70")
+        target_rect = projection.cursorRect(target)
+        scrollbar = projection.verticalScrollBar()
+        scrollbar.setValue(
+            scrollbar.value()
+            + target_rect.center().y()
+            - projection.viewport().rect().center().y()
+        )
+        qApp.processEvents()
+
+        target = projection.document().find("Anchor 70")
+        click_position = projection.cursorRect(target).center()
+        source_before = editor.toPlainText()
+
+        QTest.mouseClick(
+            projection.viewport(),
+            Qt.LeftButton,
+            pos=click_position,
+        )
+        qApp.processEvents()
+        qApp.processEvents()
+
+        active_line = projection.document().find("Anchor 70")
+        active_y = projection.cursorRect(active_line).center().y()
+        assert projection.isReadOnly()
+        assert editor.toPlainText() == source_before
+        assert (
+            editor.textCursor().block().text()
+            == source_lines[70]
+        )
+        assert "**stable prose**" not in projection.toPlainText()
+        assert abs(active_y - click_position.y()) <= 3
+    finally:
+        editor.hide()
+
+
+def test_live_preview_click_does_not_submit_projection_to_model(
+        MWEmptyProject):
+    window = MWEmptyProject
+    source = (
+        "# Model-backed chapter\n\n"
+        "A paragraph with **rendered emphasis**.\n\n"
+        "Another paragraph remains canonical."
+    )
+    item = outlineItem(title="Click safety", _type="md")
+    item.setData(Outline.text, source)
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    source_editor = window.mainEditor.currentEditor().txtRedacText
+    source_editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    source_editor.resize(480, 360)
+    source_editor.show()
+    try:
+        qApp.processEvents()
+        projection = source_editor.livePreviewView
+        target = projection.document().find("rendered emphasis")
+
+        QTest.mouseClick(
+            projection.viewport(),
+            Qt.LeftButton,
+            pos=projection.cursorRect(target).center(),
+        )
+        qApp.processEvents()
+        source_editor.submit()
+
+        assert source_editor.toPlainText() == source
+        assert item.data(Outline.text) == source
+    finally:
+        window.mainEditor.closeAllTabs()
 
 
 def test_live_preview_selection_routes_formatting_to_source():

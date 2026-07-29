@@ -41,6 +41,8 @@ class MarkdownLivePreviewView(QTextEdit):
         self._positionMap = MarkdownProjectionMap([])
         self.activeProjectionRange = None
         self._renderer = MarkdownProjectionRenderer(source_editor)
+        self._pendingViewportAnchor = None
+        self._rebuildGeneration = 0
 
         # MarkdownHighlighter's editor-facing dependencies.
         self.settings = source_editor.settings
@@ -54,6 +56,8 @@ class MarkdownLivePreviewView(QTextEdit):
         self.setObjectName("markdownLivePreviewView")
         self.setFrameShape(QFrame.NoFrame)
         self.setAcceptRichText(False)
+        self.setAcceptDrops(False)
+        self.setReadOnly(True)
         self.setUndoRedoEnabled(False)
         if source_editor._autoResize:
             self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -127,17 +131,16 @@ class MarkdownLivePreviewView(QTextEdit):
         if not self._active:
             return
 
+        viewport_anchor = (
+            self._pendingViewportAnchor
+            or self._captureViewportAnchor()
+        )
+        self._pendingViewportAnchor = None
+        old_scroll_value = self.verticalScrollBar().value()
+        self._rebuildGeneration += 1
+        generation = self._rebuildGeneration
         self._building = True
         try:
-            scrollbar = self.verticalScrollBar()
-            old_maximum = scrollbar.maximum()
-            old_value = scrollbar.value()
-            scroll_ratio = (
-                old_value / old_maximum
-                if old_maximum
-                else 0
-            )
-
             source_cursor = self._sourceEditor.textCursor()
             source_block = source_cursor.block()
             self._activeSourceBlock = source_block.blockNumber()
@@ -160,8 +163,20 @@ class MarkdownLivePreviewView(QTextEdit):
             if self._sourceEditor._autoResize:
                 self._sourceEditor.sizeChange()
 
-            new_maximum = scrollbar.maximum()
-            scrollbar.setValue(round(scroll_ratio * new_maximum))
+            if viewport_anchor is None:
+                self.verticalScrollBar().setValue(old_scroll_value)
+            else:
+                self._restoreViewportAnchor(
+                    viewport_anchor,
+                    generation,
+                )
+                QTimer.singleShot(
+                    0,
+                    lambda: self._restoreViewportAnchor(
+                        viewport_anchor,
+                        generation,
+                    ),
+                )
         finally:
             self._building = False
 
@@ -187,6 +202,11 @@ class MarkdownLivePreviewView(QTextEdit):
         block_changed = (
             source_block_number != self._activeSourceBlock
         )
+        if block_changed:
+            self._pendingViewportAnchor = (
+                source_position,
+                self.cursorRect(projection_cursor).center().y(),
+            )
         self._activeSourceBlock = source_block_number
 
         source_cursor = QTextCursor(self._sourceEditor.document())
@@ -201,6 +221,8 @@ class MarkdownLivePreviewView(QTextEdit):
             self.scheduleRebuild()
 
     def _sourcePositionForProjectionPosition(self, position):
+        if self.activeProjectionRange is None:
+            return self._positionMap.source_position_at(position)
         active_start, active_end = self.activeProjectionRange
         if active_start <= position <= active_end:
             source_block = (
@@ -242,8 +264,67 @@ class MarkdownLivePreviewView(QTextEdit):
             self.rebuild()
 
     def mousePressEvent(self, event):
+        old_position = self.textCursor().position()
+        old_anchor = self.textCursor().anchor()
         super().mousePressEvent(event)
-        self._syncSourceCursorFromProjection()
+        projection_cursor = self.textCursor()
+        if (
+            projection_cursor.position() == old_position
+            and projection_cursor.anchor() == old_anchor
+        ):
+            self._syncSourceCursorFromProjection()
+
+    def _captureViewportAnchor(self):
+        if self.activeProjectionRange is None:
+            return None
+        projection_cursor = self.textCursor()
+        source_position = self._sourcePositionForProjectionPosition(
+            projection_cursor.position()
+        )
+        if source_position is None:
+            return None
+        return (
+            source_position,
+            self.cursorRect(projection_cursor).center().y(),
+        )
+
+    def _restoreViewportAnchor(self, anchor, generation):
+        if (
+            not self._active
+            or generation != self._rebuildGeneration
+        ):
+            return
+        source_position, target_y = anchor
+        projection_position = (
+            self._projectionPositionForSourcePosition(source_position)
+        )
+        if projection_position is None:
+            return
+
+        cursor = QTextCursor(self.document())
+        cursor.setPosition(projection_position)
+        current_y = self.cursorRect(cursor).center().y()
+        scrollbar = self.verticalScrollBar()
+        scrollbar.setValue(
+            scrollbar.value() + current_y - target_y
+        )
+
+    def _projectionPositionForSourcePosition(self, source_position):
+        source_block = self._sourceEditor.document().findBlock(
+            source_position
+        )
+        if (
+            self.activeProjectionRange is not None
+            and source_block.blockNumber() == self._activeSourceBlock
+        ):
+            active_start, active_end = self.activeProjectionRange
+            return min(
+                active_start
+                + source_position
+                - source_block.position(),
+                active_end,
+            )
+        return self._positionMap.projection_position_at(source_position)
 
     def _updateActiveSourceBlock(self):
         if self.activeProjectionRange is None:
