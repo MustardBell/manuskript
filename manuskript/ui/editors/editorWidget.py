@@ -10,6 +10,9 @@ from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import open_split_dialog
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 
 
 class editorWidget(QWidget, Ui_editorWidget_ui):
@@ -72,6 +75,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtEditScrollBar = self.txtRedacText.verticalScrollBar()
         self.txtEditScrollBar.setParent(self)
         self.stack.currentChanged.connect(self.setScrollBarVisibility)
+        self.txtRedacText.presentationModeChanged.connect(
+            self.setScrollBarVisibility
+        )
 
         # def setModel(self, model):
         # self._model = model
@@ -105,12 +111,17 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
         QWidget.resizeEvent(self, event)
 
-    def setScrollBarVisibility(self):
+    def setScrollBarVisibility(self, *_args):
         """
         Since the texteEdit scrollBar has been reparented to self, it is not
         hidden when stack changes. We have to do it manually.
         """
-        self.txtEditScrollBar.setVisible(self.stack.currentIndex() == 0)
+        source_editor_visible = (
+            self.stack.currentIndex() == 0
+            and self.txtRedacText.presentationMode
+            is not MarkdownPresentationMode.READING
+        )
+        self.txtEditScrollBar.setVisible(source_editor_visible)
 
     def setFolderView(self, v):
         oldV = self.folderView

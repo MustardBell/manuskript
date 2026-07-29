@@ -42,6 +42,26 @@ class MarkdownHighlighter(BasicHighlighter):
         "markupBackground",
         "markupMonospace",
     })
+    _HIDEABLE_MARKUP_TOKENS = frozenset({
+        MTT.TokenAtxHeading1,
+        MTT.TokenAtxHeading2,
+        MTT.TokenAtxHeading3,
+        MTT.TokenAtxHeading4,
+        MTT.TokenAtxHeading5,
+        MTT.TokenAtxHeading6,
+        MTT.TokenEmphasis,
+        MTT.TokenStrong,
+        MTT.TokenStrikethrough,
+        MTT.TokenVerbatim,
+        MTT.TokenSuperScript,
+        MTT.TokenSubScript,
+        MTT.TokenCMAddition,
+        MTT.TokenCMDeletion,
+        MTT.TokenCMSubstitution,
+        MTT.TokenCMComment,
+        MTT.TokenCMHighlight,
+        MTT.TokenUnderline,
+    })
 
     highlightBlockAtPosition = pyqtSignal(int)
     headingFound = pyqtSignal(int, str, QTextBlock)
@@ -498,7 +518,7 @@ class MarkdownHighlighter(BasicHighlighter):
                     markupFormat,
                 )
 
-            if self._markupShouldBeHidden():
+            if self._markupShouldBeHidden(token):
                 self._hideMarkup(markupFormat)
 
             # Focus mode
@@ -547,7 +567,10 @@ class MarkdownHighlighter(BasicHighlighter):
             if key in self._SOURCE_THEME_KEYS
         }
 
-    def _markupShouldBeHidden(self):
+    def _markupShouldBeHidden(self, token):
+        if token.type not in self._HIDEABLE_MARKUP_TOKENS:
+            return False
+
         mode = self._presentationMode()
         if mode is MarkdownPresentationMode.SOURCE:
             return False
@@ -564,11 +587,6 @@ class MarkdownHighlighter(BasicHighlighter):
         foreground.setAlpha(0)
         markupFormat.setForeground(QBrush(foreground))
         markupFormat.clearBackground()
-
-        font = markupFormat.font()
-        font.setPointSizeF(0.01)
-        font.setStretch(1)
-        markupFormat.setFont(font)
         markupFormat.setProperty(self.MarkupHiddenProperty, True)
 
     def formatsFromTheme(self, theme, format=None,

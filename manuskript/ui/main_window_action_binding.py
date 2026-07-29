@@ -4,6 +4,9 @@ from PyQt5.QtWidgets import QActionGroup, qApp
 
 from manuskript import functions as F
 from manuskript.commands import DocumentCommand
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 
 
 class MainWindowActionBinding:
@@ -144,6 +147,27 @@ class MainWindowActionBinding:
         window.actModeFiction.triggered.connect(
             window.setViewModeFiction
         )
+        window.actMarkdownModeGroup = QActionGroup(window)
+        for action, mode in [
+            (
+                window.actMarkdownSource,
+                MarkdownPresentationMode.SOURCE,
+            ),
+            (
+                window.actMarkdownLivePreview,
+                MarkdownPresentationMode.LIVE_PREVIEW,
+            ),
+            (
+                window.actMarkdownReading,
+                MarkdownPresentationMode.READING,
+            ),
+        ]:
+            action.setActionGroup(window.actMarkdownModeGroup)
+            action.triggered.connect(
+                lambda _checked=False, selected_mode=mode:
+                    window.setMarkdownPresentationMode(selected_mode)
+            )
+        window.menuMarkdownMode.setEnabled(False)
 
     def _bind_tool_actions(self):
         window = self.window
