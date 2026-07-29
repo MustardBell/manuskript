@@ -1,6 +1,9 @@
 import importlib
 from unittest.mock import patch
 
+from PyQt5.QtWidgets import qApp
+
+from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -203,7 +206,17 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
 def test_markdown_mode_is_independent_between_split_leaves(
         MWEmptyProject):
     window = MWEmptyProject
-    item = outlineItem(title="Chapter")
+    window_was_visible = window.isVisible()
+    window.resize(1100, 720)
+    window.show()
+    item = outlineItem(title="Chapter", _type="md")
+    item.setData(
+        Outline.text,
+        "# Chapter 1\n\n"
+        "**Bunker, Kyiv. June. Daytime.**\n\n"
+        "First paragraph with *rendered emphasis*.\n\n"
+        "Second paragraph stays independent.",
+    )
     window.mdlOutline.appendItem(item)
     index = window.mdlOutline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
@@ -228,6 +241,7 @@ def test_markdown_mode_is_independent_between_split_leaves(
     second_editor.markdownPresentation.set_mode(
         MarkdownPresentationMode.READING
     )
+    qApp.processEvents()
 
     assert (
         first_editor.markdownPresentation.mode
@@ -237,4 +251,16 @@ def test_markdown_mode_is_independent_between_split_leaves(
         second_editor.markdownPresentation.mode
         is MarkdownPresentationMode.READING
     )
+    assert (
+        first_editor.markdownEditorHost.currentWidget()
+        is first_editor.txtRedacText.livePreviewView
+    )
+    assert first_editor.txtRedacText.isHidden()
+    assert (
+        second_editor.markdownEditorHost.currentWidget()
+        is second_editor.txtRedacText.readingView
+    )
+    assert second_editor.txtRedacText.isHidden()
     window.mainEditor.closeAllTabs()
+    if not window_was_visible:
+        window.hide()

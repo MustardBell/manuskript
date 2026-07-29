@@ -205,7 +205,10 @@ class textEditView(QTextEdit):
         foreground = opt["fontColor"]  # if not opt["backgroundTransparent"]
         #                               else S.text
         # self.setFont(f)
-        self.setStyleSheet("""QTextEdit{{
+        editor_style = """QStackedWidget#markdownEditorHost {{
+            background: {bg};
+            }}
+            QTextEdit{{
             background: {bg};
             color: {foreground};
             font-family: {ff};
@@ -223,7 +226,13 @@ class textEditView(QTextEdit):
             maxWidth="max-width: {}px;".format(
                 opt["maxWidth"]) if opt["maxWidth"] else "",
         )
+        style_owner = (
+            getattr(self, "_presentationHost", None)
+            or self
         )
+        style_owner.setStyleSheet(editor_style)
+        if style_owner is not self:
+            self.setStyleSheet("")
         self._defaultFontSize = f.pointSize()
 
         # We set the parent background to the editor's background in case

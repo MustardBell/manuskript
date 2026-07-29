@@ -31,8 +31,8 @@ class MarkdownProjectionHighlighter(MarkdownHighlighter):
 class MarkdownLivePreviewView(QTextEdit):
     """Rendered Markdown projection with one canonical source line exposed."""
 
-    def __init__(self, source_editor):
-        super().__init__(source_editor.viewport())
+    def __init__(self, source_editor, parent=None):
+        super().__init__(parent)
         self._sourceEditor = source_editor
         self._active = False
         self._dirty = True
@@ -61,8 +61,6 @@ class MarkdownLivePreviewView(QTextEdit):
         self.setUndoRedoEnabled(False)
         if source_editor._autoResize:
             self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.hide()
-
         self.highlighter = MarkdownProjectionHighlighter(self)
         self._refreshTimer = QTimer(self)
         self._refreshTimer.setSingleShot(True)
@@ -90,23 +88,20 @@ class MarkdownLivePreviewView(QTextEdit):
                 self._sourceEditor.textCursor().blockNumber()
             )
             self._dirty = True
-            self.show()
-            self.raise_()
             self.refreshIfNeeded()
         else:
             self._syncSourceCursorFromProjection()
-            self.hide()
 
     def scheduleRebuild(self):
         self._dirty = True
-        if self._active and self._sourceEditor.isVisible():
+        if self._active and self.isVisible():
             self._refreshTimer.start()
 
     def refreshIfNeeded(self):
         if (
             self._active
             and self._dirty
-            and self._sourceEditor.isVisible()
+            and self.isVisible()
         ):
             self._refreshTimer.start()
 
@@ -126,6 +121,14 @@ class MarkdownLivePreviewView(QTextEdit):
             document.setTextWidth(width)
             if self._active and self._sourceEditor._autoResize:
                 self._sourceEditor.sizeChange()
+
+    def resizeEvent(self, event):
+        QTextEdit.resizeEvent(self, event)
+        self.setProjectionWidth(self.viewport().width())
+
+    def showEvent(self, event):
+        QTextEdit.showEvent(self, event)
+        self.refreshIfNeeded()
 
     def rebuild(self):
         if not self._active:
