@@ -81,6 +81,7 @@ class MainWindowActionBinding:
             (window.actHeaderAtxL6, window.formatAtx6),
             (window.actFormatBold, window.formatBold),
             (window.actFormatItalic, window.formatItalic),
+            (window.actFormatUnderline, window.formatUnderline),
             (window.actFormatStrike, window.formatStrike),
             (window.actFormatVerbatim, window.formatVerbatim),
             (

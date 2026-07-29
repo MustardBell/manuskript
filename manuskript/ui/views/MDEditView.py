@@ -305,6 +305,7 @@ class MDEditView(textEditView):
 
     def bold(self): self.insertFormattingMarkup("**")
     def italic(self): self.insertFormattingMarkup("*")
+    def underline(self): self.insertFormattingMarkup("<u>", "</u>")
     def strike(self): self.insertFormattingMarkup("~~")
     def verbatim(self): self.insertFormattingMarkup("`")
     def superscript(self): self.insertFormattingMarkup("^")
@@ -385,7 +386,12 @@ class MDEditView(textEditView):
         cursor.movePosition(cursor.StartOfBlock)
         cursor.insertText(markup)
 
-    def insertFormattingMarkup(self, markup):
+    def insertFormattingMarkup(
+        self,
+        openingMarkup,
+        closingMarkup=None,
+    ):
+        closingMarkup = closingMarkup or openingMarkup
         cursor = self.textCursor()
 
         # Select beginning and end of words
@@ -398,7 +404,11 @@ class MDEditView(textEditView):
             max(start, end - 1)
         )
         if first_block != last_block:
-            self._wrapSelectionWithMarkup(cursor, markup)
+            self._wrapSelectionWithMarkup(
+                cursor,
+                openingMarkup,
+                closingMarkup,
+            )
             return
 
         block_text = first_block.text()
@@ -415,7 +425,8 @@ class MDEditView(textEditView):
             block_text,
             local_start,
             local_end,
-            markup,
+            openingMarkup,
+            closingMarkup,
         )
         self._applyInlineMarkupEdit(
             first_block,
@@ -464,21 +475,26 @@ class MDEditView(textEditView):
         )
         self.setTextCursor(restored)
 
-    def _wrapSelectionWithMarkup(self, cursor, markup):
+    def _wrapSelectionWithMarkup(
+        self,
+        cursor,
+        openingMarkup,
+        closingMarkup,
+    ):
         start = cursor.selectionStart()
         end = cursor.selectionEnd()
         edit_cursor = QTextCursor(self.document())
         edit_cursor.beginEditBlock()
         edit_cursor.setPosition(end)
-        edit_cursor.insertText(markup)
+        edit_cursor.insertText(closingMarkup)
         edit_cursor.setPosition(start)
-        edit_cursor.insertText(markup)
+        edit_cursor.insertText(openingMarkup)
         edit_cursor.endEditBlock()
 
         restored = QTextCursor(self.document())
-        restored.setPosition(start + len(markup))
+        restored.setPosition(start + len(openingMarkup))
         restored.setPosition(
-            end + len(markup),
+            end + len(openingMarkup),
             QTextCursor.KeepAnchor,
         )
         self.setTextCursor(restored)

@@ -9,6 +9,14 @@ _STRONG_PATTERN = re.compile(
     r"\*\*(?=\S).*?\S\*\*(?!\*)|"
     r"__(?=\S).*?\S__(?!_)"
 )
+_EMPHASIS_PATTERN = re.compile(
+    r"(?<!\*)\*(?=\S).*?\S\*(?!\*)|"
+    r"(?<!_)_(?=\S).*?\S_(?!_)"
+)
+_UNDERLINE_PATTERN = re.compile(
+    r"<u>(?=\S).*?\S</u>",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -26,32 +34,39 @@ class InlineMarkupEdit:
 class _DelimitedSpan:
     start: int
     end: int
-    delimiter: str
+    opening: str
+    closing: str
 
     @property
     def content_start(self):
-        return self.start + len(self.delimiter)
+        return self.start + len(self.opening)
 
     @property
     def content_end(self):
-        return self.end - len(self.delimiter)
+        return self.end - len(self.closing)
 
 
 def plan_inline_markup_toggle(
     text,
     selection_start,
     selection_end,
-    markup,
+    opening_markup,
+    closing_markup=None,
 ):
     """Plan a structural Markdown inline-format toggle within one block."""
+    closing_markup = closing_markup or opening_markup
     start, end = _trim_selection_whitespace(
         text,
         selection_start,
         selection_end,
     )
 
-    if markup == "**":
-        spans = _strong_spans(text)
+    spans = _formatting_spans(
+        text,
+        opening_markup,
+        closing_markup,
+    )
+    if spans:
         exact = next(
             (
                 span
@@ -100,12 +115,13 @@ def plan_inline_markup_toggle(
                 enclosing,
             )
 
-        merge = _merge_neighboring_strong_spans(
+        merge = _merge_neighboring_formatted_spans(
             text,
             start,
             end,
             spans,
-            markup,
+            opening_markup,
+            closing_markup,
         )
         if merge is not None:
             return merge
@@ -114,7 +130,8 @@ def plan_inline_markup_toggle(
         text,
         start,
         end,
-        markup,
+        opening_markup,
+        closing_markup,
     )
 
 
@@ -126,15 +143,44 @@ def _trim_selection_whitespace(text, start, end):
     return start, end
 
 
-def _strong_spans(text):
-    return [
-        _DelimitedSpan(
-            match.start(),
-            match.end(),
-            match.group(0)[:2],
-        )
-        for match in _STRONG_PATTERN.finditer(text)
-    ]
+def _formatting_spans(text, opening_markup, closing_markup):
+    if opening_markup == closing_markup == "**":
+        return [
+            _DelimitedSpan(
+                match.start(),
+                match.end(),
+                match.group(0)[:2],
+                match.group(0)[-2:],
+            )
+            for match in _STRONG_PATTERN.finditer(text)
+        ]
+
+    if opening_markup == closing_markup == "*":
+        return [
+            _DelimitedSpan(
+                match.start(),
+                match.end(),
+                match.group(0)[:1],
+                match.group(0)[-1:],
+            )
+            for match in _EMPHASIS_PATTERN.finditer(text)
+        ]
+
+    if (
+        opening_markup.casefold() == "<u>"
+        and closing_markup.casefold() == "</u>"
+    ):
+        return [
+            _DelimitedSpan(
+                match.start(),
+                match.end(),
+                match.group(0)[:3],
+                match.group(0)[-4:],
+            )
+            for match in _UNDERLINE_PATTERN.finditer(text)
+        ]
+
+    return []
 
 
 def _remove_span(text, span):
@@ -152,17 +198,17 @@ def _split_enclosing_span(text, start, end, span):
     prefix = text[span.content_start:start]
     selected = text[start:end]
     suffix = text[end:span.content_end]
-    bold_prefix, plain_prefix = _split_left_boundary(prefix)
-    plain_suffix, bold_suffix = _split_right_boundary(suffix)
+    formatted_prefix, plain_prefix = _split_left_boundary(prefix)
+    plain_suffix, formatted_suffix = _split_right_boundary(suffix)
 
     left = (
-        span.delimiter + bold_prefix + span.delimiter
-        if bold_prefix
+        span.opening + formatted_prefix + span.closing
+        if formatted_prefix
         else ""
     )
     right = (
-        span.delimiter + bold_suffix + span.delimiter
-        if bold_suffix
+        span.opening + formatted_suffix + span.closing
+        if formatted_suffix
         else ""
     )
     replacement = (
@@ -186,12 +232,13 @@ def _split_enclosing_span(text, start, end, span):
     )
 
 
-def _merge_neighboring_strong_spans(
+def _merge_neighboring_formatted_spans(
     text,
     start,
     end,
     spans,
-    delimiter,
+    opening_markup,
+    closing_markup,
 ):
     left = max(
         (
@@ -224,10 +271,21 @@ def _merge_neighboring_strong_spans(
     if left is None or right is None:
         return None
 
-    merged_delimiter = (
-        left.delimiter
-        if left.delimiter == right.delimiter
-        else delimiter
+    merged_opening = (
+        left.opening
+        if (
+            left.opening == right.opening
+            and left.closing == right.closing
+        )
+        else opening_markup
+    )
+    merged_closing = (
+        left.closing
+        if (
+            left.opening == right.opening
+            and left.closing == right.closing
+        )
+        else closing_markup
     )
     left_boundary = text[left.end:start]
     selected = text[start:end]
@@ -240,11 +298,11 @@ def _merge_neighboring_strong_spans(
         + text[right.content_start:right.content_end]
     )
     replacement = (
-        merged_delimiter + content + merged_delimiter
+        merged_opening + content + merged_closing
     )
     restored_start = (
         left.start
-        + len(merged_delimiter)
+        + len(merged_opening)
         + len(text[left.content_start:left.content_end])
         + len(left_boundary)
     )
@@ -305,16 +363,23 @@ def _contains_no_word_characters(text):
     return all(not _is_word_character(character) for character in text)
 
 
-def _toggle_adjacent_or_wrap(text, start, end, markup):
-    markup_length = len(markup)
+def _toggle_adjacent_or_wrap(
+    text,
+    start,
+    end,
+    opening_markup,
+    closing_markup,
+):
+    opening_length = len(opening_markup)
+    closing_length = len(closing_markup)
     selected = text[start:end]
-    before = start - markup_length
-    after = end + markup_length
+    before = start - opening_length
+    after = end + closing_length
 
     if (
         before >= 0
-        and text[before:start] == markup
-        and text[end:after] == markup
+        and text[before:start] == opening_markup
+        and text[end:after] == closing_markup
     ):
         return InlineMarkupEdit(
             start=before,
@@ -325,11 +390,13 @@ def _toggle_adjacent_or_wrap(text, start, end, markup):
         )
 
     if (
-        selected.startswith(markup)
-        and selected.endswith(markup)
-        and len(selected) >= 2 * markup_length
+        selected.startswith(opening_markup)
+        and selected.endswith(closing_markup)
+        and len(selected) >= opening_length + closing_length
     ):
-        content = selected[markup_length:-markup_length]
+        content = selected[
+            opening_length:len(selected) - closing_length
+        ]
         return InlineMarkupEdit(
             start=start,
             end=end,
@@ -338,8 +405,10 @@ def _toggle_adjacent_or_wrap(text, start, end, markup):
             selection_end=start + len(content),
         )
 
-    replacement = markup + selected + markup
-    restored_start = start + markup_length
+    replacement = (
+        opening_markup + selected + closing_markup
+    )
+    restored_start = start + opening_length
     return InlineMarkupEdit(
         start=start,
         end=end,

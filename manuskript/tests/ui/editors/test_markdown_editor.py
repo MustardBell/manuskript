@@ -218,6 +218,80 @@ def test_bold_toggle_handles_utf16_positions():
     assert editor.textCursor().selectedText() == "selected"
 
 
+def test_italic_splits_and_rejoins_an_enclosing_span():
+    editor = make_editor()
+    source = "*Keep this word, and the rest italic.*"
+    editor.setPlainText(source)
+    select_text(editor, "word")
+
+    editor.italic()
+
+    assert editor.toPlainText() == (
+        "*Keep this* word, *and the rest italic.*"
+    )
+    assert editor.textCursor().selectedText() == "word"
+
+    editor.italic()
+
+    assert editor.toPlainText() == source
+    assert editor.textCursor().selectedText() == "word"
+
+
+def test_italic_recognizes_underscore_delimiters():
+    editor = make_editor()
+    editor.setPlainText("_some italic words_")
+    select_text(editor, "italic")
+
+    editor.italic()
+
+    assert editor.toPlainText() == (
+        "_some_ italic _words_"
+    )
+    assert editor.textCursor().selectedText() == "italic"
+
+
+def test_underline_uses_inline_html_and_toggles_it_off():
+    editor = make_editor()
+    source = "some underlined words"
+    editor.setPlainText(source)
+    select_text(editor, "underlined")
+
+    editor.underline()
+
+    assert editor.toPlainText() == (
+        "some <u>underlined</u> words"
+    )
+    assert editor.textCursor().selectedText() == "underlined"
+    assert editor.highlighter.theme[
+        MarkdownTokenType.TokenUnderline
+    ]["underline"]
+
+    editor.underline()
+
+    assert editor.toPlainText() == source
+    assert editor.textCursor().selectedText() == "underlined"
+
+
+def test_underline_splits_and_rejoins_an_enclosing_html_span():
+    editor = make_editor()
+    source = "<u>Keep this word, and the rest underlined.</u>"
+    editor.setPlainText(source)
+    select_text(editor, "word")
+
+    editor.underline()
+
+    assert editor.toPlainText() == (
+        "<u>Keep this</u> word, "
+        "<u>and the rest underlined.</u>"
+    )
+    assert editor.textCursor().selectedText() == "word"
+
+    editor.underline()
+
+    assert editor.toPlainText() == source
+    assert editor.textCursor().selectedText() == "word"
+
+
 def test_clear_format_removes_inline_and_block_markdown():
     editor = make_editor()
     source = (

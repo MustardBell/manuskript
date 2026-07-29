@@ -2073,6 +2073,7 @@
      <addaction name="separator"/>
      <addaction name="actFormatBold"/>
      <addaction name="actFormatItalic"/>
+     <addaction name="actFormatUnderline"/>
      <addaction name="actFormatStrike"/>
      <addaction name="actFormatVerbatim"/>
      <addaction name="actFormatSuperscript"/>
@@ -2698,6 +2699,18 @@
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+I</string>
+   </property>
+  </action>
+  <action name="actFormatUnderline">
+   <property name="icon">
+    <iconset theme="format-text-underline">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Underline</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+U</string>
    </property>
   </action>
   <action name="actFormatStrike">
