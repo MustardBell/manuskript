@@ -11,6 +11,7 @@ from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.editors.markdownModeToolButton import (
     MarkdownModeToolButton,
 )
+from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import open_split_dialog
 from manuskript.ui.editors.markdownPresentation import (
@@ -54,6 +55,12 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def __init__(self, parent, editor_context=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self.horizontalLayout_2.removeWidget(self.txtRedacText)
+        self.markdownEditorHost = MarkdownEditorHost(
+            self.txtRedacText,
+            self.text,
+        )
+        self.horizontalLayout_2.addWidget(self.markdownEditorHost)
         self.main_editor = (
             parent if hasattr(parent, "updateTargets") else None
         )
@@ -79,6 +86,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
+        self.markdownEditorHosts = []
         self.scroll.setBackgroundRole(QPalette.Base)
         self.toggledSpellcheck.connect(self.txtRedacText.toggleSpellcheck, AUC)
         self.dictChanged.connect(self.txtRedacText.setDict, AUC)
@@ -272,6 +280,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                                highlighting=True,
                                autoResize=True,
                                settings=self.settings)
+            host = MarkdownEditorHost(edt, self)
             edt.setPresentationState(self.markdownPresentation)
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
@@ -283,7 +292,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.dictChanged.connect(edt.setDict, AUC)
             # edt.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             self.txtEdits.append(edt)
-            l.addWidget(edt)
+            self.markdownEditorHosts.append(host)
+            l.addWidget(host)
 
         def addChildren(itm):
             for c in range(itm.childCount()):
@@ -331,6 +341,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             # self.scroll.setWidgetResizable(False)
 
             self.txtEdits = []
+            self.markdownEditorHosts = []
 
             if item != self._model.rootItem:
                 addTitle(item)

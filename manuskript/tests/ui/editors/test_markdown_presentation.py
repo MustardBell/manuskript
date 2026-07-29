@@ -13,6 +13,7 @@ from PyQt5.QtTest import QTest
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.settingsManager import SettingsManager
+from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationDefaults,
     MarkdownPresentationMode,
@@ -32,6 +33,12 @@ def make_context(settings):
         create_world_item=MagicMock(),
         invoke_outline_command=MagicMock(),
     )
+
+
+def host_editor(editor, width=480, height=360):
+    host = MarkdownEditorHost(editor)
+    host.resize(width, height)
+    return host
 
 
 def format_at(editor, position):
@@ -115,11 +122,30 @@ def test_presentation_defaults_repair_an_unknown_persisted_value():
     )
 
 
+def test_projected_modes_require_an_explicit_editor_host():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+
+    with pytest.raises(RuntimeError, match="MarkdownEditorHost"):
+        editor.setPresentationMode(
+            MarkdownPresentationMode.LIVE_PREVIEW
+        )
+
+    assert (
+        editor.presentationMode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    assert editor.livePreviewView is None
+
+
 def test_editor_mode_switch_preserves_source_selection_and_undo_state():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host_editor(editor)
     editor.setPlainText("before **selected** after")
     cursor = editor.textCursor()
     start = editor.toPlainText().index("selected")
@@ -148,6 +174,8 @@ def test_leaf_presentation_state_synchronizes_its_document_views():
     state = MarkdownPresentationState()
     first = MDEditView(spellcheck=False, settings=settings)
     second = MDEditView(spellcheck=False, settings=settings)
+    host_editor(first)
+    host_editor(second)
     first.setPresentationState(state)
     second.setPresentationState(state)
 
@@ -157,6 +185,52 @@ def test_leaf_presentation_state_synchronizes_its_document_views():
     assert second.presentationMode is MarkdownPresentationMode.READING
     assert first.isReadOnly()
     assert second.isReadOnly()
+
+
+def test_presentation_host_shows_exactly_one_sibling_view():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    host = host_editor(editor)
+    editor.setPlainText("# Heading\n\nBody with **emphasis**.")
+    editor.setEnabled(True)
+    host.show()
+    try:
+        editor.setPresentationMode(
+            MarkdownPresentationMode.LIVE_PREVIEW
+        )
+        qApp.processEvents()
+
+        live_preview = editor.livePreviewView
+        assert live_preview.parent() is host
+        assert host.currentWidget() is live_preview
+        assert live_preview.isVisible()
+        assert editor.isHidden()
+
+        editor.setPresentationMode(
+            MarkdownPresentationMode.READING
+        )
+        qApp.processEvents()
+
+        reading = editor.readingView
+        assert reading.parent() is host
+        assert host.currentWidget() is reading
+        assert reading.isVisible()
+        assert live_preview.isHidden()
+        assert editor.isHidden()
+
+        editor.setPresentationMode(
+            MarkdownPresentationMode.FORMATTED_SOURCE
+        )
+        qApp.processEvents()
+
+        assert host.currentWidget() is editor
+        assert editor.isVisible()
+        assert live_preview.isHidden()
+        assert reading.isHidden()
+    finally:
+        host.hide()
 
 
 def test_auxiliary_markdown_editor_has_no_leaf_presentation_state():
@@ -180,6 +254,7 @@ def test_detaching_leaf_state_restores_formatted_source():
     settings = SettingsManager()
     state = MarkdownPresentationState()
     editor = MDEditView(spellcheck=False, settings=settings)
+    host_editor(editor)
     editor.setPresentationState(state)
     state.set_mode("reading")
 
@@ -255,6 +330,7 @@ def test_live_preview_replaces_inactive_source_with_rendered_text():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("**first**\n**second**")
     second_block = editor.document().findBlockByNumber(1)
     cursor = editor.textCursor()
@@ -264,8 +340,7 @@ def test_live_preview_replaces_inactive_source_with_rendered_text():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         projection = editor.livePreviewView
@@ -282,7 +357,7 @@ def test_live_preview_replaces_inactive_source_with_rendered_text():
         assert editor.toPlainText() == "**first**\n**second**"
         assert editor.highlighter.document() is None
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_reprojects_when_the_active_block_changes():
@@ -290,6 +365,7 @@ def test_live_preview_reprojects_when_the_active_block_changes():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("**first**\n**second**")
     second_block = editor.document().findBlockByNumber(1)
     cursor = editor.textCursor()
@@ -298,8 +374,7 @@ def test_live_preview_reprojects_when_the_active_block_changes():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         assert "**first**" not in editor.livePreviewView.toPlainText()
@@ -313,7 +388,7 @@ def test_live_preview_reprojects_when_the_active_block_changes():
         assert "**first**" in projected_text
         assert "**second**" not in projected_text
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_renders_inactive_list_markers_as_text_lists():
@@ -321,12 +396,12 @@ def test_live_preview_renders_inactive_list_markers_as_text_lists():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("- First item\n- Second item")
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         projection = editor.livePreviewView
@@ -334,7 +409,7 @@ def test_live_preview_renders_inactive_list_markers_as_text_lists():
         assert second_item.block().textList() is not None
         assert "- Second item" not in projection.toPlainText()
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_renders_heading_and_html_underline_off_line():
@@ -342,6 +417,7 @@ def test_live_preview_renders_heading_and_html_underline_off_line():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText(
         "# Heading\n\nA <u>stable underline</u>."
     )
@@ -353,8 +429,7 @@ def test_live_preview_renders_heading_and_html_underline_off_line():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         projection = editor.livePreviewView
@@ -368,7 +443,7 @@ def test_live_preview_renders_heading_and_html_underline_off_line():
             underline_position,
         ).fontUnderline()
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_edits_the_canonical_source_and_preserves_undo():
@@ -376,6 +451,7 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("**first**\nsecond")
     editor.setEnabled(True)
     cursor = editor.textCursor()
@@ -384,8 +460,7 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         QTest.keyClicks(editor.livePreviewView, "x")
@@ -399,7 +474,7 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
         assert editor.toPlainText() == "**first**\nsecond"
         assert "second" in editor.livePreviewView.toPlainText()
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_click_activates_the_rendered_source_block():
@@ -407,6 +482,7 @@ def test_live_preview_click_activates_the_rendered_source_block():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("**first**\n**second**")
     editor.setEnabled(True)
     cursor = editor.textCursor()
@@ -415,8 +491,7 @@ def test_live_preview_click_activates_the_rendered_source_block():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         projection = editor.livePreviewView
@@ -433,7 +508,7 @@ def test_live_preview_click_activates_the_rendered_source_block():
         assert "**first**" in projection.toPlainText()
         assert "**second**" not in projection.toPlainText()
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_click_preserves_source_and_viewport_anchor():
@@ -441,6 +516,7 @@ def test_live_preview_click_preserves_source_and_viewport_anchor():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     source_lines = [
         "Paragraph {} has **stable prose**.".format(number)
         for number in range(100)
@@ -460,8 +536,7 @@ def test_live_preview_click_preserves_source_and_viewport_anchor():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         projection = editor.livePreviewView
@@ -498,12 +573,15 @@ def test_live_preview_click_preserves_source_and_viewport_anchor():
         assert "**stable prose**" not in projection.toPlainText()
         assert abs(active_y - click_position.y()) <= 3
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_live_preview_click_does_not_submit_projection_to_model(
         MWEmptyProject):
     window = MWEmptyProject
+    window_was_visible = window.isVisible()
+    window.resize(900, 700)
+    window.show()
     source = (
         "# Model-backed chapter\n\n"
         "A paragraph with **rendered emphasis**.\n\n"
@@ -531,12 +609,31 @@ def test_live_preview_click_does_not_submit_projection_to_model(
             pos=projection.cursorRect(target).center(),
         )
         qApp.processEvents()
+        projection.setFocus()
+        qApp.processEvents()
         source_editor.submit()
 
         assert source_editor.toPlainText() == source
         assert item.data(Outline.text) == source
+        assert window._lastMDEditView is source_editor
+
+        source_editor.setPresentationMode(
+            MarkdownPresentationMode.READING
+        )
+        qApp.processEvents()
+        assert (
+            source_editor._presentationHost.currentWidget()
+            is source_editor.readingView
+        )
+        assert source_editor.readingView.toPlainText() == (
+            "Model-backed chapter\n"
+            "A paragraph with rendered emphasis.\n"
+            "Another paragraph remains canonical."
+        )
     finally:
         window.mainEditor.closeAllTabs()
+        if not window_was_visible:
+            window.hide()
 
 
 def test_live_preview_selection_routes_formatting_to_source():
@@ -544,6 +641,7 @@ def test_live_preview_selection_routes_formatting_to_source():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("first\nsecond")
     cursor = editor.textCursor()
     cursor.movePosition(QTextCursor.End)
@@ -551,8 +649,7 @@ def test_live_preview_selection_routes_formatting_to_source():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.resize(480, 360)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         projection = editor.livePreviewView
@@ -572,7 +669,7 @@ def test_live_preview_selection_routes_formatting_to_source():
         assert editor.toPlainText() == "first\n**second**"
         assert "**second**" in projection.toPlainText()
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_reading_mode_is_a_rendered_projection_of_untouched_source():
@@ -580,6 +677,7 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     source_document = editor.document()
     source = (
         "# Heading\n\n"
@@ -590,7 +688,7 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
     editor.setPlainText(source)
 
     editor.setPresentationMode(MarkdownPresentationMode.READING)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
 
@@ -609,7 +707,7 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
         assert "font-weight:600" in rendered_html
         assert "text-decoration: underline" in rendered_html
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_reading_projection_refreshes_when_source_changes():
@@ -617,9 +715,10 @@ def test_reading_projection_refreshes_when_source_changes():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("**first**")
     editor.setPresentationMode(MarkdownPresentationMode.READING)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         editor.document().setPlainText("*second*")
@@ -629,7 +728,7 @@ def test_reading_projection_refreshes_when_source_changes():
         assert editor.readingView.toPlainText() == "second"
         assert "font-style:italic" in editor.readingView.toHtml()
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_leaving_reading_mode_restores_the_same_editable_document():
@@ -637,6 +736,7 @@ def test_leaving_reading_mode_restores_the_same_editable_document():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host_editor(editor)
     source_document = editor.document()
     editor.setPlainText("editable")
     editor.setPresentationMode(MarkdownPresentationMode.READING)
@@ -654,6 +754,7 @@ def test_reading_projection_is_lazy_for_hidden_editor():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host = host_editor(editor)
     editor.setPlainText("# Deferred")
 
     editor.setPresentationMode(MarkdownPresentationMode.READING)
@@ -661,12 +762,12 @@ def test_reading_projection_is_lazy_for_hidden_editor():
     assert editor.readingView is not None
     assert editor.readingView.toPlainText() == ""
 
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         assert editor.readingView.toPlainText() == "Deferred"
     finally:
-        editor.hide()
+        host.hide()
 
 
 def test_reading_suspends_and_restores_source_highlighting():
@@ -674,6 +775,7 @@ def test_reading_suspends_and_restores_source_highlighting():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    host_editor(editor)
     source_document = editor.document()
 
     editor.setPresentationMode(MarkdownPresentationMode.READING)
@@ -691,16 +793,16 @@ def test_auto_resizing_reading_projection_has_no_nested_scrollbar():
         autoResize=True,
         settings=SettingsManager(),
     )
+    host = host_editor(editor, width=480, height=100)
     editor.setPlainText("# Heading\n\nA short paragraph.")
-    editor.resize(480, 100)
     editor.setPresentationMode(MarkdownPresentationMode.READING)
-    editor.show()
+    host.show()
     try:
         qApp.processEvents()
         assert (
             editor.readingView.verticalScrollBarPolicy()
             == Qt.ScrollBarAlwaysOff
         )
-        assert editor.minimumHeight() > 0
+        assert host.minimumHeight() > 0
     finally:
-        editor.hide()
+        host.hide()

@@ -294,12 +294,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         We get notified by qApp when focus changes, from old to new widget.
         """
 
-        # Projection widgets keep the canonical MDEditView as an ancestor.
+        # Projection widgets are siblings of their canonical editor in a
+        # MarkdownEditorHost.
         markdown_editor = new
         while (
             markdown_editor is not None
             and not isinstance(markdown_editor, MDEditView)
         ):
+            canonical_editor = getattr(
+                markdown_editor,
+                "canonicalEditor",
+                None,
+            )
+            if isinstance(canonical_editor, MDEditView):
+                markdown_editor = canonical_editor
+                break
             markdown_editor = markdown_editor.parent()
         self._lastMDEditView = markdown_editor
 

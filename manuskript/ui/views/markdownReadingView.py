@@ -6,8 +6,8 @@ from PyQt5.QtWidgets import QFrame, QTextBrowser
 class MarkdownReadingView(QTextBrowser):
     """Read-only projection of an MDEditView's source document."""
 
-    def __init__(self, source_editor):
-        super().__init__(source_editor.viewport())
+    def __init__(self, source_editor, parent=None):
+        super().__init__(parent)
         self._sourceEditor = source_editor
         self.setObjectName("markdownReadingView")
         self.setFrameShape(QFrame.NoFrame)
@@ -15,7 +15,6 @@ class MarkdownReadingView(QTextBrowser):
         self.setReadOnly(True)
         if source_editor._autoResize:
             self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.hide()
         self._active = False
         self._dirty = True
 
@@ -30,22 +29,18 @@ class MarkdownReadingView(QTextBrowser):
     def setActive(self, active):
         self._active = bool(active)
         if active:
-            self.show()
-            self.raise_()
             self.refreshIfNeeded()
-        else:
-            self.hide()
 
     def scheduleRefresh(self):
         self._dirty = True
-        if self._active and self._sourceEditor.isVisible():
+        if self._active and self.isVisible():
             self._refreshTimer.start()
 
     def refreshIfNeeded(self):
         if (
             self._active
             and self._dirty
-            and self._sourceEditor.isVisible()
+            and self.isVisible()
         ):
             self._refreshTimer.start()
 
@@ -57,6 +52,14 @@ class MarkdownReadingView(QTextBrowser):
             document.setTextWidth(width)
             if self._active and self._sourceEditor._autoResize:
                 self._sourceEditor.sizeChange()
+
+    def resizeEvent(self, event):
+        QTextBrowser.resizeEvent(self, event)
+        self.setProjectionWidth(self.viewport().width())
+
+    def showEvent(self, event):
+        QTextBrowser.showEvent(self, event)
+        self.refreshIfNeeded()
 
     def refresh(self):
         scrollbar = self.verticalScrollBar()
