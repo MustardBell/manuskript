@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor
 from PyQt5.QtWidgets import qApp
 
@@ -132,6 +133,8 @@ def test_shared_presentation_state_synchronizes_attached_editors():
     context = make_context(settings, state)
     first = MDEditView(spellcheck=False, settings=settings)
     second = MDEditView(spellcheck=False, settings=settings)
+    first.enablePresentationModes()
+    second.enablePresentationModes()
     first.set_text_editor_context(context)
     second.set_text_editor_context(context)
 
@@ -141,6 +144,23 @@ def test_shared_presentation_state_synchronizes_attached_editors():
     assert second.presentationMode is MarkdownPresentationMode.READING
     assert first.isReadOnly()
     assert second.isReadOnly()
+
+
+def test_auxiliary_markdown_editor_ignores_shared_reading_mode():
+    settings = SettingsManager()
+    state = MarkdownPresentationState(settings)
+    context = make_context(settings, state)
+    editor = MDEditView(spellcheck=False, settings=settings)
+    editor.set_text_editor_context(context)
+
+    state.set_mode("reading")
+
+    assert (
+        editor.presentationMode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    assert editor.readingView is None
+    assert not editor.isReadOnly()
 
 
 def test_html_display_editor_remains_read_only_in_editable_modes():
@@ -302,22 +322,26 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
     editor.setPlainText(source)
 
     editor.setPresentationMode(MarkdownPresentationMode.READING)
-    qApp.processEvents()
+    editor.show()
+    try:
+        qApp.processEvents()
 
-    assert editor.document() is source_document
-    assert editor.toPlainText() == source
-    assert not editor.readingView.isHidden()
-    assert editor.readingView.isReadOnly()
-    assert editor.readingView.toPlainText() == (
-        "Heading\n"
-        "Some bold, italic, and underlined text.\n"
-        "first\n"
-        "second"
-    )
-    rendered_html = editor.readingView.toHtml()
-    assert "<ul" in rendered_html
-    assert "font-weight:600" in rendered_html
-    assert "text-decoration: underline" in rendered_html
+        assert editor.document() is source_document
+        assert editor.toPlainText() == source
+        assert not editor.readingView.isHidden()
+        assert editor.readingView.isReadOnly()
+        assert editor.readingView.toPlainText() == (
+            "Heading\n"
+            "Some bold, italic, and underlined text.\n"
+            "first\n"
+            "second"
+        )
+        rendered_html = editor.readingView.toHtml()
+        assert "<ul" in rendered_html
+        assert "font-weight:600" in rendered_html
+        assert "text-decoration: underline" in rendered_html
+    finally:
+        editor.hide()
 
 
 def test_reading_projection_refreshes_when_source_changes():
@@ -327,13 +351,17 @@ def test_reading_projection_refreshes_when_source_changes():
     )
     editor.setPlainText("**first**")
     editor.setPresentationMode(MarkdownPresentationMode.READING)
+    editor.show()
+    try:
+        qApp.processEvents()
+        editor.document().setPlainText("*second*")
+        qApp.processEvents()
 
-    editor.document().setPlainText("*second*")
-    qApp.processEvents()
-
-    assert editor.toPlainText() == "*second*"
-    assert editor.readingView.toPlainText() == "second"
-    assert "font-style:italic" in editor.readingView.toHtml()
+        assert editor.toPlainText() == "*second*"
+        assert editor.readingView.toPlainText() == "second"
+        assert "font-style:italic" in editor.readingView.toHtml()
+    finally:
+        editor.hide()
 
 
 def test_leaving_reading_mode_restores_the_same_editable_document():
@@ -351,3 +379,60 @@ def test_leaving_reading_mode_restores_the_same_editable_document():
     assert editor.toPlainText() == "editable"
     assert editor.readingView.isHidden()
     assert not editor.isReadOnly()
+
+
+def test_reading_projection_is_lazy_for_hidden_editor():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("# Deferred")
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+
+    assert editor.readingView is not None
+    assert editor.readingView.toPlainText() == ""
+
+    editor.show()
+    try:
+        qApp.processEvents()
+        assert editor.readingView.toPlainText() == "Deferred"
+    finally:
+        editor.hide()
+
+
+def test_reading_suspends_and_restores_source_highlighting():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    source_document = editor.document()
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+    assert editor.highlighter.document() is None
+
+    editor.setPresentationMode(
+        MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    assert editor.highlighter.document() is source_document
+
+
+def test_auto_resizing_reading_projection_has_no_nested_scrollbar():
+    editor = MDEditView(
+        spellcheck=False,
+        autoResize=True,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("# Heading\n\nA short paragraph.")
+    editor.resize(480, 100)
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+    editor.show()
+    try:
+        qApp.processEvents()
+        assert (
+            editor.readingView.verticalScrollBarPolicy()
+            == Qt.ScrollBarAlwaysOff
+        )
+        assert editor.minimumHeight() > 0
+    finally:
+        editor.hide()

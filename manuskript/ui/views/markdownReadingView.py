@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QTextDocument
 from PyQt5.QtWidgets import QFrame, QTextBrowser
 
@@ -13,7 +13,11 @@ class MarkdownReadingView(QTextBrowser):
         self.setFrameShape(QFrame.NoFrame)
         self.setOpenExternalLinks(True)
         self.setReadOnly(True)
+        if source_editor._autoResize:
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.hide()
+        self._active = False
+        self._dirty = True
 
         self._refreshTimer = QTimer(self)
         self._refreshTimer.setSingleShot(True)
@@ -24,16 +28,35 @@ class MarkdownReadingView(QTextBrowser):
         )
 
     def setActive(self, active):
+        self._active = bool(active)
         if active:
-            self.refresh()
             self.show()
             self.raise_()
+            self.refreshIfNeeded()
         else:
             self.hide()
 
     def scheduleRefresh(self):
-        if not self.isHidden():
+        self._dirty = True
+        if self._active and self._sourceEditor.isVisible():
             self._refreshTimer.start()
+
+    def refreshIfNeeded(self):
+        if (
+            self._active
+            and self._dirty
+            and self._sourceEditor.isVisible()
+        ):
+            self._refreshTimer.start()
+
+    def setProjectionWidth(self, width):
+        if width <= 0:
+            return
+        document = self.document()
+        if document.textWidth() != width:
+            document.setTextWidth(width)
+            if self._active:
+                self._sourceEditor.sizeChange()
 
     def refresh(self):
         scrollbar = self.verticalScrollBar()
@@ -51,6 +74,9 @@ class MarkdownReadingView(QTextBrowser):
             self._sourceEditor.toPlainText(),
             QTextDocument.MarkdownDialectGitHub,
         )
+        self._dirty = False
+        self.setProjectionWidth(self.viewport().width())
+        self._sourceEditor.sizeChange()
 
         new_maximum = scrollbar.maximum()
         scrollbar.setValue(round(scroll_ratio * new_maximum))

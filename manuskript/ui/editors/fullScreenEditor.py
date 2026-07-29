@@ -44,6 +44,7 @@ class fullScreenEditor(QWidget):
                                 highlighting=True,
                                 dict=self.settings.dict,
                                 settings=self.settings)
+        self.editor.enablePresentationModes()
         if text_editor_context is not None:
             self.editor.set_text_editor_context(text_editor_context)
         self.editor.setFrameStyle(QFrame.NoFrame)

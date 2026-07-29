@@ -46,6 +46,9 @@ class MDEditView(textEditView):
         self._noFocusMode = False
         self._lastCursorPosition = None
         self._presentationState = None
+        self._availablePresentationState = None
+        self._presentationModesEnabled = False
+        self._highlighterSuspendedForReading = False
         self._contentReadOnly = html is not None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
@@ -65,19 +68,15 @@ class MDEditView(textEditView):
 
         # Highlighter
         self._textFormat = "md"
-        self.readingView = MarkdownReadingView(self)
+        self.readingView = None
         self.readingViewResizeTimer = QTimer(self)
         self.readingViewResizeTimer.setSingleShot(True)
         self.readingViewResizeTimer.setInterval(0)
         self.readingViewResizeTimer.timeout.connect(
             self._resizeReadingView
         )
-        configured_mode = self.settings.textEditor.get(
-            "markdownMode",
-            MarkdownPresentationMode.FORMATTED_SOURCE.value,
-        )
-        self._presentationMode = MarkdownPresentationMode.from_value(
-            configured_mode
+        self._presentationMode = (
+            MarkdownPresentationMode.FORMATTED_SOURCE
         )
         self._applyPresentationMode()
 
@@ -121,15 +120,53 @@ class MDEditView(textEditView):
             self._contentReadOnly
             or not self._presentationMode.is_editable
         )
-        self.readingView.setActive(reading_active)
-        self._scheduleReadingViewResize()
-        self.setFocusProxy(
-            self.readingView if reading_active else None
+        reading_view = (
+            self._ensureReadingView()
+            if reading_active
+            else self.readingView
         )
-        if self.highlighter:
+        if reading_view is not None:
+            reading_view.setActive(reading_active)
+            self._scheduleReadingViewResize()
+        self.setFocusProxy(
+            reading_view if reading_active else None
+        )
+        self._setHighlighterSuspended(reading_active)
+        if self.highlighter and not reading_active:
             self.highlighter.rehighlight()
 
-    def set_text_editor_context(self, context):
+    def _ensureReadingView(self):
+        if self.readingView is None:
+            self.readingView = MarkdownReadingView(self)
+            self._resizeReadingView()
+        return self.readingView
+
+    def _setHighlighterSuspended(self, suspended):
+        if not self.highlighter:
+            return
+        if suspended and not self._highlighterSuspendedForReading:
+            self.highlighter.setDocument(None)
+            self._highlighterSuspendedForReading = True
+        elif not suspended and self._highlighterSuspendedForReading:
+            self.highlighter.setDocument(self.document())
+            self._highlighterSuspendedForReading = False
+
+    def enablePresentationModes(self, enabled=True):
+        """Opt this long-form editor into the shared presentation state."""
+        enabled = bool(enabled)
+        if enabled == self._presentationModesEnabled:
+            return
+
+        self._presentationModesEnabled = enabled
+        self._attachPresentationState(
+            self._availablePresentationState if enabled else None
+        )
+        if not enabled:
+            self.setPresentationMode(
+                MarkdownPresentationMode.FORMATTED_SOURCE
+            )
+
+    def _attachPresentationState(self, state):
         if self._presentationState is not None:
             try:
                 self._presentationState.modeChanged.disconnect(
@@ -138,17 +175,23 @@ class MDEditView(textEditView):
             except (RuntimeError, TypeError):
                 pass
 
+        self._presentationState = state
+        if state is not None:
+            state.modeChanged.connect(self.setPresentationMode)
+            self.setPresentationMode(state.mode)
+
+    def set_text_editor_context(self, context):
+        self._attachPresentationState(None)
         textEditView.set_text_editor_context(self, context)
-        self._presentationState = (
+        self._availablePresentationState = (
             getattr(context, "markdown_presentation", None)
             if context is not None
             else None
         )
-        if self._presentationState is not None:
-            self._presentationState.modeChanged.connect(
-                self.setPresentationMode
+        if self._presentationModesEnabled:
+            self._attachPresentationState(
+                self._availablePresentationState
             )
-            self.setPresentationMode(self._presentationState.mode)
 
     ###########################################################################
     # KEYPRESS
@@ -705,16 +748,46 @@ class MDEditView(textEditView):
         self.scheduleInteractionRectUpdate()
 
     def _scheduleReadingViewResize(self):
-        if hasattr(self, "readingViewResizeTimer"):
+        if (
+            self.readingView is not None
+            and hasattr(self, "readingViewResizeTimer")
+        ):
             self.readingViewResizeTimer.start()
 
     def _resizeReadingView(self):
+        if self.readingView is None:
+            return
         target_geometry = self.viewport().rect()
         if self.readingView.geometry() != target_geometry:
             self.readingView.setGeometry(target_geometry)
+        self.readingView.setProjectionWidth(target_geometry.width())
+
+    def sizeChange(self):
+        if (
+            self._autoResize
+            and getattr(self, "readingView", None) is not None
+            and not self.readingView.isHidden()
+        ):
+            opt = self.settings.textEditor
+            doc_height = (
+                self.readingView.document().size().height()
+                + 2 * opt["marginsTB"]
+            )
+            if self.heightMin <= doc_height <= self.heightMax:
+                self.setMinimumHeight(int(doc_height))
+            return
+        textEditView.sizeChange(self)
+
+    def showEvent(self, event):
+        textEditView.showEvent(self, event)
+        if self.readingView is not None:
+            self.readingView.refreshIfNeeded()
 
     def copy(self):
-        if not self.readingView.isHidden():
+        if (
+            self.readingView is not None
+            and not self.readingView.isHidden()
+        ):
             self.readingView.copy()
             return
         textEditView.copy(self)

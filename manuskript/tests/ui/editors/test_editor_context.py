@@ -98,6 +98,11 @@ def test_active_editor_selection_sync_refreshes_main_editor(
 
 def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     window = MWEmptyProject
+    item = outlineItem(title="Chapter")
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    manuscript_editor = window.mainEditor.currentEditor().txtRedacText
     selector = window.mainEditor.cmbMarkdownMode
     state = window.textEditorContext.markdown_presentation
 
@@ -122,3 +127,13 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
 
     assert state.mode is MarkdownPresentationMode.READING
     assert selector.currentText() == "Reading"
+    assert (
+        manuscript_editor.presentationMode
+        is MarkdownPresentationMode.READING
+    )
+    assert (
+        window.txtSummarySentence.presentationMode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    assert window.txtSummarySentence.readingView is None
+    window.mainEditor.closeAllTabs()
