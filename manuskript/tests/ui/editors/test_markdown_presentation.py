@@ -564,7 +564,7 @@ def test_live_preview_click_preserves_source_and_viewport_anchor():
 
         active_line = projection.document().find("Anchor 70")
         active_y = projection.cursorRect(active_line).center().y()
-        assert projection.isReadOnly()
+        assert not projection.isReadOnly()
         assert editor.toPlainText() == source_before
         assert (
             editor.textCursor().block().text()
@@ -576,7 +576,7 @@ def test_live_preview_click_preserves_source_and_viewport_anchor():
         host.hide()
 
 
-def test_live_preview_click_does_not_submit_projection_to_model(
+def test_live_preview_click_focuses_and_edits_the_canonical_model(
         MWEmptyProject):
     window = MWEmptyProject
     window_was_visible = window.isVisible()
@@ -596,12 +596,16 @@ def test_live_preview_click_does_not_submit_projection_to_model(
     source_editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    source_editor.resize(480, 360)
-    source_editor.show()
     try:
         qApp.processEvents()
         projection = source_editor.livePreviewView
         target = projection.document().find("rendered emphasis")
+        target.setPosition(
+            target.selectionStart() + len("rendered")
+        )
+        expected_click_position = (
+            source.index("rendered emphasis") + len("rendered")
+        )
 
         QTest.mouseClick(
             projection.viewport(),
@@ -609,13 +613,34 @@ def test_live_preview_click_does_not_submit_projection_to_model(
             pos=projection.cursorRect(target).center(),
         )
         qApp.processEvents()
-        projection.setFocus()
-        qApp.processEvents()
-        source_editor.submit()
+        assert projection.hasFocus()
+        assert qApp.focusWidget() is projection
+        assert (
+            source_editor.textCursor().position()
+            == expected_click_position
+        )
 
         assert source_editor.toPlainText() == source
         assert item.data(Outline.text) == source
         assert window._lastMDEditView is source_editor
+
+        insertion_position = source_editor.textCursor().position()
+        QTest.keyClicks(qApp.focusWidget(), "X")
+        qApp.processEvents()
+        edited_source = (
+            source[:insertion_position]
+            + "X"
+            + source[insertion_position:]
+        )
+        assert source_editor.toPlainText() == edited_source
+        source_editor.submit()
+        assert item.data(Outline.text) == edited_source
+
+        source_editor.undo()
+        qApp.processEvents()
+        source_editor.submit()
+        assert source_editor.toPlainText() == source
+        assert item.data(Outline.text) == source
 
         source_editor.setPresentationMode(
             MarkdownPresentationMode.READING
