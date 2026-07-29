@@ -462,14 +462,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.projectBinding.bind()
         self.referenceService = self.projectBinding.reference_service
         self.textEditorContext = self.projectBinding.text_editor_context
-        self.attachMarkdownPresentationState(
-            self.textEditorContext.markdown_presentation
-        )
 
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
-        self.attachMarkdownPresentationState(None)
         self.projectBinding.unbind()
+        self.attachMarkdownPresentationState(None)
         self.textEditorContext = None
         self.referenceService = None
 

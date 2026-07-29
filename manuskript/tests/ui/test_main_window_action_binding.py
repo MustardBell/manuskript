@@ -39,6 +39,10 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         window.navigationController.back
     )
     window.generateViewMenu.assert_called_once_with()
+    (
+        window.mainEditor.activeMarkdownPresentationStateChanged.connect
+        .assert_called_once_with(window.attachMarkdownPresentationState)
+    )
     window.actModeSimple.setActionGroup.assert_called_once_with(
         action_group
     )

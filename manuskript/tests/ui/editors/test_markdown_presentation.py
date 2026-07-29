@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import qApp
 
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationDefaults,
     MarkdownPresentationMode,
     MarkdownPresentationState,
 )
@@ -15,7 +16,7 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.views.text_editor_context import TextEditorContext
 
 
-def make_context(settings, presentation):
+def make_context(settings):
     return TextEditorContext(
         settings=settings,
         reload_fonts=MagicMock(),
@@ -23,7 +24,6 @@ def make_context(settings, presentation):
         create_plot=MagicMock(),
         create_world_item=MagicMock(),
         invoke_outline_command=MagicMock(),
-        markdown_presentation=presentation,
     )
 
 
@@ -72,9 +72,10 @@ def test_markdown_presentation_mode_normalizes_persisted_values():
         MarkdownPresentationMode.from_value("wysiwyg")
 
 
-def test_presentation_state_persists_and_emits_real_transitions():
-    settings = SettingsManager()
-    state = MarkdownPresentationState(settings)
+def test_leaf_presentation_state_emits_only_real_transitions():
+    state = MarkdownPresentationState(
+        MarkdownPresentationMode.FORMATTED_SOURCE
+    )
     transitions = []
     state.modeChanged.connect(transitions.append)
 
@@ -86,17 +87,19 @@ def test_presentation_state_persists_and_emits_real_transitions():
         MarkdownPresentationMode.SOURCE,
         MarkdownPresentationMode.READING,
     ]
-    assert settings.textEditor["markdownMode"] == "reading"
 
 
-def test_presentation_state_repairs_an_unknown_persisted_value():
+def test_presentation_defaults_repair_an_unknown_persisted_value():
     settings = SettingsManager()
-    settings.textEditor["markdownMode"] = "wysiwyg"
+    settings.textEditor["markdownDefaultMode"] = "wysiwyg"
 
-    state = MarkdownPresentationState(settings)
+    mode = MarkdownPresentationDefaults.load(settings)
 
-    assert state.mode is MarkdownPresentationMode.FORMATTED_SOURCE
-    assert settings.textEditor["markdownMode"] == "formatted-source"
+    assert mode is MarkdownPresentationMode.FORMATTED_SOURCE
+    assert (
+        settings.textEditor["markdownDefaultMode"]
+        == "formatted-source"
+    )
 
 
 def test_editor_mode_switch_preserves_source_selection_and_undo_state():
@@ -127,16 +130,13 @@ def test_editor_mode_switch_preserves_source_selection_and_undo_state():
     assert editor.textCursor().selectedText() == "selected"
 
 
-def test_shared_presentation_state_synchronizes_attached_editors():
+def test_leaf_presentation_state_synchronizes_its_document_views():
     settings = SettingsManager()
-    state = MarkdownPresentationState(settings)
-    context = make_context(settings, state)
+    state = MarkdownPresentationState()
     first = MDEditView(spellcheck=False, settings=settings)
     second = MDEditView(spellcheck=False, settings=settings)
-    first.enablePresentationModes()
-    second.enablePresentationModes()
-    first.set_text_editor_context(context)
-    second.set_text_editor_context(context)
+    first.setPresentationState(state)
+    second.setPresentationState(state)
 
     state.set_mode("reading")
 
@@ -146,10 +146,10 @@ def test_shared_presentation_state_synchronizes_attached_editors():
     assert second.isReadOnly()
 
 
-def test_auxiliary_markdown_editor_ignores_shared_reading_mode():
+def test_auxiliary_markdown_editor_has_no_leaf_presentation_state():
     settings = SettingsManager()
-    state = MarkdownPresentationState(settings)
-    context = make_context(settings, state)
+    state = MarkdownPresentationState()
+    context = make_context(settings)
     editor = MDEditView(spellcheck=False, settings=settings)
     editor.set_text_editor_context(context)
 
@@ -163,16 +163,14 @@ def test_auxiliary_markdown_editor_ignores_shared_reading_mode():
     assert not editor.isReadOnly()
 
 
-def test_detaching_long_form_editor_restores_formatted_source():
+def test_detaching_leaf_state_restores_formatted_source():
     settings = SettingsManager()
-    state = MarkdownPresentationState(settings)
-    context = make_context(settings, state)
+    state = MarkdownPresentationState()
     editor = MDEditView(spellcheck=False, settings=settings)
-    editor.enablePresentationModes()
-    editor.set_text_editor_context(context)
+    editor.setPresentationState(state)
     state.set_mode("reading")
 
-    editor.set_text_editor_context(None)
+    editor.setPresentationState(None)
 
     assert (
         editor.presentationMode

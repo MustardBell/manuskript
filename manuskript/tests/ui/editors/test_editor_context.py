@@ -76,6 +76,9 @@ def test_full_screen_editor_receives_existing_editor_context(
         settings=window.settingsManager,
         text_editor_context=window.textEditorContext,
         screenNumber=0,
+        presentation_mode=(
+            window.mainEditor.currentEditor().markdownPresentation.mode
+        ),
     )
     window.mainEditor.closeAllTabs()
 
@@ -104,7 +107,7 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     manuscript_editor = window.mainEditor.currentEditor().txtRedacText
     selector = window.mainEditor.cmbMarkdownMode
-    state = window.textEditorContext.markdown_presentation
+    state = window.mainEditor.currentEditor().markdownPresentation
 
     assert (
         window.menuMarkdownMode.menuAction()
@@ -136,4 +139,43 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
         is MarkdownPresentationMode.FORMATTED_SOURCE
     )
     assert window.txtSummarySentence.readingView is None
+    window.mainEditor.closeAllTabs()
+
+
+def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
+    window = MWEmptyProject
+    first_item = outlineItem(title="First")
+    second_item = outlineItem(title="Second")
+    window.mdlOutline.appendItem(first_item)
+    window.mdlOutline.appendItem(second_item)
+    first_index = window.mdlOutline.indexFromItem(first_item)
+    second_index = window.mdlOutline.indexFromItem(second_item)
+
+    window.mainEditor.setCurrentModelIndex(first_index, newTab=True)
+    first_editor = window.mainEditor.currentEditor()
+    window.actMarkdownLivePreview.trigger()
+
+    window.mainEditor.setCurrentModelIndex(second_index, newTab=True)
+    second_editor = window.mainEditor.currentEditor()
+
+    assert (
+        first_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    assert (
+        second_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    assert (
+        window.mainEditor.cmbMarkdownMode.currentText()
+        == "Formatted Source"
+    )
+
+    first_editor._tabWidget.setCurrentWidget(first_editor)
+
+    assert (
+        window.mainEditor.cmbMarkdownMode.currentText()
+        == "Live Preview"
+    )
+    assert window.actMarkdownLivePreview.isChecked()
     window.mainEditor.closeAllTabs()
