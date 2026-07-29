@@ -1,3 +1,5 @@
+from bisect import bisect_left
+
 from PyQt5.QtGui import (
     QTextBlockFormat,
     QTextCharFormat,
@@ -37,6 +39,13 @@ class MarkdownProjectionMap:
             return None
         position = min(max(0, position), len(self._positions) - 1)
         return self._positions[position]
+
+    def projection_position_at(self, source_position):
+        """Return the rendered position nearest to a source position."""
+        if not self._positions:
+            return None
+        position = bisect_left(self._positions, source_position)
+        return min(position, len(self._positions) - 1)
 
     def rendered_range_for(self, document, source_block):
         source_start = source_block.position()
