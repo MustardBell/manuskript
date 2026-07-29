@@ -26,4 +26,5 @@ class DefaultTextEditorSettings:
             "backgroundTransparent": False,
             "alwaysCenter": False,
             "focusMode": False,
+            "markdownMode": "live-preview",
         }
