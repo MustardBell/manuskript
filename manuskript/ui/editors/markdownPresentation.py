@@ -7,6 +7,7 @@ class MarkdownPresentationMode(Enum):
     """How a Markdown document is presented without changing its source."""
 
     SOURCE = "source"
+    FORMATTED_SOURCE = "formatted-source"
     LIVE_PREVIEW = "live-preview"
     READING = "reading"
 
@@ -42,7 +43,7 @@ class MarkdownPresentationState(QObject):
 
     modeChanged = pyqtSignal(object)
 
-    DEFAULT_MODE = MarkdownPresentationMode.LIVE_PREVIEW
+    DEFAULT_MODE = MarkdownPresentationMode.FORMATTED_SOURCE
     SETTINGS_KEY = "markdownMode"
 
     def __init__(self, settings, parent=None):

@@ -106,12 +106,17 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
         in window.menuView.actions()
     )
     assert selector.isEnabled()
-    assert selector.currentText() == "Live Preview"
+    assert selector.currentText() == "Formatted Source"
 
     selector.setCurrentIndex(0)
 
     assert state.mode is MarkdownPresentationMode.SOURCE
     assert window.actMarkdownSource.isChecked()
+
+    window.actMarkdownFormattedSource.trigger()
+
+    assert state.mode is MarkdownPresentationMode.FORMATTED_SOURCE
+    assert selector.currentText() == "Formatted Source"
 
     window.actMarkdownReading.trigger()
 

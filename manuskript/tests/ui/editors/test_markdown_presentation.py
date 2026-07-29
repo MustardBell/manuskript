@@ -44,6 +44,12 @@ def test_markdown_presentation_mode_defines_display_policy():
     assert not MarkdownPresentationMode.SOURCE.renders_markdown
     assert not MarkdownPresentationMode.SOURCE.reveals_active_block
 
+    assert MarkdownPresentationMode.FORMATTED_SOURCE.is_editable
+    assert MarkdownPresentationMode.FORMATTED_SOURCE.renders_markdown
+    assert not (
+        MarkdownPresentationMode.FORMATTED_SOURCE.reveals_active_block
+    )
+
     assert MarkdownPresentationMode.LIVE_PREVIEW.is_editable
     assert MarkdownPresentationMode.LIVE_PREVIEW.renders_markdown
     assert MarkdownPresentationMode.LIVE_PREVIEW.reveals_active_block
@@ -88,8 +94,8 @@ def test_presentation_state_repairs_an_unknown_persisted_value():
 
     state = MarkdownPresentationState(settings)
 
-    assert state.mode is MarkdownPresentationMode.LIVE_PREVIEW
-    assert settings.textEditor["markdownMode"] == "live-preview"
+    assert state.mode is MarkdownPresentationMode.FORMATTED_SOURCE
+    assert settings.textEditor["markdownMode"] == "formatted-source"
 
 
 def test_editor_mode_switch_preserves_source_selection_and_undo_state():

@@ -555,7 +555,7 @@ class MarkdownHighlighter(BasicHighlighter):
         return getattr(
             self.editor,
             "presentationMode",
-            MarkdownPresentationMode.LIVE_PREVIEW,
+            MarkdownPresentationMode.FORMATTED_SOURCE,
         )
 
     def _themeForPresentation(self, theme):
@@ -572,7 +572,10 @@ class MarkdownHighlighter(BasicHighlighter):
             return False
 
         mode = self._presentationMode()
-        if mode is MarkdownPresentationMode.SOURCE:
+        if mode in (
+            MarkdownPresentationMode.SOURCE,
+            MarkdownPresentationMode.FORMATTED_SOURCE,
+        ):
             return False
         if mode is MarkdownPresentationMode.READING:
             return True

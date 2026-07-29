@@ -82,6 +82,7 @@ class Ui_mainEditor(object):
         self.cmbMarkdownMode.addItem("")
         self.cmbMarkdownMode.addItem("")
         self.cmbMarkdownMode.addItem("")
+        self.cmbMarkdownMode.addItem("")
         self.cmbMarkdownMode.setCurrentIndex(1)
         self.horizontalLayout_19.addWidget(self.cmbMarkdownMode)
         self.btnRedacFullscreen = QtWidgets.QPushButton(mainEditor)
@@ -106,8 +107,9 @@ class Ui_mainEditor(object):
         self.btnRedacFolderOutline.setText(_translate("mainEditor", "Outline"))
         self.cmbMarkdownMode.setToolTip(_translate("mainEditor", "Markdown editor mode"))
         self.cmbMarkdownMode.setItemText(0, _translate("mainEditor", "Source"))
-        self.cmbMarkdownMode.setItemText(1, _translate("mainEditor", "Live Preview"))
-        self.cmbMarkdownMode.setItemText(2, _translate("mainEditor", "Reading"))
+        self.cmbMarkdownMode.setItemText(1, _translate("mainEditor", "Formatted Source"))
+        self.cmbMarkdownMode.setItemText(2, _translate("mainEditor", "Live Preview"))
+        self.cmbMarkdownMode.setItemText(3, _translate("mainEditor", "Reading"))
         self.btnRedacFullscreen.setShortcut("F11")
 
 from manuskript.ui.editors.tabSplitter import tabSplitter

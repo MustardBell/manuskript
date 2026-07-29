@@ -2116,6 +2116,7 @@
       <string>Markdown &amp;Editor</string>
      </property>
      <addaction name="actMarkdownSource"/>
+     <addaction name="actMarkdownFormattedSource"/>
      <addaction name="actMarkdownLivePreview"/>
      <addaction name="actMarkdownReading"/>
     </widget>
@@ -2403,14 +2404,25 @@
    <property name="checkable">
     <bool>true</bool>
    </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
    <property name="text">
     <string>&amp;Live Preview</string>
    </property>
    <property name="statusTip">
     <string>Render Markdown while revealing syntax in the active block</string>
+   </property>
+  </action>
+  <action name="actMarkdownFormattedSource">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Formatted Source</string>
+   </property>
+   <property name="statusTip">
+    <string>Show Markdown syntax and rendered text styling together</string>
    </property>
   </action>
   <action name="actMarkdownReading">
