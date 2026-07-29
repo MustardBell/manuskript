@@ -197,7 +197,7 @@ def test_live_preview_reveals_only_the_active_blocks_markup():
         MarkdownHighlighter.MarkupHiddenProperty
     )
     assert first_marker.foreground().color().alpha() == 0
-    assert first_marker.fontPointSize() == pytest.approx(0.01)
+    assert first_marker.fontPointSize() != pytest.approx(0.01)
     assert first_text.fontWeight() == QFont.Bold
     assert not second_marker.property(
         MarkdownHighlighter.MarkupHiddenProperty
@@ -231,3 +231,117 @@ def test_live_preview_rehighlights_old_and_new_active_blocks():
     assert second_marker.property(
         MarkdownHighlighter.MarkupHiddenProperty
     )
+
+
+def test_live_preview_keeps_list_markers_layout_stable_when_visible():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("- First item\n- Second item")
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        second_block = editor.document().findBlockByNumber(1)
+        marker = format_at(editor, second_block.position())
+        assert not marker.property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+    finally:
+        editor.hide()
+
+
+def test_live_preview_hides_markup_without_changing_font_metrics():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText(
+        "# Heading\n\nA <u>stable underline</u>."
+    )
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        tag_position = editor.toPlainText().index("<u>")
+        marker_format = format_at(editor, tag_position)
+        assert marker_format.property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+        assert marker_format.foreground().color().alpha() == 0
+        assert marker_format.fontPointSize() != pytest.approx(0.01)
+    finally:
+        editor.hide()
+
+
+def test_reading_mode_is_a_rendered_projection_of_untouched_source():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    source_document = editor.document()
+    source = (
+        "# Heading\n\n"
+        "Some **bold**, *italic*, and <u>underlined</u> text.\n\n"
+        "- first\n"
+        "- second"
+    )
+    editor.setPlainText(source)
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+    qApp.processEvents()
+
+    assert editor.document() is source_document
+    assert editor.toPlainText() == source
+    assert not editor.readingView.isHidden()
+    assert editor.readingView.isReadOnly()
+    assert editor.readingView.toPlainText() == (
+        "Heading\n"
+        "Some bold, italic, and underlined text.\n"
+        "first\n"
+        "second"
+    )
+    rendered_html = editor.readingView.toHtml()
+    assert "<ul" in rendered_html
+    assert "font-weight:600" in rendered_html
+    assert "text-decoration: underline" in rendered_html
+
+
+def test_reading_projection_refreshes_when_source_changes():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**first**")
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+
+    editor.document().setPlainText("*second*")
+    qApp.processEvents()
+
+    assert editor.toPlainText() == "*second*"
+    assert editor.readingView.toPlainText() == "second"
+    assert "font-style:italic" in editor.readingView.toHtml()
+
+
+def test_leaving_reading_mode_restores_the_same_editable_document():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    source_document = editor.document()
+    editor.setPlainText("editable")
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+
+    editor.setPresentationMode(MarkdownPresentationMode.SOURCE)
+
+    assert editor.document() is source_document
+    assert editor.toPlainText() == "editable"
+    assert editor.readingView.isHidden()
+    assert not editor.isReadOnly()

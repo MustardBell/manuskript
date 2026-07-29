@@ -15,6 +15,7 @@ from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import qApp, QToolTip
 
 from manuskript.ui.views.textEditView import textEditView
+from manuskript.ui.views.markdownReadingView import MarkdownReadingView
 from manuskript.ui.highlighters import MarkdownHighlighter
 from manuskript.ui.highlighters.markdownEnums import MarkdownState as MS
 from manuskript.ui.highlighters.markdownTokenizer import MarkdownTokenizer as MT
@@ -64,6 +65,13 @@ class MDEditView(textEditView):
 
         # Highlighter
         self._textFormat = "md"
+        self.readingView = MarkdownReadingView(self)
+        self.readingViewResizeTimer = QTimer(self)
+        self.readingViewResizeTimer.setSingleShot(True)
+        self.readingViewResizeTimer.setInterval(0)
+        self.readingViewResizeTimer.timeout.connect(
+            self._resizeReadingView
+        )
         configured_mode = self.settings.textEditor.get(
             "markdownMode",
             MarkdownPresentationMode.LIVE_PREVIEW.value,
@@ -104,9 +112,19 @@ class MDEditView(textEditView):
         self.presentationModeChanged.emit(mode)
 
     def _applyPresentationMode(self):
+        reading_active = (
+            not self._contentReadOnly
+            and self._presentationMode
+            is MarkdownPresentationMode.READING
+        )
         self.setReadOnly(
             self._contentReadOnly
             or not self._presentationMode.is_editable
+        )
+        self.readingView.setActive(reading_active)
+        self._scheduleReadingViewResize()
+        self.setFocusProxy(
+            self.readingView if reading_active else None
         )
         if self.highlighter:
             self.highlighter.rehighlight()
@@ -683,7 +701,23 @@ class MDEditView(textEditView):
 
     def resizeEvent(self, event):
         textEditView.resizeEvent(self, event)
+        self._scheduleReadingViewResize()
         self.scheduleInteractionRectUpdate()
+
+    def _scheduleReadingViewResize(self):
+        if hasattr(self, "readingViewResizeTimer"):
+            self.readingViewResizeTimer.start()
+
+    def _resizeReadingView(self):
+        target_geometry = self.viewport().rect()
+        if self.readingView.geometry() != target_geometry:
+            self.readingView.setGeometry(target_geometry)
+
+    def copy(self):
+        if not self.readingView.isHidden():
+            self.readingView.copy()
+            return
+        textEditView.copy(self)
 
     def scrollContentsBy(self, dx, dy):
         textEditView.scrollContentsBy(self, dx, dy)
