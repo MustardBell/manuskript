@@ -108,6 +108,116 @@ def test_tab_and_backtab_route_to_markdown_indentation():
     assert editor.toPlainText() == "line"
 
 
+def select_text(editor, text):
+    source = editor.toPlainText()
+    python_start = source.index(text)
+    start = len(
+        source[:python_start].encode("utf-16-le")
+    ) // 2
+    length = len(text.encode("utf-16-le")) // 2
+    cursor = editor.textCursor()
+    cursor.setPosition(start)
+    cursor.setPosition(
+        start + length,
+        QTextCursor.KeepAnchor,
+    )
+    editor.setTextCursor(cursor)
+
+
+def test_bold_is_a_toggle_instead_of_stacking_delimiters():
+    editor = make_editor()
+    source = "was it the blown precision and"
+    editor.setPlainText(source)
+    select_text(editor, "precision")
+
+    editor.bold()
+
+    assert editor.toPlainText() == (
+        "was it the blown **precision** and"
+    )
+    assert editor.textCursor().selectedText() == "precision"
+
+    editor.bold()
+
+    assert editor.toPlainText() == source
+    assert editor.textCursor().selectedText() == "precision"
+
+
+def test_bold_removes_markers_included_in_selection():
+    editor = make_editor()
+    editor.setPlainText("some **bold words** here")
+    select_text(editor, "**bold words**")
+
+    editor.bold()
+
+    assert editor.toPlainText() == "some bold words here"
+    assert editor.textCursor().selectedText() == "bold words"
+
+
+def test_bold_splits_an_enclosing_strong_span():
+    editor = make_editor()
+    source = (
+        "**Taras finished his tea, set the mug on the "
+        "floor, and said:**"
+    )
+    editor.setPlainText(source)
+    select_text(editor, "tea")
+
+    editor.bold()
+
+    assert editor.toPlainText() == (
+        "**Taras finished his** tea, "
+        "**set the mug on the floor, and said:**"
+    )
+    assert editor.textCursor().selectedText() == "tea"
+
+    editor.bold()
+
+    assert editor.toPlainText() == source
+    assert editor.textCursor().selectedText() == "tea"
+
+
+def test_bold_splits_underscore_strong_without_changing_prose():
+    editor = make_editor()
+    source = "__Keep this word, and the rest strong.__"
+    editor.setPlainText(source)
+    select_text(editor, "word")
+
+    editor.bold()
+
+    assert editor.toPlainText() == (
+        "__Keep this__ word, __and the rest strong.__"
+    )
+    assert editor.textCursor().selectedText() == "word"
+
+    editor.bold()
+
+    assert editor.toPlainText() == source
+    assert editor.textCursor().selectedText() == "word"
+
+
+def test_bold_leaves_selected_outer_whitespace_outside_markers():
+    editor = make_editor()
+    editor.setPlainText("before selected after")
+    select_text(editor, " selected ")
+
+    editor.bold()
+
+    assert editor.toPlainText() == "before **selected** after"
+    assert editor.textCursor().selectedText() == "selected"
+
+
+def test_bold_toggle_handles_utf16_positions():
+    editor = make_editor()
+    editor.setPlainText("🙂 before **selected** after")
+    select_text(editor, "selected")
+
+    editor.bold()
+
+    assert editor.toPlainText() == "🙂 before selected after"
+    assert editor.textCursor().selectedText() == "selected"
+
+
 def test_clear_format_removes_inline_and_block_markdown():
     editor = make_editor()
     source = (
