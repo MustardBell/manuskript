@@ -53,6 +53,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             parent if hasattr(parent, "updateTargets") else None
         )
         self.settings = self.txtRedacText.settings
+        self.txtRedacText.enablePresentationModes()
         self.editor_context = None
         self.outline_context = None
         if editor_context is not None:
@@ -235,6 +236,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                                highlighting=True,
                                autoResize=True,
                                settings=self.settings)
+            edt.enablePresentationModes()
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
                     self.editor_context.text_editor
