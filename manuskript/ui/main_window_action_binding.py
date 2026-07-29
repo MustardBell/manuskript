@@ -138,6 +138,9 @@ class MainWindowActionBinding:
     def _bind_view_actions(self):
         window = self.window
         window.generateViewMenu()
+        window.mainEditor.activeMarkdownPresentationStateChanged.connect(
+            window.attachMarkdownPresentationState
+        )
         window.actModeGroup = QActionGroup(window)
         window.actModeSimple.setActionGroup(window.actModeGroup)
         window.actModeFiction.setActionGroup(window.actModeGroup)

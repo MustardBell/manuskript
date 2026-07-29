@@ -16,6 +16,10 @@ from manuskript.ui.editors.locker import locker
 from manuskript.ui.editors.themes import findThemePath, generateTheme, setThemeEditorDatas
 from manuskript.ui.editors.themes import loadThemeDatas
 from manuskript.ui.views.MDEditView import MDEditView
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationDefaults,
+    MarkdownPresentationState,
+)
 from manuskript.functions import Spellchecker
 
 import logging
@@ -26,7 +30,7 @@ class fullScreenEditor(QWidget):
 
     def __init__(
             self, index, settings, text_editor_context=None, parent=None,
-            screenNumber=None):
+            screenNumber=None, presentation_mode=None):
         QWidget.__init__(self, parent)
         self.settings = settings
         self.setAttribute(Qt.WA_DeleteOnClose, True)
@@ -44,7 +48,13 @@ class fullScreenEditor(QWidget):
                                 highlighting=True,
                                 dict=self.settings.dict,
                                 settings=self.settings)
-        self.editor.enablePresentationModes()
+        self.markdownPresentation = MarkdownPresentationState(
+            presentation_mode
+            if presentation_mode is not None
+            else MarkdownPresentationDefaults.load(settings),
+            parent=self,
+        )
+        self.editor.setPresentationState(self.markdownPresentation)
         if text_editor_context is not None:
             self.editor.set_text_editor_context(text_editor_context)
         self.editor.setFrameStyle(QFrame.NoFrame)

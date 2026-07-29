@@ -11,7 +11,9 @@ from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import open_split_dialog
 from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationDefaults,
     MarkdownPresentationMode,
+    MarkdownPresentationState,
 )
 
 
@@ -53,11 +55,17 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             parent if hasattr(parent, "updateTargets") else None
         )
         self.settings = self.txtRedacText.settings
-        self.txtRedacText.enablePresentationModes()
         self.editor_context = None
         self.outline_context = None
         if editor_context is not None:
             self.set_context(editor_context)
+        self.markdownPresentation = MarkdownPresentationState(
+            MarkdownPresentationDefaults.load(self.settings),
+            parent=self,
+        )
+        self.txtRedacText.setPresentationState(
+            self.markdownPresentation
+        )
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
@@ -236,7 +244,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                                highlighting=True,
                                autoResize=True,
                                settings=self.settings)
-            edt.enablePresentationModes()
+            edt.setPresentationState(self.markdownPresentation)
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
                     self.editor_context.text_editor

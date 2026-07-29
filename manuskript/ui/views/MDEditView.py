@@ -46,8 +46,6 @@ class MDEditView(textEditView):
         self._noFocusMode = False
         self._lastCursorPosition = None
         self._presentationState = None
-        self._availablePresentationState = None
-        self._presentationModesEnabled = False
         self._highlighterSuspendedForReading = False
         self._contentReadOnly = html is not None
         textEditView.__init__(self, parent, index, html, spellcheck,
@@ -151,22 +149,8 @@ class MDEditView(textEditView):
             self.highlighter.setDocument(self.document())
             self._highlighterSuspendedForReading = False
 
-    def enablePresentationModes(self, enabled=True):
-        """Opt this long-form editor into the shared presentation state."""
-        enabled = bool(enabled)
-        if enabled == self._presentationModesEnabled:
-            return
-
-        self._presentationModesEnabled = enabled
-        self._attachPresentationState(
-            self._availablePresentationState if enabled else None
-        )
-        if not enabled:
-            self.setPresentationMode(
-                MarkdownPresentationMode.FORMATTED_SOURCE
-            )
-
-    def _attachPresentationState(self, state):
+    def setPresentationState(self, state):
+        """Attach this view to its owning editor leaf's presentation state."""
         if self._presentationState is not None:
             try:
                 self._presentationState.modeChanged.disconnect(
@@ -179,24 +163,13 @@ class MDEditView(textEditView):
         if state is not None:
             state.modeChanged.connect(self.setPresentationMode)
             self.setPresentationMode(state.mode)
+        else:
+            self.setPresentationMode(
+                MarkdownPresentationMode.FORMATTED_SOURCE
+            )
 
     def set_text_editor_context(self, context):
-        self._attachPresentationState(None)
         textEditView.set_text_editor_context(self, context)
-        self._availablePresentationState = (
-            getattr(context, "markdown_presentation", None)
-            if context is not None
-            else None
-        )
-        if self._presentationModesEnabled:
-            if self._availablePresentationState is not None:
-                self._attachPresentationState(
-                    self._availablePresentationState
-                )
-            else:
-                self.setPresentationMode(
-                    MarkdownPresentationMode.FORMATTED_SOURCE
-                )
 
     ###########################################################################
     # KEYPRESS

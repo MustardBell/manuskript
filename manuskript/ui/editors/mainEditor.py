@@ -2,7 +2,7 @@
 # --!-- coding: utf8 --!--
 import locale, os
 
-from PyQt5.QtCore import QModelIndex, QRect, QPoint
+from PyQt5.QtCore import QModelIndex, QRect, QPoint, pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter, QIcon
 from PyQt5.QtWidgets import QWidget, qApp, QDesktopWidget
@@ -65,6 +65,8 @@ class mainEditor(QWidget, Ui_mainEditor):
     +-------------------------------------------------------------------------+
     """
 
+    activeMarkdownPresentationStateChanged = pyqtSignal(object)
+
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
@@ -124,12 +126,10 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.editor_context = context
         if context.text_editor is not None:
             self.settings = context.text_editor.settings
-            self.attachMarkdownPresentationState(
-                context.text_editor.markdown_presentation
-            )
-        else:
-            self.attachMarkdownPresentationState(None)
         self.tabSplitter.set_context(context)
+        self.attachMarkdownPresentationState(
+            self._currentMarkdownPresentationState()
+        )
 
     def clear_context(self):
         self.attachMarkdownPresentationState(None)
@@ -137,6 +137,8 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.editor_context = None
 
     def attachMarkdownPresentationState(self, state):
+        if state is self._markdownPresentationState:
+            return
         if self._markdownPresentationState is not None:
             try:
                 self._markdownPresentationState.modeChanged.disconnect(
@@ -147,11 +149,20 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         self._markdownPresentationState = state
         self.cmbMarkdownMode.setEnabled(state is not None)
+        self.activeMarkdownPresentationStateChanged.emit(state)
         if state is None:
             return
 
         state.modeChanged.connect(self.syncMarkdownPresentationMode)
         self.syncMarkdownPresentationMode(state.mode)
+
+    def _currentMarkdownPresentationState(self):
+        editor = self.currentEditor()
+        return (
+            getattr(editor, "markdownPresentation", None)
+            if editor is not None
+            else None
+        )
 
     def setMarkdownPresentationMode(self, index):
         if (
@@ -194,6 +205,9 @@ class mainEditor(QWidget, Ui_mainEditor):
         return tabWidget.currentWidget()
 
     def tabChanged(self, index=QModelIndex()):
+        self.attachMarkdownPresentationState(
+            self._currentMarkdownPresentationState()
+        )
         if self.currentEditor():
             index = self.currentEditor().currentIndex
             view = self.currentEditor().folderView
@@ -461,7 +475,11 @@ class mainEditor(QWidget, Ui_mainEditor):
                 self.currentEditor().currentIndex,
                 settings=self.settings,
                 text_editor_context=self.editor_context.text_editor,
-                screenNumber=currentScreenNumber)
+                screenNumber=currentScreenNumber,
+                presentation_mode=(
+                    self.currentEditor().markdownPresentation.mode
+                ),
+            )
             # Clean the variable when closing fullscreen prevent errors
             self._fullScreen.exited.connect(self.clearFullScreen)
 

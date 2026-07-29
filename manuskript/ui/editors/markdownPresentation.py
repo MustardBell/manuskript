@@ -39,27 +39,20 @@ class MarkdownPresentationMode(Enum):
 
 
 class MarkdownPresentationState(QObject):
-    """Shared, persisted presentation state for every Markdown editor."""
+    """Presentation state owned by one editor leaf."""
 
     modeChanged = pyqtSignal(object)
 
     DEFAULT_MODE = MarkdownPresentationMode.FORMATTED_SOURCE
-    SETTINGS_KEY = "markdownMode"
 
-    def __init__(self, settings, parent=None):
+    def __init__(self, mode=None, parent=None):
         super().__init__(parent)
-        self._settings = settings
-        configured_mode = settings.textEditor.get(
-            self.SETTINGS_KEY,
-            self.DEFAULT_MODE.value,
-        )
         try:
             self._mode = MarkdownPresentationMode.from_value(
-                configured_mode
+                mode if mode is not None else self.DEFAULT_MODE
             )
         except ValueError:
             self._mode = self.DEFAULT_MODE
-        self._persist()
 
     @property
     def mode(self):
@@ -71,8 +64,33 @@ class MarkdownPresentationState(QObject):
             return
 
         self._mode = mode
-        self._persist()
         self.modeChanged.emit(mode)
 
-    def _persist(self):
-        self._settings.textEditor[self.SETTINGS_KEY] = self._mode.value
+
+class MarkdownPresentationDefaults:
+    """Read and write the seed mode used by newly created editor leaves."""
+
+    SETTINGS_KEY = "markdownDefaultMode"
+    LEGACY_SETTINGS_KEY = "markdownMode"
+    DEFAULT_MODE = MarkdownPresentationState.DEFAULT_MODE
+
+    @classmethod
+    def load(cls, settings):
+        configured_mode = settings.textEditor.get(
+            cls.SETTINGS_KEY,
+            settings.textEditor.get(
+                cls.LEGACY_SETTINGS_KEY,
+                cls.DEFAULT_MODE.value,
+            ),
+        )
+        try:
+            mode = MarkdownPresentationMode.from_value(configured_mode)
+        except ValueError:
+            mode = cls.DEFAULT_MODE
+        settings.textEditor[cls.SETTINGS_KEY] = mode.value
+        return mode
+
+    @classmethod
+    def store(cls, settings, mode):
+        mode = MarkdownPresentationMode.from_value(mode)
+        settings.textEditor[cls.SETTINGS_KEY] = mode.value
