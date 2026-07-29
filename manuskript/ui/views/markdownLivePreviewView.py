@@ -57,7 +57,7 @@ class MarkdownLivePreviewView(QTextEdit):
         self.setFrameShape(QFrame.NoFrame)
         self.setAcceptRichText(False)
         self.setAcceptDrops(False)
-        self.setReadOnly(True)
+        self.setReadOnly(False)
         self.setUndoRedoEnabled(False)
         if source_editor._autoResize:
             self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -269,6 +269,8 @@ class MarkdownLivePreviewView(QTextEdit):
     def mousePressEvent(self, event):
         old_position = self.textCursor().position()
         old_anchor = self.textCursor().anchor()
+        if event.button() == Qt.RightButton:
+            self.setTextCursor(self.cursorForPosition(event.pos()))
         super().mousePressEvent(event)
         projection_cursor = self.textCursor()
         if (
@@ -276,6 +278,25 @@ class MarkdownLivePreviewView(QTextEdit):
             and projection_cursor.anchor() == old_anchor
         ):
             self._syncSourceCursorFromProjection()
+
+    def contextMenuEvent(self, event):
+        self._syncSourceCursorFromProjection()
+        popup_menu = self._sourceEditor.createStandardContextMenu()
+        popup_menu.exec_(event.globalPos())
+
+    def canInsertFromMimeData(self, source):
+        return source.hasText()
+
+    def insertFromMimeData(self, source):
+        text = source.text()
+        if not text:
+            return
+        self._syncSourceCursorFromProjection()
+        source_cursor = self._sourceEditor.textCursor()
+        source_cursor.insertText(text)
+        self._sourceEditor.setTextCursor(source_cursor)
+        self._refreshTimer.stop()
+        self._updateActiveSourceBlock()
 
     def _captureViewportAnchor(self):
         if self.activeProjectionRange is None:
