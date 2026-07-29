@@ -9,7 +9,7 @@ regexp, but not yet perfect.
 import re
 from PyQt5.QtCore import Qt, pyqtSignal, qWarning, QRegExp
 from PyQt5.QtGui import (QSyntaxHighlighter, QTextBlock, QColor, QFont,
-                         QTextCharFormat, QTextFormat, QBrush, QPalette)
+                         QTextCharFormat, QBrush, QPalette)
 from PyQt5.QtWidgets import qApp, QStyle
 
 from manuskript.ui.highlighters import BasicHighlighter
@@ -32,7 +32,6 @@ GW_FADE_ALPHA = 140
 
 class MarkdownHighlighter(BasicHighlighter):
 
-    MarkupHiddenProperty = QTextFormat.UserProperty + 1
     _SOURCE_THEME_KEYS = frozenset({
         "color",
         "background",
@@ -42,27 +41,6 @@ class MarkdownHighlighter(BasicHighlighter):
         "markupBackground",
         "markupMonospace",
     })
-    _HIDEABLE_MARKUP_TOKENS = frozenset({
-        MTT.TokenAtxHeading1,
-        MTT.TokenAtxHeading2,
-        MTT.TokenAtxHeading3,
-        MTT.TokenAtxHeading4,
-        MTT.TokenAtxHeading5,
-        MTT.TokenAtxHeading6,
-        MTT.TokenEmphasis,
-        MTT.TokenStrong,
-        MTT.TokenStrikethrough,
-        MTT.TokenVerbatim,
-        MTT.TokenSuperScript,
-        MTT.TokenSubScript,
-        MTT.TokenCMAddition,
-        MTT.TokenCMDeletion,
-        MTT.TokenCMSubstitution,
-        MTT.TokenCMComment,
-        MTT.TokenCMHighlight,
-        MTT.TokenUnderline,
-    })
-
     highlightBlockAtPosition = pyqtSignal(int)
     headingFound = pyqtSignal(int, str, QTextBlock)
     headingRemoved = pyqtSignal(int)
@@ -518,9 +496,6 @@ class MarkdownHighlighter(BasicHighlighter):
                     markupFormat,
                 )
 
-            if self._markupShouldBeHidden(token):
-                self._hideMarkup(markupFormat)
-
             # Focus mode
             unfocus = self.unfocusConditions()
             if unfocus:
@@ -566,37 +541,6 @@ class MarkdownHighlighter(BasicHighlighter):
             for key, value in theme.items()
             if key in self._SOURCE_THEME_KEYS
         }
-
-    def _markupShouldBeHidden(self, token):
-        if token.type not in self._HIDEABLE_MARKUP_TOKENS:
-            return False
-
-        mode = self._presentationMode()
-        if mode in (
-            MarkdownPresentationMode.SOURCE,
-            MarkdownPresentationMode.FORMATTED_SOURCE,
-        ):
-            return False
-        if mode is MarkdownPresentationMode.READING:
-            return True
-
-        cursor_block = self.editor.textCursor().block()
-        return self.currentBlock() != cursor_block
-
-    def _hideMarkup(self, markupFormat):
-        foreground = markupFormat.foreground().color()
-        if not foreground.isValid():
-            foreground = QColor(self.defaultTextColor)
-        foreground.setAlpha(0)
-        markupFormat.setForeground(QBrush(foreground))
-        markupFormat.clearBackground()
-        # QTextDocument has no hidden-range decoration. Keep the source
-        # untouched, but reduce inactive markup to Qt's supported minimum
-        # horizontal font stretch so it no longer leaves visible gaps.
-        # Keeping the point size unchanged also avoids line-height feedback
-        # loops while QTextEdit is resizing and wrapping.
-        markupFormat.setFontStretch(1)
-        markupFormat.setProperty(self.MarkupHiddenProperty, True)
 
     def formatsFromTheme(self, theme, format=None,
                          markupFormat=QTextCharFormat()):

@@ -55,7 +55,7 @@ class MarkdownReadingView(QTextBrowser):
         document = self.document()
         if document.textWidth() != width:
             document.setTextWidth(width)
-            if self._active:
+            if self._active and self._sourceEditor._autoResize:
                 self._sourceEditor.sizeChange()
 
     def refresh(self):
@@ -76,7 +76,8 @@ class MarkdownReadingView(QTextBrowser):
         )
         self._dirty = False
         self.setProjectionWidth(self.viewport().width())
-        self._sourceEditor.sizeChange()
+        if self._sourceEditor._autoResize:
+            self._sourceEditor.sizeChange()
 
         new_maximum = scrollbar.maximum()
         scrollbar.setValue(round(scroll_ratio * new_maximum))

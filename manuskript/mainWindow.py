@@ -294,11 +294,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         We get notified by qApp when focus changes, from old to new widget.
         """
 
-        # If new is a MDEditView, we keep it in memory
-        if issubclass(type(new), MDEditView):
-            self._lastMDEditView = new
-        else:
-            self._lastMDEditView = None
+        # Projection widgets keep the canonical MDEditView as an ancestor.
+        markdown_editor = new
+        while (
+            markdown_editor is not None
+            and not isinstance(markdown_editor, MDEditView)
+        ):
+            markdown_editor = markdown_editor.parent()
+        self._lastMDEditView = markdown_editor
 
         # Determine which view had focus last, to send the keyboard shortcuts
         # to the right place

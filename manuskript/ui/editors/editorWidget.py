@@ -146,7 +146,10 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         source_editor_visible = (
             self.stack.currentIndex() == 0
             and self.txtRedacText.presentationMode
-            is not MarkdownPresentationMode.READING
+            not in (
+                MarkdownPresentationMode.LIVE_PREVIEW,
+                MarkdownPresentationMode.READING,
+            )
         )
         self.txtEditScrollBar.setVisible(source_editor_visible)
 
