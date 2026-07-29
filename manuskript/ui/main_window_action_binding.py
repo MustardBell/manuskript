@@ -154,6 +154,10 @@ class MainWindowActionBinding:
                 MarkdownPresentationMode.SOURCE,
             ),
             (
+                window.actMarkdownFormattedSource,
+                MarkdownPresentationMode.FORMATTED_SOURCE,
+            ),
+            (
                 window.actMarkdownLivePreview,
                 MarkdownPresentationMode.LIVE_PREVIEW,
             ),

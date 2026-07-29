@@ -45,6 +45,9 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.actMarkdownLivePreview.setActionGroup.assert_called_once_with(
         action_group
     )
+    window.actMarkdownFormattedSource.setActionGroup.assert_called_once_with(
+        action_group
+    )
 
     copy_slot = window.actCopy.triggered.connect.call_args.args[0]
     copy_slot()

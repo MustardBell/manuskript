@@ -432,6 +432,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         actions = {
             MarkdownPresentationMode.SOURCE:
                 self.actMarkdownSource,
+            MarkdownPresentationMode.FORMATTED_SOURCE:
+                self.actMarkdownFormattedSource,
             MarkdownPresentationMode.LIVE_PREVIEW:
                 self.actMarkdownLivePreview,
             MarkdownPresentationMode.READING:

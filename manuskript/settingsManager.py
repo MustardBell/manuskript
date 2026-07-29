@@ -112,7 +112,7 @@ class SettingsManager:
                 "backgroundTransparent": False,
                 "alwaysCenter": False,
                 "focusMode": False,
-                "markdownMode": "live-preview",
+                "markdownMode": "formatted-source",
             }
             for k in added:
                 if k not in self.textEditor:

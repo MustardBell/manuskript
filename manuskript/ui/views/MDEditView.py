@@ -74,7 +74,7 @@ class MDEditView(textEditView):
         )
         configured_mode = self.settings.textEditor.get(
             "markdownMode",
-            MarkdownPresentationMode.LIVE_PREVIEW.value,
+            MarkdownPresentationMode.FORMATTED_SOURCE.value,
         )
         self._presentationMode = MarkdownPresentationMode.from_value(
             configured_mode

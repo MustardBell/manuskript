@@ -82,7 +82,7 @@ textEditor = {
     "backgroundTransparent": False,
     "alwaysCenter": False,
     "focusMode": False,  # "line", "paragraph", "sentence"
-    "markdownMode": "live-preview",
+    "markdownMode": "formatted-source",
     }
 
 revisions = {

@@ -76,6 +76,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._markdownPresentationState = None
         self._markdownModes = (
             MarkdownPresentationMode.SOURCE,
+            MarkdownPresentationMode.FORMATTED_SOURCE,
             MarkdownPresentationMode.LIVE_PREVIEW,
             MarkdownPresentationMode.READING,
         )
