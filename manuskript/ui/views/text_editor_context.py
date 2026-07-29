@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 from manuskript.commands import DocumentCommand
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationState,
+)
 
 
 @dataclass(frozen=True)
@@ -14,10 +17,12 @@ class TextEditorContext:
     create_plot: Callable[[str], None]
     create_world_item: Callable[[str], None]
     invoke_outline_command: Callable[[DocumentCommand], None]
+    markdown_presentation: MarkdownPresentationState
 
 
 def text_editor_context_for(window, settings):
     """Adapt the main UI to the text editor action boundary."""
+    markdown_presentation = MarkdownPresentationState(settings)
 
     def reload_fonts():
         from manuskript.ui.views.textEditView import textEditView
@@ -52,4 +57,5 @@ def text_editor_context_for(window, settings):
         create_plot=create_plot,
         create_world_item=create_world_item,
         invoke_outline_command=invoke_outline_command,
+        markdown_presentation=markdown_presentation,
     )

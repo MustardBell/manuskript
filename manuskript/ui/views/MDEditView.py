@@ -3,7 +3,14 @@
 
 import re
 
-from PyQt5.QtCore import QRegExp, Qt, QTimer, QRect, QPoint
+from PyQt5.QtCore import (
+    QRegExp,
+    Qt,
+    QTimer,
+    QRect,
+    QPoint,
+    pyqtSignal,
+)
 from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import qApp, QToolTip
 
@@ -14,12 +21,17 @@ from manuskript.ui.highlighters.markdownTokenizer import MarkdownTokenizer as MT
 from manuskript.ui.editors.markdownInlineFormatting import (
     plan_inline_markup_toggle,
 )
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 from manuskript import functions as F
 
 import logging
 LOGGER = logging.getLogger(__name__)
 
 class MDEditView(textEditView):
+
+    presentationModeChanged = pyqtSignal(object)
 
     blockquoteRegex = QRegExp("^ {0,3}(>\\s*)+")
     listRegex = QRegExp(r"^(\s*)([+*-]|([0-9a-z])+([.\)]))(\s+)")
@@ -32,6 +44,8 @@ class MDEditView(textEditView):
                  settings=None):
         self._noFocusMode = False
         self._lastCursorPosition = None
+        self._presentationState = None
+        self._contentReadOnly = html is not None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
                               autoResize=autoResize, settings=settings,
@@ -50,6 +64,14 @@ class MDEditView(textEditView):
 
         # Highlighter
         self._textFormat = "md"
+        configured_mode = self.settings.textEditor.get(
+            "markdownMode",
+            MarkdownPresentationMode.LIVE_PREVIEW.value,
+        )
+        self._presentationMode = MarkdownPresentationMode.from_value(
+            configured_mode
+        )
+        self._applyPresentationMode()
 
         if index:
             # We have to setup things anew, for the highlighter notably
@@ -66,6 +88,49 @@ class MDEditView(textEditView):
         )
         self.setMouseTracking(True)
         self.scheduleInteractionRectUpdate()
+
+    @property
+    def presentationMode(self):
+        return self._presentationMode
+
+    def setPresentationMode(self, mode):
+        mode = MarkdownPresentationMode.from_value(mode)
+        if mode is self._presentationMode:
+            self._applyPresentationMode()
+            return
+
+        self._presentationMode = mode
+        self._applyPresentationMode()
+        self.presentationModeChanged.emit(mode)
+
+    def _applyPresentationMode(self):
+        self.setReadOnly(
+            self._contentReadOnly
+            or not self._presentationMode.is_editable
+        )
+        if self.highlighter:
+            self.highlighter.rehighlight()
+
+    def set_text_editor_context(self, context):
+        if self._presentationState is not None:
+            try:
+                self._presentationState.modeChanged.disconnect(
+                    self.setPresentationMode
+                )
+            except (RuntimeError, TypeError):
+                pass
+
+        textEditView.set_text_editor_context(self, context)
+        self._presentationState = (
+            getattr(context, "markdown_presentation", None)
+            if context is not None
+            else None
+        )
+        if self._presentationState is not None:
+            self._presentationState.modeChanged.connect(
+                self.setPresentationMode
+            )
+            self.setPresentationMode(self._presentationState.mode)
 
     ###########################################################################
     # KEYPRESS
