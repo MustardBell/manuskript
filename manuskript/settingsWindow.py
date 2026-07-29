@@ -374,6 +374,7 @@ class settingsWindow(QWidget, Ui_Settings):
     def setStyle(self, style):
         self.applicationPreferences.style = style
         qApp.setStyle(style)
+        self.settings.applyTooltipStyle()
 
     def setTranslation(self, index):
         path = self.cmbTranslation.currentData()
