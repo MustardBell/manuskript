@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import (
     QFont,
     QTextCharFormat,
@@ -550,7 +550,7 @@ def test_live_preview_click_activates_the_source_block_without_mutation():
         host.hide()
 
 
-def test_live_preview_repeated_clicks_cannot_change_text_or_revision():
+def test_live_preview_repeated_clicks_preserve_content_and_scroll():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
@@ -574,18 +574,21 @@ def test_live_preview_repeated_clicks_cannot_change_text_or_revision():
         source_before = editor.toPlainText()
         undo_before = editor.document().isUndoAvailable()
         content_changes = QSignalSpy(editor.document().contentsChange)
+        scrollbar = editor.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum() // 2)
+        qApp.processEvents()
+        viewport = editor.viewport().rect()
+        click_points = (
+            QPoint(viewport.width() // 3, viewport.height() // 3),
+            QPoint(viewport.width() // 2, viewport.height() // 2),
+            QPoint(
+                viewport.width() * 2 // 3,
+                viewport.height() * 2 // 3,
+            ),
+        )
 
-        for line_number in (38, 39, 40, 39, 38, 40, 38, 40):
-            target = editor.document().find(
-                "stable prose",
-                editor.document().findBlockByNumber(
-                    line_number * 2
-                ).position(),
-            )
-            editor.setTextCursor(target)
-            editor.ensureCursorVisible()
-            qApp.processEvents()
-            click_point = editor.cursorRect(target).center()
+        for click_point in click_points * 3:
+            scroll_before = scrollbar.value()
             QTest.mouseClick(
                 editor.viewport(),
                 Qt.LeftButton,
@@ -599,6 +602,7 @@ def test_live_preview_repeated_clicks_cannot_change_text_or_revision():
                 editor.document().isUndoAvailable()
                 == undo_before
             )
+            assert scrollbar.value() == scroll_before
 
         assert not editor.isReadOnly()
         assert editor.toPlainText() == source_before
