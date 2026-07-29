@@ -224,6 +224,7 @@ def test_live_preview_reveals_only_the_active_blocks_markup():
     )
     assert first_marker.foreground().color().alpha() == 0
     assert first_marker.fontPointSize() != pytest.approx(0.01)
+    assert first_marker.fontStretch() == 1
     assert first_text.fontWeight() == QFont.Bold
     assert not second_marker.property(
         MarkdownHighlighter.MarkupHiddenProperty
@@ -259,6 +260,32 @@ def test_live_preview_rehighlights_old_and_new_active_blocks():
     )
 
 
+def test_live_preview_hidden_markup_has_no_visible_gap():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**first**\n**second**")
+    second_block = editor.document().findBlockByNumber(1)
+    cursor = editor.textCursor()
+    cursor.setPosition(second_block.position() + 2)
+    editor.setTextCursor(cursor)
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        cursor.setPosition(0)
+        before_markup = editor.cursorRect(cursor).x()
+        cursor.setPosition(2)
+        after_markup = editor.cursorRect(cursor).x()
+        assert after_markup - before_markup <= 1
+    finally:
+        editor.hide()
+
+
 def test_live_preview_keeps_list_markers_layout_stable_when_visible():
     editor = MDEditView(
         spellcheck=False,
@@ -281,7 +308,7 @@ def test_live_preview_keeps_list_markers_layout_stable_when_visible():
         editor.hide()
 
 
-def test_live_preview_hides_markup_without_changing_font_metrics():
+def test_live_preview_collapses_markup_without_changing_line_height():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
@@ -303,6 +330,7 @@ def test_live_preview_hides_markup_without_changing_font_metrics():
         )
         assert marker_format.foreground().color().alpha() == 0
         assert marker_format.fontPointSize() != pytest.approx(0.01)
+        assert marker_format.fontStretch() == 1
     finally:
         editor.hide()
 
