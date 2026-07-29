@@ -186,6 +186,37 @@
       </widget>
      </item>
      <item>
+      <widget class="QComboBox" name="cmbMarkdownMode">
+      <property name="minimumSize">
+       <size>
+        <width>130</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="toolTip">
+       <string>Markdown editor mode</string>
+      </property>
+      <property name="currentIndex">
+       <number>1</number>
+      </property>
+      <item>
+       <property name="text">
+        <string>Source</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Live Preview</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Reading</string>
+       </property>
+      </item>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="btnRedacFullscreen">
        <property name="text">
         <string/>

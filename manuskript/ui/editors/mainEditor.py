@@ -13,6 +13,9 @@ from manuskript.ui import style
 from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.fullScreenEditor import fullScreenEditor
 from manuskript.ui.editors.mainEditor_ui import Ui_mainEditor
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 
 try:
     locale.setlocale(locale.LC_ALL, '')
@@ -70,6 +73,13 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         self.editor_context = None
         self.settings = None
+        self._markdownPresentationState = None
+        self._markdownModes = (
+            MarkdownPresentationMode.SOURCE,
+            MarkdownPresentationMode.LIVE_PREVIEW,
+            MarkdownPresentationMode.READING,
+        )
+        self.cmbMarkdownMode.setEnabled(False)
 
         # Connections --------------------------------------------------------
 
@@ -88,6 +98,10 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         self.btnRedacFullscreen.clicked.connect(
                 self.showFullScreen, AUC)
+        self.cmbMarkdownMode.currentIndexChanged.connect(
+            self.setMarkdownPresentationMode,
+            AUC,
+        )
 
         # self.tab.setDocumentMode(False)
 
@@ -109,11 +123,51 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.editor_context = context
         if context.text_editor is not None:
             self.settings = context.text_editor.settings
+            self.attachMarkdownPresentationState(
+                context.text_editor.markdown_presentation
+            )
+        else:
+            self.attachMarkdownPresentationState(None)
         self.tabSplitter.set_context(context)
 
     def clear_context(self):
+        self.attachMarkdownPresentationState(None)
         self.tabSplitter.set_context(None)
         self.editor_context = None
+
+    def attachMarkdownPresentationState(self, state):
+        if self._markdownPresentationState is not None:
+            try:
+                self._markdownPresentationState.modeChanged.disconnect(
+                    self.syncMarkdownPresentationMode
+                )
+            except (RuntimeError, TypeError):
+                pass
+
+        self._markdownPresentationState = state
+        self.cmbMarkdownMode.setEnabled(state is not None)
+        if state is None:
+            return
+
+        state.modeChanged.connect(self.syncMarkdownPresentationMode)
+        self.syncMarkdownPresentationMode(state.mode)
+
+    def setMarkdownPresentationMode(self, index):
+        if (
+            self._markdownPresentationState is None
+            or not 0 <= index < len(self._markdownModes)
+        ):
+            return
+        self._markdownPresentationState.set_mode(
+            self._markdownModes[index]
+        )
+
+    def syncMarkdownPresentationMode(self, mode):
+        mode = MarkdownPresentationMode.from_value(mode)
+        index = self._markdownModes.index(mode)
+        previous = self.cmbMarkdownMode.blockSignals(True)
+        self.cmbMarkdownMode.setCurrentIndex(index)
+        self.cmbMarkdownMode.blockSignals(previous)
 
     ###############################################################################
     # TABS
