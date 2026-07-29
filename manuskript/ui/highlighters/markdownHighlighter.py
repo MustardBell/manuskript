@@ -9,7 +9,7 @@ regexp, but not yet perfect.
 import re
 from PyQt5.QtCore import Qt, pyqtSignal, qWarning, QRegExp
 from PyQt5.QtGui import (QSyntaxHighlighter, QTextBlock, QColor, QFont,
-                         QTextCharFormat, QBrush, QPalette)
+                         QTextCharFormat, QTextFormat, QBrush, QPalette)
 from PyQt5.QtWidgets import qApp, QStyle
 
 from manuskript.ui.highlighters import BasicHighlighter
@@ -17,6 +17,9 @@ from manuskript.ui.highlighters import MarkdownTokenizer
 from manuskript.ui.highlighters import MarkdownState as MS
 from manuskript.ui.highlighters import MarkdownTokenType as MTT
 from manuskript.ui.highlighters import BlockquoteStyle as BS
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 from manuskript.ui import style as S
 from manuskript import functions as F
 
@@ -28,6 +31,17 @@ GW_FADE_ALPHA = 140
 # GPLV3+.
 
 class MarkdownHighlighter(BasicHighlighter):
+
+    MarkupHiddenProperty = QTextFormat.UserProperty + 1
+    _SOURCE_THEME_KEYS = frozenset({
+        "color",
+        "background",
+        "monospace",
+        "markupBold",
+        "markupColor",
+        "markupBackground",
+        "markupMonospace",
+    })
 
     highlightBlockAtPosition = pyqtSignal(int)
     headingFound = pyqtSignal(int, str, QTextBlock)
@@ -477,9 +491,15 @@ class MarkdownHighlighter(BasicHighlighter):
 
             theme = self.theme.get(token.type)
             if theme:
-                fmt, markupFormat = self.formatsFromTheme(theme,
-                                                          fmt,
-                                                          markupFormat)
+                presentation_theme = self._themeForPresentation(theme)
+                fmt, markupFormat = self.formatsFromTheme(
+                    presentation_theme,
+                    fmt,
+                    markupFormat,
+                )
+
+            if self._markupShouldBeHidden():
+                self._hideMarkup(markupFormat)
 
             # Focus mode
             unfocus = self.unfocusConditions()
@@ -510,6 +530,46 @@ class MarkdownHighlighter(BasicHighlighter):
         else:
             qWarning("MarkdownHighlighter.applyFormattingForToken() was passed"
                      " in a token of unknown type.")
+
+    def _presentationMode(self):
+        return getattr(
+            self.editor,
+            "presentationMode",
+            MarkdownPresentationMode.LIVE_PREVIEW,
+        )
+
+    def _themeForPresentation(self, theme):
+        if self._presentationMode().renders_markdown:
+            return theme
+        return {
+            key: value
+            for key, value in theme.items()
+            if key in self._SOURCE_THEME_KEYS
+        }
+
+    def _markupShouldBeHidden(self):
+        mode = self._presentationMode()
+        if mode is MarkdownPresentationMode.SOURCE:
+            return False
+        if mode is MarkdownPresentationMode.READING:
+            return True
+
+        cursor_block = self.editor.textCursor().block()
+        return self.currentBlock() != cursor_block
+
+    def _hideMarkup(self, markupFormat):
+        foreground = markupFormat.foreground().color()
+        if not foreground.isValid():
+            foreground = QColor(self.defaultTextColor)
+        foreground.setAlpha(0)
+        markupFormat.setForeground(QBrush(foreground))
+        markupFormat.clearBackground()
+
+        font = markupFormat.font()
+        font.setPointSizeF(0.01)
+        font.setStretch(1)
+        markupFormat.setFont(font)
+        markupFormat.setProperty(self.MarkupHiddenProperty, True)
 
     def formatsFromTheme(self, theme, format=None,
                          markupFormat=QTextCharFormat()):

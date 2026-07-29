@@ -335,14 +335,20 @@ class MDEditView(textEditView):
 
     def cursorPositionHasChanged(self):
         self.centerCursor()
-        # Focus mode
-        if self.highlighter and self.settings.textEditor["focusMode"]:
-            if self._lastCursorPosition:
-                block = self.document().findBlock(self._lastCursorPosition)
-                self.highlighter.rehighlightBlock(block)
-            self._lastCursorPosition = self.textCursor().position()
-            block = self.document().findBlock(self._lastCursorPosition)
-            self.highlighter.rehighlightBlock(block)
+        current_position = self.textCursor().position()
+        presentation_reveal = (
+            self._presentationMode.reveals_active_block
+        )
+        focus_mode = self.settings.textEditor["focusMode"]
+        if self.highlighter and (focus_mode or presentation_reveal):
+            if self._lastCursorPosition is not None:
+                previous_block = self.document().findBlock(
+                    self._lastCursorPosition
+                )
+                self.highlighter.rehighlightBlock(previous_block)
+            current_block = self.document().findBlock(current_position)
+            self.highlighter.rehighlightBlock(current_block)
+        self._lastCursorPosition = current_position
 
     def centerCursor(self, force=False):
         cursor = self.cursorRect()
