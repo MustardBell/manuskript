@@ -2,6 +2,9 @@ import importlib
 from unittest.mock import patch
 
 from manuskript.models.outlineItem import outlineItem
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 
 main_editor_module = importlib.import_module(
     "manuskript.ui.editors.mainEditor"
@@ -91,3 +94,26 @@ def test_active_editor_selection_sync_refreshes_main_editor(
 
     tab_changed.assert_called_once_with()
     window.mainEditor.closeAllTabs()
+
+
+def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
+    window = MWEmptyProject
+    selector = window.mainEditor.cmbMarkdownMode
+    state = window.textEditorContext.markdown_presentation
+
+    assert (
+        window.menuMarkdownMode.menuAction()
+        in window.menuView.actions()
+    )
+    assert selector.isEnabled()
+    assert selector.currentText() == "Live Preview"
+
+    selector.setCurrentIndex(0)
+
+    assert state.mode is MarkdownPresentationMode.SOURCE
+    assert window.actMarkdownSource.isChecked()
+
+    window.actMarkdownReading.trigger()
+
+    assert state.mode is MarkdownPresentationMode.READING
+    assert selector.currentText() == "Reading"
