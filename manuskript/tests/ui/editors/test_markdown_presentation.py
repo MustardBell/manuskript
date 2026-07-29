@@ -1,13 +1,15 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor
+from PyQt5.QtWidgets import qApp
 
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
     MarkdownPresentationState,
 )
+from manuskript.ui.highlighters import MarkdownHighlighter
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.views.text_editor_context import TextEditorContext
 
@@ -22,6 +24,19 @@ def make_context(settings, presentation):
         invoke_outline_command=MagicMock(),
         markdown_presentation=presentation,
     )
+
+
+def format_at(editor, position):
+    block = editor.document().findBlock(position)
+    position_in_block = position - block.position()
+    for format_range in block.layout().formats():
+        if (
+            format_range.start
+            <= position_in_block
+            < format_range.start + format_range.length
+        ):
+            return format_range.format
+    return QTextCharFormat()
 
 
 def test_markdown_presentation_mode_defines_display_policy():
@@ -132,3 +147,87 @@ def test_html_display_editor_remains_read_only_in_editable_modes():
     editor.setPresentationMode(MarkdownPresentationMode.SOURCE)
 
     assert editor.isReadOnly()
+
+
+def test_source_mode_shows_markup_without_rendering_emphasis():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**bold** and *italic*")
+
+    editor.setPresentationMode(MarkdownPresentationMode.SOURCE)
+    editor.highlighter.rehighlight()
+    qApp.processEvents()
+
+    opening_bold = format_at(editor, 0)
+    bold_text = format_at(editor, 2)
+    italic_text = format_at(
+        editor,
+        editor.toPlainText().index("italic"),
+    )
+    assert not opening_bold.property(
+        MarkdownHighlighter.MarkupHiddenProperty
+    )
+    assert bold_text.fontWeight() != QFont.Bold
+    assert not italic_text.fontItalic()
+
+
+def test_live_preview_reveals_only_the_active_blocks_markup():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**first**\n**second**")
+    second_block = editor.document().findBlockByNumber(1)
+    cursor = editor.textCursor()
+    cursor.setPosition(second_block.position() + 2)
+    editor.setTextCursor(cursor)
+
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.highlighter.rehighlight()
+    qApp.processEvents()
+
+    first_marker = format_at(editor, 0)
+    first_text = format_at(editor, 2)
+    second_marker = format_at(editor, second_block.position())
+    assert first_marker.property(
+        MarkdownHighlighter.MarkupHiddenProperty
+    )
+    assert first_marker.foreground().color().alpha() == 0
+    assert first_marker.fontPointSize() == pytest.approx(0.01)
+    assert first_text.fontWeight() == QFont.Bold
+    assert not second_marker.property(
+        MarkdownHighlighter.MarkupHiddenProperty
+    )
+
+
+def test_live_preview_rehighlights_old_and_new_active_blocks():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**first**\n**second**")
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    second_block = editor.document().findBlockByNumber(1)
+    cursor = editor.textCursor()
+    cursor.setPosition(second_block.position() + 2)
+    editor.setTextCursor(cursor)
+    qApp.processEvents()
+
+    cursor.setPosition(2)
+    editor.setTextCursor(cursor)
+    qApp.processEvents()
+
+    first_marker = format_at(editor, 0)
+    second_marker = format_at(editor, second_block.position())
+    assert not first_marker.property(
+        MarkdownHighlighter.MarkupHiddenProperty
+    )
+    assert second_marker.property(
+        MarkdownHighlighter.MarkupHiddenProperty
+    )
