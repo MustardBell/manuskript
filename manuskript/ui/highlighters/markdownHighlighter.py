@@ -590,6 +590,12 @@ class MarkdownHighlighter(BasicHighlighter):
         foreground.setAlpha(0)
         markupFormat.setForeground(QBrush(foreground))
         markupFormat.clearBackground()
+        # QTextDocument has no hidden-range decoration. Keep the source
+        # untouched, but reduce inactive markup to Qt's supported minimum
+        # horizontal font stretch so it no longer leaves visible gaps.
+        # Keeping the point size unchanged also avoids line-height feedback
+        # loops while QTextEdit is resizing and wrapping.
+        markupFormat.setFontStretch(1)
         markupFormat.setProperty(self.MarkupHiddenProperty, True)
 
     def formatsFromTheme(self, theme, format=None,
