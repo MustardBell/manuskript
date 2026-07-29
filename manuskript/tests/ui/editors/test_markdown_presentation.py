@@ -163,6 +163,24 @@ def test_auxiliary_markdown_editor_ignores_shared_reading_mode():
     assert not editor.isReadOnly()
 
 
+def test_detaching_long_form_editor_restores_formatted_source():
+    settings = SettingsManager()
+    state = MarkdownPresentationState(settings)
+    context = make_context(settings, state)
+    editor = MDEditView(spellcheck=False, settings=settings)
+    editor.enablePresentationModes()
+    editor.set_text_editor_context(context)
+    state.set_mode("reading")
+
+    editor.set_text_editor_context(None)
+
+    assert (
+        editor.presentationMode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    assert not editor.isReadOnly()
+
+
 def test_html_display_editor_remains_read_only_in_editable_modes():
     editor = MDEditView(
         html="<h1>Folder</h1>",
@@ -197,6 +215,32 @@ def test_source_mode_shows_markup_without_rendering_emphasis():
     )
     assert bold_text.fontWeight() != QFont.Bold
     assert not italic_text.fontItalic()
+
+
+def test_formatted_source_shows_markup_and_rendered_emphasis():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**bold** and *italic*")
+
+    editor.setPresentationMode(
+        MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+    editor.highlighter.rehighlight()
+    qApp.processEvents()
+
+    opening_bold = format_at(editor, 0)
+    bold_text = format_at(editor, 2)
+    italic_text = format_at(
+        editor,
+        editor.toPlainText().index("italic"),
+    )
+    assert not opening_bold.property(
+        MarkdownHighlighter.MarkupHiddenProperty
+    )
+    assert bold_text.fontWeight() == QFont.Bold
+    assert italic_text.fontItalic()
 
 
 def test_live_preview_reveals_only_the_active_blocks_markup():

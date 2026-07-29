@@ -189,9 +189,14 @@ class MDEditView(textEditView):
             else None
         )
         if self._presentationModesEnabled:
-            self._attachPresentationState(
-                self._availablePresentationState
-            )
+            if self._availablePresentationState is not None:
+                self._attachPresentationState(
+                    self._availablePresentationState
+                )
+            else:
+                self.setPresentationMode(
+                    MarkdownPresentationMode.FORMATTED_SOURCE
+                )
 
     ###########################################################################
     # KEYPRESS
