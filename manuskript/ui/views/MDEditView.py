@@ -15,6 +15,9 @@ from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import qApp, QToolTip
 
 from manuskript.ui.views.textEditView import textEditView
+from manuskript.ui.views.markdownLivePreviewView import (
+    MarkdownLivePreviewView,
+)
 from manuskript.ui.views.markdownReadingView import MarkdownReadingView
 from manuskript.ui.highlighters import MarkdownHighlighter
 from manuskript.ui.highlighters.markdownEnums import MarkdownState as MS
@@ -46,7 +49,7 @@ class MDEditView(textEditView):
         self._noFocusMode = False
         self._lastCursorPosition = None
         self._presentationState = None
-        self._highlighterSuspendedForReading = False
+        self._highlighterSuspendedForProjection = False
         self._contentReadOnly = html is not None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
@@ -66,6 +69,7 @@ class MDEditView(textEditView):
 
         # Highlighter
         self._textFormat = "md"
+        self.livePreviewView = None
         self.readingView = None
         self.readingViewResizeTimer = QTimer(self)
         self.readingViewResizeTimer.setSingleShot(True)
@@ -114,6 +118,11 @@ class MDEditView(textEditView):
             and self._presentationMode
             is MarkdownPresentationMode.READING
         )
+        live_preview_active = (
+            not self._contentReadOnly
+            and self._presentationMode
+            is MarkdownPresentationMode.LIVE_PREVIEW
+        )
         self.setReadOnly(
             self._contentReadOnly
             or not self._presentationMode.is_editable
@@ -126,12 +135,35 @@ class MDEditView(textEditView):
         if reading_view is not None:
             reading_view.setActive(reading_active)
             self._scheduleReadingViewResize()
-        self.setFocusProxy(
-            reading_view if reading_active else None
+        live_preview_view = (
+            self._ensureLivePreviewView()
+            if live_preview_active
+            else self.livePreviewView
         )
-        self._setHighlighterSuspended(reading_active)
-        if self.highlighter and not reading_active:
+        if live_preview_view is not None:
+            live_preview_view.setActive(live_preview_active)
+            self._scheduleReadingViewResize()
+        active_projection = (
+            reading_view
+            if reading_active
+            else live_preview_view
+            if live_preview_active
+            else None
+        )
+        self.setFocusProxy(
+            active_projection
+        )
+        self._setHighlighterSuspended(
+            reading_active or live_preview_active
+        )
+        if self.highlighter and active_projection is None:
             self.highlighter.rehighlight()
+
+    def _ensureLivePreviewView(self):
+        if self.livePreviewView is None:
+            self.livePreviewView = MarkdownLivePreviewView(self)
+            self._resizeReadingView()
+        return self.livePreviewView
 
     def _ensureReadingView(self):
         if self.readingView is None:
@@ -142,12 +174,18 @@ class MDEditView(textEditView):
     def _setHighlighterSuspended(self, suspended):
         if not self.highlighter:
             return
-        if suspended and not self._highlighterSuspendedForReading:
+        if (
+            suspended
+            and not self._highlighterSuspendedForProjection
+        ):
             self.highlighter.setDocument(None)
-            self._highlighterSuspendedForReading = True
-        elif not suspended and self._highlighterSuspendedForReading:
+            self._highlighterSuspendedForProjection = True
+        elif (
+            not suspended
+            and self._highlighterSuspendedForProjection
+        ):
             self.highlighter.setDocument(self.document())
-            self._highlighterSuspendedForReading = False
+            self._highlighterSuspendedForProjection = False
 
     def setPresentationState(self, state):
         """Attach this view to its owning editor leaf's presentation state."""
@@ -375,11 +413,12 @@ class MDEditView(textEditView):
     def cursorPositionHasChanged(self):
         self.centerCursor()
         current_position = self.textCursor().position()
-        presentation_reveal = (
-            self._presentationMode.reveals_active_block
-        )
         focus_mode = self.settings.textEditor["focusMode"]
-        if self.highlighter and (focus_mode or presentation_reveal):
+        if (
+            self.highlighter
+            and self.highlighter.document() is self.document()
+            and focus_mode
+        ):
             if self._lastCursorPosition is not None:
                 previous_block = self.document().findBlock(
                     self._lastCursorPosition
@@ -727,28 +766,45 @@ class MDEditView(textEditView):
 
     def _scheduleReadingViewResize(self):
         if (
-            self.readingView is not None
+            (
+                self.readingView is not None
+                or self.livePreviewView is not None
+            )
             and hasattr(self, "readingViewResizeTimer")
         ):
             self.readingViewResizeTimer.start()
 
     def _resizeReadingView(self):
-        if self.readingView is None:
-            return
         target_geometry = self.viewport().rect()
-        if self.readingView.geometry() != target_geometry:
-            self.readingView.setGeometry(target_geometry)
-        self.readingView.setProjectionWidth(target_geometry.width())
+        for projection in (
+            self.livePreviewView,
+            self.readingView,
+        ):
+            if projection is None:
+                continue
+            if projection.geometry() != target_geometry:
+                projection.setGeometry(target_geometry)
+            projection.setProjectionWidth(target_geometry.width())
 
     def sizeChange(self):
-        if (
-            self._autoResize
-            and getattr(self, "readingView", None) is not None
-            and not self.readingView.isHidden()
-        ):
+        if not self._autoResize:
+            return
+        active_projection = next(
+            (
+                projection
+                for projection in (
+                    getattr(self, "livePreviewView", None),
+                    getattr(self, "readingView", None),
+                )
+                if projection is not None
+                and not projection.isHidden()
+            ),
+            None,
+        )
+        if active_projection is not None:
             opt = self.settings.textEditor
             doc_height = (
-                self.readingView.document().size().height()
+                active_projection.document().size().height()
                 + 2 * opt["marginsTB"]
             )
             if self.heightMin <= doc_height <= self.heightMax:
@@ -758,10 +814,18 @@ class MDEditView(textEditView):
 
     def showEvent(self, event):
         textEditView.showEvent(self, event)
+        if self.livePreviewView is not None:
+            self.livePreviewView.refreshIfNeeded()
         if self.readingView is not None:
             self.readingView.refreshIfNeeded()
 
     def copy(self):
+        if (
+            self.livePreviewView is not None
+            and not self.livePreviewView.isHidden()
+        ):
+            self.livePreviewView.copy()
+            return
         if (
             self.readingView is not None
             and not self.readingView.isHidden()

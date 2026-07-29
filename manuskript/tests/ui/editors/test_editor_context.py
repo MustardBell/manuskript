@@ -198,3 +198,43 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
         is MarkdownPresentationMode.FORMATTED_SOURCE
     )
     window.mainEditor.closeAllTabs()
+
+
+def test_markdown_mode_is_independent_between_split_leaves(
+        MWEmptyProject):
+    window = MWEmptyProject
+    item = outlineItem(title="Chapter")
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    first_editor = window.mainEditor.currentEditor()
+    first_editor.markdownPresentation.set_mode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+
+    window.mainEditor.tabSplitter.split(state=1)
+    second_editor = window.mainEditor.currentEditor()
+
+    assert second_editor is not first_editor
+    assert (
+        first_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    assert (
+        second_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.FORMATTED_SOURCE
+    )
+
+    second_editor.markdownPresentation.set_mode(
+        MarkdownPresentationMode.READING
+    )
+
+    assert (
+        first_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    assert (
+        second_editor.markdownPresentation.mode
+        is MarkdownPresentationMode.READING
+    )
+    window.mainEditor.closeAllTabs()

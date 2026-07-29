@@ -1,9 +1,15 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QTextCharFormat, QTextCursor
+from PyQt5.QtCore import QEvent, Qt
+from PyQt5.QtGui import (
+    QFont,
+    QKeyEvent,
+    QTextCharFormat,
+    QTextCursor,
+)
 from PyQt5.QtWidgets import qApp
+from PyQt5.QtTest import QTest
 
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownPresentation import (
@@ -38,6 +44,12 @@ def format_at(editor, position):
         ):
             return format_range.format
     return QTextCharFormat()
+
+
+def rich_format_at(editor, position):
+    cursor = QTextCursor(editor.document())
+    cursor.setPosition(position + 1)
+    return cursor.charFormat()
 
 
 def test_markdown_presentation_mode_defines_display_policy():
@@ -208,9 +220,7 @@ def test_source_mode_shows_markup_without_rendering_emphasis():
         editor,
         editor.toPlainText().index("italic"),
     )
-    assert not opening_bold.property(
-        MarkdownHighlighter.MarkupHiddenProperty
-    )
+    assert opening_bold.foreground().color().alpha() != 0
     assert bold_text.fontWeight() != QFont.Bold
     assert not italic_text.fontItalic()
 
@@ -234,14 +244,12 @@ def test_formatted_source_shows_markup_and_rendered_emphasis():
         editor,
         editor.toPlainText().index("italic"),
     )
-    assert not opening_bold.property(
-        MarkdownHighlighter.MarkupHiddenProperty
-    )
+    assert opening_bold.foreground().color().alpha() != 0
     assert bold_text.fontWeight() == QFont.Bold
     assert italic_text.fontItalic()
 
 
-def test_live_preview_reveals_only_the_active_blocks_markup():
+def test_live_preview_replaces_inactive_source_with_rendered_text():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
@@ -255,54 +263,28 @@ def test_live_preview_reveals_only_the_active_blocks_markup():
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
-    editor.highlighter.rehighlight()
-    qApp.processEvents()
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        projection = editor.livePreviewView
+        projected_text = projection.toPlainText()
 
-    first_marker = format_at(editor, 0)
-    first_text = format_at(editor, 2)
-    second_marker = format_at(editor, second_block.position())
-    assert first_marker.property(
-        MarkdownHighlighter.MarkupHiddenProperty
-    )
-    assert first_marker.foreground().color().alpha() == 0
-    assert first_marker.fontPointSize() != pytest.approx(0.01)
-    assert first_marker.fontStretch() == 1
-    assert first_text.fontWeight() == QFont.Bold
-    assert not second_marker.property(
-        MarkdownHighlighter.MarkupHiddenProperty
-    )
-
-
-def test_live_preview_rehighlights_old_and_new_active_blocks():
-    editor = MDEditView(
-        spellcheck=False,
-        settings=SettingsManager(),
-    )
-    editor.setPlainText("**first**\n**second**")
-    editor.setPresentationMode(
-        MarkdownPresentationMode.LIVE_PREVIEW
-    )
-    second_block = editor.document().findBlockByNumber(1)
-    cursor = editor.textCursor()
-    cursor.setPosition(second_block.position() + 2)
-    editor.setTextCursor(cursor)
-    qApp.processEvents()
-
-    cursor.setPosition(2)
-    editor.setTextCursor(cursor)
-    qApp.processEvents()
-
-    first_marker = format_at(editor, 0)
-    second_marker = format_at(editor, second_block.position())
-    assert not first_marker.property(
-        MarkdownHighlighter.MarkupHiddenProperty
-    )
-    assert second_marker.property(
-        MarkdownHighlighter.MarkupHiddenProperty
-    )
+        assert "**first**" not in projected_text
+        assert "first" in projected_text
+        assert "**second**" in projected_text
+        first_position = projected_text.index("first")
+        assert (
+            rich_format_at(projection, first_position).fontWeight()
+            == QFont.Bold
+        )
+        assert editor.toPlainText() == "**first**\n**second**"
+        assert editor.highlighter.document() is None
+    finally:
+        editor.hide()
 
 
-def test_live_preview_hidden_markup_has_no_visible_gap():
+def test_live_preview_reprojects_when_the_active_block_changes():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
@@ -319,16 +301,21 @@ def test_live_preview_hidden_markup_has_no_visible_gap():
     editor.show()
     try:
         qApp.processEvents()
-        cursor.setPosition(0)
-        before_markup = editor.cursorRect(cursor).x()
+        assert "**first**" not in editor.livePreviewView.toPlainText()
+        assert "**second**" in editor.livePreviewView.toPlainText()
+
         cursor.setPosition(2)
-        after_markup = editor.cursorRect(cursor).x()
-        assert after_markup - before_markup <= 1
+        editor.setTextCursor(cursor)
+        qApp.processEvents()
+
+        projected_text = editor.livePreviewView.toPlainText()
+        assert "**first**" in projected_text
+        assert "**second**" not in projected_text
     finally:
         editor.hide()
 
 
-def test_live_preview_keeps_list_markers_layout_stable_when_visible():
+def test_live_preview_renders_inactive_list_markers_as_text_lists():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
@@ -341,16 +328,15 @@ def test_live_preview_keeps_list_markers_layout_stable_when_visible():
     editor.show()
     try:
         qApp.processEvents()
-        second_block = editor.document().findBlockByNumber(1)
-        marker = format_at(editor, second_block.position())
-        assert not marker.property(
-            MarkdownHighlighter.MarkupHiddenProperty
-        )
+        projection = editor.livePreviewView
+        second_item = projection.document().find("Second item")
+        assert second_item.block().textList() is not None
+        assert "- Second item" not in projection.toPlainText()
     finally:
         editor.hide()
 
 
-def test_live_preview_collapses_markup_without_changing_line_height():
+def test_live_preview_renders_heading_and_html_underline_off_line():
     editor = MDEditView(
         spellcheck=False,
         settings=SettingsManager(),
@@ -358,6 +344,11 @@ def test_live_preview_collapses_markup_without_changing_line_height():
     editor.setPlainText(
         "# Heading\n\nA <u>stable underline</u>."
     )
+    cursor = editor.textCursor()
+    cursor.setPosition(
+        editor.document().findBlockByNumber(1).position()
+    )
+    editor.setTextCursor(cursor)
     editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
@@ -365,14 +356,122 @@ def test_live_preview_collapses_markup_without_changing_line_height():
     editor.show()
     try:
         qApp.processEvents()
-        tag_position = editor.toPlainText().index("<u>")
-        marker_format = format_at(editor, tag_position)
-        assert marker_format.property(
-            MarkdownHighlighter.MarkupHiddenProperty
+        projection = editor.livePreviewView
+        projected_text = projection.toPlainText()
+        assert "# Heading" not in projected_text
+        assert "<u>" not in projected_text
+        assert "</u>" not in projected_text
+        underline_position = projected_text.index("stable underline")
+        assert rich_format_at(
+            projection,
+            underline_position,
+        ).fontUnderline()
+    finally:
+        editor.hide()
+
+
+def test_live_preview_edits_the_canonical_source_and_preserves_undo():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**first**\nsecond")
+    cursor = editor.textCursor()
+    cursor.movePosition(QTextCursor.End)
+    editor.setTextCursor(cursor)
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        event = QKeyEvent(
+            QEvent.KeyPress,
+            Qt.Key_X,
+            Qt.NoModifier,
+            "x",
         )
-        assert marker_format.foreground().color().alpha() == 0
-        assert marker_format.fontPointSize() != pytest.approx(0.01)
-        assert marker_format.fontStretch() == 1
+        editor.livePreviewView.keyPressEvent(event)
+
+        assert editor.toPlainText() == "**first**\nsecondx"
+        assert "secondx" in editor.livePreviewView.toPlainText()
+
+        editor.undo()
+        qApp.processEvents()
+
+        assert editor.toPlainText() == "**first**\nsecond"
+        assert "second" in editor.livePreviewView.toPlainText()
+    finally:
+        editor.hide()
+
+
+def test_live_preview_click_activates_the_rendered_source_block():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("**first**\n**second**")
+    editor.setEnabled(True)
+    cursor = editor.textCursor()
+    cursor.movePosition(QTextCursor.End)
+    editor.setTextCursor(cursor)
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        projection = editor.livePreviewView
+        click_cursor = projection.document().find("first")
+        click_cursor.setPosition(click_cursor.selectionStart() + 2)
+        QTest.mouseClick(
+            projection.viewport(),
+            Qt.LeftButton,
+            pos=projection.cursorRect(click_cursor).center(),
+        )
+        qApp.processEvents()
+
+        assert editor.textCursor().blockNumber() == 0
+        assert "**first**" in projection.toPlainText()
+        assert "**second**" not in projection.toPlainText()
+    finally:
+        editor.hide()
+
+
+def test_live_preview_selection_routes_formatting_to_source():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    editor.setPlainText("first\nsecond")
+    cursor = editor.textCursor()
+    cursor.movePosition(QTextCursor.End)
+    editor.setTextCursor(cursor)
+    editor.setPresentationMode(
+        MarkdownPresentationMode.LIVE_PREVIEW
+    )
+    editor.resize(480, 360)
+    editor.show()
+    try:
+        qApp.processEvents()
+        projection = editor.livePreviewView
+        projected_text = projection.toPlainText()
+        start = projected_text.index("second")
+        selection = QTextCursor(projection.document())
+        selection.setPosition(start)
+        selection.setPosition(
+            start + len("second"),
+            QTextCursor.KeepAnchor,
+        )
+        projection.setTextCursor(selection)
+
+        editor.bold()
+        qApp.processEvents()
+
+        assert editor.toPlainText() == "first\n**second**"
+        assert "**second**" in projection.toPlainText()
     finally:
         editor.hide()
 
