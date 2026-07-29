@@ -253,9 +253,9 @@ def test_markdown_mode_is_independent_between_split_leaves(
     )
     assert (
         first_editor.markdownEditorHost.currentWidget()
-        is first_editor.txtRedacText.livePreviewView
+        is first_editor.txtRedacText
     )
-    assert first_editor.txtRedacText.isHidden()
+    assert first_editor.txtRedacText.isVisible()
     assert (
         second_editor.markdownEditorHost.currentWidget()
         is second_editor.txtRedacText.readingView

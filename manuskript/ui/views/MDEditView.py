@@ -46,7 +46,7 @@ class MDEditView(textEditView):
         self._lastCursorPosition = None
         self._presentationState = None
         self._presentationHost = None
-        self._highlighterSuspendedForProjection = False
+        self._highlighterSuspendedForReading = False
         self._contentReadOnly = html is not None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
@@ -66,7 +66,6 @@ class MDEditView(textEditView):
 
         # Highlighter
         self._textFormat = "md"
-        self.livePreviewView = None
         self.readingView = None
         self._presentationMode = (
             MarkdownPresentationMode.FORMATTED_SOURCE
@@ -97,14 +96,11 @@ class MDEditView(textEditView):
         mode = MarkdownPresentationMode.from_value(mode)
         if (
             not self._contentReadOnly
-            and mode in (
-                MarkdownPresentationMode.LIVE_PREVIEW,
-                MarkdownPresentationMode.READING,
-            )
+            and mode is MarkdownPresentationMode.READING
             and self._presentationHost is None
         ):
             raise RuntimeError(
-                "Projected Markdown modes require a MarkdownEditorHost"
+                "Reading mode requires a MarkdownEditorHost"
             )
         if mode is self._presentationMode:
             self._applyPresentationMode()
@@ -120,34 +116,28 @@ class MDEditView(textEditView):
             and self._presentationMode
             is MarkdownPresentationMode.READING
         )
-        live_preview_active = (
-            not self._contentReadOnly
-            and self._presentationMode
-            is MarkdownPresentationMode.LIVE_PREVIEW
-        )
         self.setReadOnly(
             self._contentReadOnly
             or not self._presentationMode.is_editable
         )
-        projection_requested = reading_active or live_preview_active
-        if projection_requested and self._presentationHost is None:
+        if reading_active and self._presentationHost is None:
             raise RuntimeError(
-                "Projected Markdown modes require a MarkdownEditorHost"
+                "Reading mode requires a MarkdownEditorHost"
             )
         effective_mode = (
             self._presentationMode
             if not self._contentReadOnly
             else MarkdownPresentationMode.FORMATTED_SOURCE
         )
-        active_projection = (
+        active_sibling = (
             self._presentationHost.setPresentationMode(effective_mode)
             if self._presentationHost is not None
             else None
         )
         self._setHighlighterSuspended(
-            active_projection is not None
+            active_sibling is not None
         )
-        if self.highlighter and active_projection is None:
+        if self.highlighter and active_sibling is None:
             self.highlighter.rehighlight()
 
     def setPresentationHost(self, host):
@@ -169,16 +159,16 @@ class MDEditView(textEditView):
             return
         if (
             suspended
-            and not self._highlighterSuspendedForProjection
+            and not self._highlighterSuspendedForReading
         ):
             self.highlighter.setDocument(None)
-            self._highlighterSuspendedForProjection = True
+            self._highlighterSuspendedForReading = True
         elif (
             not suspended
-            and self._highlighterSuspendedForProjection
+            and self._highlighterSuspendedForReading
         ):
             self.highlighter.setDocument(self.document())
-            self._highlighterSuspendedForProjection = False
+            self._highlighterSuspendedForReading = False
 
     def setPresentationState(self, state):
         """Attach this view to its owning editor leaf's presentation state."""
@@ -406,11 +396,14 @@ class MDEditView(textEditView):
     def cursorPositionHasChanged(self):
         self.centerCursor()
         current_position = self.textCursor().position()
+        presentation_reveal = (
+            self._presentationMode.reveals_active_block
+        )
         focus_mode = self.settings.textEditor["focusMode"]
         if (
             self.highlighter
             and self.highlighter.document() is self.document()
-            and focus_mode
+            and (focus_mode or presentation_reveal)
         ):
             if self._lastCursorPosition is not None:
                 previous_block = self.document().findBlock(
