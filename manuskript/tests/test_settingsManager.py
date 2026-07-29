@@ -3,6 +3,9 @@ import unittest
 from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
+from PyQt5.QtGui import QColor, QPalette
+from PyQt5.QtWidgets import QToolTip, qApp
+
 from manuskript import settings as default_settings
 from manuskript.settingsManager import SettingsManager
 
@@ -123,6 +126,44 @@ class TestSettingsManager(unittest.TestCase):
     def test_cursor_flash_time_rejects_non_callable_default(self):
         with self.assertRaisesRegex(TypeError, "must be callable"):
             self.settings.configure_cursor_flash_time(875)
+
+    def test_system_tooltip_style_repairs_inaccessible_palette(self):
+        palette = QPalette(qApp.palette())
+        palette.setColor(
+            QPalette.Inactive,
+            QPalette.ToolTipText,
+            QColor("white"),
+        )
+        palette.setColor(
+            QPalette.Inactive,
+            QPalette.ToolTipBase,
+            QColor("#ffffdc"),
+        )
+        self.settings.tooltipStyle[
+            "useSystemDefaultsForTooltips"
+        ] = True
+
+        with patch(
+            "manuskript.settingsManager.qApp"
+        ) as application:
+            application.palette.return_value = palette
+            self.settings.applyTooltipStyle()
+
+        repaired = QToolTip.palette()
+        self.assertEqual(
+            repaired.color(
+                QPalette.Inactive,
+                QPalette.ToolTipBase,
+            ),
+            QColor("#ffffdc"),
+        )
+        self.assertEqual(
+            repaired.color(
+                QPalette.Inactive,
+                QPalette.ToolTipText,
+            ),
+            QColor("black"),
+        )
 
 
 if __name__ == '__main__':
