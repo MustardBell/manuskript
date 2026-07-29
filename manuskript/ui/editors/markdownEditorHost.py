@@ -4,9 +4,6 @@ from PyQt5.QtWidgets import QFrame, QStackedWidget
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
-from manuskript.ui.views.markdownLivePreviewView import (
-    MarkdownLivePreviewView,
-)
 from manuskript.ui.views.markdownReadingView import MarkdownReadingView
 
 
@@ -20,7 +17,6 @@ class MarkdownEditorHost(QStackedWidget):
         self.setObjectName("markdownEditorHost")
         self.setFrameShape(QFrame.NoFrame)
         self.sourceEditor = source_editor
-        self.livePreviewView = None
         self.readingView = None
         self.addWidget(source_editor)
         source_editor.setPresentationHost(self)
@@ -45,21 +41,9 @@ class MarkdownEditorHost(QStackedWidget):
         return target if target is not self.sourceEditor else None
 
     def _viewForMode(self, mode):
-        if mode is MarkdownPresentationMode.LIVE_PREVIEW:
-            return self._ensureLivePreviewView()
         if mode is MarkdownPresentationMode.READING:
             return self._ensureReadingView()
         return self.sourceEditor
-
-    def _ensureLivePreviewView(self):
-        if self.livePreviewView is None:
-            self.livePreviewView = MarkdownLivePreviewView(
-                self.sourceEditor,
-                self,
-            )
-            self.addWidget(self.livePreviewView)
-            self.sourceEditor.livePreviewView = self.livePreviewView
-        return self.livePreviewView
 
     def _ensureReadingView(self):
         if self.readingView is None:
