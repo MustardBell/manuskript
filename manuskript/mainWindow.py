@@ -47,6 +47,7 @@ from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
 )
+from manuskript.ui.menu_tooltips import MenuTooltipController
 from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
@@ -187,6 +188,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.actionBinding = MainWindowActionBinding(self)
         self.actionBinding.bind()
+        self.menuTooltipController = MenuTooltipController(
+            self.menubar,
+            {
+                self.menuFile: self.tr(
+                    "Open, save, import, compile, and close projects"
+                ),
+                self.menuEdit: self.tr(
+                    "Edit content, formatting, labels, and preferences"
+                ),
+                self.menuOrganize: self.tr(
+                    "Reorder, split, merge, and duplicate project items"
+                ),
+                self.menuNavigate: self.tr(
+                    "Move backward and forward through navigation history"
+                ),
+                self.menuView: self.tr(
+                    "Change the workspace and Markdown presentation"
+                ),
+                self.menuTools: self.tr(
+                    "Open writing analysis and target tools"
+                ),
+                self.menuHelp: self.tr(
+                    "Open help, diagnostics, support, and application details"
+                ),
+            },
+            self,
+        )
 
         # Tools non-modal windows
         self.td = None  # Targets Dialog
