@@ -87,7 +87,12 @@ textEditor = {
 
 revisions = {
     "keep": False,
+    "backend": "internal",
     "smartremove": True,
+    "git": {
+        "autoCommit": False,
+        "taggedOnly": False,
+    },
     "rules": collections.OrderedDict({
         10 * 60:            60,                     # One per minute for the last 10mn
         60 * 60:            60 * 10,                # One per 10mn for the last hour

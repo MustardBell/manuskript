@@ -109,6 +109,36 @@ class TestSettingsManager(unittest.TestCase):
         self.assertEqual(default_settings.spellcheck, expected_spellcheck)
         self.assertEqual(default_settings.folderView, expected_folder_view)
 
+    def test_old_revision_settings_gain_backend_defaults(self):
+        old_settings = {
+            "revisions": {
+                "keep": True,
+                "smartremove": False,
+                "rules": {
+                    "600": 60,
+                    "null": 604800,
+                },
+            },
+        }
+
+        with patch.object(
+            self.settings,
+            "apply_loaded_settings_effects",
+        ):
+            self.settings.load(json.dumps(old_settings))
+
+        self.assertEqual(
+            self.settings.revisions["backend"],
+            "internal",
+        )
+        self.assertFalse(
+            self.settings.revisions["git"]["autoCommit"]
+        )
+        self.assertEqual(
+            self.settings.revisions["rules"][None],
+            604800,
+        )
+
     def test_cursor_flash_time_uses_injected_platform_default(self):
         original_provider = self.settings._default_cursor_flash_time
         provider = MagicMock(return_value=875)
