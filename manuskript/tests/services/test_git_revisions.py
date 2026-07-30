@@ -1,5 +1,6 @@
 import os
 import subprocess
+import zipfile
 
 import pytest
 
@@ -149,6 +150,39 @@ def test_snapshot_reads_project_from_commit_without_changing_worktree(
     assert scene.read_text(encoding="utf-8") == (
         "Current uncommitted text"
     )
+
+
+def test_zipped_project_scope_contains_only_archive(tmp_path):
+    run_git(tmp_path, "init", "-q")
+    run_git(tmp_path, "config", "user.name", "Revision Tester")
+    run_git(
+        tmp_path,
+        "config",
+        "user.email",
+        "revisions@example.test",
+    )
+    project_file = tmp_path / "book.msk"
+    with zipfile.ZipFile(project_file, "w") as archive:
+        archive.writestr("settings.txt", "{}")
+        archive.writestr("outline/scene.md", "First")
+    (tmp_path / "unrelated.txt").write_text(
+        "Not part of project",
+        encoding="utf-8",
+    )
+    run_git(tmp_path, "add", "book.msk", "unrelated.txt")
+    run_git(tmp_path, "commit", "-q", "-m", "Initial archive")
+    revision = run_git(
+        tmp_path,
+        "rev-parse",
+        "HEAD",
+    ).stdout.decode().strip()
+
+    backend = GitRevisionBackend(str(project_file))
+    snapshot = backend.snapshot(revision)
+
+    assert backend.repository.project_paths == ("book.msk",)
+    assert snapshot.zipped
+    assert snapshot.files["outline/scene.md"] == "First"
 
 
 def test_snapshot_rejects_commit_without_complete_project(

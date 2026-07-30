@@ -90,6 +90,15 @@ def test_general(MWSampleProject):
                             lambda: S.revisions["keep"])
     switchCheckBoxAndAssert(SW.chkRevisionRemove,
                             lambda: S.revisions["smartremove"])
+    git_index = SW.cmbRevisionBackend.findData("git")
+    SW.cmbRevisionBackend.setCurrentIndex(git_index)
+    assert S.revisions["backend"] == "git"
+    assert not SW.grpGitRevisionOptions.isHidden()
+    assert SW.chkRevisionRemove.isHidden()
+    SW.chkGitAutoCommit.setChecked(True)
+    SW.chkGitTaggedOnly.setChecked(True)
+    assert S.revisions["git"]["autoCommit"]
+    assert S.revisions["git"]["taggedOnly"]
 
     # Views
     # Simple way here, we just call the functions.

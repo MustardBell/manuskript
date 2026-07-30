@@ -68,3 +68,19 @@ class ProjectRevisionCoordinator:
             project_manager.ui.settings,
         )
         return project_manager.restoreRevisionSnapshot(loaded)
+
+    def manual_commit(self, project_manager, message):
+        project_manager.ui.flush_pending_edits()
+        if not project_manager.saveDatas(record_revision=False):
+            raise GitRevisionError(
+                "The project could not be saved before committing."
+            )
+        return self.git_backend(
+            project_manager.currentProject
+        ).commit(message)
+
+    def create_tag(self, project_file, revision, name):
+        return self.git_backend(project_file).create_tag(
+            revision,
+            name,
+        )

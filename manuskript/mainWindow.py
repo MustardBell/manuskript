@@ -45,6 +45,7 @@ from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
+from manuskript.ui.git_revision_dialog import GitRevisionDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.main_window_action_binding import (
@@ -419,6 +420,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         searchTextInput.setFocus()
         searchTextInput.selectAll()
 
+    def showGitRevisions(self):
+        if not self.projectManager.session.is_open:
+            return
+        if self.gitRevisionDialog is None:
+            self.gitRevisionDialog = GitRevisionDialog(
+                self.projectManager,
+                self.settingsManager,
+                self.revisionCoordinator,
+                self,
+            )
+            self.gitRevisionDialog.setAttribute(
+                Qt.WA_DeleteOnClose,
+            )
+            self.gitRevisionDialog.destroyed.connect(
+                self._gitRevisionDialogClosed
+            )
+        self.gitRevisionDialog.show()
+        self.gitRevisionDialog.raise_()
+        self.gitRevisionDialog.activateWindow()
+
+    def _gitRevisionDialogClosed(self):
+        self.gitRevisionDialog = None
+
     # Formats
     def callLastMDEditView(self, functionName, params=()):
         """
@@ -605,6 +629,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def setupMoreUi(self):
 
         style.styleMainWindow(self)
+
+        self.actGitRevisions = QAction(
+            QIcon.fromTheme("document-open-recent"),
+            self.tr("Revision &History…"),
+            self,
+        )
+        self.actGitRevisions.setObjectName("actGitRevisions")
+        self.actGitRevisions.setToolTip(self.tr(
+            "Review, tag, commit, and restore project revisions"
+        ))
+        self.menuFile.insertAction(
+            self.actCloseProject,
+            self.actGitRevisions,
+        )
+        self.gitRevisionDialog = None
 
         # Tool bar on the right
         self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)

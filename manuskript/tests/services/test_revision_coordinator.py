@@ -80,3 +80,26 @@ def test_restore_passes_validated_snapshot_to_project_owner():
     project_manager.restoreRevisionSnapshot.assert_called_once_with(
         loaded
     )
+
+
+def test_manual_commit_flushes_and_saves_without_auto_commit():
+    backend = MagicMock()
+    backend.commit.return_value = "b" * 40
+    coordinator = ProjectRevisionCoordinator(
+        backend_factory=lambda _project: backend,
+    )
+    project_manager = MagicMock()
+    project_manager.currentProject = "book.msk"
+    project_manager.saveDatas.return_value = True
+
+    result = coordinator.manual_commit(
+        project_manager,
+        "Chapter complete",
+    )
+
+    assert result == "b" * 40
+    project_manager.ui.flush_pending_edits.assert_called_once_with()
+    project_manager.saveDatas.assert_called_once_with(
+        record_revision=False
+    )
+    backend.commit.assert_called_once_with("Chapter complete")
