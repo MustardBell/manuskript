@@ -91,7 +91,7 @@ revisions = {
     "smartremove": True,
     "git": {
         "autoCommit": False,
-        "taggedOnly": False,
+        "taggedOnly": True,
     },
     "rules": collections.OrderedDict({
         10 * 60:            60,                     # One per minute for the last 10mn

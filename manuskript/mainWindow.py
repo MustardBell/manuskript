@@ -29,6 +29,9 @@ from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
 from manuskript.services.external_process import ExternalProcessRunner
+from manuskript.services.revision_coordinator import (
+    ProjectRevisionCoordinator,
+)
 from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
@@ -152,12 +155,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
         self.projectHistory = ProjectHistory()
+        self.revisionCoordinator = ProjectRevisionCoordinator()
         self.themeRepository = ThemeRepository()
         self.themePreviewRenderer = ThemePreviewRenderer()
         self.projectManager = ProjectManager(
             self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
             last_project_store=self.projectHistory,
+            revision_coordinator=self.revisionCoordinator,
         )
         self.welcome.set_context(
             welcome_context_for(

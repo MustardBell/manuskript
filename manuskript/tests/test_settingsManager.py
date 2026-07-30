@@ -134,6 +134,9 @@ class TestSettingsManager(unittest.TestCase):
         self.assertFalse(
             self.settings.revisions["git"]["autoCommit"]
         )
+        self.assertTrue(
+            self.settings.revisions["git"]["taggedOnly"]
+        )
         self.assertEqual(
             self.settings.revisions["rules"][None],
             604800,
