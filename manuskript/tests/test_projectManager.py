@@ -249,6 +249,98 @@ class TestProjectManager(unittest.TestCase):
         self.assertFalse(result)
         show_failures.assert_called_once_with(failures)
 
+    def test_revision_restore_replaces_models_through_project_owner(self):
+        self.project_manager.session.open("project.msk")
+        self.window.tabMain.currentIndex.return_value = 0
+        self.window.mainEditor.tabSplitter.openIndexes.return_value = []
+        previous_models = MagicMock()
+        replacement_models = MagicMock()
+        self.project_manager.models = previous_models
+        self.storage.save.side_effect = [
+            ProjectSaveResult(),
+            ProjectSaveResult(),
+        ]
+        snapshot = MagicMock()
+        snapshot.commit_id = "a" * 40
+        snapshot.models = replacement_models
+        snapshot.load_result = ProjectLoadResult()
+        snapshot.settings.save.return_value = (
+            self.window.settingsManager.save()
+        )
+
+        with patch.object(
+            self.lifecycle_view,
+            "flush_pending_edits",
+        ) as flush, patch.object(
+            self.lifecycle_view,
+            "prepare_model_replacement",
+        ) as prepare:
+            result = self.project_manager.restoreRevisionSnapshot(
+                snapshot
+            )
+
+        self.assertTrue(result)
+        self.assertIs(
+            self.project_manager.models,
+            replacement_models,
+        )
+        flush.assert_called_once_with()
+        prepare.assert_called_once_with()
+        self.assertEqual(self.storage.save.call_count, 2)
+        self.assertEqual(
+            self.project_manager.session.state,
+            ProjectState.CLEAN,
+        )
+        self.storage.load.assert_not_called()
+
+    def test_failed_revision_save_reinstalls_and_rewrites_previous_state(
+        self,
+    ):
+        self.project_manager.session.open("project.msk")
+        self.window.tabMain.currentIndex.return_value = 0
+        self.window.mainEditor.tabSplitter.openIndexes.return_value = []
+        previous_models = MagicMock()
+        replacement_models = MagicMock()
+        self.project_manager.models = previous_models
+        self.storage.save.side_effect = [
+            ProjectSaveResult(),
+            ProjectSaveResult(failed_files=("outline/scene.md",)),
+            ProjectSaveResult(),
+        ]
+        snapshot = MagicMock()
+        snapshot.commit_id = "b" * 40
+        snapshot.models = replacement_models
+        snapshot.load_result = ProjectLoadResult()
+        snapshot.settings.save.return_value = (
+            self.window.settingsManager.save()
+        )
+
+        result = self.project_manager.restoreRevisionSnapshot(snapshot)
+
+        self.assertFalse(result)
+        self.assertIs(self.project_manager.models, previous_models)
+        self.assertEqual(self.storage.save.call_count, 3)
+        self.assertEqual(
+            self.project_manager.session.state,
+            ProjectState.CLEAN,
+        )
+
+    def test_invalid_revision_snapshot_never_touches_live_project(self):
+        self.project_manager.session.open("project.msk")
+        previous_models = MagicMock()
+        self.project_manager.models = previous_models
+        snapshot = MagicMock()
+        snapshot.commit_id = "c" * 40
+        snapshot.load_result = ProjectLoadResult(
+            fatal_errors=("Malformed snapshot",)
+        )
+
+        result = self.project_manager.restoreRevisionSnapshot(snapshot)
+
+        self.assertFalse(result)
+        self.assertIs(self.project_manager.models, previous_models)
+        self.storage.save.assert_not_called()
+
     def test_load_permission_failures_are_presented_by_lifecycle_view(self):
         failures = ("outline/scene.md",)
         self.storage.load.return_value = ProjectLoadResult(

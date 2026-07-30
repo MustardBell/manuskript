@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from manuskript.domain.project import CloseDecision
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
+from manuskript.ui.views.textEditView import textEditView
 
 project_lifecycle_module = importlib.import_module(
     "manuskript.ui.project_lifecycle"
@@ -76,3 +77,17 @@ def test_lifecycle_view_captures_project_state_before_cleanup():
     assert window.settingsManager.openIndexes == open_indexes
     window.mainEditor.close.assert_called_once_with()
     window.mainEditor.closeAllTabs.assert_called_once_with()
+
+
+def test_lifecycle_view_flushes_every_model_backed_text_editor():
+    window = MagicMock()
+    first = MagicMock()
+    second = MagicMock()
+    window.findChildren.return_value = [first, second]
+    view = ProjectLifecycleView(window)
+
+    view.flush_pending_edits()
+
+    window.findChildren.assert_called_once_with(textEditView)
+    first.submit.assert_called_once_with()
+    second.submit.assert_called_once_with()

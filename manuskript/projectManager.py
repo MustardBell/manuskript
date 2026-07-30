@@ -95,10 +95,7 @@ class ProjectManager:
         self.ui.apply_loaded_settings()
 
         self.reconfigureAutosave()
-        for model in self.ui.change_models():
-            self.modelConnections.connect(
-                model.dataChanged, self.startTimerNoChanges
-            )
+        self._connectModelChanges()
 
         self.syncUiToState()
         self.last_project_store.remember_last_project(project)
@@ -235,6 +232,160 @@ class ProjectManager:
         )
         self.ui.install_models(self.models)
         return self.models
+
+    def restoreRevisionSnapshot(self, snapshot):
+        """Replace the project through validated models, never Git checkout."""
+        if not self.session.is_open:
+            LOGGER.error(
+                "Cannot restore a revision when no project is open."
+            )
+            return False
+        if not snapshot.load_result.succeeded:
+            LOGGER.error(
+                "Cannot restore invalid revision snapshot %s.",
+                snapshot.commit_id,
+            )
+            return False
+
+        self.ui.flush_pending_edits()
+        if not self.saveDatas():
+            LOGGER.error(
+                "Cannot preserve the current project before restoring %s.",
+                snapshot.commit_id,
+            )
+            return False
+
+        previous_models = self.models
+        previous_settings = self.ui.settings.save()
+        restored_settings = snapshot.settings.save()
+        replacement_attempted = False
+
+        self.autosave.stop()
+        self.ui.prepare_model_replacement()
+        self._disconnectModelChanges()
+        self.ui.disconnect_project()
+
+        try:
+            replacement_attempted = True
+            self._installProjectState(
+                snapshot.models,
+                restored_settings,
+            )
+            self.session.mark_dirty()
+            if not self.saveDatas():
+                raise RuntimeError(
+                    "The restored revision could not be saved."
+                )
+        except Exception:
+            LOGGER.exception(
+                "Restoring revision %s failed; reinstating the "
+                "previous project state.",
+                snapshot.commit_id,
+            )
+            rollback_succeeded = self._rollbackProjectState(
+                previous_models,
+                previous_settings,
+                replacement_attempted,
+            )
+            self.reconfigureAutosave()
+            if not rollback_succeeded:
+                self.status_reporter(
+                    self.ui.translate(
+                        "Revision restore failed, and the previous "
+                        "project could not be written back completely."
+                    ),
+                    importance=3,
+                )
+            else:
+                self.status_reporter(
+                    self.ui.translate(
+                        "Revision restore failed; the previous "
+                        "project was restored."
+                    ),
+                    importance=3,
+                )
+            return False
+
+        self._disposeModels(previous_models)
+        self.reconfigureAutosave()
+        self.ui.project_opened()
+        self.status_reporter(
+            self.ui.translate(
+                "Revision {} restored."
+            ).format(snapshot.commit_id[:10]),
+            importance=0,
+        )
+        return True
+
+    def _installProjectState(self, models, serialized_settings):
+        self.ui.settings.load(
+            serialized_settings,
+            fromString=True,
+            protocol=0,
+        )
+        self._adoptLiveSettings(models)
+        self.models = models
+        self.ui.install_models(models)
+        self.ui.connect_project()
+        self.ui.apply_loaded_settings()
+        self._connectModelChanges()
+
+    def _rollbackProjectState(
+        self,
+        previous_models,
+        previous_settings,
+        replacement_attempted,
+    ):
+        self._disconnectModelChanges()
+        if replacement_attempted:
+            try:
+                self.ui.disconnect_project()
+            except Exception:
+                LOGGER.exception(
+                    "Cannot release the failed revision model bindings."
+                )
+
+        try:
+            self._installProjectState(
+                previous_models,
+                previous_settings,
+            )
+            self.session.mark_dirty()
+            rollback_succeeded = self.saveDatas()
+            self.ui.project_opened()
+            return rollback_succeeded
+        except Exception:
+            LOGGER.exception(
+                "Cannot reinstall the project state from before "
+                "revision restore."
+            )
+            return False
+
+    def _adoptLiveSettings(self, models):
+        outline = getattr(models, "outline", None)
+        if outline is None:
+            return
+        outline.settings = self.ui.settings
+        outline.rootItem.setModel(outline)
+
+    def _connectModelChanges(self):
+        for model in self.ui.change_models():
+            self.modelConnections.connect(
+                model.dataChanged,
+                self.startTimerNoChanges,
+            )
+
+    def _disconnectModelChanges(self):
+        self.modelConnections.disconnect_all()
+
+    @staticmethod
+    def _disposeModels(models):
+        if models is None:
+            return
+        for model in vars(models).values():
+            delete_later = getattr(model, "deleteLater", None)
+            if delete_later is not None:
+                delete_later()
 
     def loadDatas(self, project):
         result = self.storage.load(self.persistence_context(project))
