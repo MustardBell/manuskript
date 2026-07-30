@@ -98,3 +98,26 @@ def test_storage_converts_serializer_exception_to_failed_save_result():
 
     assert not result.succeeded
     assert result.failed_files == ("broken.msk",)
+
+
+def test_storage_loads_revision_snapshot_from_memory():
+    context = MagicMock()
+    context.project_file = "book.msk"
+    snapshot = MagicMock()
+    snapshot.zipped = False
+    snapshot.files = {"settings.txt": "{}"}
+    storage = ProjectStorage()
+    load_result = ProjectLoadResult()
+
+    with patch(
+        "manuskript.services.project_storage.version_1.loadProject",
+        return_value=load_result,
+    ) as load_project:
+        result = storage.load_snapshot(context, snapshot)
+
+    assert result is load_result
+    file_access = load_project.call_args.kwargs["file_access"]
+    assert file_access.read(
+        "ignored.msk",
+        zipped=False,
+    ).files == snapshot.files
