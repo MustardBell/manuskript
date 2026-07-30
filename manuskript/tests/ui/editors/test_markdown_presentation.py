@@ -617,6 +617,9 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
     window_was_visible = window.isVisible()
     window.resize(900, 700)
     window.show()
+    window.raise_()
+    window.activateWindow()
+    assert QTest.qWaitForWindowActive(window)
     source = (
         "# Model-backed chapter\n\n"
         "A paragraph with **rendered emphasis**.\n\n"
@@ -650,7 +653,7 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
             Qt.LeftButton,
             pos=source_editor.cursorRect(target).center(),
         )
-        qApp.processEvents()
+        QTest.qWait(50)
         assert source_editor.hasFocus()
         assert qApp.focusWidget() is source_editor
         assert (
