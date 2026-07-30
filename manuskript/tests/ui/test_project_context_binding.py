@@ -69,6 +69,14 @@ def test_project_context_binding_installs_and_releases_contexts():
     window.mainEditor.set_context.assert_called_once_with(
         editor_context
     )
+    window.treeRedacOutline.bind_project_model.assert_called_once_with(
+        window.mdlOutline,
+        outline_context,
+    )
+    window.treeOutlineOutline.bind_project_model.assert_called_once_with(
+        window.mdlOutline,
+        outline_context,
+    )
     completer.setReferenceService.assert_called_once()
     window.widget.setContext.assert_called_once_with(search_context)
 
@@ -76,6 +84,8 @@ def test_project_context_binding_installs_and_releases_contexts():
 
     text_editor.set_text_editor_context.assert_called_with(None)
     completer.setReferenceService.assert_called_with(None)
+    window.treeRedacOutline.unbind_project_model.assert_called_once_with()
+    window.treeOutlineOutline.unbind_project_model.assert_called_once_with()
     window.mainEditor.clear_context.assert_called_once_with()
     window.widget.clearContext.assert_called_once_with()
     assert binding.reference_service is None
