@@ -121,7 +121,11 @@ class outlineCharacterDelegate(QStyledItemDelegate):
         # s = QStyledItemDelegate.sizeHint(self, option, index)
 
         item = QModelIndex()
-        character = self.mdlCharacter.getCharacterByID(index.data())
+        character = (
+            self.mdlCharacter.getCharacterByID(index.data())
+            if self.mdlCharacter is not None
+            else None
+        )
         if character:
             item = character.index(Character.name)
 
@@ -148,6 +152,9 @@ class outlineCharacterDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         # editor.addItem("")
         editor.addItem(QIcon.fromTheme("dialog-no"), self.tr("None"))
+        if self.mdlCharacter is None:
+            editor.setCurrentIndex(0)
+            return
 
         l = [self.tr("Main"), self.tr("Secondary"), self.tr("Minor")]
         for importance in range(3):
@@ -179,7 +186,11 @@ class outlineCharacterDelegate(QStyledItemDelegate):
         ##option.rect.setWidth(option.rect.width() + 18)
 
         itemIndex = QModelIndex()
-        character = self.mdlCharacter.getCharacterByID(index.data())
+        character = (
+            self.mdlCharacter.getCharacterByID(index.data())
+            if self.mdlCharacter is not None
+            else None
+        )
         if character:
             itemIndex = character.index(Character.name)
 
@@ -280,6 +291,8 @@ class outlineStatusDelegate(QStyledItemDelegate):
         return editor
 
     def setEditorData(self, editor, index):
+        if self.mdlStatus is None:
+            return
         for i in range(self.mdlStatus.rowCount()):
             editor.addItem(self.mdlStatus.item(i, 0).text())
 
@@ -315,6 +328,10 @@ class outlineLabelDelegate(QStyledItemDelegate):
         self.mdlLabels = mdlLabels
 
     def sizeHint(self, option, index):
+        if self.mdlLabels is None:
+            return QStyledItemDelegate.sizeHint(
+                self, option, index
+            ) + QSize(18, 0)
         d = index.internalPointer().data(index.column(), Qt.DisplayRole)
         if not d:
             d = 0
@@ -337,6 +354,8 @@ class outlineLabelDelegate(QStyledItemDelegate):
         return editor
 
     def setEditorData(self, editor, index):
+        if self.mdlLabels is None:
+            return
         for i in range(self.mdlLabels.rowCount()):
             editor.addItem(self.mdlLabels.item(i, 0).icon(),
                            self.mdlLabels.item(i, 0).text())
@@ -353,6 +372,10 @@ class outlineLabelDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         if not index.isValid():
             return QStyledItemDelegate.paint(self, painter, option, index)
+        if self.mdlLabels is None:
+            return QStyledItemDelegate.paint(
+                self, painter, option, index
+            )
         else:
             item = index.internalPointer()
 
