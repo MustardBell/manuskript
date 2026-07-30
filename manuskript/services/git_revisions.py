@@ -2,6 +2,7 @@ import io
 import os
 import shutil
 import subprocess
+import tempfile
 import zipfile
 from dataclasses import dataclass
 
@@ -33,20 +34,22 @@ class GitCommandRunner:
     def available(self):
         return self.executable is not None
 
-    def execute(self, arguments, *, stdin=None):
+    def execute(self, arguments, *, stdin=None, environment=None):
         if not self.available:
             raise GitNotAvailableError(
                 "Git is not installed or cannot be found."
             )
 
         command = (self.executable, *tuple(arguments))
-        completed = self._run(
-            list(command),
-            input=stdin,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
+        options = {
+            "input": stdin,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "check": False,
+        }
+        if environment is not None:
+            options["env"] = environment
+        completed = self._run(list(command), **options)
         return GitCommandResult(
             arguments=command,
             stdout=completed.stdout,
@@ -123,12 +126,13 @@ class GitRevisionBackend:
         *,
         allow_failure=False,
         stdin=None,
+        environment=None,
     ):
         result = self.runner.execute((
             "-C",
             self.repository.root,
             *tuple(arguments),
-        ), stdin=stdin)
+        ), stdin=stdin, environment=environment)
         if result.return_code and not allow_failure:
             detail = result.stderr.decode(
                 "utf-8",
@@ -397,6 +401,144 @@ class GitRevisionBackend:
             "{}^{{commit}}".format(revision),
         ))
         return result.stdout.decode("ascii").strip()
+
+    def commit(self, message):
+        """Commit only project files without hooks or worktree mutation."""
+        message = str(message).strip()
+        if not message:
+            raise GitRevisionError(
+                "A commit message is required."
+            )
+        if self.status().conflicts:
+            raise GitRevisionError(
+                "Resolve project merge conflicts before committing."
+            )
+
+        head = self.status().head
+        temporary_index = self._temporary_index_path()
+        environment = os.environ.copy()
+        environment["GIT_INDEX_FILE"] = temporary_index
+        try:
+            if head:
+                self._execute(
+                    ("read-tree", head),
+                    environment=environment,
+                )
+            else:
+                self._execute(
+                    ("read-tree", "--empty"),
+                    environment=environment,
+                )
+            self._execute((
+                "add",
+                "-A",
+                "-f",
+                "--",
+                *self.repository.project_paths,
+            ), environment=environment)
+
+            changed = self._execute((
+                "diff",
+                "--cached",
+                "--quiet",
+                "--",
+                *self.repository.project_paths,
+            ), allow_failure=True, environment=environment)
+            if changed.return_code == 0:
+                return None
+            if changed.return_code != 1:
+                detail = changed.stderr.decode(
+                    "utf-8",
+                    errors="replace",
+                ).strip()
+                raise GitRevisionError(
+                    detail or "Cannot compare project changes."
+                )
+
+            tree = self._execute(
+                ("write-tree",),
+                environment=environment,
+            ).stdout.decode("ascii").strip()
+            arguments = ["commit-tree", tree]
+            if head:
+                arguments.extend(("-p", head))
+            commit_id = self._execute(
+                arguments,
+                stdin=(message + "\n").encode("utf-8"),
+            ).stdout.decode("ascii").strip()
+
+            update_arguments = [
+                "update-ref",
+                "-m",
+                "Manuskript revision commit",
+                "HEAD",
+                commit_id,
+            ]
+            if head:
+                update_arguments.append(head)
+            else:
+                update_arguments.append("0" * 40)
+            self._execute(update_arguments)
+
+            # Bring only this project's real index entries in line with
+            # the new HEAD. Unrelated staged changes stay untouched.
+            self._execute((
+                "reset",
+                "-q",
+                commit_id,
+                "--",
+                *self.repository.project_paths,
+            ))
+            return commit_id
+        finally:
+            for path in (
+                temporary_index,
+                temporary_index + ".lock",
+            ):
+                try:
+                    os.remove(path)
+                except FileNotFoundError:
+                    pass
+
+    def create_tag(self, revision, name):
+        """Create an immutable lightweight milestone without running hooks."""
+        commit_id = self.resolve_commit(revision)
+        name = str(name).strip()
+        if not name:
+            raise GitRevisionError("A tag name is required.")
+        reference = "refs/tags/{}".format(name)
+        validation = self._execute(
+            ("check-ref-format", reference),
+            allow_failure=True,
+        )
+        if validation.return_code:
+            raise GitRevisionError(
+                "The tag name is not valid."
+            )
+        self._execute((
+            "update-ref",
+            "-m",
+            "Manuskript revision milestone",
+            reference,
+            commit_id,
+            "0" * 40,
+        ))
+        return name
+
+    def _temporary_index_path(self):
+        directory = os.path.join(
+            self.repository.git_dir,
+            "manuskript",
+        )
+        os.makedirs(directory, exist_ok=True)
+        descriptor, path = tempfile.mkstemp(
+            prefix="revision-index-",
+            dir=directory,
+        )
+        os.close(descriptor)
+        # Git requires a missing path or a valid index, not an empty file.
+        os.remove(path)
+        return path
 
     def snapshot(self, revision):
         """Read a complete project snapshot without touching the worktree."""

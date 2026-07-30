@@ -15,6 +15,9 @@ from manuskript.services.project_persistence import (
     ProjectPersistenceContext,
 )
 from manuskript.services.project_storage import ProjectStorage
+from manuskript.services.revision_coordinator import (
+    ProjectRevisionCoordinator,
+)
 from manuskript.ui.connections import SignalConnectionRegistry
 
 import logging
@@ -24,7 +27,8 @@ LOGGER = logging.getLogger(__name__)
 class ProjectManager:
     def __init__(
             self, lifecycle_view, storage=None, status_reporter=None,
-            model_factory=None, autosave=None, last_project_store=None):
+            model_factory=None, autosave=None, last_project_store=None,
+            revision_coordinator=None):
         self.ui = lifecycle_view
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
@@ -39,6 +43,9 @@ class ProjectManager:
         )
         self.last_project_store = (
             last_project_store or ProjectHistory()
+        )
+        self.revision_coordinator = (
+            revision_coordinator or ProjectRevisionCoordinator()
         )
 
     @property
@@ -167,7 +174,13 @@ class ProjectManager:
         self.autosave.schedule_after_change()
         return True
 
-    def saveDatas(self, projectName=None):
+    def saveDatas(
+        self,
+        projectName=None,
+        *,
+        revision_message=None,
+        record_revision=True,
+    ):
         """Saves the current project (in self.currentProject).
 
         If ``projectName`` is given, currentProject becomes projectName.
@@ -213,6 +226,8 @@ class ProjectManager:
             ).format(current_project_name)
             self.status_reporter(feedback, importance=0)
             LOGGER.info("Project {} saved.".format(current_project_name))
+            if record_revision:
+                self._recordRevisionAfterSave(revision_message)
         else:
             if projectName:
                 self.session.rename(previous_project)
@@ -224,6 +239,26 @@ class ProjectManager:
             self.status_reporter(feedback, importance=3)
             LOGGER.warning("Project {} not saved.".format(current_project_name))
         return result.succeeded
+
+    def _recordRevisionAfterSave(self, message):
+        try:
+            self.revision_coordinator.after_project_save(
+                self.currentProject,
+                self.ui.settings,
+                message=message,
+            )
+        except Exception as error:
+            LOGGER.exception(
+                "Project saved, but its Git revision could not be "
+                "recorded."
+            )
+            self.status_reporter(
+                self.ui.translate(
+                    "Project saved, but Git could not record the "
+                    "revision: {}"
+                ).format(str(error)),
+                importance=2,
+            )
 
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(
@@ -248,7 +283,11 @@ class ProjectManager:
             return False
 
         self.ui.flush_pending_edits()
-        if not self.saveDatas():
+        if not self.saveDatas(
+            revision_message="Before restoring revision {}".format(
+                snapshot.commit_id[:10]
+            )
+        ):
             LOGGER.error(
                 "Cannot preserve the current project before restoring %s.",
                 snapshot.commit_id,
@@ -272,7 +311,11 @@ class ProjectManager:
                 restored_settings,
             )
             self.session.mark_dirty()
-            if not self.saveDatas():
+            if not self.saveDatas(
+                revision_message="Restore revision {}".format(
+                    snapshot.commit_id[:10]
+                )
+            ):
                 raise RuntimeError(
                     "The restored revision could not be saved."
                 )
@@ -351,7 +394,9 @@ class ProjectManager:
                 previous_settings,
             )
             self.session.mark_dirty()
-            rollback_succeeded = self.saveDatas()
+            rollback_succeeded = self.saveDatas(
+                record_revision=False
+            )
             self.ui.project_opened()
             return rollback_succeeded
         except Exception:

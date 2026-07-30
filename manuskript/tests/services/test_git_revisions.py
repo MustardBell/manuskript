@@ -167,6 +167,66 @@ def test_snapshot_rejects_commit_without_complete_project(
         backend.snapshot("HEAD")
 
 
+def test_manual_commit_records_only_project_and_preserves_other_staging(
+    git_project,
+):
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("Committed by Manuskript", encoding="utf-8")
+    unrelated = repository / "unrelated.txt"
+    unrelated.write_text("Staged elsewhere", encoding="utf-8")
+    run_git(repository, "add", "unrelated.txt")
+
+    commit_id = GitRevisionBackend(str(project_file)).commit(
+        "Manual milestone candidate"
+    )
+
+    committed_scene = run_git(
+        repository,
+        "show",
+        "{}:book/outline/scene.md".format(commit_id),
+    ).stdout.decode()
+    committed_paths = run_git(
+        repository,
+        "show",
+        "--format=",
+        "--name-only",
+        commit_id,
+    ).stdout.decode().splitlines()
+    staged_paths = run_git(
+        repository,
+        "diff",
+        "--cached",
+        "--name-only",
+    ).stdout.decode().splitlines()
+    assert committed_scene == "Committed by Manuskript"
+    assert "book/outline/scene.md" in committed_paths
+    assert "unrelated.txt" not in committed_paths
+    assert staged_paths == ["unrelated.txt"]
+
+
+def test_manual_commit_returns_none_when_project_is_unchanged(
+    git_project,
+):
+    _repository, project_file = git_project
+
+    assert GitRevisionBackend(str(project_file)).commit(
+        "Nothing changed"
+    ) is None
+
+
+def test_create_tag_makes_commit_visible_as_milestone(git_project):
+    _repository, project_file = git_project
+    backend = GitRevisionBackend(str(project_file))
+    commit_id = backend.resolve_commit("HEAD")
+
+    backend.create_tag(commit_id, "draft/one")
+
+    revisions = backend.history(tagged_only=True)
+    assert revisions[0].commit_id == commit_id
+    assert revisions[0].tags == ("draft/one",)
+
+
 def test_project_outside_git_repository_is_unavailable(tmp_path):
     project_file = write_project(tmp_path)
 
