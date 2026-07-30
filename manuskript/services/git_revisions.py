@@ -117,6 +117,7 @@ class GitRevisionBackend:
 
     def __init__(self, project_file, runner=None):
         self.project_file = os.path.abspath(project_file)
+        self.zipped = zipfile.is_zipfile(self.project_file)
         self.runner = runner or GitCommandRunner()
         self.repository = self._discover_repository()
 
@@ -152,7 +153,8 @@ class GitRevisionBackend:
         candidates = [os.path.dirname(self.project_file)]
         project_directory = self._project_directory()
         if (
-            project_directory != candidates[0]
+            project_directory is not None
+            and project_directory != candidates[0]
             and os.path.isdir(project_directory)
         ):
             candidates.append(project_directory)
@@ -192,7 +194,10 @@ class GitRevisionBackend:
     def _project_paths(self, root):
         candidates = [self.project_file]
         project_directory = self._project_directory()
-        if os.path.isdir(project_directory):
+        if (
+            project_directory is not None
+            and os.path.isdir(project_directory)
+        ):
             candidates.append(project_directory)
 
         paths = []
@@ -216,8 +221,8 @@ class GitRevisionBackend:
         return tuple(dict.fromkeys(paths))
 
     def _project_directory(self):
-        if zipfile.is_zipfile(self.project_file):
-            return os.path.dirname(self.project_file)
+        if self.zipped:
+            return None
         directory = os.path.dirname(self.project_file)
         folder = os.path.splitext(
             os.path.basename(self.project_file)
@@ -552,7 +557,7 @@ class GitRevisionBackend:
             for path, object_id in entries
         }
 
-        if zipfile.is_zipfile(self.project_file):
+        if self.zipped:
             files = self._files_from_zip_snapshot(repository_files)
             zipped = True
         else:

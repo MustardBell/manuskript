@@ -47,6 +47,7 @@ class ProjectLifecycleView:
         for item in [
             self.window.actSave,
             self.window.actSaveAs,
+            self.window.actGitRevisions,
             self.window.actCloseProject,
             self.window.menuEdit,
             self.window.menuView,
