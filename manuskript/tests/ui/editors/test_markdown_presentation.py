@@ -497,6 +497,7 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
         qApp.processEvents()
         assert host.currentWidget() is editor
         QTest.keyClicks(editor, "x")
+        QTest.qWait(50)
 
         assert editor.toPlainText() == "**first**\nsecondx"
 
@@ -663,7 +664,7 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
 
         insertion_position = source_editor.textCursor().position()
         QTest.keyClicks(qApp.focusWidget(), "X")
-        qApp.processEvents()
+        QTest.qWait(50)
         edited_source = (
             source[:insertion_position]
             + "X"
