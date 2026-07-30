@@ -18,6 +18,7 @@ from manuskript.domain.persistence import (
     ProjectLoadResult,
     ProjectSaveResult,
 )
+from manuskript.domain.revisions import RevisionConfiguration
 from manuskript.enums import Character, World, Plot, PlotStep, Outline
 from manuskript.functions import iconColor, iconFromColorString
 from manuskript.converters import HTML2PlainText
@@ -257,7 +258,10 @@ def saveProject(
     moves += m
 
     # Writes revisions (if asked for)
-    if context.settings.revisions["keep"]:
+    revision_configuration = RevisionConfiguration.from_mapping(
+        context.settings.revisions
+    )
+    if revision_configuration.uses_internal_snapshots:
         files.append(("revisions.xml", mdl.saveToXML()))
 
     ####################################################################################################################

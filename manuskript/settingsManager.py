@@ -121,17 +121,29 @@ class SettingsManager:
 
     def _load_revisions_settings(self, allSettings):
         """Load revisions settings and restore integer rule keys."""
-        if "revisions" in allSettings:
-            self.revisions = allSettings["revisions"]
-            r = {}
-            for i in self.revisions["rules"]:
-                if i == "null":
-                    r[None] = self.revisions["rules"]["null"]
-                elif i is None:
-                    r[None] = self.revisions["rules"][None]
+        if "revisions" not in allSettings:
+            return
+
+        loaded = allSettings["revisions"]
+        merged = deepcopy(default_settings.revisions)
+        merged.update({
+            key: value
+            for key, value in loaded.items()
+            if key not in ("rules", "git")
+        })
+        merged["git"].update(loaded.get("git") or {})
+
+        loaded_rules = loaded.get("rules") or {}
+        if loaded_rules:
+            rules = {}
+            for key, value in loaded_rules.items():
+                if key == "null" or key is None:
+                    rules[None] = value
                 else:
-                    r[int(i)] = self.revisions["rules"][i]
-            self.revisions["rules"] = r
+                    rules[int(key)] = value
+            merged["rules"] = rules
+
+        self.revisions = merged
 
     def _load_tooltip_settings(self, allSettings):
         """Load tooltip settings with backward-compatible defaults."""

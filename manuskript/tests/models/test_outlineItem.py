@@ -202,6 +202,27 @@ def test_revision_policy_is_read_from_assigned_model_settings():
     assert item.revisions()[-1][1] == "First"
 
 
+def test_git_revision_backend_does_not_capture_internal_snapshots():
+    revisions = default_revision_settings()
+    revisions["keep"] = True
+    revisions["backend"] = "git"
+    settings = SimpleNamespace(
+        countSpaces=True,
+        revisions=revisions,
+    )
+    model = outlineModel(settings=settings)
+    item = outlineItem(
+        title="Scene",
+        _type="md",
+        parent=model.rootItem,
+    )
+    item.setData(Outline.text, "First")
+
+    item.setData(Outline.text, "Second")
+
+    assert item.revisions() == []
+
+
 def test_outline_model_exposes_consistent_drag_and_drop_flags():
     model = outlineModel()
     folder = outlineItem(
