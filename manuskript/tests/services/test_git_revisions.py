@@ -129,6 +129,44 @@ def test_revision_details_are_scoped_to_project(git_project):
     assert "book/outline/scene.md" in details
 
 
+def test_snapshot_reads_project_from_commit_without_changing_worktree(
+    git_project,
+):
+    repository, project_file = git_project
+    revision = run_git(
+        repository,
+        "rev-parse",
+        "HEAD",
+    ).stdout.decode().strip()
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("Current uncommitted text", encoding="utf-8")
+
+    snapshot = GitRevisionBackend(str(project_file)).snapshot(revision)
+
+    assert snapshot.commit_id == revision
+    assert not snapshot.zipped
+    assert snapshot.files["outline/scene.md"] == "First"
+    assert scene.read_text(encoding="utf-8") == (
+        "Current uncommitted text"
+    )
+
+
+def test_snapshot_rejects_commit_without_complete_project(
+    git_project,
+):
+    repository, project_file = git_project
+    run_git(repository, "rm", "-q", "book/settings.txt")
+    run_git(repository, "commit", "-q", "-m", "Remove settings")
+
+    backend = GitRevisionBackend(str(project_file))
+
+    with pytest.raises(
+        Exception,
+        match="settings.txt is missing",
+    ):
+        backend.snapshot("HEAD")
+
+
 def test_project_outside_git_repository_is_unavailable(tmp_path):
     project_file = write_project(tmp_path)
 
