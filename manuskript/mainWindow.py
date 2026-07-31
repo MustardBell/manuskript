@@ -64,6 +64,7 @@ from manuskript.ui.editors.markdownPresentation import (
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
+from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
@@ -97,6 +98,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self,
         settings_manager,
         application_preferences=None,
+        plugin_runtime=None,
+        plugin_option_store=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -152,6 +155,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
+        self.pluginRuntime = plugin_runtime
+        self.pluginOptionStore = plugin_option_store
+        self.pluginUi = (
+            PluginUiController(
+                self,
+                plugin_runtime,
+                plugin_option_store,
+            )
+            if plugin_runtime is not None
+            else None
+        )
         self.projectLifecycleView = ProjectLifecycleView(self)
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
@@ -489,6 +503,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._markdownPresentationState.modeChanged.disconnect(
                     self.syncMarkdownPresentationActions
                 )
+                (
+                    self._markdownPresentationState
+                    .allowedModesChanged.disconnect(
+                        self.syncMarkdownPresentationModes
+                    )
+                )
             except (RuntimeError, TypeError):
                 pass
 
@@ -500,6 +520,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         state.modeChanged.connect(
             self.syncMarkdownPresentationActions
         )
+        state.allowedModesChanged.connect(
+            self.syncMarkdownPresentationModes
+        )
+        self.syncMarkdownPresentationModes(state.allowed_modes)
         self.syncMarkdownPresentationActions(state.mode)
 
     def syncMarkdownPresentationActions(self, mode):
@@ -515,6 +539,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.actMarkdownReading,
         }
         actions[mode].setChecked(True)
+
+    def syncMarkdownPresentationModes(self, modes):
+        allowed = set(modes)
+        for mode, action in {
+            MarkdownPresentationMode.SOURCE:
+                self.actMarkdownSource,
+            MarkdownPresentationMode.FORMATTED_SOURCE:
+                self.actMarkdownFormattedSource,
+            MarkdownPresentationMode.LIVE_PREVIEW:
+                self.actMarkdownLivePreview,
+            MarkdownPresentationMode.READING:
+                self.actMarkdownReading,
+        }.items():
+            action.setEnabled(mode in allowed)
 
     # Navigate
     
@@ -985,7 +1023,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     else QModelIndex()
                 ),
                 show_status=self.statusPresenter.show,
-            )
+            ),
+            plugin_runtime=self.pluginRuntime,
+            plugin_option_store=self.pluginOptionStore,
         )
         self.dialog.show()
         self.centerChildWindow(self.dialog)
@@ -993,17 +1033,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def doCompile(self):
         self.dialog = exporterDialog(
-            ExportContext(
-                project_file=self.currentProject,
-                outline_model=self.mdlOutline,
-                flat_data_model=self.mdlFlatData,
-                label_model=self.mdlLabels,
-                status_model=self.mdlStatus,
-                parent=self,
-                tool_paths=self.externalToolPaths,
-                process_runner=self.externalProcessRunner,
-            ),
+            self.exportContext(),
             preferences=self.applicationPreferences,
+            plugin_runtime=self.pluginRuntime,
+            plugin_option_store=self.pluginOptionStore,
         )
         self.dialog.show()
         self.centerChildWindow(self.dialog)
+
+    def exportContext(self):
+        return ExportContext(
+            project_file=self.currentProject or "",
+            outline_model=self.mdlOutline,
+            flat_data_model=self.mdlFlatData,
+            label_model=self.mdlLabels,
+            status_model=self.mdlStatus,
+            parent=self,
+            tool_paths=self.externalToolPaths,
+            process_runner=self.externalProcessRunner,
+            page_types=(
+                self.pluginUi.pageTypes
+                if self.pluginUi is not None
+                else None
+            ),
+        )

@@ -17,6 +17,8 @@ class markdown(plainText):
     exportFilter = "Markdown files (*.md);; Any files (*)"
     exportDefaultSuffix = ".md"
     icon = "text-x-markdown"
+    format_id = "markdown"
+    artifact_media_type = "text/markdown"
 
     def settingsWidget(self):
         w = markdownSettings(self, self.context)

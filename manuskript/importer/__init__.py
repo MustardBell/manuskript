@@ -26,3 +26,21 @@ importers = [
     LaTeXPandocImporter,
     OPMLPandocImporter,
     ]
+
+
+def create_importers(
+        plugin_runtime=None,
+        plugin_option_store=None,
+):
+    values = [importer_type() for importer_type in importers]
+    if plugin_runtime is not None:
+        from manuskript.ui.plugins.import_adapter import (
+            create_plugin_importers,
+        )
+        values.extend(
+            create_plugin_importers(
+                plugin_runtime,
+                plugin_option_store,
+            )
+        )
+    return values

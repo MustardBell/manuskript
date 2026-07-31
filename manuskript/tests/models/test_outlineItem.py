@@ -67,6 +67,16 @@ def test_outlineItemsProperties(outlineItemFolder, outlineItemText):
     text.setData(text.enum.goal, 4)
     assert text.data(text.enum.goalPercentage) == .5
 
+
+def test_outline_item_preserves_typed_plugin_values_in_xml():
+    item = outlineItem(title="Structured", _type="md", ID="scene-1")
+
+    item.setPluginValue("example.structured-page", True)
+    restored = outlineItem(xml=item.toXML())
+
+    assert restored.hasPluginValue("example.structured-page")
+    assert restored.pluginValue("example.structured-page") is True
+
 def test_modelStuff(outlineModelBasic):
     """
     Tests with children items.

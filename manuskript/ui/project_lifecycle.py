@@ -53,13 +53,21 @@ class ProjectLifecycleView:
             self.window.menuView,
             self.window.menuOrganize,
             self.window.menuNavigate,
-            self.window.menuTools,
             self.window.menuHelp,
             self.window.actImport,
             self.window.actCompile,
             self.window.actSettings,
         ]:
             item.setEnabled(project_open)
+        for action in self.window.menuTools.actions():
+            if (
+                self.window.pluginUi is not None
+                and action in self.window.pluginUi.globalActions
+            ):
+                action.setEnabled(True)
+            else:
+                action.setEnabled(project_open)
+        self.window.menuTools.setEnabled(True)
 
     def connect_project(self):
         self.window.makeConnections()
@@ -110,6 +118,8 @@ class ProjectLifecycleView:
             + self.window.tr("Manuskript")
         )
         self.window.history.reset()
+        if self.window.pluginUi is not None:
+            self.window.pluginUi.project_opened()
         self.window.switchToProject()
 
     def confirm_unsaved_changes(self):
@@ -167,6 +177,8 @@ class ProjectLifecycleView:
         dialog.open()
 
     def prepare_close(self):
+        if self.window.pluginUi is not None:
+            self.window.pluginUi.prepare_project_close()
         self.window.mainEditor.close()
         self.window.mainEditor.closeAllTabs()
 

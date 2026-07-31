@@ -14,6 +14,7 @@ class ExportContext:
     parent: object
     tool_paths: object = None
     process_runner: object = None
+    page_types: object = None
 
     @property
     def project_path(self):

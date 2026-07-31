@@ -8,6 +8,8 @@ from manuskript.plugins.api import (
     ExportContribution,
     ImportContribution,
     MarkupContribution,
+    PageRendererContribution,
+    PageTypeContribution,
     ProjectPanelContribution,
     contribution_descriptor,
 )
@@ -19,6 +21,8 @@ class ContributionKind(str, Enum):
     IMPORTER = "importer"
     CONVERTER = "converter"
     PROJECT_PANEL = "project_panel"
+    PAGE_TYPE = "page_type"
+    PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
 
 
@@ -27,6 +31,8 @@ CONTRIBUTION_TYPES = {
     ContributionKind.IMPORTER: ImportContribution,
     ContributionKind.CONVERTER: ConversionContribution,
     ContributionKind.PROJECT_PANEL: ProjectPanelContribution,
+    ContributionKind.PAGE_TYPE: PageTypeContribution,
+    ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
 }
 
@@ -64,6 +70,12 @@ class PluginRegistrar:
 
     def register_project_panel(self, contribution):
         self._add(ContributionKind.PROJECT_PANEL, contribution)
+
+    def register_page_type(self, contribution):
+        self._add(ContributionKind.PAGE_TYPE, contribution)
+
+    def register_page_renderer(self, contribution):
+        self._add(ContributionKind.PAGE_RENDERER, contribution)
 
     def register_markup(self, contribution):
         self._add(ContributionKind.MARKUP, contribution)
@@ -168,6 +180,14 @@ class PluginRegistry:
     @property
     def project_panels(self):
         return self.contributions(ContributionKind.PROJECT_PANEL)
+
+    @property
+    def page_types(self):
+        return self.contributions(ContributionKind.PAGE_TYPE)
+
+    @property
+    def page_renderers(self):
+        return self.contributions(ContributionKind.PAGE_RENDERER)
 
     @property
     def markup(self):

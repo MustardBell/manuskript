@@ -45,6 +45,8 @@ class MarkdownModeToolButton(QToolButton):
 
         self.clicked.connect(self.toggleReading)
         state.modeChanged.connect(self.syncMode)
+        state.allowedModesChanged.connect(self.syncAllowedModes)
+        self.syncAllowedModes(state.allowed_modes)
         self.syncMode(state.mode)
 
     @property
@@ -52,24 +54,47 @@ class MarkdownModeToolButton(QToolButton):
         return self._state
 
     def toggleReading(self):
-        if self._state.mode is MarkdownPresentationMode.READING:
-            self._state.set_mode(self._lastEditableMode)
+        if MarkdownPresentationMode.READING in self._state.allowed_modes:
+            if self._state.mode is MarkdownPresentationMode.READING:
+                self._state.set_mode(self._lastEditableMode)
+            else:
+                self._state.set_mode(MarkdownPresentationMode.READING)
         else:
-            self._state.set_mode(MarkdownPresentationMode.READING)
+            target = (
+                MarkdownPresentationMode.SOURCE
+                if self._state.mode
+                is MarkdownPresentationMode.FORMATTED_SOURCE
+                else MarkdownPresentationMode.FORMATTED_SOURCE
+            )
+            self._state.set_mode(target)
 
     def syncMode(self, mode):
         mode = MarkdownPresentationMode.from_value(mode)
-        if mode.is_editable:
+        if (
+            mode.is_editable
+            and MarkdownPresentationMode.READING
+            in self._state.allowed_modes
+        ):
             self._lastEditableMode = mode
             target_mode = MarkdownPresentationMode.READING
             icon = QIcon.fromTheme(
                 "view-preview",
                 QIcon.fromTheme("document-preview"),
             )
-        else:
+        elif mode is MarkdownPresentationMode.READING:
             target_mode = self._lastEditableMode
             icon = QIcon.fromTheme(
                 "document-edit",
+                QIcon.fromTheme("accessories-text-editor"),
+            )
+        else:
+            target_mode = (
+                MarkdownPresentationMode.SOURCE
+                if mode is MarkdownPresentationMode.FORMATTED_SOURCE
+                else MarkdownPresentationMode.FORMATTED_SOURCE
+            )
+            icon = QIcon.fromTheme(
+                "code-context",
                 QIcon.fromTheme("accessories-text-editor"),
             )
 
@@ -80,3 +105,9 @@ class MarkdownModeToolButton(QToolButton):
             )
         )
         self._actions[mode].setChecked(True)
+
+    def syncAllowedModes(self, modes):
+        allowed = set(modes)
+        for mode, action in self._actions.items():
+            action.setEnabled(mode in allowed)
+        self.syncMode(self._state.mode)

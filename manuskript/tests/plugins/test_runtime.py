@@ -158,3 +158,91 @@ def test_plugin_package_supports_relative_imports(tmp_path):
         runtime.registry.exporters[0].descriptor.name
         == "Relative import"
     )
+
+
+def test_refresh_unloads_a_plugin_removed_from_disk(tmp_path):
+    plugin_root = create_plugin(tmp_path)
+    preferences = InMemoryPluginPreferences(["example.plugin"])
+    runtime = PluginRuntime([tmp_path], preferences)
+    runtime.discover()
+    runtime.load_enabled()
+    (plugin_root / "plugin.json").unlink()
+
+    runtime.discover()
+
+    assert runtime.records == {}
+    assert runtime.registry.exporters == ()
+
+
+def test_refresh_unloads_plugin_when_manifest_becomes_duplicate(tmp_path):
+    create_plugin(tmp_path)
+    preferences = InMemoryPluginPreferences(["example.plugin"])
+    runtime = PluginRuntime([tmp_path], preferences)
+    runtime.discover()
+    runtime.load_enabled()
+    duplicate_root = tmp_path / "duplicate"
+    duplicate_root.mkdir()
+    (duplicate_root / "plugin.json").write_text(
+        json.dumps({
+            "id": "example.plugin",
+            "name": "Duplicate",
+            "version": "1.0",
+            "api_version": 1,
+            "entry_point": "plugin:register",
+        }),
+        encoding="utf-8",
+    )
+
+    runtime.discover()
+
+    assert (
+        runtime.records["example.plugin"].status
+        is PluginStatus.FAILED
+    )
+    assert runtime.registry.exporters == ()
+
+
+def test_preinstalled_plugin_uses_normal_enable_disable_state(tmp_path):
+    create_plugin(tmp_path, plugin_id="preinstalled.plugin")
+    preferences = InMemoryPluginPreferences()
+    runtime = PluginRuntime([tmp_path], preferences)
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["preinstalled.plugin"]
+    assert record.status is PluginStatus.DISABLED
+    assert preferences.enabled_plugin_ids == ()
+
+    runtime.enable("preinstalled.plugin")
+
+    assert record.status is PluginStatus.LOADED
+    assert len(runtime.registry.exporters) == 1
+
+    runtime.disable("preinstalled.plugin")
+
+    assert record.status is PluginStatus.DISABLED
+    assert runtime.registry.exporters == ()
+    assert preferences.enabled_plugin_ids == ()
+
+
+def test_duplicate_plugin_ids_across_roots_are_rejected(tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    create_plugin(first, plugin_id="duplicate.plugin")
+    create_plugin(second, plugin_id="duplicate.plugin")
+    runtime = PluginRuntime(
+        [first, second],
+        InMemoryPluginPreferences(["duplicate.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["duplicate.plugin"]
+    assert record.manifest.root.parent == first
+    assert record.status is PluginStatus.FAILED
+    assert runtime.registry.exporters == ()
+    assert "Duplicate plugin ID" in runtime.discovery_issues[0].error

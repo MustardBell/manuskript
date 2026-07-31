@@ -12,6 +12,8 @@ class PluginPreferences:
             self.ENABLED_KEY,
             [],
         )
+        if value is None:
+            return ()
         if isinstance(value, str):
             value = [value]
         return tuple(dict.fromkeys(str(item) for item in value))

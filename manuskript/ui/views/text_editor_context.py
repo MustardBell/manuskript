@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 
 from manuskript.commands import DocumentCommand
 @dataclass(frozen=True)
@@ -12,6 +12,8 @@ class TextEditorContext:
     create_plot: Callable[[str], None]
     create_world_item: Callable[[str], None]
     invoke_outline_command: Callable[[DocumentCommand], None]
+    markup_profiles: Optional[object] = None
+    page_types: Optional[object] = None
 
 
 def text_editor_context_for(window, settings):
@@ -49,4 +51,14 @@ def text_editor_context_for(window, settings):
         create_plot=create_plot,
         create_world_item=create_world_item,
         invoke_outline_command=invoke_outline_command,
+        markup_profiles=(
+            window.pluginUi.markupProfiles
+            if window.pluginUi is not None
+            else None
+        ),
+        page_types=(
+            window.pluginUi.pageTypes
+            if window.pluginUi is not None
+            else None
+        ),
     )

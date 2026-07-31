@@ -58,3 +58,4 @@ def test_project_models_install_legacy_window_attributes():
     assert window.mdlPlots is models.plots
     assert window.mdlOutline is models.outline
     assert window.mdlWorld is models.world
+    assert window.projectPluginData is models.plugin_data

@@ -19,6 +19,7 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationDefaults,
+    MarkdownPresentationMode,
     MarkdownPresentationState,
 )
 from manuskript.functions import Spellchecker
@@ -31,7 +32,8 @@ class fullScreenEditor(QWidget):
 
     def __init__(
             self, index, settings, text_editor_context=None, parent=None,
-            screenNumber=None, presentation_mode=None):
+            screenNumber=None, presentation_mode=None,
+            markup_profile=None):
         QWidget.__init__(self, parent)
         self.settings = settings
         self.setAttribute(Qt.WA_DeleteOnClose, True)
@@ -59,21 +61,61 @@ class fullScreenEditor(QWidget):
         self.editor.setPresentationState(self.markdownPresentation)
         if text_editor_context is not None:
             self.editor.set_text_editor_context(text_editor_context)
+        self.markupProfile = None
+        if (
+            markup_profile is not None
+            and text_editor_context is not None
+            and text_editor_context.markup_profiles is not None
+        ):
+            self.markupProfile = (
+                text_editor_context.markup_profiles.create_state(
+                    parent=self
+                )
+            )
+            self.markupProfile.copy_selection_from(markup_profile)
+            self.markupProfile.changed.connect(
+                self._markupProfileChanged
+            )
+            self.editor.setMarkupProfileState(self.markupProfile)
+        self.pageType = None
+        if (
+            text_editor_context is not None
+            and text_editor_context.page_types is not None
+        ):
+            self.pageType = text_editor_context.page_types.create_state(
+                item=(
+                    index.internalPointer()
+                    if index is not None and index.isValid()
+                    else None
+                ),
+                parent=self,
+            )
+            self.pageType.changed.connect(
+                self._refreshPresentationModes
+            )
+            self.editor.setPageTypeState(self.pageType)
+        self._refreshPresentationModes()
         self.editor.setFrameStyle(QFrame.NoFrame)
         self.activeEditorView = self.editorHost.currentWidget()
-        self.activeEditorView.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff
+        scroll_view = (
+            self.activeEditorView
+            if hasattr(self.activeEditorView, "verticalScrollBar")
+            else self.editor
         )
-        self.activeEditorView.setVerticalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff
-        )
+        if hasattr(scroll_view, "setHorizontalScrollBarPolicy"):
+            scroll_view.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarAlwaysOff
+            )
+            scroll_view.setVerticalScrollBarPolicy(
+                Qt.ScrollBarAlwaysOff
+            )
         self.editor.installEventFilter(self)
         self.editorHost.installEventFilter(self)
         self.activeEditorView.setMouseTracking(True)
-        self.activeEditorView.setVerticalScrollBar(
+        scroll_view.setVerticalScrollBar(
             myScrollBar(self.settings)
         )
-        self.scrollBar = self.activeEditorView.verticalScrollBar()
+        self.scrollBar = scroll_view.verticalScrollBar()
         self.scrollBar.setParent(self)
 
         # Top Panel
@@ -211,6 +253,23 @@ class fullScreenEditor(QWidget):
         self.showFullScreen()
         # self.showMaximized()
         # self.show()
+
+    def _markupProfileChanged(self):
+        self._refreshPresentationModes()
+
+    def _refreshPresentationModes(self):
+        page_modes = (
+            self.pageType.allowed_presentation_modes
+            if self.pageType is not None
+            else None
+        )
+        self.markdownPresentation.set_allowed_modes(
+            page_modes
+            if page_modes is not None
+            else tuple(MarkdownPresentationMode)
+            if self.markupProfile is None
+            else self.markupProfile.allowed_presentation_modes
+        )
 
     def leaveFullscreen(self):
         self.__exit__("Leaving fullScreenEditor via leaveFullScreen.")

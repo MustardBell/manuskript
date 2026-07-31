@@ -82,6 +82,9 @@ def test_full_screen_editor_receives_existing_editor_context(
         presentation_mode=(
             window.mainEditor.currentEditor().markdownPresentation.mode
         ),
+        markup_profile=(
+            window.mainEditor.currentEditor().markupProfile
+        ),
     )
     window.mainEditor.closeAllTabs()
 
