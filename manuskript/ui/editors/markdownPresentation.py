@@ -42,6 +42,7 @@ class MarkdownPresentationState(QObject):
     """Presentation state owned by one editor leaf."""
 
     modeChanged = pyqtSignal(object)
+    allowedModesChanged = pyqtSignal(object)
 
     DEFAULT_MODE = MarkdownPresentationMode.FORMATTED_SOURCE
 
@@ -53,18 +54,48 @@ class MarkdownPresentationState(QObject):
             )
         except ValueError:
             self._mode = self.DEFAULT_MODE
+        self._allowed_modes = tuple(MarkdownPresentationMode)
 
     @property
     def mode(self):
         return self._mode
 
+    @property
+    def allowed_modes(self):
+        return self._allowed_modes
+
     def set_mode(self, mode):
         mode = MarkdownPresentationMode.from_value(mode)
+        if mode not in self._allowed_modes:
+            return
         if mode is self._mode:
             return
 
         self._mode = mode
         self.modeChanged.emit(mode)
+
+    def set_allowed_modes(self, modes):
+        modes = tuple(
+            MarkdownPresentationMode.from_value(mode)
+            for mode in modes
+        )
+        if not modes:
+            raise ValueError(
+                "At least one presentation mode must remain available."
+            )
+        modes = tuple(dict.fromkeys(modes))
+        if modes == self._allowed_modes:
+            return
+        self._allowed_modes = modes
+        self.allowedModesChanged.emit(modes)
+        if self._mode not in modes:
+            preferred = (
+                MarkdownPresentationMode.FORMATTED_SOURCE
+                if MarkdownPresentationMode.FORMATTED_SOURCE in modes
+                else modes[0]
+            )
+            self._mode = preferred
+            self.modeChanged.emit(preferred)
 
 
 class MarkdownPresentationDefaults:

@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
+
+from manuskript.domain.exporting import ExportArtifact
 
 
 PLUGIN_API_VERSION = 1
@@ -26,8 +29,11 @@ class OptionField:
     choices: tuple[tuple[str, Any], ...] = ()
     minimum: float | None = None
     maximum: float | None = None
+    section: str = ""
 
     def __post_init__(self):
+        object.__setattr__(self, "kind", OptionKind(self.kind))
+        object.__setattr__(self, "choices", tuple(self.choices))
         if not self.key or not self.label:
             raise ValueError("Plugin option keys and labels are required.")
         if self.kind is OptionKind.CHOICE and not self.choices:
@@ -67,10 +73,23 @@ class ProjectSnapshot:
 
 
 @dataclass(frozen=True)
-class ExportArtifact:
+class ConversionArtifact:
     content: str | bytes
-    suggested_name: str
+    suggested_name: str = "converted.txt"
     media_type: str = "application/octet-stream"
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RenderedDocument:
+    html: str
+    base_url: str = ""
+
+
+@dataclass(frozen=True)
+class PageExportDocument:
+    content: str
+    source_format: str = "markdown"
 
 
 @dataclass(frozen=True)
@@ -94,6 +113,14 @@ class ExportContribution:
     engine_factory: Callable[[], Any]
     options: tuple[OptionField, ...] = ()
     options_view_factory: Callable[..., Any] | None = None
+    output_format: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "output_format",
+            str(self.output_format or self.descriptor.id),
+        )
 
 
 @dataclass(frozen=True)
@@ -119,6 +146,23 @@ class ConversionContribution:
     source_formats: tuple[str, ...]
     target_formats: tuple[str, ...]
     options: tuple[OptionField, ...] = ()
+    options_view_factory: Callable[..., Any] | None = None
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "source_formats",
+            tuple(str(value) for value in self.source_formats),
+        )
+        object.__setattr__(
+            self,
+            "target_formats",
+            tuple(str(value) for value in self.target_formats),
+        )
+        if not self.source_formats or not self.target_formats:
+            raise ValueError(
+                "Converters must declare source and target formats."
+            )
 
 
 @dataclass(frozen=True)
@@ -128,9 +172,69 @@ class ProjectPanelContribution:
     default_file: str
 
     def __post_init__(self):
-        if not self.default_file:
+        path = PurePosixPath(str(self.default_file).replace("\\", "/"))
+        if (
+            not self.default_file
+            or path.is_absolute()
+            or any(part in ("", ".", "..") for part in path.parts)
+        ):
             raise ValueError(
-                "Project panels must declare a default raw project file."
+                "Project panels must declare a safe relative raw "
+                "project file."
+            )
+
+
+@dataclass(frozen=True)
+class PageTypeContribution:
+    descriptor: ExtensionDescriptor
+    property_label: str
+    detector: Callable[[str], bool] | None = None
+    parser_factory: Callable[[], Any] | None = None
+    renderer_factory: Callable[[], Any] | None = None
+    wizard_factory: Callable[..., Any] | None = None
+    activation_warning: Callable[[str], str] | None = None
+    item_kinds: tuple[str, ...] = ("md",)
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "item_kinds",
+            tuple(str(value) for value in self.item_kinds),
+        )
+        if not self.property_label or not self.item_kinds:
+            raise ValueError(
+                "Page types require a property label and item kind."
+            )
+        if not any((
+            self.parser_factory,
+            self.renderer_factory,
+            self.wizard_factory,
+        )):
+            raise ValueError(
+                "Page types must provide a parser, renderer, or wizard."
+            )
+
+
+@dataclass(frozen=True)
+class PageRendererContribution:
+    descriptor: ExtensionDescriptor
+    page_type_id: str
+    renderer_factory: Callable[[], Any]
+    target_formats: tuple[str, ...]
+    options: tuple[OptionField, ...] = ()
+    options_view_factory: Callable[..., Any] | None = None
+    priority: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "target_formats",
+            tuple(str(value) for value in self.target_formats),
+        )
+        object.__setattr__(self, "options", tuple(self.options))
+        if not self.page_type_id or not self.target_formats:
+            raise ValueError(
+                "Page renderers require a page type and target format."
             )
 
 
@@ -145,6 +249,20 @@ class MarkupContribution:
     mode: MarkupMode
     highlighter_factory: Callable[..., Any]
     behavior_factory: Callable[..., Any] | None = None
+    base_ids: tuple[str, ...] = ("markdown",)
+
+    def __post_init__(self):
+        object.__setattr__(self, "mode", MarkupMode(self.mode))
+        object.__setattr__(
+            self,
+            "base_ids",
+            tuple(str(value) for value in self.base_ids),
+        )
+        if self.mode is MarkupMode.AUGMENT and not self.base_ids:
+            raise ValueError(
+                "Additive markup contributions must declare at least "
+                "one compatible base markup ID."
+            )
 
 
 Contribution = (
@@ -152,6 +270,8 @@ Contribution = (
     | ImportContribution
     | ConversionContribution
     | ProjectPanelContribution
+    | PageTypeContribution
+    | PageRendererContribution
     | MarkupContribution
 )
 

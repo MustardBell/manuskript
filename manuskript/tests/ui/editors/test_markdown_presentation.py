@@ -1,13 +1,13 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import QPoint, Qt
+from PyQt5.QtCore import QPoint, Qt, pyqtSignal
 from PyQt5.QtGui import (
     QFont,
     QTextCharFormat,
     QTextCursor,
 )
-from PyQt5.QtWidgets import qApp
+from PyQt5.QtWidgets import qApp, QWidget
 from PyQt5.QtTest import QSignalSpy, QTest
 
 from manuskript.enums import Outline
@@ -238,6 +238,40 @@ def test_presentation_host_uses_source_for_live_and_sibling_for_reading():
         assert reading.isHidden()
     finally:
         host.hide()
+
+
+def test_page_wizard_replaces_an_already_active_live_view_and_applies_once():
+    class Wizard(QWidget):
+        applyRequested = pyqtSignal(str)
+
+        def __init__(self):
+            super().__init__()
+            self.loaded = None
+
+        def load_source(self, source):
+            self.loaded = source
+
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    host = host_editor(editor)
+    editor.setPlainText("canonical source")
+    editor.document().clearUndoRedoStacks()
+    editor.setPresentationMode(MarkdownPresentationMode.LIVE_PREVIEW)
+
+    host.setPageWizardFactory(Wizard)
+    wizard = host.currentWidget()
+
+    assert isinstance(wizard, Wizard)
+    assert wizard.loaded == "canonical source"
+    assert editor.toPlainText() == "canonical source"
+
+    wizard.applyRequested.emit("structured source")
+
+    assert editor.toPlainText() == "structured source"
+    editor.undo()
+    assert editor.toPlainText() == "canonical source"
 
 
 def test_auxiliary_markdown_editor_has_no_leaf_presentation_state():

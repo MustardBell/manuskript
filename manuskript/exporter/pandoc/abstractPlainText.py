@@ -22,6 +22,19 @@ class abstractPlainText(markdown):
     icon = "SUBCLASSME"
     exportFilter = "SUBCLASSME"
     exportDefaultSuffix = ".SUBCLASSME"
+    # Pandoc output is process-backed and may be binary. It is not an
+    # in-memory conversion source unless a concrete format opts in.
+    format_id = None
+    # Pandoc consumes the combined manuscript as Markdown, but its raw
+    # blocks can safely carry exact fragments for textual target formats.
+    page_render_targets = {
+        "html": "html",
+        "epub": "html",
+        "latex": "latex",
+        "pdf": "latex",
+        "rst": "rst",
+        "bbcode": "bbcode",
+    }
 
     def __init__(self, exporter):
         super().__init__(exporter.context)
@@ -49,6 +62,29 @@ class abstractPlainText(markdown):
 
     def src(self, settingsWidget):
         return markdown.output(self, settingsWidget)
+
+    def pageRenderTarget(self):
+        return self.page_render_targets.get(self.toFormat, "markdown")
+
+    def pageOutputFormat(self):
+        return self.toFormat
+
+    def processRenderedPageText(self, content, target_format, settings):
+        fence = "`" * max(
+            3,
+            max(
+                (len(match.group(0)) + 1 for match in re.finditer(
+                    r"`+",
+                    content,
+                )),
+                default=3,
+            ),
+        )
+        return "\n{fence}{{={target}}}\n{content}\n{fence}\n".format(
+            fence=fence,
+            target=target_format,
+            content=content.rstrip("\n"),
+        )
 
     def output(self, settingsWidget, outputfile=None):
         args = settingsWidget.runnableSettings()

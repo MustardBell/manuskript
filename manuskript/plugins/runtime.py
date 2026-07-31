@@ -31,6 +31,7 @@ class PluginStatus(str, Enum):
 class PluginRecord:
     manifest: PluginManifest
     status: PluginStatus
+    loadable: bool = True
     error: str = ""
     handle: object = None
     module_prefix: str = ""
@@ -61,6 +62,7 @@ class PluginRuntime:
 
     def discover(self):
         enabled = set(self.preferences.enabled_plugin_ids)
+        previous_records = self.records
         discovered = {}
         issues = []
 
@@ -88,21 +90,25 @@ class PluginRuntime:
                         previous.manifest.root,
                         manifest.root,
                     )
-                    previous.status = PluginStatus.FAILED
-                    previous.error = message
                     issues.append(
                         PluginDiscoveryIssue(
                             str(manifest.root),
                             message,
                         )
                     )
+                    discovered[manifest.id] = PluginRecord(
+                        manifest=previous.manifest,
+                        status=PluginStatus.FAILED,
+                        loadable=False,
+                        error=message,
+                    )
                     continue
 
-                existing = self.records.get(manifest.id)
+                existing = previous_records.get(manifest.id)
                 if (
                     existing is not None
                     and existing.status is PluginStatus.LOADED
-                    and existing.manifest.root == manifest.root
+                    and existing.manifest == manifest
                 ):
                     discovered[manifest.id] = existing
                 else:
@@ -120,6 +126,10 @@ class PluginRuntime:
                         ),
                     )
 
+        for plugin_id, previous in previous_records.items():
+            if discovered.get(plugin_id) is not previous:
+                self._deactivate_record(previous)
+
         self.records = discovered
         self.discovery_issues = issues
         return tuple(self.records.values())
@@ -128,31 +138,20 @@ class PluginRuntime:
         if not self.records:
             self.discover()
         enabled = set(self.preferences.enabled_plugin_ids)
-        for plugin_id in sorted(enabled):
-            if plugin_id in self.records:
+        for plugin_id, record in sorted(self.records.items()):
+            if plugin_id in enabled:
                 self.load(plugin_id)
         return tuple(self.records.values())
 
     def enable(self, plugin_id):
+        self._record(plugin_id)
         self.preferences.enable(plugin_id)
         return self.load(plugin_id)
 
     def disable(self, plugin_id):
-        self.preferences.disable(plugin_id)
         record = self._record(plugin_id)
-        self.registry.remove_plugin(plugin_id)
-        handle = record.handle
-        if handle is not None and hasattr(handle, "deactivate"):
-            try:
-                handle.deactivate()
-            except Exception:
-                LOGGER.exception(
-                    "Plugin %s failed while deactivating.",
-                    plugin_id,
-                )
-        self._remove_modules(record.module_prefix)
-        record.handle = None
-        record.module_prefix = ""
+        self.preferences.disable(plugin_id)
+        self._deactivate_record(record)
         record.status = PluginStatus.DISABLED
         record.error = ""
         return record
@@ -161,6 +160,8 @@ class PluginRuntime:
         record = self._record(plugin_id)
         manifest = record.manifest
         if record.status is PluginStatus.LOADED:
+            return record
+        if not record.loadable:
             return record
 
         if manifest.api_version != self.api_version:
@@ -237,6 +238,22 @@ class PluginRuntime:
         if plugin_id not in self.records:
             raise KeyError("Unknown plugin {!r}.".format(plugin_id))
         return self.records[plugin_id]
+
+    def _deactivate_record(self, record):
+        plugin_id = record.manifest.id
+        self.registry.remove_plugin(plugin_id)
+        handle = record.handle
+        if handle is not None and hasattr(handle, "deactivate"):
+            try:
+                handle.deactivate()
+            except Exception:
+                LOGGER.exception(
+                    "Plugin %s failed while deactivating.",
+                    plugin_id,
+                )
+        self._remove_modules(record.module_prefix)
+        record.handle = None
+        record.module_prefix = ""
 
     @staticmethod
     def _module_prefix(manifest):

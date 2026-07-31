@@ -299,6 +299,7 @@ def saveProject(
     # Well, for now, we keep them here...
 
     files.append(("settings.txt", context.settings.save(protocol=0)))
+    files += list(context.models.plugin_data.project_files())
 
     return file_access.write(
         project,
@@ -530,6 +531,7 @@ def loadProject(
     LOGGER.debug("Loading {} ({})".format(project, "zip" if zip else "folder"))
     read_result = file_access.read(project, zipped=bool(zip))
     files = read_result.files
+    context.models.plugin_data.load_project_files(files)
     if not zip:
         cache.clear()
         cache.update(files)

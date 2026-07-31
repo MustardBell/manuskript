@@ -24,8 +24,16 @@ class metadataView(QWidget, Ui_metadataView):
                                     style.simpleScrollBarV())
         self.revisions.setStyleSheet(style.simpleScrollBarV())
 
-    def setModels(self, mdlOutline, mdlCharacter, mdlLabels, mdlStatus):
-        self.properties.setModels(mdlOutline, mdlCharacter, mdlLabels, mdlStatus)
+    def setModels(
+            self, mdlOutline, mdlCharacter, mdlLabels, mdlStatus,
+            page_types=None):
+        self.properties.setModels(
+            mdlOutline,
+            mdlCharacter,
+            mdlLabels,
+            mdlStatus,
+            page_types=page_types,
+        )
         self.txtSummarySentence.setModel(mdlOutline)
         self.txtSummaryFull.setModel(mdlOutline)
         self.txtNotes.setModel(mdlOutline)

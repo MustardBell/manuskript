@@ -7,6 +7,7 @@ regexp, but not yet perfect.
 """
 
 import re
+import logging
 from PyQt5.QtCore import Qt, pyqtSignal, qWarning, QRegExp
 from PyQt5.QtGui import (QSyntaxHighlighter, QTextBlock, QColor, QFont,
                          QTextCharFormat, QTextFormat, QBrush, QPalette)
@@ -22,6 +23,9 @@ from manuskript.ui.editors.markdownPresentation import (
 )
 from manuskript.ui import style as S
 from manuskript import functions as F
+
+
+LOGGER = logging.getLogger(__name__)
 
 # Un longue ligne. Un longue ligne. Un longue ligne. Un longue ligne.asdasdasda
 
@@ -93,6 +97,7 @@ class MarkdownHighlighter(BasicHighlighter):
         self.searchExpression = ""
         self.searchExpressionRegExp = False
         self.searchExpressionCase = False
+        self.pluginExtensions = ()
 
         #f = self.document().defaultFont()
         #f.setFamily("monospace")
@@ -258,6 +263,9 @@ class MarkdownHighlighter(BasicHighlighter):
             if self.tokenizer.backtrackRequested():
                 previous = self.currentBlock().previous()
                 self.highlightBlockAtPosition.emit(previous.position())
+
+        for extension in self.pluginExtensions:
+            extension.highlight_block(self, text)
 
         if self.spellCheckEnabled:
             self.spellCheck(text)
@@ -652,6 +660,10 @@ class MarkdownHighlighter(BasicHighlighter):
         self.highlightedTags = tags
         if rehighlight:
             self.rehighlight()
+
+    def setPluginExtensions(self, extensions):
+        self.pluginExtensions = tuple(extensions)
+        self.rehighlight()
 
     def setSearched(self, expression, regExp=False, caseSensitivity=False):
         """
