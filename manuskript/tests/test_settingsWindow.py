@@ -18,6 +18,41 @@ def test_background_image_filter_uses_qt_pattern_separator():
         "Image files (*.png *.jpg *.jpeg);;All files (*)"
     )
 
+
+def test_git_history_opened_from_modal_settings_is_interactive(
+        MWSampleProject):
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtTest import QTest
+    from PyQt5.QtWidgets import QDialogButtonBox, qApp
+
+    window = MWSampleProject
+    window.settingsWindow()
+    settings = window.sw
+    settings.chkRevisionsKeep.setChecked(True)
+    settings.cmbRevisionBackend.setCurrentIndex(
+        settings.cmbRevisionBackend.findData("git")
+    )
+
+    settings.btnManageGitRevisions.click()
+    QTest.qWait(50)
+
+    dialog = window.gitRevisionDialog
+    assert dialog is not None
+    assert dialog.parentWidget() is settings
+    assert dialog.isVisible()
+    assert settings.isVisible()
+
+    buttons = dialog.findChild(QDialogButtonBox)
+    QTest.mouseClick(
+        buttons.button(QDialogButtonBox.Close),
+        Qt.LeftButton,
+    )
+    QTest.qWait(50)
+
+    assert window.gitRevisionDialog is None
+    assert settings.isVisible()
+    settings.close()
+
 def test_general(MWSampleProject):
     MW = MWSampleProject
 
