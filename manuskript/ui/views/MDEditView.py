@@ -11,6 +11,9 @@ from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.highlighters import MarkdownHighlighter
 from manuskript.ui.highlighters.markdownEnums import MarkdownState as MS
 from manuskript.ui.highlighters.markdownTokenizer import MarkdownTokenizer as MT
+from manuskript.ui.editors.markdownInlineFormatting import (
+    plan_inline_markup_toggle,
+)
 from manuskript import functions as F
 
 import logging
@@ -302,6 +305,7 @@ class MDEditView(textEditView):
 
     def bold(self): self.insertFormattingMarkup("**")
     def italic(self): self.insertFormattingMarkup("*")
+    def underline(self): self.insertFormattingMarkup("<u>", "</u>")
     def strike(self): self.insertFormattingMarkup("~~")
     def verbatim(self): self.insertFormattingMarkup("`")
     def superscript(self): self.insertFormattingMarkup("^")
@@ -382,35 +386,133 @@ class MDEditView(textEditView):
         cursor.movePosition(cursor.StartOfBlock)
         cursor.insertText(markup)
 
-    def insertFormattingMarkup(self, markup):
+    def insertFormattingMarkup(
+        self,
+        openingMarkup,
+        closingMarkup=None,
+    ):
+        closingMarkup = closingMarkup or openingMarkup
         cursor = self.textCursor()
 
         # Select beginning and end of words
         self.selectWord(cursor)
 
-        if cursor.hasSelection():
-            start = cursor.selectionStart()
-            end = cursor.selectionEnd() + len(markup)
-            cursor.beginEditBlock()
-            cursor.setPosition(start)
-            cursor.insertText(markup)
-            cursor.setPosition(end)
-            cursor.insertText(markup)
-            cursor.endEditBlock()
-            cursor.movePosition(QTextCursor.PreviousCharacter,
-                                QTextCursor.KeepAnchor, len(markup))
-            #self.setTextCursor(cursor)
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        first_block = self.document().findBlock(start)
+        last_block = self.document().findBlock(
+            max(start, end - 1)
+        )
+        if first_block != last_block:
+            self._wrapSelectionWithMarkup(
+                cursor,
+                openingMarkup,
+                closingMarkup,
+            )
+            return
 
-        else:
-            # Insert markup twice (for opening and closing around the cursor),
-            # and then move the cursor to be between the pair.
-            cursor.beginEditBlock()
-            cursor.insertText(markup)
-            cursor.insertText(markup)
-            cursor.movePosition(QTextCursor.PreviousCharacter,
-                                QTextCursor.MoveAnchor, len(markup))
-            cursor.endEditBlock()
-            self.setTextCursor(cursor)
+        block_text = first_block.text()
+        block_position = first_block.position()
+        local_start = self._pythonIndexFromUtf16Offset(
+            block_text,
+            start - block_position,
+        )
+        local_end = self._pythonIndexFromUtf16Offset(
+            block_text,
+            end - block_position,
+        )
+        edit = plan_inline_markup_toggle(
+            block_text,
+            local_start,
+            local_end,
+            openingMarkup,
+            closingMarkup,
+        )
+        self._applyInlineMarkupEdit(
+            first_block,
+            block_text,
+            edit,
+        )
+
+    def _applyInlineMarkupEdit(self, block, block_text, edit):
+        replacement_start = (
+            block.position()
+            + self._utf16Length(block_text[:edit.start])
+        )
+        replacement_end = (
+            block.position()
+            + self._utf16Length(block_text[:edit.end])
+        )
+        updated_text = (
+            block_text[:edit.start]
+            + edit.replacement
+            + block_text[edit.end:]
+        )
+
+        cursor = QTextCursor(self.document())
+        cursor.beginEditBlock()
+        cursor.setPosition(replacement_start)
+        cursor.setPosition(
+            replacement_end,
+            QTextCursor.KeepAnchor,
+        )
+        cursor.insertText(edit.replacement)
+        cursor.endEditBlock()
+
+        restored = QTextCursor(self.document())
+        restored.setPosition(
+            block.position()
+            + self._utf16Length(
+                updated_text[:edit.selection_start]
+            )
+        )
+        restored.setPosition(
+            block.position()
+            + self._utf16Length(
+                updated_text[:edit.selection_end]
+            ),
+            QTextCursor.KeepAnchor,
+        )
+        self.setTextCursor(restored)
+
+    def _wrapSelectionWithMarkup(
+        self,
+        cursor,
+        openingMarkup,
+        closingMarkup,
+    ):
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        edit_cursor = QTextCursor(self.document())
+        edit_cursor.beginEditBlock()
+        edit_cursor.setPosition(end)
+        edit_cursor.insertText(closingMarkup)
+        edit_cursor.setPosition(start)
+        edit_cursor.insertText(openingMarkup)
+        edit_cursor.endEditBlock()
+
+        restored = QTextCursor(self.document())
+        restored.setPosition(start + len(openingMarkup))
+        restored.setPosition(
+            end + len(openingMarkup),
+            QTextCursor.KeepAnchor,
+        )
+        self.setTextCursor(restored)
+
+    @staticmethod
+    def _utf16Length(text):
+        return len(text.encode("utf-16-le")) // 2
+
+    @classmethod
+    def _pythonIndexFromUtf16Offset(cls, text, offset):
+        units = 0
+        for index, character in enumerate(text):
+            if units == offset:
+                return index
+            units += cls._utf16Length(character)
+            if units > offset:
+                return index + 1
+        return len(text)
 
     def clearFormat(self):
         cursor = self.textCursor()
