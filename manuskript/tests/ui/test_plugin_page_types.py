@@ -127,6 +127,26 @@ def test_page_type_activation_warns_before_committing_checkbox(
     ]
 
 
+def test_rebuilding_page_type_properties_detaches_old_controls():
+    service, _contribution = make_service()
+    view = propertiesView()
+    view.setPageTypeService(service)
+    old_checkbox = view.findChild(
+        QCheckBox,
+        "pluginPropertyexample_structured",
+    )
+
+    view._rebuildPluginProperties()
+
+    checkboxes = view.findChildren(
+        QCheckBox,
+        "pluginPropertyexample_structured",
+    )
+    assert len(checkboxes) == 1
+    assert checkboxes[0] is not old_checkbox
+    assert old_checkbox.parent() is None
+
+
 def test_active_page_type_owns_reading_live_and_export_behavior():
     service, contribution = make_service()
     item = outlineItem(title="Structured", _type="md")
