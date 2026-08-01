@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QAbstractItemView, qApp, QMenu, QAction, \
                             QListWidget, QWidgetAction, QListWidgetItem, \
                             QLineEdit, QInputDialog, QMessageBox, QCheckBox
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import mainWindow, statusMessage
 from manuskript.functions import toInt, customIcons, safeTranslate
@@ -278,7 +278,7 @@ class outlineBasics(QAbstractItemView):
             parent = self.currentIndex()
 
         if _type == "text":
-            _type = settings.defaultTextType
+            _type = SettingsManager().defaultTextType
 
         item = outlineItem(title=safeTranslate(qApp, "outlineBasics", "New"), _type=_type)
         self.model().appendItem(item, parent)
@@ -309,7 +309,7 @@ class outlineBasics(QAbstractItemView):
         """
         Shows a warning, and then deletes currently selected indexes.
         """
-        if not settings.dontShowDeleteWarning:
+        if not SettingsManager().dontShowDeleteWarning:
             msgInfo = list()
             msgInfo.append("<p><b>")
             msgInfo.append(safeTranslate(qApp, "outlineBasics", "You're about to delete {} item(s).").format(
@@ -338,7 +338,7 @@ class outlineBasics(QAbstractItemView):
                 return
 
             if chk.isChecked():
-                settings.dontShowDeleteWarning = True
+                SettingsManager().dontShowDeleteWarning = True
 
         self.model().removeIndexes(self.getSelection())
 

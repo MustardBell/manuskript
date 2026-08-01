@@ -2,11 +2,14 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from manuskript.projectManager import ProjectManager
+from manuskript.settingsManager import SettingsManager
+
 
 class TestProjectManager(unittest.TestCase):
 
     def setUp(self):
         self.window = MagicMock()
+        self.window.settingsManager = SettingsManager()
         self.project_manager = ProjectManager(self.window)
 
     @patch('manuskript.functions.statusMessage')
@@ -33,9 +36,7 @@ class TestProjectManager(unittest.TestCase):
         # Mock the loading methods to avoid complex setup
         with patch.object(self.project_manager, 'loadEmptyDatas'), \
              patch.object(self.project_manager, 'loadDatas', return_value=True), \
-             patch.object(self.window, 'makeConnections'), \
-             patch('manuskript.settings.openIndexes', []), \
-             patch('manuskript.settings.viewSettings', {"Tree": {"iconSize": 24}}):
+             patch.object(self.window, 'makeConnections'):
             
             self.project_manager.loadProject("existing_project.msk")
             

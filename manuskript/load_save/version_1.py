@@ -17,7 +17,7 @@ from PyQt5.QtCore import Qt, QModelIndex
 from PyQt5.QtGui import QColor, QStandardItem
 from PyQt5.QtWidgets import QListWidgetItem
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, World, Plot, PlotStep, Outline
 from manuskript.functions import mainWindow, iconColor, iconFromColorString
 from manuskript.converters import HTML2PlainText
@@ -106,7 +106,7 @@ def saveProject(zip=None):
     @return: True if successful, False otherwise.
     """
     if zip == None:
-        zip = settings.saveToZip
+        zip = SettingsManager().saveToZip
 
     LOGGER.info("Saving to: %s", "zip" if zip else "folder")
 
@@ -262,7 +262,7 @@ def saveProject(zip=None):
     removes += r
 
     # Writes revisions (if asked for)
-    if settings.revisions["keep"]:
+    if SettingsManager().revisions["keep"]:
         files.append(("revisions.xml", mdl.saveToXML()))
 
     ####################################################################################################################
@@ -299,7 +299,7 @@ def saveProject(zip=None):
     # Maybe include them only if zipped?
     # Well, for now, we keep them here...
 
-    files.append(("settings.txt", settings.save(protocol=0)))
+    files.append(("settings.txt", SettingsManager().save(protocol=0)))
 
     # We check if the file exist and we have write access. If the file does
     # not exist, we check the parent folder, because it might be a new project.
@@ -716,13 +716,13 @@ def loadProject(project, zip=None):
     # Settings
 
     if "settings.txt" in files:
-        settings.load(files["settings.txt"], fromString=True, protocol=0)
+        SettingsManager().load(files["settings.txt"], fromString=True, protocol=0)
     else:
         errors.append("settings.txt")
 
     # Just to be sure
-    settings.saveToZip = True if zip else False
-    settings.defaultTextType = "md"
+    SettingsManager().saveToZip = True if zip else False
+    SettingsManager().defaultTextType = "md"
 
     ####################################################################################################################
     # Labels
