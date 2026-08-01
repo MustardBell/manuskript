@@ -2,10 +2,11 @@ import json
 import logging
 from copy import deepcopy
 
-from PyQt5.QtWidgets import qApp
+from PyQt5.QtWidgets import QToolTip, qApp
 
 # Import default settings
 from manuskript import settings as default_settings
+from manuskript.ui.tooltip_style import accessible_tooltip_palette
 
 LOGGER = logging.getLogger(__name__)
 
@@ -188,6 +189,9 @@ class SettingsManager:
             )
         else:
             qApp.setStyleSheet("")  # Reset to default
+            QToolTip.setPalette(
+                accessible_tooltip_palette(qApp.palette())
+            )
 
     def applyCursorFlashTime(self):
         """
