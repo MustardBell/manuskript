@@ -38,7 +38,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        pip install pyinstaller PyQt5 lxml pyenchant pytest pytest-faulthandler pillow dmgbuild
+        pip install pyinstaller PyQt5 lxml pyenchant pytest pytest-faulthandler markdown==3.9 pillow dmgbuild
 
     - name: Run Pytest
       run: |

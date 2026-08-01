@@ -1,11 +1,26 @@
 from unittest.mock import patch
 
-from PyQt5.QtCore import QCoreApplication, QEvent
+from PyQt5.QtCore import QEvent, QRect
 from PyQt5.QtGui import QHelpEvent
-from PyQt5.QtWidgets import QMenuBar, qApp
+from PyQt5.QtWidgets import QMenuBar
 
 from manuskript.ui.menu_tooltips import MenuTooltipController
 import manuskript.ui.menu_tooltips as menu_tooltips_module
+
+
+class PredictableMenuBar(QMenuBar):
+    """Keep the event-filter test independent of native menu placement."""
+
+    def __init__(self):
+        super().__init__()
+        self.tooltip_action = None
+        self.tooltip_geometry = QRect(10, 0, 80, 30)
+
+    def actionAt(self, _position):
+        return self.tooltip_action
+
+    def actionGeometry(self, _action):
+        return self.tooltip_geometry
 
 
 def test_menu_tooltips_are_enabled_and_status_tips_are_promoted():
@@ -23,17 +38,15 @@ def test_menu_tooltips_are_enabled_and_status_tips_are_promoted():
 
 
 def test_menu_bar_tooltip_event_shows_the_action_description():
-    menu_bar = QMenuBar()
+    menu_bar = PredictableMenuBar()
     menu = menu_bar.addMenu("&File")
     controller = MenuTooltipController(
         menu_bar,
         {menu: "Open and save projects"},
     )
-    menu_bar.resize(400, 30)
-    menu_bar.show()
-    qApp.processEvents()
     action = menu.menuAction()
-    rect = menu_bar.actionGeometry(action)
+    menu_bar.tooltip_action = action
+    rect = menu_bar.tooltip_geometry
     event = QHelpEvent(
         QEvent.ToolTip,
         rect.center(),
@@ -44,7 +57,7 @@ def test_menu_bar_tooltip_event_shows_the_action_description():
         menu_tooltips_module.QToolTip,
         "showText",
     ) as show_tooltip:
-        assert QCoreApplication.sendEvent(menu_bar, event)
+        assert controller.eventFilter(menu_bar, event)
 
     show_tooltip.assert_called_once_with(
         event.globalPos(),
