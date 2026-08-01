@@ -8,6 +8,10 @@ from PyQt5.QtWidgets import QToolTip, qApp
 
 from manuskript import settings as default_settings
 from manuskript.settingsManager import SettingsManager
+from manuskript.ui.tooltip_style import (
+    MINIMUM_TEXT_CONTRAST,
+    contrast_ratio,
+)
 
 
 class TestSettingsManager(unittest.TestCase):
@@ -189,6 +193,19 @@ class TestSettingsManager(unittest.TestCase):
                 QPalette.ToolTipBase,
             ).rgba(),
             QColor("#ffffdc").rgba(),
+        )
+        self.assertGreaterEqual(
+            contrast_ratio(
+                repaired.color(
+                    QPalette.Inactive,
+                    QPalette.ToolTipText,
+                ),
+                repaired.color(
+                    QPalette.Inactive,
+                    QPalette.ToolTipBase,
+                ),
+            ),
+            MINIMUM_TEXT_CONTRAST,
         )
         self.assertEqual(
             repaired.color(
