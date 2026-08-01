@@ -4,7 +4,12 @@ import os
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QBrush, QColor, QIcon
-from PyQt5.QtWidgets import QWidget, QFileDialog, QStyle
+from PyQt5.QtWidgets import (
+    QWidget,
+    QFileDialog,
+    QMessageBox,
+    QStyle,
+)
 
 from manuskript.functions import openURL
 from manuskript.ui.importers.importer_ui import Ui_importer
@@ -32,7 +37,13 @@ class importerDialog(QWidget, Ui_importer):
         ".html": "text-html",
         }
 
-    def __init__(self, context, parent=None):
+    def __init__(
+        self,
+        context,
+        parent=None,
+        plugin_runtime=None,
+        plugin_option_store=None,
+    ):
         QWidget.__init__(self, parent)
         self.setupUi(self)
 
@@ -46,7 +57,10 @@ class importerDialog(QWidget, Ui_importer):
         self.editor.toggleSpellcheck(False)
 
         # Register importFormats:
-        self.importers = importer.importers
+        self.importers = importer.create_importers(
+            plugin_runtime=plugin_runtime,
+            plugin_option_store=plugin_option_store,
+        )
 
         # Populate combo box with formats
         self.populateImportList()
@@ -106,10 +120,11 @@ class importerDialog(QWidget, Ui_importer):
         if formatIdentifier == "header":
             return None
 
-        F = [F for F in self.importers
-               if formatIdentifier == "{}:{}".format(F.engine, F.name)][0]
-        # We instantiate the class
-        return F()
+        return [
+            value for value in self.importers
+            if formatIdentifier
+            == "{}:{}".format(value.engine, value.name)
+        ][0]
 
     ############################################################################
     # Import file
@@ -240,7 +255,11 @@ class importerDialog(QWidget, Ui_importer):
             fromString=True)
 
         # Inserting elements
-        result = self.startImport(previewModel)
+        try:
+            result = self.startImport(previewModel)
+        except Exception as error:
+            self._show_import_error(error)
+            return
 
         if result:
             outline_view_context = OutlineViewContext(
@@ -278,7 +297,11 @@ class importerDialog(QWidget, Ui_importer):
         """
         Called by the Import button.
         """
-        self.startImport(self.context.outline_model)
+        try:
+            self.startImport(self.context.outline_model)
+        except Exception as error:
+            self._show_import_error(error)
+            return
 
         # Signal every views that important model changes have happened.
         self.context.outline_model.layoutChanged.emit()
@@ -330,6 +353,16 @@ class importerDialog(QWidget, Ui_importer):
             items = self.doTransformations(items)
 
         return True
+
+    def _show_import_error(self, error):
+        QMessageBox.critical(
+            self,
+            self.tr("Import failed"),
+            "{}\n\n{}".format(
+                getattr(self._format, "name", self.tr("Importer")),
+                error,
+            ),
+        )
 
     def doTransformations(self, items):
         """

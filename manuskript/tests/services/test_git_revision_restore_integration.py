@@ -27,6 +27,18 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
         source_root / "book-of-acts",
         project_directory,
     )
+    plugin_file = (
+        project_directory
+        / "plugins"
+        / "example.archive"
+        / "documents"
+        / "main.data"
+    )
+    plugin_file.parent.mkdir(parents=True)
+    plugin_file.write_text(
+        "Initial raw plugin content",
+        encoding="utf-8",
+    )
     run_git(tmp_path, "init", "-q")
     run_git(tmp_path, "config", "user.name", "Restore Tester")
     run_git(
@@ -55,6 +67,10 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
         scene_file.read_text(encoding="utf-8") + marker,
         encoding="utf-8",
     )
+    plugin_file.write_text(
+        "Changed raw plugin content",
+        encoding="utf-8",
+    )
     run_git(tmp_path, "add", "book")
     run_git(tmp_path, "commit", "-q", "-m", "Change scene")
 
@@ -70,6 +86,12 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
     ]
     assert any("RESTORE-INTEGRATION-MARKER" in text
                for text in before_restore)
+    assert (
+        MWNoProject.projectManager.models.plugin_data
+        .namespace("example.archive")
+        .read("documents/main.data")
+        == "Changed raw plugin content"
+    )
 
     restored = MWNoProject.revisionCoordinator.restore(
         MWNoProject.projectManager,
@@ -86,6 +108,15 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
                    for text in after_restore)
     assert "RESTORE-INTEGRATION-MARKER" not in scene_file.read_text(
         encoding="utf-8"
+    )
+    assert (
+        MWNoProject.projectManager.models.plugin_data
+        .namespace("example.archive")
+        .read("documents/main.data")
+        == "Initial raw plugin content"
+    )
+    assert plugin_file.read_text(encoding="utf-8") == (
+        "Initial raw plugin content"
     )
     assert MWNoProject.settingsManager.revisions["backend"] == "git"
     assert MWNoProject.projectManager.session.is_open

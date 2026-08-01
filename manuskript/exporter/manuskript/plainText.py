@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
+import os
 import re
 from PyQt5.QtGui import QFont, QTextCharFormat
 from PyQt5.QtWidgets import QPlainTextEdit, qApp, QFrame, QMessageBox
 
+from manuskript.domain.exporting import ExportArtifact
 from manuskript.exporter.basic import basicFormat
+from manuskript.exporter.page_routes import page_renderer_route_id
 from manuskript.functions import getSaveFileNameWithSuffix, safeTranslate
 from manuskript.models import outlineItem
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
@@ -21,6 +24,8 @@ class plainText(basicFormat):
         "Preview": True,
     }
     icon = "text-plain"
+    format_id = "plain"
+    artifact_media_type = "text/plain"
 
     # Default settings used in self.getExportFilename. For easy subclassing when exporting plaintext.
     exportVarName = "lastPlainText"
@@ -70,6 +75,17 @@ class plainText(basicFormat):
                 ).format(str(e)),
             )
             return ""
+
+    def artifact(self, settingsWidget):
+        settingsWidget.writeSettings()
+        project_file = getattr(self.context, "project_file", "")
+        stem = os.path.splitext(os.path.basename(project_file))[0]
+        return ExportArtifact(
+            content=self.output(settingsWidget),
+            suggested_name=(stem or "manuskript")
+            + self.exportDefaultSuffix,
+            media_type=self.artifact_media_type,
+        )
 
     def getExportFilename(self, settingsWidget, varName=None, filter=None):
 
@@ -190,7 +206,7 @@ class plainText(basicFormat):
                     l,
                 ):
 
-                    r += self.processText(item.text(), settings)
+                    r += self.processItemText(item, settings)
 
         rendered_children = []
         for c in item.children():
@@ -219,6 +235,52 @@ class plainText(basicFormat):
         if not content_settings["More"]:
             return value
         return value[level] if level < len(value) else False
+
+    def processItemText(self, item, settings):
+        source = item.text()
+        page_types = getattr(self.context, "page_types", None)
+        if page_types is None:
+            return self.processText(source, settings)
+        target_format = self.pageRenderTarget()
+        document = page_types.export_document(
+            item,
+            target_format,
+            source=source,
+            route_id=self.pageRendererRoute(),
+        )
+        if document.source_format == "markdown":
+            return self.processText(document.content, settings)
+        if document.source_format == target_format:
+            return self.processRenderedPageText(
+                document.content,
+                target_format,
+                settings,
+            )
+        raise ValueError(
+            "Cannot include {} page content in a {} export."
+            .format(document.source_format, target_format)
+        )
+
+    def pageRenderTarget(self):
+        """Format in which this exporter composes individual pages."""
+        return self.format_id or "markdown"
+
+    def pageOutputFormat(self):
+        """User-facing destination used to persist renderer routing."""
+        return self.format_id or self.pageRenderTarget()
+
+    def pageRendererRoute(self):
+        override = getattr(self, "_page_renderer_route_override", None)
+        if override:
+            return override
+        return page_renderer_route_id(
+            self.pageOutputFormat(),
+            self.pageRenderTarget(),
+        )
+
+    def processRenderedPageText(self, content, target_format, settings):
+        """Embed an exact-format page fragment into the export source."""
+        return content.rstrip("\n") + "\n"
 
     @staticmethod
     def _matchesMetadataFilters(item, content_settings):

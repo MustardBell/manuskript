@@ -15,13 +15,24 @@ from manuskript.ui import style as S
 
 
 class exporterDialog(QWidget, Ui_exporter):
-    def __init__(self, context, parent=None, preferences=None):
+    def __init__(
+        self,
+        context,
+        parent=None,
+        preferences=None,
+        plugin_runtime=None,
+        plugin_option_store=None,
+    ):
         QWidget.__init__(self, parent)
         self.setupUi(self)
 
         # Var
         self.context = context
-        self.exporters = exporter.create_exporters(context)
+        self.exporters = exporter.create_exporters(
+            context,
+            plugin_runtime=plugin_runtime,
+            plugin_option_store=plugin_option_store,
+        )
         self.currentExporter = None
         self.settingsWidget = None
         self.previewWidget = None

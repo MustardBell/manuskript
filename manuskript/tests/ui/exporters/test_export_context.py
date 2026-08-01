@@ -1,4 +1,5 @@
 import importlib
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,8 +7,16 @@ from PyQt5.QtGui import QStandardItem, QStandardItemModel
 
 from manuskript import exporter
 from manuskript.exporter.context import ExportContext
+from manuskript.exporter.page_routes import page_renderer_routes
 from manuskript.exporter.pandoc import pandocExporter
 from manuskript.exporter.pandoc.abstractPlainText import pandocSettings
+from manuskript.plugins.api import (
+    ConversionArtifact,
+    ConversionContribution,
+    ExtensionDescriptor,
+)
+from manuskript.plugins.registry import PluginRegistry
+from manuskript.services.plugin_options import InMemoryPluginOptionStore
 
 busy_cursor_module = importlib.import_module(
     "manuskript.ui.busy_cursor"
@@ -56,6 +65,69 @@ def test_exporter_factory_builds_isolated_project_graphs():
             assert first_format is not second_format
             assert first_format.context is context
             assert second_format.context is context
+
+
+def test_exporter_factory_always_exposes_native_bbcode():
+    exporters = exporter.create_exporters(make_context())
+
+    bbcode = exporters[0].getFormatByName("BBCode")
+
+    assert bbcode is not None
+    assert bbcode.isValid()
+    assert bbcode.format_id == "bbcode"
+
+
+def test_page_renderer_routes_come_from_usable_export_formats():
+    exporters = exporter.create_exporters(make_context())
+
+    routes = page_renderer_routes(exporters[:1])
+
+    assert {route.id for route in routes} == {
+        "plain:plain",
+        "markdown:markdown",
+        "bbcode:bbcode",
+        "html:html",
+    }
+    assert "OPML" not in {route.label for route in routes}
+
+
+def test_exporter_factory_exposes_plugin_converters_as_compile_formats():
+    class Converter:
+        def convert(
+                self, content, source_format, target_format, options):
+            return ConversionArtifact(content)
+
+    registry = PluginRegistry()
+    registrar = registry.registrar("example.converter")
+    registrar.register_converter(
+        ConversionContribution(
+            ExtensionDescriptor("example.bbcode", "Plugin BBCode"),
+            Converter,
+            source_formats=("markdown",),
+            target_formats=("bbcode",),
+        )
+    )
+    registry.install("example.converter", registrar.contributions)
+    runtime = SimpleNamespace(registry=registry, records={})
+
+    exporters = exporter.create_exporters(
+        make_context(),
+        plugin_runtime=runtime,
+        plugin_option_store=InMemoryPluginOptionStore(),
+    )
+
+    plugin_format = exporters[-1].getFormatByName("Plugin BBCode")
+    assert plugin_format is not None
+    assert plugin_format.source_format.name == "Markdown"
+    assert plugin_format.source_format_id == "markdown"
+    assert plugin_format.format_id == "bbcode"
+    plugin_route = next(
+        route
+        for route in page_renderer_routes(exporters)
+        if route.id == "bbcode:markdown"
+    )
+    assert plugin_route.label == "Plugin BBCode"
+    assert plugin_route.exporter_name == "example.converter"
 
 
 def test_plain_text_output_uses_context_outline_root():

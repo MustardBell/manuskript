@@ -144,6 +144,12 @@ class mainEditor(QWidget, Ui_mainEditor):
                 self._markdownPresentationState.modeChanged.disconnect(
                     self.syncMarkdownPresentationMode
                 )
+                (
+                    self._markdownPresentationState
+                    .allowedModesChanged.disconnect(
+                        self.syncMarkdownPresentationModes
+                    )
+                )
             except (RuntimeError, TypeError):
                 pass
 
@@ -154,6 +160,10 @@ class mainEditor(QWidget, Ui_mainEditor):
             return
 
         state.modeChanged.connect(self.syncMarkdownPresentationMode)
+        state.allowedModesChanged.connect(
+            self.syncMarkdownPresentationModes
+        )
+        self.syncMarkdownPresentationModes(state.allowed_modes)
         self.syncMarkdownPresentationMode(state.mode)
 
     def _currentMarkdownPresentationState(self):
@@ -180,6 +190,14 @@ class mainEditor(QWidget, Ui_mainEditor):
         previous = self.cmbMarkdownMode.blockSignals(True)
         self.cmbMarkdownMode.setCurrentIndex(index)
         self.cmbMarkdownMode.blockSignals(previous)
+
+    def syncMarkdownPresentationModes(self, modes):
+        allowed = set(modes)
+        model = self.cmbMarkdownMode.model()
+        for index, mode in enumerate(self._markdownModes):
+            item = model.item(index)
+            if item is not None:
+                item.setEnabled(mode in allowed)
 
     ###############################################################################
     # TABS
@@ -478,6 +496,9 @@ class mainEditor(QWidget, Ui_mainEditor):
                 screenNumber=currentScreenNumber,
                 presentation_mode=(
                     self.currentEditor().markdownPresentation.mode
+                ),
+                markup_profile=(
+                    self.currentEditor().markupProfile
                 ),
             )
             # Clean the variable when closing fullscreen prevent errors

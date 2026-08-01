@@ -51,3 +51,29 @@ def test_close_auxiliary_windows_closes_every_other_top_level_window(
 
     first.close.assert_called_once_with()
     second.close.assert_called_once_with()
+
+
+def test_plugin_manager_remains_available_without_open_project(
+        MWNoProject):
+    MWNoProject.projectManager.syncUiToState()
+
+    assert MWNoProject.menuTools.isEnabled()
+    assert MWNoProject.pluginUi.manageAction.isEnabled()
+    assert not MWNoProject.actToolFrequency.isEnabled()
+
+
+def test_plugins_use_one_tools_menu(MWNoProject):
+    plugin_menus = [
+        action.menu()
+        for action in MWNoProject.menuTools.actions()
+        if action.menu() is not None
+        and action.menu().objectName() == "menuPlugins"
+    ]
+
+    assert plugin_menus == [MWNoProject.pluginUi.menu]
+    assert [
+        action.text()
+        for action in plugin_menus[0].actions()
+        if not action.isSeparator()
+    ] == ["Manage Plugins…", "Raw Plugin Data…"]
+    assert not MWNoProject.pluginUi.projectPanels.rawDataAction.isEnabled()
