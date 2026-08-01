@@ -1,6 +1,6 @@
 import unittest
-from unittest.mock import MagicMock, patch, ANY
-from PyQt5.QtCore import QTimer, QObject
+from unittest.mock import MagicMock, patch
+
 from manuskript.projectManager import ProjectManager
 
 class TestProjectManagerTimer(unittest.TestCase):
@@ -29,7 +29,8 @@ class TestProjectManagerTimer(unittest.TestCase):
         # Patch QStandardItemModel to avoid TypeError
         self.mock_qstandarditemmodel_class = patch("manuskript.projectManager.QStandardItemModel", autospec=True).start()
 
-        self.project_manager = ProjectManager(self.window)
+        self.storage = MagicMock()
+        self.project_manager = ProjectManager(self.window, storage=self.storage)
 
     def tearDown(self):
         patch.stopall()
@@ -79,7 +80,7 @@ class TestProjectManagerTimer(unittest.TestCase):
         self.mock_save_timer_no_changes.start.reset_mock()
         self.project_manager.startTimerNoChanges()
         self.mock_save_timer_no_changes.start.assert_called_once()
-        self.assertTrue(self.window.projectDirty)
+        self.assertTrue(self.project_manager.projectDirty)
 
     def test_save_timer_no_changes_does_not_start_with_autosave_disabled(self):
         self._load_project_helper(auto_save=False, auto_save_no_changes=False)
@@ -98,24 +99,24 @@ class TestProjectManagerTimer(unittest.TestCase):
     def test_save_timer_no_changes_stops_after_saving(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=True)
         self.project_manager.startTimerNoChanges()
-        with patch("manuskript.loadSave.saveProject", return_value=True):
-            self.project_manager.saveDatas()
+        self.storage.save.return_value = True
+        self.project_manager.saveDatas()
         self.mock_save_timer_no_changes.stop.assert_called()
 
-    @patch("manuskript.loadSave.saveProject", return_value=True)
-    def test_save_timer_triggers_save_datas(self, mock_save_project):
+    def test_save_timer_triggers_save_datas(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=False)
+        self.storage.save.return_value = True
         # Manually trigger the timeout signal
         self.project_manager.saveTimer.timeout.connect.call_args[0][0]()
-        mock_save_project.assert_called_once()
+        self.storage.save.assert_called_once_with(self.window)
 
-    @patch("manuskript.loadSave.saveProject", return_value=True)
-    def test_save_timer_no_changes_triggers_save_datas(self, mock_save_project):
+    def test_save_timer_no_changes_triggers_save_datas(self):
         self._load_project_helper(auto_save=True, auto_save_no_changes=True)
         self.project_manager.startTimerNoChanges()
+        self.storage.save.return_value = True
         # Manually trigger the timeout signal
         self.project_manager.saveTimerNoChanges.timeout.connect.call_args[0][0]()
-        mock_save_project.assert_called_once()
+        self.storage.save.assert_called_once_with(self.window)
 
 if __name__ == "__main__":
     unittest.main()

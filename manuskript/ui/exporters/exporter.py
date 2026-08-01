@@ -1,26 +1,24 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import json
-import os
-
 from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QBrush, QColor, QIcon
 from PyQt5.QtWidgets import QWidget, QStyle
 
 from manuskript import exporter
-from manuskript.functions import writablePath, openURL
+from manuskript.functions import openURL
 from manuskript.ui.exporters.exporter_ui import Ui_exporter
 from manuskript.ui.exporters.exportersManager import exportersManager
 from manuskript.ui import style as S
 
 
 class exporterDialog(QWidget, Ui_exporter):
-    def __init__(self, parent=None, mw=None):
+    def __init__(self, context, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
 
         # Var
-        self.mw = mw
+        self.context = context
+        self.exporters = exporter.create_exporters(context)
         self.currentExporter = None
         self.settingsWidget = None
         self.previewWidget = None
@@ -41,7 +39,7 @@ class exporterDialog(QWidget, Ui_exporter):
 
         # Populates list
         self.cmbExporters.clear()
-        for E in exporter.exporters:
+        for E in self.exporters:
 
             if not E.isValid() and not E.absentTip:
                 continue
@@ -114,7 +112,10 @@ class exporterDialog(QWidget, Ui_exporter):
         name = self.cmbExporters.currentText()
         exporterName = self.cmbExporters.currentData()
 
-        E = exporter.getExporterByName(exporterName)
+        E = exporter.get_exporter_by_name(
+            self.exporters,
+            exporterName,
+        )
 
         if not E:
             return None, None
@@ -133,7 +134,7 @@ class exporterDialog(QWidget, Ui_exporter):
 
     def openManager(self):
         """Open exporters manager dialog"""
-        self.dialog = exportersManager()
+        self.dialog = exportersManager(self.exporters)
         self.dialog.show()
 
         r = self.dialog.geometry()

@@ -18,7 +18,6 @@ from manuskript.ui.highlighters import MarkdownState as MS
 from manuskript.ui.highlighters import MarkdownTokenType as MTT
 from manuskript.ui.highlighters import BlockquoteStyle as BS
 from manuskript.ui import style as S
-from manuskript.settingsManager import SettingsManager
 from manuskript import functions as F
 
 # Un longue ligne. Un longue ligne. Un longue ligne. Un longue ligne.asdasdasda
@@ -89,14 +88,14 @@ class MarkdownHighlighter(BasicHighlighter):
         - (start, end) if block is supposed to be unfocused except for that part.
         """
 
-        if self.editor._noFocusMode or not SettingsManager().textEditor["focusMode"]:
+        if self.editor._noFocusMode or not self.editor.settings.textEditor["focusMode"]:
             return False
 
-        if SettingsManager().textEditor["focusMode"] == "paragraph":
+        if self.editor.settings.textEditor["focusMode"] == "paragraph":
             return not self.currentBlock().contains(
                 self.editor.textCursor().position())
 
-        elif SettingsManager().textEditor["focusMode"] == "line":
+        elif self.editor.settings.textEditor["focusMode"] == "line":
             if self.currentBlock().contains(
                     self.editor.textCursor().position()):
                 block = self.currentBlock()
@@ -111,7 +110,7 @@ class MarkdownHighlighter(BasicHighlighter):
             else:
                 return True
 
-        elif SettingsManager().textEditor["focusMode"] == "sentence":
+        elif self.editor.settings.textEditor["focusMode"] == "sentence":
             if self.currentBlock().contains(
                     self.editor.textCursor().position()):
                 block = self.currentBlock()

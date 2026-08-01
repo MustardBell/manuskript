@@ -12,10 +12,9 @@ from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListW
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 # Spell checker support
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
-from manuskript.functions import allPaths, iconColor, writablePath, appPath, findWidgetsOfClass
-from manuskript.functions import mainWindow, findBackground, themeIcon
+from manuskript.functions import allPaths, iconColor, writablePath, appPath
+from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.tabSplitter import tabSplitter
 from manuskript.ui.editors.themes import createThemePreview
 from manuskript.ui.editors.themes import getThemeName
@@ -28,10 +27,11 @@ from manuskript.ui import style as S
 
 
 class settingsWindow(QWidget, Ui_Settings):
-    def __init__(self, mainWindow):
+    def __init__(self, mainWindow, settings_manager):
         QWidget.__init__(self)
         self.setupUi(self)
         self.mw = mainWindow
+        self.settings = settings_manager
 
         # UI
         for l in [self.lblTitleGeneral,
@@ -118,17 +118,17 @@ class settingsWindow(QWidget, Ui_Settings):
         self.spnGeneralFontSize.setValue(f.pointSize())
         self.spnGeneralFontSize.valueChanged.connect(self.setAppFontSize)
 
-        self.chkProgressChars.setChecked(SettingsManager().progressChars);
+        self.chkProgressChars.setChecked(self.settings.progressChars);
         self.chkProgressChars.stateChanged.connect(self.charSettingsChanged)
 
         self.txtAutoSave.setValidator(QIntValidator(0, 999, self))
         self.txtAutoSaveNoChanges.setValidator(QIntValidator(0, 999, self))
-        self.chkAutoSave.setChecked(SettingsManager().autoSave)
-        self.chkAutoSaveNoChanges.setChecked(SettingsManager().autoSaveNoChanges)
-        self.txtAutoSave.setText(str(SettingsManager().autoSaveDelay))
-        self.txtAutoSaveNoChanges.setText(str(SettingsManager().autoSaveNoChangesDelay))
-        self.chkSaveOnQuit.setChecked(SettingsManager().saveOnQuit)
-        self.chkSaveToZip.setChecked(SettingsManager().saveToZip)
+        self.chkAutoSave.setChecked(self.settings.autoSave)
+        self.chkAutoSaveNoChanges.setChecked(self.settings.autoSaveNoChanges)
+        self.txtAutoSave.setText(str(self.settings.autoSaveDelay))
+        self.txtAutoSaveNoChanges.setText(str(self.settings.autoSaveNoChangesDelay))
+        self.chkSaveOnQuit.setChecked(self.settings.saveOnQuit)
+        self.chkSaveToZip.setChecked(self.settings.saveToZip)
         self.chkAutoSave.stateChanged.connect(self.saveSettingsChanged)
         self.chkAutoSaveNoChanges.stateChanged.connect(self.saveSettingsChanged)
         self.chkSaveOnQuit.stateChanged.connect(self.saveSettingsChanged)
@@ -140,7 +140,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkAutoLoad.stateChanged.connect(self.saveSettingsChanged)
 
         # Revisions
-        opt = SettingsManager().revisions
+        opt = self.settings.revisions
         self.chkRevisionsKeep.setChecked(opt["keep"])
         self.chkRevisionsKeep.stateChanged.connect(self.revisionsSettingsChanged)
         self.chkRevisionRemove.setChecked(opt["smartremove"])
@@ -161,15 +161,15 @@ class settingsWindow(QWidget, Ui_Settings):
         lst = ["Nothing", "POV", "Label", "Progress", "Compile"]
         for cmb in self.viewSettingsDatas():
             item, part = self.viewSettingsDatas()[cmb]
-            cmb.setCurrentIndex(lst.index(SettingsManager().viewSettings[item][part]))
+            cmb.setCurrentIndex(lst.index(self.settings.viewSettings[item][part]))
             cmb.currentIndexChanged.connect(self.viewSettingsChanged)
 
         for chk in self.outlineColumnsData():
             col = self.outlineColumnsData()[chk]
-            chk.setChecked(col in SettingsManager().outlineViewColumns)
+            chk.setChecked(col in self.settings.outlineViewColumns)
             chk.stateChanged.connect(self.outlineColumnsChanged)
 
-        self.chkOutlinePOV.setVisible(SettingsManager().viewMode != "simple") #  Hides checkbox if non-fiction view mode
+        self.chkOutlinePOV.setVisible(self.settings.viewMode != "simple") #  Hides checkbox if non-fiction view mode
 
         for item, what, value in [
             (self.rdoTreeItemCount, "InfoFolder", "Count"),
@@ -184,19 +184,19 @@ class settingsWindow(QWidget, Ui_Settings):
             (self.rdoTreeTextSummary, "InfoText", "Summary"),
             (self.rdoTreeTextNothing, "InfoText", "Nothing"),
         ]:
-            item.setChecked(SettingsManager().viewSettings["Tree"][what] == value)
+            item.setChecked(self.settings.viewSettings["Tree"][what] == value)
             item.toggled.connect(self.treeViewSettignsChanged)
 
         self.sldTreeIconSize.valueChanged.connect(self.treeViewSettignsChanged)
         self.sldTreeIconSize.valueChanged.connect(
             lambda v: self.lblTreeIconSize.setText("{}x{}".format(v, v)))
-        self.sldTreeIconSize.setValue(SettingsManager().viewSettings["Tree"]["iconSize"])
+        self.sldTreeIconSize.setValue(self.settings.viewSettings["Tree"]["iconSize"])
 
-        self.chkCountSpaces.setChecked(SettingsManager().countSpaces);
+        self.chkCountSpaces.setChecked(self.settings.countSpaces);
         self.chkCountSpaces.stateChanged.connect(self.countSpacesChanged)
 
-        self.rdoCorkOldStyle.setChecked(SettingsManager().corkStyle == "old")
-        self.rdoCorkNewStyle.setChecked(SettingsManager().corkStyle == "new")
+        self.rdoCorkOldStyle.setChecked(self.settings.corkStyle == "old")
+        self.rdoCorkNewStyle.setChecked(self.settings.corkStyle == "new")
         self.rdoCorkNewStyle.toggled.connect(self.setCorkStyle)
         self.rdoCorkOldStyle.toggled.connect(self.setCorkStyle)
 
@@ -207,7 +207,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.btnCorkColor.clicked.connect(self.setCorkColor)
 
         # Text editor
-        opt = SettingsManager().textEditor
+        opt = self.settings.textEditor
             # Font
         self.setButtonColor(self.btnEditorFontColor, opt["fontColor"])
         self.btnEditorFontColor.clicked.connect(self.choseEditorFontColor)
@@ -311,13 +311,13 @@ class settingsWindow(QWidget, Ui_Settings):
         self.timerUpdateFSPreview.timeout.connect(self.updatePreview)
 
         # Style - Tooltips  
-        self.chkUseSystemTooltips.setChecked(SettingsManager().tooltipStyle["useSystemDefaultsForTooltips"])
+        self.chkUseSystemTooltips.setChecked(self.settings.tooltipStyle["useSystemDefaultsForTooltips"])
         self.chkUseSystemTooltips.stateChanged.connect(self.toggleTooltipCustomization)
-        self.setButtonColor(self.btnTooltipTextColor, SettingsManager().tooltipStyle["textColor"])
+        self.setButtonColor(self.btnTooltipTextColor, self.settings.tooltipStyle["textColor"])
         self.btnTooltipTextColor.clicked.connect(self.chooseTooltipTextColor)
-        self.setButtonColor(self.btnTooltipBackgroundColor, SettingsManager().tooltipStyle["backgroundColor"])
+        self.setButtonColor(self.btnTooltipBackgroundColor, self.settings.tooltipStyle["backgroundColor"])
         self.btnTooltipBackgroundColor.clicked.connect(self.chooseTooltipBackgroundColor)
-        self.setButtonColor(self.btnTooltipBorderColor, SettingsManager().tooltipStyle["borderColor"])
+        self.setButtonColor(self.btnTooltipBorderColor, self.settings.tooltipStyle["borderColor"])
         self.btnTooltipBorderColor.clicked.connect(self.chooseTooltipBorderColor)
         self.updateTooltipControlsState()
 
@@ -361,12 +361,12 @@ class settingsWindow(QWidget, Ui_Settings):
         f = qApp.font()
         f.setPointSize(val)
         qApp.setFont(f)
-        mainWindow().setFont(f)
+        self.mw.setFont(f)
         sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
         sttgs.setValue("appFontSize", val)
 
     def charSettingsChanged(self):
-        SettingsManager().progressChars = True if self.chkProgressChars.checkState() else False
+        self.settings.progressChars = True if self.chkProgressChars.checkState() else False
 
         self.mw.mainEditor.updateStats()
 
@@ -380,21 +380,21 @@ class settingsWindow(QWidget, Ui_Settings):
         sttgs.setValue("autoLoad", True if self.chkAutoLoad.checkState() else False)
         sttgs.sync()
 
-        SettingsManager().autoSave = True if self.chkAutoSave.checkState() else False
-        SettingsManager().autoSaveNoChanges = True if self.chkAutoSaveNoChanges.checkState() else False
-        SettingsManager().saveOnQuit = True if self.chkSaveOnQuit.checkState() else False
-        SettingsManager().saveToZip = True if self.chkSaveToZip.checkState() else False
-        SettingsManager().autoSaveDelay = int(self.txtAutoSave.text())
-        SettingsManager().autoSaveNoChangesDelay = int(self.txtAutoSaveNoChanges.text())
-        self.mw.projectManager.saveTimer.setInterval(SettingsManager().autoSaveDelay * 60 * 1000)
-        self.mw.projectManager.saveTimerNoChanges.setInterval(SettingsManager().autoSaveNoChangesDelay * 1000)
+        self.settings.autoSave = True if self.chkAutoSave.checkState() else False
+        self.settings.autoSaveNoChanges = True if self.chkAutoSaveNoChanges.checkState() else False
+        self.settings.saveOnQuit = True if self.chkSaveOnQuit.checkState() else False
+        self.settings.saveToZip = True if self.chkSaveToZip.checkState() else False
+        self.settings.autoSaveDelay = int(self.txtAutoSave.text())
+        self.settings.autoSaveNoChangesDelay = int(self.txtAutoSaveNoChanges.text())
+        self.mw.projectManager.saveTimer.setInterval(self.settings.autoSaveDelay * 60 * 1000)
+        self.mw.projectManager.saveTimerNoChanges.setInterval(self.settings.autoSaveNoChangesDelay * 1000)
 
     ####################################################################################################
     #                                           REVISION                                               #
     ####################################################################################################
 
     def revisionsSettingsChanged(self):
-        opt = SettingsManager().revisions
+        opt = self.settings.revisions
         opt["keep"] = True if self.chkRevisionsKeep.checkState() else False
         opt["smartremove"] = self.chkRevisionRemove.isChecked()
         opt["rules"][10 * 60] = 60 / self.spnRevisions10Mn.value()
@@ -446,13 +446,13 @@ class settingsWindow(QWidget, Ui_Settings):
         chk = self.sender()
         val = True if chk.checkState() else False
         col = self.outlineColumnsData()[chk]
-        if val and not col in SettingsManager().outlineViewColumns:
-            SettingsManager().outlineViewColumns.append(col)
-        elif not val and col in SettingsManager().outlineViewColumns:
-            SettingsManager().outlineViewColumns.remove(col)
+        if val and not col in self.settings.outlineViewColumns:
+            self.settings.outlineViewColumns.append(col)
+        elif not val and col in self.settings.outlineViewColumns:
+            self.settings.outlineViewColumns.remove(col)
 
         # Update views
-        for w in findWidgetsOfClass(outlineView):
+        for w in self.mw.findChildren(outlineView, QRegExp()):
             w.hideColumns()
 
     def treeViewSettignsChanged(self):
@@ -470,36 +470,36 @@ class settingsWindow(QWidget, Ui_Settings):
             (self.rdoTreeTextNothing, "InfoText", "Nothing"),
         ]:
             if item.isChecked():
-                SettingsManager().viewSettings["Tree"][what] = value
+                self.settings.viewSettings["Tree"][what] = value
 
         iconSize = self.sldTreeIconSize.value()
-        if iconSize != SettingsManager().viewSettings["Tree"]["iconSize"]:
-            SettingsManager().viewSettings["Tree"]["iconSize"] = iconSize
+        if iconSize != self.settings.viewSettings["Tree"]["iconSize"]:
+            self.settings.viewSettings["Tree"]["iconSize"] = iconSize
             self.mw.treeRedacOutline.setIconSize(QSize(iconSize, iconSize))
 
         self.mw.treeRedacOutline.viewport().update()
 
     def countSpacesChanged(self):
-        SettingsManager().countSpaces = True if self.chkCountSpaces.checkState() else False
+        self.settings.countSpaces = True if self.chkCountSpaces.checkState() else False
 
         self.mw.mainEditor.updateStats()
 
     def setCorkColor(self):
-        color = QColor(SettingsManager().corkBackground["color"])
+        color = QColor(self.settings.corkBackground["color"])
         self.colorDialog = QColorDialog(color, self)
         color = self.colorDialog.getColor(color)
         if color.isValid():
-            SettingsManager().corkBackground["color"] = color.name()
+            self.settings.corkBackground["color"] = color.name()
             self.updateCorkColor()
             # Update Cork view
             self.mw.mainEditor.updateCorkBackground()
 
     def setCorkStyle(self):
-        SettingsManager().corkStyle = "new" if self.rdoCorkNewStyle.isChecked() else "old"
+        self.settings.corkStyle = "new" if self.rdoCorkNewStyle.isChecked() else "old"
         self.mw.mainEditor.updateCorkView()
 
     def updateCorkColor(self):
-        self.btnCorkColor.setStyleSheet("background:{};".format(SettingsManager().corkBackground["color"]))
+        self.btnCorkColor.setStyleSheet("background:{};".format(self.settings.corkBackground["color"]))
 
     def setCorkBackground(self, i):
         # Check if combobox was reset
@@ -509,16 +509,16 @@ class settingsWindow(QWidget, Ui_Settings):
         img = self.cmbCorkImage.itemData(i)
         img = os.path.basename(img)
         if img:
-            SettingsManager().corkBackground["image"] = img
+            self.settings.corkBackground["image"] = img
         else:
             txt = self.cmbCorkImage.itemText(i)
             if txt == "":
-                SettingsManager().corkBackground["image"] = ""
+                self.settings.corkBackground["image"] = ""
             else:
                 img = self.addBackgroundImage()
                 if img:
                     self.populatesCmbBackgrounds(self.cmbCorkImage)
-                    SettingsManager().corkBackground["image"] = img
+                    self.settings.corkBackground["image"] = img
                 self.setCorkImageDefault()
         # Update Cork view
         self.mw.mainEditor.updateCorkBackground()
@@ -567,8 +567,8 @@ class settingsWindow(QWidget, Ui_Settings):
                 
 
     def setCorkImageDefault(self):
-        if SettingsManager().corkBackground["image"] != "":
-            i = self.cmbCorkImage.findData(findBackground(SettingsManager().corkBackground["image"]))
+        if self.settings.corkBackground["image"] != "":
+            i = self.cmbCorkImage.findData(findBackground(self.settings.corkBackground["image"]))
             if i != -1:
                 self.cmbCorkImage.setCurrentIndex(i)
 
@@ -582,101 +582,97 @@ class settingsWindow(QWidget, Ui_Settings):
         """
 
         # Background
-        SettingsManager().textEditor["backgroundTransparent"] = True if self.chkEditorBackgroundTransparent.checkState() else False
+        self.settings.textEditor["backgroundTransparent"] = True if self.chkEditorBackgroundTransparent.checkState() else False
 
         # Font
         f = self.cmbEditorFontFamily.currentFont()
         f.setPointSize(self.spnEditorFontSize.value())
-        SettingsManager().textEditor["font"] = f.toString()
+        self.settings.textEditor["font"] = f.toString()
 
         # Cursor
-        SettingsManager().textEditor["cursorWidth"] = \
+        self.settings.textEditor["cursorWidth"] = \
             1 if not self.chkEditorCursorWidth.isChecked() else \
             self.spnEditorCursorWidth.value()
         self.spnEditorCursorWidth.setEnabled(self.chkEditorCursorWidth.isChecked())
-        SettingsManager().textEditor["alwaysCenter"] = self.chkEditorTypeWriterMode.isChecked()
-        SettingsManager().textEditor["focusMode"] = \
+        self.settings.textEditor["alwaysCenter"] = self.chkEditorTypeWriterMode.isChecked()
+        self.settings.textEditor["focusMode"] = \
             False if self.cmbEditorFocusMode.currentIndex() == 0 else \
             "sentence" if self.cmbEditorFocusMode.currentIndex() == 1 else \
             "line" if self.cmbEditorFocusMode.currentIndex() == 2 else \
             "paragraph"
 
         # Text area
-        SettingsManager().textEditor["maxWidth"] = \
+        self.settings.textEditor["maxWidth"] = \
             0 if not self.chkEditorMaxWidth.isChecked() else \
             self.spnEditorMaxWidth.value()
         self.spnEditorMaxWidth.setEnabled(self.chkEditorMaxWidth.isChecked())
-        SettingsManager().textEditor["marginsLR"] = self.spnEditorMarginsLR.value()
-        SettingsManager().textEditor["marginsTB"] = self.spnEditorMarginsTB.value()
+        self.settings.textEditor["marginsLR"] = self.spnEditorMarginsLR.value()
+        self.settings.textEditor["marginsTB"] = self.spnEditorMarginsTB.value()
 
         # Paragraphs
-        SettingsManager().textEditor["textAlignment"] = self.cmbEditorAlignment.currentIndex()
-        SettingsManager().textEditor["lineSpacing"] = \
+        self.settings.textEditor["textAlignment"] = self.cmbEditorAlignment.currentIndex()
+        self.settings.textEditor["lineSpacing"] = \
             100 if self.cmbEditorLineSpacing.currentIndex() == 0 else \
             150 if self.cmbEditorLineSpacing.currentIndex() == 1 else \
             200 if self.cmbEditorLineSpacing.currentIndex() == 2 else \
             self.spnEditorLineSpacing.value()
         self.spnEditorLineSpacing.setEnabled(self.cmbEditorLineSpacing.currentIndex() == 3)
-        SettingsManager().textEditor["tabWidth"] = self.spnEditorTabWidth.value()
-        SettingsManager().textEditor["indent"] = True if self.chkEditorIndent.checkState() else False
-        SettingsManager().textEditor["spacingAbove"] = self.spnEditorParaAbove.value()
-        SettingsManager().textEditor["spacingBelow"] = self.spnEditorParaBelow.value()
+        self.settings.textEditor["tabWidth"] = self.spnEditorTabWidth.value()
+        self.settings.textEditor["indent"] = True if self.chkEditorIndent.checkState() else False
+        self.settings.textEditor["spacingAbove"] = self.spnEditorParaAbove.value()
+        self.settings.textEditor["spacingBelow"] = self.spnEditorParaBelow.value()
 
         self.timerUpdateWidgets.start()
 
     def updateAllWidgets(self):
 
         # Update font and defaultBlockFormat to all textEditView. Drastically.
-        for w in mainWindow().findChildren(textEditView, QRegExp(".*")):
+        for w in self.mw.findChildren(textEditView, QRegExp(".*")):
             w.loadFontSettings()
 
         # Update background color in all tabSplitter (tabs)
-        for w in mainWindow().findChildren(tabSplitter, QRegExp(".*")):
+        for w in self.mw.findChildren(tabSplitter, QRegExp(".*")):
             w.updateStyleSheet()
 
         # Update background color in all folder text view:
-        for w in mainWindow().findChildren(QWidget, QRegExp("editorWidgetFolderText")):
-            w.setStyleSheet("background: {};".format(SettingsManager().textEditor["background"]))
+        for w in self.mw.findChildren(QWidget, QRegExp("editorWidgetFolderText")):
+            w.setStyleSheet("background: {};".format(self.settings.textEditor["background"]))
 
     def setApplicationCursorBlinking(self):
-        SettingsManager().textEditor["cursorNotBlinking"] = self.chkEditorNoBlinking.isChecked()
-        if SettingsManager().textEditor["cursorNotBlinking"]:
-            qApp.setCursorFlashTime(0)
-        else:
-            # Load default system value, that we cached at startup
-            qApp.setCursorFlashTime(self.mw._defaultCursorFlashTime)
+        self.settings.textEditor["cursorNotBlinking"] = self.chkEditorNoBlinking.isChecked()
+        self.settings.applyCursorFlashTime()
 
     def choseEditorFontColor(self):
-        color = SettingsManager().textEditor["fontColor"]
+        color = self.settings.textEditor["fontColor"]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            SettingsManager().textEditor["fontColor"] = color.name()
+            self.settings.textEditor["fontColor"] = color.name()
             self.setButtonColor(self.btnEditorFontColor, color.name())
             self.updateEditorSettings()
 
     def choseEditorMisspelledColor(self):
-        color = SettingsManager().textEditor["misspelled"]
+        color = self.settings.textEditor["misspelled"]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            SettingsManager().textEditor["misspelled"] = color.name()
+            self.settings.textEditor["misspelled"] = color.name()
             self.setButtonColor(self.btnEditorMisspelledColor, color.name())
             self.updateEditorSettings()
 
     def choseEditorBackgroundColor(self):
-        color = SettingsManager().textEditor["background"]
+        color = self.settings.textEditor["background"]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            SettingsManager().textEditor["background"] = color.name()
+            self.settings.textEditor["background"] = color.name()
             self.setButtonColor(self.btnEditorBackgroundColor, color.name())
             self.updateEditorSettings()
 
     def restoreEditorColors(self):
-        SettingsManager().textEditor["background"] = S.base
+        self.settings.textEditor["background"] = S.base
         self.setButtonColor(self.btnEditorBackgroundColor, S.base)
-        SettingsManager().textEditor["fontColor"] = S.text
+        self.settings.textEditor["fontColor"] = S.text
         self.setButtonColor(self.btnEditorFontColor, S.text)
         self.updateEditorSettings()
 
@@ -734,7 +730,7 @@ class settingsWindow(QWidget, Ui_Settings):
             self.btnThemeRemove.setEnabled(current.data(Qt.UserRole + 1))
             # Save settings
             theme = current.data(Qt.UserRole)
-            SettingsManager().fullScreenTheme = os.path.splitext(os.path.split(theme)[1])[0]
+            self.settings.fullScreenTheme = os.path.splitext(os.path.split(theme)[1])[0]
         else:
             # UI updates
             self.btnThemeEdit.setEnabled(False)
@@ -771,7 +767,7 @@ class settingsWindow(QWidget, Ui_Settings):
 
     def populatesThemesList(self):
         paths = allPaths(os.path.join("resources", "themes"))
-        current = SettingsManager().fullScreenTheme
+        current = self.settings.fullScreenTheme
         self.lstThemes.clear()
 
         for p in paths:
@@ -1020,39 +1016,39 @@ class settingsWindow(QWidget, Ui_Settings):
         ####################################################################################################
 
     def chooseTooltipTextColor(self):
-        color = SettingsManager().tooltipStyle["textColor"]
+        color = self.settings.tooltipStyle["textColor"]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            SettingsManager().tooltipStyle["textColor"] = color.name()
+            self.settings.tooltipStyle["textColor"] = color.name()
             self.setButtonColor(self.btnTooltipTextColor, color.name())
             self.updateTooltipStyle()
 
     def chooseTooltipBackgroundColor(self):
-        color = SettingsManager().tooltipStyle["backgroundColor"]
+        color = self.settings.tooltipStyle["backgroundColor"]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            SettingsManager().tooltipStyle["backgroundColor"] = color.name()
+            self.settings.tooltipStyle["backgroundColor"] = color.name()
             self.setButtonColor(self.btnTooltipBackgroundColor, color.name())
             self.updateTooltipStyle()
 
     def chooseTooltipBorderColor(self):
-        color = SettingsManager().tooltipStyle["borderColor"]
+        color = self.settings.tooltipStyle["borderColor"]
         self.colorDialog = QColorDialog(QColor(color), self)
         color = self.colorDialog.getColor(QColor(color))
         if color.isValid():
-            SettingsManager().tooltipStyle["borderColor"] = color.name()
+            self.settings.tooltipStyle["borderColor"] = color.name()
             self.setButtonColor(self.btnTooltipBorderColor, color.name())
             self.updateTooltipStyle()
 
     def toggleTooltipCustomization(self):
-        SettingsManager().tooltipStyle["useSystemDefaultsForTooltips"] = self.chkUseSystemTooltips.isChecked()
+        self.settings.tooltipStyle["useSystemDefaultsForTooltips"] = self.chkUseSystemTooltips.isChecked()
         self.updateTooltipControlsState()
         self.updateTooltipStyle()
 
     def updateTooltipControlsState(self):
-        visible = not SettingsManager().tooltipStyle["useSystemDefaultsForTooltips"]
+        visible = not self.settings.tooltipStyle["useSystemDefaultsForTooltips"]
         self.lblTooltipTextColor.setVisible(visible)
         self.btnTooltipTextColor.setVisible(visible)
         self.lblTooltipBackgroundColor.setVisible(visible)
@@ -1067,9 +1063,4 @@ class settingsWindow(QWidget, Ui_Settings):
             self.formLayout_tooltips.setContentsMargins(9, 9, 9, 0)
 
     def updateTooltipStyle(self):
-        # Apply the new tooltip style immediately
-        if SettingsManager().tooltipStyle["useSystemDefaultsForTooltips"]:
-            # Clear any custom tooltip styling to use system defaults
-            qApp.setStyleSheet("")
-        else:
-            qApp.setStyleSheet(f"QToolTip {{ color: {SettingsManager().tooltipStyle['textColor']}; background-color: {SettingsManager().tooltipStyle['backgroundColor']}; border: 1px solid {SettingsManager().tooltipStyle['borderColor']}; }}")
+        self.settings.applyTooltipStyle()

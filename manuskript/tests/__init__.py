@@ -16,19 +16,6 @@ from manuskript import main
 arguments = main.process_commandline([])
 app, MW = main.prepare(arguments, tests=True)
 
-# FIXME: Again, don't know why, but when closing a project and then reopening
-#        one, we get a `TypeError: connection is not unique` in MainWindow:
-#        self.btnAddSubPlot.clicked.connect(self.updateSubPlotView, F.AUC)
-#        Yet the disconnectAll() function has been called.
-#        Workaround: we remove the necessity for connection to be unique. This
-#        works for now, but could create issues later on when we want to test
-#        this specific functionality. Maybe it will be called several times?
-#        At that moment, we will need to catch the exception in the MainWindow,
-#        or better: understand why it happens at all, and only on some signals.
-from manuskript import functions as F
-from PyQt5.QtCore import Qt
-F.AUC = Qt.AutoConnection
-
 # METHOD 2
 # ========
 # We need a qApplication to be running, or all the calls to qApp

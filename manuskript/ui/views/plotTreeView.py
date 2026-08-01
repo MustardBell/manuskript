@@ -5,7 +5,6 @@ from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem
 from lxml import etree as ET
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Plot, Outline, PlotStep
 from manuskript.models import references as Ref
 from manuskript.ui import style as S
@@ -15,6 +14,7 @@ class plotTreeView(QTreeWidget):
     def __init__(self, parent=None):
         QTreeWidget.__init__(self, parent)
         self._model = None
+        self.settings = None
         self._catRow = [-1, -1, -1]
         self._filter = ""
         self._lastID = -1
@@ -36,12 +36,34 @@ class plotTreeView(QTreeWidget):
         self._showSubPlot = v
         self.updateItems()
 
-    def setPlotModel(self, model):
+    def setPlotModel(self, model, settings=None):
+        if settings is not None:
+            self.settings = settings
+        if model is self._model:
+            self.updateItems()
+            return
+        self._disconnectPlotModel()
         self._model = model
+        if self._model is None:
+            self.clear()
+            return
         self._model.dataChanged.connect(self.updateMaybe)
         self._model.rowsInserted.connect(self.updateMaybe2)
         self._model.rowsRemoved.connect(self.updateMaybe2)
         self.updateItems()
+
+    def _disconnectPlotModel(self):
+        if self._model is None:
+            return
+        for signal, slot in [
+            (self._model.dataChanged, self.updateMaybe),
+            (self._model.rowsInserted, self.updateMaybe2),
+            (self._model.rowsRemoved, self.updateMaybe2),
+        ]:
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
 
     def setFilter(self, text):
         self._filter = text
@@ -186,7 +208,10 @@ class plotTreeView(QTreeWidget):
             _id, name, summary = self._model.getSubPlotsByID(plotID)[subplotRaw]
             sub = ET.Element("outlineItem")
             sub.set(Outline.title.name, name)
-            sub.set(Outline.type.name, SettingsManager().defaultTextType)
+            sub.set(
+                Outline.type.name,
+                self.settings.defaultTextType,
+            )
             sub.set(Outline.summaryFull.name, summary)
             sub.set(Outline.notes.name, self.tr("**Plot:** {}").format(
                     Ref.plotReference(plotID)))

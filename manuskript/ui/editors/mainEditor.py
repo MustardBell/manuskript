@@ -7,9 +7,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter, QIcon
 from PyQt5.QtWidgets import QWidget, qApp, QDesktopWidget
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
-from manuskript.functions import AUC, mainWindow, drawProgress, appPath, uiParse
+from manuskript.functions import AUC, drawProgress, appPath, uiParse
 from manuskript.ui import style
 from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.fullScreenEditor import fullScreenEditor
@@ -69,7 +68,8 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._updating = False
         self._fullScreen = None
 
-        self.mw = mainWindow()
+        self.editor_context = None
+        self.settings = None
 
         # Connections --------------------------------------------------------
 
@@ -104,6 +104,16 @@ class mainEditor(QWidget, Ui_mainEditor):
         for btn in [self.btnRedacFolderCork, self.btnRedacFolderText, self.btnRedacFolderOutline]:
             btn.setToolTip(btn.text())
             btn.setText("")
+
+    def set_context(self, context):
+        self.editor_context = context
+        if context.text_editor is not None:
+            self.settings = context.text_editor.settings
+        self.tabSplitter.set_context(context)
+
+    def clear_context(self):
+        self.tabSplitter.set_context(None)
+        self.editor_context = None
 
     ###############################################################################
     # TABS
@@ -142,11 +152,11 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.updateThingsVisible(index)
 
     def updateMainTreeView(self, index):
-        if not index.isValid():
+        if not index.isValid() or self.editor_context is None:
             return
 
         self._updating = True
-        self.mw.treeRedacOutline.setCurrentIndex(index)
+        self.editor_context.outline_tree.setCurrentIndex(index)
         self._updating = False
 
     def closeAllTabs(self):
@@ -192,12 +202,16 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         # This might be called during a drag n drop operation, or while deleting
         # items. If so, we don't want to do anything.
-        if not self.mw.mdlOutline._removingRows:
-            if len(self.mw.treeRedacOutline.selectionModel().
+        if self.editor_context is None:
+            return
+        outline_model = self.editor_context.outline_model
+        outline_tree = self.editor_context.outline_tree
+        if not outline_model._removingRows:
+            if len(outline_tree.selectionModel().
                 selection().indexes()) == 0:
                 idx = QModelIndex()
             else:
-                idx = self.mw.treeRedacOutline.currentIndex()
+                idx = outline_tree.currentIndex()
 
             self.setCurrentModelIndex(idx)
             self.updateThingsVisible(idx)
@@ -207,11 +221,13 @@ class mainEditor(QWidget, Ui_mainEditor):
             self.setCurrentModelIndex(i, newTab)
 
     def goToParentItem(self):
-        if self.currentEditor():
+        if self.currentEditor() and self.editor_context is not None:
             idx = self.currentEditor().currentIndex
-            self.mw.treeRedacOutline.setCurrentIndex(idx.parent())
+            self.editor_context.outline_tree.setCurrentIndex(idx.parent())
 
     def setCurrentModelIndex(self, index, newTab=False, tabWidget=None):
+        if self.editor_context is None:
+            return
 
         title = self.getIndexTitle(index)
 
@@ -233,7 +249,7 @@ class mainEditor(QWidget, Ui_mainEditor):
             newTab = True
 
         if newTab or not tabWidget.count():
-            editor = editorWidget(self)
+            editor = editorWidget(self, self.editor_context)
             editor.setCurrentModelIndex(index)
             editor._tabWidget = tabWidget
             i = tabWidget.addTab(editor, editor.ellidedTitle(title))
@@ -262,52 +278,11 @@ class mainEditor(QWidget, Ui_mainEditor):
         return title
 
     ###############################################################################
-    # FUNCTIONS FOR MENU ACCESS
+    # DOCUMENT COMMAND ROUTING
     ###############################################################################
 
-    def copy(self):
-        if self.currentEditor():
-            self.currentEditor().copy()
-    
-    def cut(self):
-        if self.currentEditor():
-            self.currentEditor().cut()
-    
-    def paste(self):
-        if self.currentEditor():
-            self.currentEditor().paste()
-    
-    def rename(self):
-        if self.currentEditor():
-            self.currentEditor().rename()
-    
-    def duplicate(self):
-        if self.currentEditor():
-            self.currentEditor().duplicate()
-    
-    def delete(self):
-        if self.currentEditor():
-            self.currentEditor().delete()
-    
-    def moveUp(self):
-        if self.currentEditor():
-            self.currentEditor().moveUp()
-    
-    def moveDown(self):
-        if self.currentEditor():
-            self.currentEditor().moveDown()
-    
-    def splitDialog(self):
-        if self.currentEditor():
-            self.currentEditor().splitDialog()
-    
-    def splitCursor(self):
-        if self.currentEditor():
-            self.currentEditor().splitCursor()
-    
-    def merge(self):
-        if self.currentEditor():
-            self.currentEditor().merge()
+    def document_command_target(self, _command):
+        return self.currentEditor()
 
     ###############################################################################
     # UI
@@ -335,7 +310,7 @@ class mainEditor(QWidget, Ui_mainEditor):
 
     def updateStats(self):
 
-        if not self.currentEditor():
+        if not self.currentEditor() or self.editor_context is None:
             return
 
         index = self.currentEditor().currentIndex
@@ -343,10 +318,10 @@ class mainEditor(QWidget, Ui_mainEditor):
         if index.isValid():
             item = index.internalPointer()
         else:
-            item = self.mw.mdlOutline.rootItem
+            item = self.editor_context.outline_model.rootItem
 
         if not item:
-            item = self.mw.mdlOutline.rootItem
+            item = self.editor_context.outline_model.rootItem
 
         cc = item.data(Outline.charCount)
         wc = item.data(Outline.wordCount)
@@ -374,7 +349,7 @@ class mainEditor(QWidget, Ui_mainEditor):
             del p
             self.lblRedacProgress.setPixmap(self.px)
 
-            if SettingsManager().progressChars:
+            if self.settings.progressChars:
                 self.lblRedacWC.setText(self.tr("({} chars) {}  words / {} ").format(
                         locale.format_string("%d", cc, grouping=True),
                         locale.format_string("%d", wc, grouping=True),
@@ -389,7 +364,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         else:
             self.lblRedacProgress.hide()
 
-            if SettingsManager().progressChars:
+            if self.settings.progressChars:
                 self.lblRedacWC.setText(self.tr("{} chars ").format(
                         locale.format_string("%d", cc, grouping=True)))
                 self.lblRedacWC.setToolTip("")
@@ -410,7 +385,7 @@ class mainEditor(QWidget, Ui_mainEditor):
     def setCorkSizeFactor(self, val):
         for w in self.allAllTabs():
             w.setCorkSizeFactor(val)
-        SettingsManager().corkSizeFactor = val
+        self.settings.corkSizeFactor = val
 
     def updateCorkView(self):
         for w in self.allAllTabs():
@@ -429,6 +404,8 @@ class mainEditor(QWidget, Ui_mainEditor):
             currentScreenNumber = QDesktopWidget().screenNumber(widget=self)
             self._fullScreen = fullScreenEditor(
                 self.currentEditor().currentIndex,
+                settings=self.settings,
+                text_editor_context=self.editor_context.text_editor,
                 screenNumber=currentScreenNumber)
             # Clean the variable when closing fullscreen prevent errors
             self._fullScreen.exited.connect(self.clearFullScreen)

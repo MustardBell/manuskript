@@ -5,11 +5,11 @@ from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QWidget, QFrame, QSpacerItem, QSizePolicy
 from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 
-from manuskript.settingsManager import SettingsManager
-from manuskript.functions import AUC, mainWindow
+from manuskript.commands import DocumentCommand
+from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.views.MDEditView import MDEditView
-from manuskript.ui.tools.splitDialog import splitDialog
+from manuskript.ui.tools.splitDialog import open_split_dialog
 
 
 class editorWidget(QWidget, Ui_editorWidget_ui):
@@ -43,9 +43,17 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
     _maxTabTitleLength = 24
 
-    def __init__(self, parent):
+    def __init__(self, parent, editor_context=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self.main_editor = (
+            parent if hasattr(parent, "updateTargets") else None
+        )
+        self.settings = self.txtRedacText.settings
+        self.editor_context = None
+        self.outline_context = None
+        if editor_context is not None:
+            self.set_context(editor_context)
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
@@ -54,9 +62,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.dictChanged.connect(self.txtRedacText.setDict, AUC)
         self.txtRedacText.setHighlighting(True)
         self.currentDict = ""
-        self.spellcheck = SettingsManager().spellcheck
+        self.spellcheck = self.settings.spellcheck
         self.folderView = "cork"
-        self.mw = mainWindow()
         self._tabWidget = None  # set by mainEditor on creation
 
         self._model = None
@@ -69,6 +76,19 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # def setModel(self, model):
         # self._model = model
         # self.setView()
+
+    def set_context(self, editor_context):
+        self.editor_context = editor_context
+        self.outline_context = editor_context.outline_views
+        if editor_context.text_editor is not None:
+            self.settings = editor_context.text_editor.settings
+            self.txtRedacText.set_text_editor_context(
+                editor_context.text_editor
+            )
+            for editor in getattr(self, "txtEdits", []):
+                editor.set_text_editor_context(editor_context.text_editor)
+        self.corkView.set_outline_context(self.outline_context)
+        self.outlineView.set_outline_context(self.outline_context)
 
     def resizeEvent(self, event):
         """
@@ -102,7 +122,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.folderView = "text"
 
         # Saving value
-        SettingsManager().folderView = self.folderView
+        self.settings.folderView = self.folderView
 
         if oldV != self.folderView and self.currentIndex:
             self.setCurrentModelIndex(self.currentIndex)
@@ -154,11 +174,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             return title
 
     def setView(self):
-        # index = mainWindow().treeRedacOutline.currentIndex()
-
         # Counting the number of other selected items
         # sel = []
-        # for i in mainWindow().treeRedacOutline.selectionModel().selection().indexes():
+        # for i in the main outline tree selection:
         # if i.column() != 0: continue
         # if i not in sel: sel.append(i)
 
@@ -166,20 +184,28 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # item = index.internalPointer()
         # else:
         # index = QModelIndex()
-        # item = self.mw.mdlOutline.rootItem
+        # item = self.editor_context.outline_model.rootItem
 
         # self.currentIndex = index
 
         if self.currentIndex.isValid():
             item = self.currentIndex.internalPointer()
         else:
-            item = self.mw.mdlOutline.rootItem
+            item = (
+                self.editor_context.outline_model.rootItem
+                if self.editor_context is not None
+                else self._model.rootItem
+            )
 
         self.updateTabTitle()
 
         def addTitle(itm):
             edt = MDEditView(self, html="<h{l}>{t}</h{l}>".format(l=min(itm.level() + 1, 5), t=itm.title()),
-                               autoResize=True)
+                               autoResize=True, settings=self.settings)
+            if self.editor_context.text_editor is not None:
+                edt.set_text_editor_context(
+                    self.editor_context.text_editor
+                )
             edt.setFrameShape(QFrame.NoFrame)
             self.txtEdits.append(edt)
             l.addWidget(edt)
@@ -194,9 +220,14 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             edt = MDEditView(self,
                                index=itm.index(),
                                spellcheck=self.spellcheck,
-                               dict=SettingsManager().dict,
+                               dict=self.settings.dict,
                                highlighting=True,
-                               autoResize=True)
+                               autoResize=True,
+                               settings=self.settings)
+            if self.editor_context.text_editor is not None:
+                edt.set_text_editor_context(
+                    self.editor_context.text_editor
+                )
             edt.setFrameShape(QFrame.NoFrame)
             edt.setStatusTip("{}".format(itm.path()))
             self.toggledSpellcheck.connect(edt.toggleSpellcheck, AUC)
@@ -242,7 +273,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             w = QWidget()
             w.setObjectName("editorWidgetFolderText")
             l = QVBoxLayout(w)
-            opt = SettingsManager().textEditor
+            opt = self.settings.textEditor
             background = (opt["background"] if not opt["backgroundTransparent"]
                           else "transparent")
             w.setStyleSheet("background: {};".format(background))
@@ -264,24 +295,45 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.corkView.setModel(self._model)
             self.corkView.setRootIndex(self.currentIndex)
             try:
-                self.corkView.selectionModel().selectionChanged.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.corkView.clicked.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.corkView.clicked.connect(mainWindow().mainEditor.updateTargets, AUC)
+                selection_changed = self.outline_context.selection_changed
+                if selection_changed is not None:
+                    self.corkView.selectionModel().selectionChanged.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                    self.corkView.clicked.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                if self.main_editor is not None:
+                    self.corkView.clicked.connect(
+                        self.main_editor.updateTargets,
+                        AUC,
+                    )
             except TypeError:
                 pass
 
         elif item and item.isFolder() and self.folderView == "outline":
             self.stack.setCurrentIndex(3)
-            self.outlineView.setModelCharacters(mainWindow().mdlCharacter)
-            self.outlineView.setModelLabels(mainWindow().mdlLabels)
-            self.outlineView.setModelStatus(mainWindow().mdlStatus)
             self.outlineView.setModel(self._model)
             self.outlineView.setRootIndex(self.currentIndex)
 
             try:
-                self.outlineView.selectionModel().selectionChanged.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.outlineView.clicked.connect(mainWindow().redacMetadata.selectionChanged, AUC)
-                self.outlineView.clicked.connect(mainWindow().mainEditor.updateTargets, AUC)
+                selection_changed = self.outline_context.selection_changed
+                if selection_changed is not None:
+                    self.outlineView.selectionModel().selectionChanged.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                    self.outlineView.clicked.connect(
+                        selection_changed,
+                        AUC,
+                    )
+                if self.main_editor is not None:
+                    self.outlineView.clicked.connect(
+                        self.main_editor.updateTargets,
+                        AUC,
+                    )
             except TypeError:
                 pass
 
@@ -331,7 +383,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                 # should be re-evaluated to match the desired behaviour.
                 raise NotImplementedError("implement tab closing")
 
-            # FIXME: selection in self.mw.treeRedacOutline is not updated
+            # FIXME: selection in the main outline tree is not updated
             #        but we cannot simply setCurrentIndex through treeRedacOutline
             #        because this might be a tab in the background / out of focus
             #        Also the UI of mainEditor is not updated (so the folder icons
@@ -379,14 +431,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.updateIndexFromID(fallback=parent, ignore=self.currentIndex.internalPointer())
 
     def updateStatusBar(self):
-        # Update progress
-        # if self.currentIndex and self.currentIndex.isValid():
-        # if self._model:
-        mw = mainWindow()
-        if not mw:
-            return
-
-        mw.mainEditor.tabChanged()
+        if self.main_editor is not None:
+            self.main_editor.tabChanged()
 
     def toggleSpellcheck(self, v):
         self.spellcheck = v
@@ -397,7 +443,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.dictChanged.emit(dct)
 
     ###############################################################################
-    # FUNCTIONS FOR MENU ACCESS
+    # DOCUMENT COMMAND ROUTING
     ###############################################################################
 
     def getCurrentItemView(self):
@@ -416,22 +462,14 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         else:
             return None
 
-    def copy(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().copy()
-    def cut(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().cut()
-    def paste(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().paste()
-    def rename(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().rename()
-    def duplicate(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().duplicate()
-    def delete(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().delete()
-    def moveUp(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().moveUp()
-    def moveDown(self):
-        if self.getCurrentItemView(): self.getCurrentItemView().moveDown()
+    def document_command_target(self, command):
+        if command in {
+            DocumentCommand.SPLIT_DIALOG,
+            DocumentCommand.SPLIT_CURSOR,
+            DocumentCommand.MERGE,
+        }:
+            return self
+        return self.getCurrentItemView()
 
     def splitDialog(self):
         """
@@ -445,7 +483,12 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             sel = self.txtRedacText.textCursor().selectedText()
             # selectedText uses \u2029 instead of \n, no idea why.
             sel = sel.replace("\u2029", "\n")
-            splitDialog(self, [self.currentIndex], mark=sel)
+            open_split_dialog(
+                self,
+                [self.currentIndex],
+                self.editor_context.outline_model.rootItem,
+                mark=sel,
+            )
 
         elif self.getCurrentItemView():
             # One of the views

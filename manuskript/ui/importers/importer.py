@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import json
 import os
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QBrush, QColor, QIcon
-from PyQt5.QtWidgets import QWidget, QFileDialog, QMessageBox, QStyle
+from PyQt5.QtWidgets import QWidget, QFileDialog, QStyle
 
-from manuskript.functions import writablePath, appPath, openURL, statusMessage
+from manuskript.functions import openURL
 from manuskript.ui.importers.importer_ui import Ui_importer
 from manuskript.ui.importers.generalSettings import generalSettings
 from manuskript.ui import style
@@ -15,6 +14,9 @@ from manuskript import importer
 from manuskript.models import outlineModel, outlineItem
 from manuskript.enums import Outline
 from manuskript.exporter.pandoc import pandocExporter
+from manuskript.ui.editors.editor_context import EditorContext
+from manuskript.ui.views.outline_colors import OutlineColorResolver
+from manuskript.ui.views.outline_context import OutlineViewContext
 
 class importerDialog(QWidget, Ui_importer):
 
@@ -30,12 +32,12 @@ class importerDialog(QWidget, Ui_importer):
         ".html": "text-html",
         }
 
-    def __init__(self, parent=None, mw=None):
+    def __init__(self, context, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
 
         # Var
-        self.mw = mw
+        self.context = context
         self.settingsWidget = None
         self.fileName = ""
         self.setStyleSheet(style.mainWindowSS())
@@ -194,7 +196,7 @@ class importerDialog(QWidget, Ui_importer):
         self.grpSettings.setEnabled(True)
         self.grpPreview.setEnabled(True)
 
-        self.settingsWidget = generalSettings()
+        self.settingsWidget = generalSettings(self.context)
         #TODO: custom format widget to match exporter visuals?
         self.settingsWidget = F.settingsWidget(self.settingsWidget)
 
@@ -230,15 +232,42 @@ class importerDialog(QWidget, Ui_importer):
             return
 
         # Creating a temporary outlineModel
-        previewModel = outlineModel(self)
+        previewModel = outlineModel(
+            self,
+            settings=self.context.settings,
+        )
         previewModel.loadFromXML(
-            self.mw.mdlOutline.saveToXML(),
+            self.context.outline_model.saveToXML(),
             fromString=True)
 
         # Inserting elements
         result = self.startImport(previewModel)
 
         if result:
+            outline_view_context = OutlineViewContext(
+                character_model=self.context.character_model,
+                label_model=self.context.label_model,
+                status_model=self.context.status_model,
+                settings=self.context.settings,
+                color_resolver=OutlineColorResolver(
+                    self.context.character_model,
+                    self.context.label_model,
+                ),
+                open_index=self.tree.setCurrentIndex,
+                open_indexes=lambda indexes: (
+                    self.tree.setCurrentIndex(indexes[0])
+                    if indexes
+                    else None
+                ),
+                show_status=self.context.show_status,
+            )
+            self.editor.set_context(
+                EditorContext(
+                    outline_model=previewModel,
+                    outline_tree=self.tree,
+                    outline_views=outline_view_context,
+                )
+            )
             self.tree.setModel(previewModel)
             for i in range(1, previewModel.columnCount()):
                 self.tree.hideColumn(i)
@@ -250,16 +279,16 @@ class importerDialog(QWidget, Ui_importer):
         """
         Called by the Import button.
         """
-        self.startImport(self.mw.mdlOutline)
+        self.startImport(self.context.outline_model)
 
         # Signal every views that important model changes have happened.
-        self.mw.mdlOutline.layoutChanged.emit()
+        self.context.outline_model.layoutChanged.emit()
 
         # I'm getting segfault over this message sometimes...
         # Using status bar message instead...
         #QMessageBox.information(self, self.tr("Import status"),
                                 #self.tr("Import Complete."))
-        statusMessage("Import complete!", 5000)
+        self.context.show_status("Import complete!", 5000)
 
         self.close()
 

@@ -11,6 +11,7 @@ def test_general(MWSampleProject):
     # Loading from mainWindow
     MW.actSettings.triggered.emit()
     assert MW.sw.isVisible()
+    assert MW.sw.settings is MW.settingsManager
     MW.sw.close()
     MW.actLabels.triggered.emit()
     assert MW.sw.isVisible()

@@ -17,9 +17,8 @@ from PyQt5.QtCore import Qt, QModelIndex
 from PyQt5.QtGui import QColor, QStandardItem
 from PyQt5.QtWidgets import QListWidgetItem
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, World, Plot, PlotStep, Outline
-from manuskript.functions import mainWindow, iconColor, iconFromColorString
+from manuskript.functions import iconColor, iconFromColorString
 from manuskript.converters import HTML2PlainText
 from lxml import etree as ET
 
@@ -95,7 +94,7 @@ def slugify(name):
     return newName
 
 
-def saveProject(zip=None):
+def saveProject(mw, zip=None):
     """
     Saves the project. If zip is False, the project is saved as a multitude of plain-text files for the most parts
     and some XML or zip? for settings and stuff.
@@ -106,7 +105,7 @@ def saveProject(zip=None):
     @return: True if successful, False otherwise.
     """
     if zip == None:
-        zip = SettingsManager().saveToZip
+        zip = mw.settingsManager.saveToZip
 
     LOGGER.info("Saving to: %s", "zip" if zip else "folder")
 
@@ -117,8 +116,6 @@ def saveProject(zip=None):
     # List of files to be moved
     moves = []
 
-    # MainWindow interaction things.
-    mw = mainWindow()
     project = mw.currentProject
 
     # Sanity check (see PR-583): make sure we actually have a current project.
@@ -262,7 +259,7 @@ def saveProject(zip=None):
     removes += r
 
     # Writes revisions (if asked for)
-    if SettingsManager().revisions["keep"]:
+    if mw.settingsManager.revisions["keep"]:
         files.append(("revisions.xml", mdl.saveToXML()))
 
     ####################################################################################################################
@@ -299,7 +296,7 @@ def saveProject(zip=None):
     # Maybe include them only if zipped?
     # Well, for now, we keep them here...
 
-    files.append(("settings.txt", SettingsManager().save(protocol=0)))
+    files.append(("settings.txt", mw.settingsManager.save(protocol=0)))
 
     # We check if the file exist and we have write access. If the file does
     # not exist, we check the parent folder, because it might be a new project.
@@ -638,7 +635,7 @@ def outlineToMMD(item):
 # LOAD
 ########################################################################################################################
 
-def loadProject(project, zip=None):
+def loadProject(project, mw, zip=None):
     """
     Loads a project.
     @param project: the filename of the project to open.
@@ -646,7 +643,6 @@ def loadProject(project, zip=None):
     @return: an array of errors, empty if None.
     """
 
-    mw = mainWindow()
     errors = list()
     filesWithPermissionErrors = list()
 
@@ -716,13 +712,13 @@ def loadProject(project, zip=None):
     # Settings
 
     if "settings.txt" in files:
-        SettingsManager().load(files["settings.txt"], fromString=True, protocol=0)
+        mw.settingsManager.load(files["settings.txt"], fromString=True, protocol=0)
     else:
         errors.append("settings.txt")
 
     # Just to be sure
-    SettingsManager().saveToZip = True if zip else False
-    SettingsManager().defaultTextType = "md"
+    mw.settingsManager.saveToZip = True if zip else False
+    mw.settingsManager.defaultTextType = "md"
 
     ####################################################################################################################
     # Labels

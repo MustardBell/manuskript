@@ -56,9 +56,16 @@ class SettingsManager:
     def __init__(self):
         if SettingsManager._initialized:
             return
+        self._default_cursor_flash_time = None
         self._initialize_from_defaults()
         self.initDefaultValues()
         SettingsManager._initialized = True
+
+    def configure_cursor_flash_time(self, default_value):
+        """Inject a callable returning the platform's cursor flash interval."""
+        if not callable(default_value):
+            raise TypeError("default cursor flash time must be callable")
+        self._default_cursor_flash_time = default_value
 
     def save(self, filename=None, protocol=None):
         """Save the current settings as JSON.
@@ -197,10 +204,8 @@ class SettingsManager:
         """
         if self.textEditor.get("cursorNotBlinking", False):
             qApp.setCursorFlashTime(0)
-        else:
-            from manuskript.functions import mainWindow
-            if mainWindow():
-                qApp.setCursorFlashTime(mainWindow()._defaultCursorFlashTime)
+        elif self._default_cursor_flash_time is not None:
+            qApp.setCursorFlashTime(self._default_cursor_flash_time())
 
     def reset_to_defaults(self):
         """Reset active settings to independent copies of their defaults."""

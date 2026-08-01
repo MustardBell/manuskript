@@ -5,7 +5,6 @@ from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QTreeView, QAction
 
 from manuskript.enums import Outline
-from manuskript.functions import mainWindow
 from manuskript.ui.views.dndView import dndView
 from manuskript.ui.views.outlineBasics import outlineBasics
 from manuskript.ui.views.treeDelegates import treeTitleDelegate
@@ -18,6 +17,15 @@ class treeView(QTreeView, dndView, outlineBasics):
         outlineBasics.__init__(self, parent)
         self._indexesToOpen = None
 
+    def set_outline_context(self, context):
+        outlineBasics.set_outline_context(self, context)
+        if hasattr(self, "titleDelegate"):
+            self.titleDelegate.set_color_resolver(
+                context.color_resolver if context is not None else None
+            )
+            if context is not None:
+                self.titleDelegate.set_settings(context.settings)
+
     def setModel(self, model):
         QTreeView.setModel(self, model)
 
@@ -28,7 +36,16 @@ class treeView(QTreeView, dndView, outlineBasics):
         self.showColumn(Outline.title)
 
         # Setting delegate
-        self.titleDelegate = treeTitleDelegate()
+        color_resolver = (
+            self.outline_context.color_resolver
+            if self.outline_context is not None
+            else None
+        )
+        self.titleDelegate = treeTitleDelegate(
+            self,
+            color_resolver=color_resolver,
+            settings=self.settings,
+        )
         self.setItemDelegateForColumn(Outline.title, self.titleDelegate)
 
     def makePopupMenu(self):

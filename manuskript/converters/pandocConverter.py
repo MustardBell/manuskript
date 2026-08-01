@@ -4,12 +4,11 @@ import os
 import shutil
 import subprocess
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import qApp, QMessageBox
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtWidgets import qApp
 from PyQt5.QtGui import QCursor
 
-from manuskript.converters import abstractConverter
-from manuskript.functions import mainWindow, safeTranslate
+from manuskript.converters.abstractConverter import abstractConverter
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -20,30 +19,32 @@ class pandocConverter(abstractConverter):
     cmd = "pandoc"
 
     @classmethod
-    def isValid(self):
-        if self.path() != None:
+    def isValid(cls):
+        if cls.path() is not None:
             return 2
-        elif self.customPath() and os.path.exists(self.customPath):
+        custom_path = cls.customPath()
+        if custom_path and os.path.exists(custom_path):
             return 1
-        else:
-            return 0
+        return 0
 
     @classmethod
-    def customPath(self):
+    def customPath(cls):
         settings = QSettings()
-        return settings.value("Exporters/{}_customPath".format(self.name), "")
+        return settings.value("Exporters/{}_customPath".format(cls.name), "")
 
     @classmethod
-    def path(self):
-        return shutil.which(self.cmd)
+    def path(cls):
+        return shutil.which(cls.cmd)
 
     @classmethod
-    def convert(self, src, _from="markdown", to="html", args=None, outputfile=None):
-        if not self.isValid:
+    def convert(
+            cls, src, _from="markdown", to="html", args=None,
+            outputfile=None, on_error=None):
+        if not cls.isValid():
             LOGGER.error("pandocConverter is called but not valid.")
             return ""
 
-        cmd = [self.runCmd()]
+        cmd = [cls.runCmd()]
 
         cmd += ["--from={}".format(_from)]
         cmd += ["--to={}".format(to)]
@@ -55,33 +56,35 @@ class pandocConverter(abstractConverter):
             cmd.append("--output={}".format(outputfile))
 
         qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
 
-        p = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+            if not isinstance(src, bytes):
+                src = src.encode("utf-8")
 
-        if not type(src) == bytes:
-            src = src.encode("utf-8")  # assumes utf-8
-
-        stdout, stderr = p.communicate(src)
-
-        qApp.restoreOverrideCursor()
+            stdout, stderr = process.communicate(src)
+        finally:
+            qApp.restoreOverrideCursor()
 
         if stderr:
-            err = stderr.decode("utf-8")
+            err = stderr.decode("utf-8", errors="replace")
             LOGGER.error(err)
-            QMessageBox.critical(mainWindow().dialog,
-                                 safeTranslate(qApp, "Export", "Error"), err)
+            if on_error is not None:
+                on_error(err)
             return None
 
         return stdout.decode("utf-8")
 
     @classmethod
-    def runCmd(self):
-        if self.isValid() == 2:
-            return self.cmd
-        elif self.isValid() == 1:
-            return self.customPath
+    def runCmd(cls):
+        validity = cls.isValid()
+        if validity == 2:
+            return cls.cmd
+        if validity == 1:
+            return cls.customPath()
+        return None

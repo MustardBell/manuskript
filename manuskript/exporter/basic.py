@@ -7,9 +7,6 @@ import subprocess
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QWidget
 
-from manuskript.models import outlineItem
-from manuskript.functions import mainWindow
-
 import logging
 LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +21,8 @@ class basicExporter:
     absentTip = ""  # A tip displayed when exporter is absent.
     absentURL = ""  # URL to open if exporter is absent.
 
-    def __init__(self):
+    def __init__(self, context=None):
+        self.context = context
         settings = QSettings()
         self.customPath = settings.value("Exporters/{}_customPath".format(self.name), "")
 
@@ -90,51 +88,53 @@ class basicFormat:
     }
     icon = ""
 
-    def __init__(self, name, description="", icon=""):
-        self.name = name
-        self.description = description
-        self.icon = icon
+    def __init__(
+        self,
+        name=None,
+        description=None,
+        icon=None,
+        context=None,
+    ):
+        self.context = context
+        if name is not None:
+            self.name = name
+        if description is not None:
+            self.description = description
+        if icon is not None:
+            self.icon = icon
 
-    @classmethod
-    def settingsWidget(cls):
+    def settingsWidget(self):
         return QWidget()
 
-    @classmethod
-    def previewWidget(cls):
+    def previewWidget(self):
         return QWidget()
 
-    @classmethod
-    def preview(cls, settingsWidget, previewWidget):
+    def preview(self, settingsWidget, previewWidget):
         pass
 
-    @classmethod
-    def export(cls, settingsWidget):
+    def export(self, settingsWidget):
         pass
 
-    @classmethod
-    def shortcodes(cls):
+    def shortcodes(self):
         return [
             ("\n", "\\n")
         ]
 
-    @classmethod
-    def escapes(cls, text):
-        for A, B in cls.shortcodes():
+    def escapes(self, text):
+        for A, B in self.shortcodes():
             text = text.replace(A, B)
         return text
 
-    @classmethod
-    def descapes(cls, text):
+    def descapes(self, text):
         """How do we call that?"""
-        for A, B in cls.shortcodes():
+        for A, B in self.shortcodes():
             text = text.replace(B, A)
         return text
 
-    @classmethod
-    def isValid(cls):
+    def isValid(self):
         return True
 
-    @classmethod
-    def projectPath(cls):
-        return os.path.dirname(os.path.abspath(mainWindow().currentProject))
-
+    def projectPath(self):
+        if self.context is None:
+            raise RuntimeError("Export context has not been configured.")
+        return self.context.project_path

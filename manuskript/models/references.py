@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
-import re
-
 import logging
+import re
+from dataclasses import dataclass
+from typing import Callable, Optional
+
 LOGGER = logging.getLogger(__name__)
 
 ###############################################################################
@@ -19,7 +21,7 @@ from manuskript.enums import Outline
 from manuskript.enums import Character
 from manuskript.enums import Plot
 from manuskript.enums import PlotStep
-from manuskript.functions import mainWindow, mixColors, safeTranslate
+from manuskript.functions import mixColors, safeTranslate
 from manuskript.ui import style as S
 
 
@@ -39,6 +41,83 @@ TextHighlightColor = QColor(mixColors(QColor(Qt.blue).name(), S.window, .3))
 CharacterHighlightColor = QColor(mixColors(QColor(Qt.yellow).name(), S.window, .3))
 PlotHighlightColor = QColor(mixColors(QColor(Qt.red).name(), S.window, .3))
 WorldHighlightColor = QColor(mixColors(QColor(Qt.green).name(), S.window, .3))
+
+
+@dataclass(frozen=True)
+class ReferenceModels:
+    """Project models used to resolve and describe references."""
+
+    outline: object
+    characters: object
+    plots: object
+    world: object
+    statuses: object
+    labels: object
+
+
+@dataclass(frozen=True)
+class ReferenceNavigation:
+    """UI actions available to reference navigation."""
+
+    open_character: Callable[[str], bool]
+    open_text: Callable[[str], bool]
+    open_plot: Callable[[str], bool]
+    open_world: Callable[[str], bool]
+
+
+class ReferenceService:
+    """Resolve project references without consulting application globals."""
+
+    def __init__(
+        self,
+        models: ReferenceModels,
+        navigation: Optional[ReferenceNavigation] = None,
+    ):
+        self.models = models
+        self.navigation = navigation
+
+    def infos(self, ref):
+        return infos(ref, self.models)
+
+    def short_infos(self, ref):
+        return shortInfos(ref, self.models)
+
+    def title(self, ref):
+        return title(ref, self.models)
+
+    def reference_type(self, ref):
+        return type(ref, self.models)
+
+    def reference_id(self, ref):
+        return ID(ref, self.models)
+
+    def tooltip(self, ref):
+        return tooltip(ref, self.models)
+
+    def to_link(self, ref):
+        return refToLink(ref, self.models)
+
+    def linkify_all(self, text):
+        return linkifyAllRefs(text, self.models)
+
+    def find_references_to(self, ref, parent=None, recursive=True):
+        return findReferencesTo(
+            ref,
+            self.models,
+            parent=parent,
+            recursive=recursive,
+        )
+
+    def list_references(self, ref, title=None):
+        return listReferences(ref, self.models, title=title)
+
+    def basic_format(self, text):
+        return basicFormat(text, self.models)
+
+    def open(self, ref):
+        if self.navigation is None:
+            raise RuntimeError("Reference navigation has not been configured.")
+        return open(ref, self.navigation)
 
 
 def plotReference(ID, searchable=False):
@@ -81,7 +160,7 @@ def worldReference(ID, searchable=False):
 # READABLE INFOS
 ###############################################################################
 
-def infos(ref):
+def infos(ref, models):
     """Returns a full paragraph in HTML format
     containing detailed infos about the reference ``ref``.
     """
@@ -94,7 +173,7 @@ def infos(ref):
 
     # A text or outline item
     if _type == TextLetter:
-        m = mainWindow().mdlOutline
+        m = models.outline
         idx = m.getIndexByID(_ref)
 
         if not idx.isValid():
@@ -117,19 +196,19 @@ def infos(ref):
         if item.POV():
             POV = "<a href='{ref}'>{text}</a>".format(
                     ref=characterReference(item.POV()),
-                    text=mainWindow().mdlCharacter.getCharacterByID(item.POV()).name())
+                    text=models.characters.getCharacterByID(item.POV()).name())
 
         # The status of the scene
         status = item.status()
         if status:
-            status = mainWindow().mdlStatus.item(int(status), 0).text()
+            status = models.statuses.item(int(status), 0).text()
         else:
             status = ""
 
         # The label of the scene
         label = item.label()
         if label:
-            label = mainWindow().mdlLabels.item(int(label), 0).text()
+            label = models.labels.item(int(label), 0).text()
         else:
             label = ""
 
@@ -180,15 +259,15 @@ def infos(ref):
                         ls=ls.replace("\n", "<br>")) if ls.strip() else "",
                 notes="<p><b>{notesTitle}</b><br>{notes}</p>".format(
                         notesTitle=notesTitle,
-                        notes=linkifyAllRefs(notes)) if notes.strip() else "",
-                references=listReferences(ref)
+                        notes=linkifyAllRefs(notes, models)) if notes.strip() else "",
+                references=listReferences(ref, models)
         )
 
         return text
 
     # A character
     elif _type == CharacterLetter:
-        m = mainWindow().mdlCharacter
+        m = models.characters
         c = m.getCharacterByID(int(_ref))
         if c == None:
             return safeTranslate(qApp, "references", "Unknown reference: {}.").format(ref)
@@ -204,7 +283,7 @@ def infos(ref):
 
         # Goto (link)
         goto = safeTranslate(qApp, "references", "Go to {}.")
-        goto = goto.format(refToLink(ref))
+        goto = goto.format(refToLink(ref, models))
 
         # basic infos
         basic = []
@@ -235,7 +314,7 @@ def infos(ref):
         detailed = "<br>".join(detailed)
 
         # list scenes of which it is POV
-        oM = mainWindow().mdlOutline
+        oM = models.outline
         lst = oM.findItemsByPOV(_ref)
 
         listPOV = ""
@@ -263,13 +342,13 @@ def infos(ref):
                 POV="<h2>{POVof}</h2><ul>{listPOV}</ul>".format(
                         POVof=POVof,
                         listPOV=listPOV) if listPOV else "",
-                references=listReferences(ref)
+                references=listReferences(ref, models)
         )
         return text
 
     # A plot
     elif _type == PlotLetter:
-        m = mainWindow().mdlPlots
+        m = models.plots
         index = m.getIndexFromID(_ref)
         name = m.getPlotNameByID(_ref)
 
@@ -284,7 +363,7 @@ def infos(ref):
 
         # Goto (link)
         goto = safeTranslate(qApp, "references", "Go to {}.")
-        goto = goto.format(refToLink(ref))
+        goto = goto.format(refToLink(ref, models))
 
         # Description
         description = m.data(index.sibling(index.row(),
@@ -295,7 +374,7 @@ def infos(ref):
                                       Plot.result))
 
         # Characters
-        pM = mainWindow().mdlCharacter
+        pM = models.characters
         item = m.item(index.row(), Plot.characters)
         characters = ""
         if item:
@@ -345,13 +424,13 @@ def infos(ref):
                 steps="<h2>{title}</h2><ul>{steps}</ul>".format(
                         title=stepsTitle,
                         steps=steps) if steps else "",
-                references=listReferences(ref)
+                references=listReferences(ref, models)
         )
         return text
 
     # A World item
     elif _type == WorldLetter:
-        m = mainWindow().mdlWorld
+        m = models.world
         index = m.indexByID(_ref)
         name = m.name(index)
 
@@ -365,16 +444,16 @@ def infos(ref):
 
         # Goto (link)
         goto = safeTranslate(qApp, "references", "Go to {}.")
-        goto = goto.format(refToLink(ref))
+        goto = goto.format(refToLink(ref, models))
 
         # Description
-        description = basicFormat(m.description(index))
+        description = basicFormat(m.description(index), models)
 
         # Passion
-        passion = basicFormat(m.passion(index))
+        passion = basicFormat(m.passion(index), models)
 
         # Conflict
-        conflict = basicFormat(m.conflict(index))
+        conflict = basicFormat(m.conflict(index), models)
 
         text = """<h1>{name}</h1>
         {goto}
@@ -394,7 +473,7 @@ def infos(ref):
                 conflict="<h2>{title}</h2><ul>{lst}</ul>".format(
                         title=conflictTitle,
                         lst=conflict) if conflict else "",
-                references=listReferences(ref)
+                references=listReferences(ref, models)
         )
         return text
 
@@ -402,7 +481,7 @@ def infos(ref):
         return safeTranslate(qApp, "references", "Unknown reference: {}.").format(ref)
 
 
-def shortInfos(ref):
+def shortInfos(ref, models):
     """Returns infos about reference ``ref``.
     Returns -1 if ``ref`` is not a valid reference, and None if it is valid but unknown."""
     match = re.fullmatch(RegEx, ref)
@@ -419,7 +498,7 @@ def shortInfos(ref):
     if _type == TextLetter:
         _infos["type"] = TextLetter
 
-        m = mainWindow().mdlOutline
+        m = models.outline
         idx = m.getIndexByID(_ref)
 
         if not idx.isValid():
@@ -438,7 +517,7 @@ def shortInfos(ref):
     elif _type == CharacterLetter:
         _infos["type"] = CharacterLetter
 
-        m = mainWindow().mdlCharacter
+        m = models.characters
         c = m.getCharacterByID(_ref)
 
         if c:
@@ -448,7 +527,7 @@ def shortInfos(ref):
     elif _type == PlotLetter:
         _infos["type"] = PlotLetter
 
-        m = mainWindow().mdlPlots
+        m = models.plots
         name = m.getPlotNameByID(_ref)
         if name:
             _infos["title"] = name
@@ -456,7 +535,7 @@ def shortInfos(ref):
     elif _type == WorldLetter:
         _infos["type"] = WorldLetter
 
-        m = mainWindow().mdlWorld
+        m = models.world
         item = m.itemByID(_ref)
         if item:
             name = item.text()
@@ -468,27 +547,27 @@ def shortInfos(ref):
     return None
 
 
-def title(ref):
+def title(ref, models):
     """Returns a the title (or name) for the reference ``ref``."""
-    infos = shortInfos(ref)
+    infos = shortInfos(ref, models)
     if infos and infos != -1 and "title" in infos:
         return infos["title"]
     else:
         return None
 
-def type(ref):
-    infos = shortInfos(ref)
+def type(ref, models):
+    infos = shortInfos(ref, models)
     if infos and infos != -1:
         return infos["type"]
 
-def ID(ref):
-    infos = shortInfos(ref)
+def ID(ref, models):
+    infos = shortInfos(ref, models)
     if infos and infos != -1:
         return infos["ID"]
 
-def tooltip(ref):
+def tooltip(ref, models):
     """Returns a tooltip in HTML for the reference ``ref``."""
-    infos = shortInfos(ref)
+    infos = shortInfos(ref, models)
 
     if not infos:
         return safeTranslate(qApp, "references", "<b>Unknown reference:</b> {}.").format(ref)
@@ -520,7 +599,7 @@ def tooltip(ref):
 # FUNCTIONS
 ###############################################################################
 
-def refToLink(ref):
+def refToLink(ref, models):
     """Transforms the reference ``ref`` in a link displaying useful infos
     about that reference. For character, character's name. For text item,
     item's name, etc.
@@ -531,24 +610,24 @@ def refToLink(ref):
         _ref = match.group(2)
         text = ""
         if _type == TextLetter:
-            m = mainWindow().mdlOutline
+            m = models.outline
             idx = m.getIndexByID(_ref)
             if idx.isValid():
                 item = idx.internalPointer()
                 text = item.title()
 
         elif _type == CharacterLetter:
-            m = mainWindow().mdlCharacter
+            m = models.characters
             c = m.getCharacterByID(int(_ref))
             if c:
                 text = c.name()
 
         elif _type == PlotLetter:
-            m = mainWindow().mdlPlots
+            m = models.plots
             text = m.getPlotNameByID(_ref)
 
         elif _type == WorldLetter:
-            m = mainWindow().mdlWorld
+            m = models.world
             item = m.itemByID(_ref)
             if item:
                 text = item.text()
@@ -560,14 +639,14 @@ def refToLink(ref):
         else:
             return ref
 
-def linkifyAllRefs(text):
+def linkifyAllRefs(text, models):
     """Takes all the references in ``text`` and transform them into HMTL links."""
-    return re.sub(RegEx, lambda m: refToLink(m.group(0)), text)
+    return re.sub(RegEx, lambda m: refToLink(m.group(0), models), text)
 
-def findReferencesTo(ref, parent=None, recursive=True):
+def findReferencesTo(ref, models, parent=None, recursive=True):
     """List of text items containing references ref, and returns IDs.
     Starts from item parent. If None, starts from root."""
-    oM = mainWindow().mdlOutline
+    oM = models.outline
 
     if parent == None:
         parent = oM.rootItem
@@ -584,11 +663,13 @@ def findReferencesTo(ref, parent=None, recursive=True):
 
     return lst
 
-def listReferences(ref, title=safeTranslate(qApp, "references", "Referenced in:")):
-    oM = mainWindow().mdlOutline
+def listReferences(ref, models, title=None):
+    if title is None:
+        title = safeTranslate(qApp, "references", "Referenced in:")
+    oM = models.outline
     listRefs = ""
 
-    lst = findReferencesTo(ref)
+    lst = findReferencesTo(ref, models)
 
     for t in lst:
         idx = oM.getIndexByID(t)
@@ -600,14 +681,14 @@ def listReferences(ref, title=safeTranslate(qApp, "references", "Referenced in:"
             title=title,
             ref=listRefs) if listRefs else ""
 
-def basicFormat(text):
+def basicFormat(text, models):
     if not text:
         return ""
     text = text.replace("\n", "<br>")
-    text = linkifyAllRefs(text)
+    text = linkifyAllRefs(text, models)
     return text
 
-def open(ref):
+def open(ref, navigation):
     """Identify ``ref`` and open it."""
     match = re.fullmatch(RegEx, ref)
     if not match:
@@ -617,49 +698,28 @@ def open(ref):
     _ref = match.group(2)
 
     if _type == CharacterLetter:
-        mw = mainWindow()
-        item = mw.lstCharacters.getItemByID(_ref)
-
-        if item:
-            mw.tabMain.setCurrentIndex(mw.TabPersos)
-            mw.lstCharacters.setCurrentItem(item)
+        if navigation.open_character(_ref):
             return True
 
         LOGGER.error("Character reference {} not found.".format(ref))
         return False
 
     elif _type == TextLetter:
-        mw = mainWindow()
-        index = mw.mdlOutline.getIndexByID(_ref)
-
-        if index.isValid():
-            mw.tabMain.setCurrentIndex(mw.TabRedac)
-            mw.mainEditor.setCurrentModelIndex(index, newTab=True)
+        if navigation.open_text(_ref):
             return True
         else:
             LOGGER.error("Text reference {} not found.".format(ref))
             return False
 
     elif _type == PlotLetter:
-        mw = mainWindow()
-        item = mw.lstPlots.getItemByID(_ref)
-
-        if item:
-            mw.tabMain.setCurrentIndex(mw.TabPlots)
-            mw.lstPlots.setCurrentItem(item)
+        if navigation.open_plot(_ref):
             return True
 
         LOGGER.error("Plot reference {} not found.".format(ref))
         return False
 
     elif _type == WorldLetter:
-        mw = mainWindow()
-        item = mw.mdlWorld.itemByID(_ref)
-
-        if item:
-            mw.tabMain.setCurrentIndex(mw.TabWorld)
-            mw.treeWorld.setCurrentIndex(
-                    mw.mdlWorld.indexFromItem(item))
+        if navigation.open_world(_ref):
             return True
 
         LOGGER.error("World reference {} not found.".format(ref))
