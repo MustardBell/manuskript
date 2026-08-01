@@ -15,14 +15,20 @@ class manuskriptExporter(basicExporter):
 
     name = "Manuskript"
     description = safeTranslate(qApp, "Export", "Default exporter, provides basic formats used by other exporters.")
-    exportTo = [
-        plainText(),
-        markdown(),
-        HTML(),
-        basicFormat("OPML", icon="text-x-opml+xml")
-    ]
     icon = appPath(os.path.join("icons", "Manuskript", "icon-256px.png"))
 
-    @classmethod
-    def isValid(cls):
+    def __init__(self, context):
+        super().__init__(context)
+        self.exportTo = [
+            plainText(context),
+            markdown(context),
+            HTML(context),
+            basicFormat(
+                "OPML",
+                icon="text-x-opml+xml",
+                context=context,
+            ),
+        ]
+
+    def isValid(self):
         return True

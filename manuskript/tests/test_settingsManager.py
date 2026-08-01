@@ -1,7 +1,7 @@
 import json
 import unittest
 from copy import deepcopy
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from manuskript import settings as default_settings
 from manuskript.settingsManager import SettingsManager
@@ -109,6 +109,24 @@ class TestSettingsManager(unittest.TestCase):
 
         self.assertEqual(default_settings.spellcheck, expected_spellcheck)
         self.assertEqual(default_settings.folderView, expected_folder_view)
+
+    def test_cursor_flash_time_uses_injected_platform_default(self):
+        original_provider = self.settings._default_cursor_flash_time
+        provider = MagicMock(return_value=875)
+        self.settings.textEditor["cursorNotBlinking"] = False
+        try:
+            self.settings.configure_cursor_flash_time(provider)
+            with patch("manuskript.settingsManager.qApp") as application:
+                self.settings.applyCursorFlashTime()
+        finally:
+            self.settings._default_cursor_flash_time = original_provider
+
+        provider.assert_called_once_with()
+        application.setCursorFlashTime.assert_called_once_with(875)
+
+    def test_cursor_flash_time_rejects_non_callable_default(self):
+        with self.assertRaisesRegex(TypeError, "must be callable"):
+            self.settings.configure_cursor_flash_time(875)
 
 
 if __name__ == '__main__':

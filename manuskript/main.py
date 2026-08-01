@@ -167,7 +167,8 @@ def prepare(arguments, tests=False):
 
     # Apply configurable tooltip styling
     from manuskript.settingsManager import SettingsManager
-    SettingsManager().applyTooltipStyle()
+    settings_manager = SettingsManager()
+    settings_manager.applyTooltipStyle()
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
@@ -181,7 +182,7 @@ def prepare(arguments, tests=False):
     # Main window
     from manuskript.mainWindow import MainWindow
 
-    MW = MainWindow()
+    MW = MainWindow(settings_manager)
     # We store the system default cursor flash time to be able to restore it
     # later if necessary
     MW._defaultCursorFlashTime = qApp.cursorFlashTime()
@@ -196,11 +197,7 @@ def prepare(arguments, tests=False):
 
     return app, MW
 
-def launch(arguments, app, MW = None):
-    if MW == None:
-        from manuskript.functions import mainWindow
-        MW = mainWindow()
-
+def launch(arguments, app, MW):
     MW.show()
 
     # Support for IPython Jupyter QT Console as a debugging aid.

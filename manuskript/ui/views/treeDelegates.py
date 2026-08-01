@@ -4,12 +4,11 @@ from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui import QColor, QPalette, QIcon, QFont, QFontMetrics
 from PyQt5.QtWidgets import QStyledItemDelegate, qApp, QStyleOptionViewItem, QStyle
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.functions import mixColors, colorifyPixmap
-from manuskript.functions import outlineItemColors
 from manuskript.functions import toFloat
 from manuskript.ui import style as S
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 
 
 class treeTitleDelegate(QStyledItemDelegate):
@@ -17,9 +16,18 @@ class treeTitleDelegate(QStyledItemDelegate):
     in the treeview with proper colors according to settings.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, color_resolver=None, settings=None):
         QStyledItemDelegate.__init__(self, parent)
         self._view = None
+        self.color_resolver = color_resolver or OutlineColorResolver()
+        self.settings = settings
+
+    def set_color_resolver(self, color_resolver):
+        self.color_resolver = color_resolver or OutlineColorResolver()
+
+    def set_settings(self, settings):
+        if settings is not None:
+            self.settings = settings
 
     def setView(self, view):
         self._view = view
@@ -27,7 +35,7 @@ class treeTitleDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
 
         item = index.internalPointer()
-        colors = outlineItemColors(item)
+        colors = self.color_resolver.colors_for(item)
 
         style = qApp.style()
 
@@ -40,9 +48,9 @@ class treeTitleDelegate(QStyledItemDelegate):
         # Background
         style.drawPrimitive(style.PE_PanelItemViewItem, opt, painter)
 
-        if SettingsManager().viewSettings["Tree"]["Background"] != "Nothing" and not opt.state & QStyle.State_Selected:
+        if self.settings.viewSettings["Tree"]["Background"] != "Nothing" and not opt.state & QStyle.State_Selected:
 
-            col = colors[SettingsManager().viewSettings["Tree"]["Background"]]
+            col = colors[self.settings.viewSettings["Tree"]["Background"]]
 
             if col != QColor(Qt.transparent):
                 col2 = QColor(S.window)
@@ -73,8 +81,8 @@ class treeTitleDelegate(QStyledItemDelegate):
             mode = QIcon.Selected
         state = QIcon.On if opt.state & QStyle.State_Open else QIcon.Off
         icon = opt.icon.pixmap(iconRect.size(), mode=mode, state=state)
-        if opt.icon and SettingsManager().viewSettings["Tree"]["Icon"] != "Nothing":
-            color = colors[SettingsManager().viewSettings["Tree"]["Icon"]]
+        if opt.icon and self.settings.viewSettings["Tree"]["Icon"] != "Nothing":
+            color = colors[self.settings.viewSettings["Tree"]["Icon"]]
             colorifyPixmap(icon, color)
         opt.icon = QIcon(icon)
         opt.icon.paint(painter, iconRect, opt.decorationAlignment, mode, state)
@@ -87,13 +95,13 @@ class treeTitleDelegate(QStyledItemDelegate):
                 col = QColor(S.highlightedText)
                 textColor = col
                 painter.setPen(col)
-            if SettingsManager().viewSettings["Tree"]["Text"] != "Nothing":
-                col = colors[SettingsManager().viewSettings["Tree"]["Text"]]
+            if self.settings.viewSettings["Tree"]["Text"] != "Nothing":
+                col = colors[self.settings.viewSettings["Tree"]["Text"]]
                 if col == Qt.transparent:
                     col = textColor
                 # If text color is Compile and item is selected, we have
                 # to change the color
-                if SettingsManager().viewSettings["Outline"]["Text"] == "Compile" and \
+                if self.settings.viewSettings["Outline"]["Text"] == "Compile" and \
                    not item.compile():
                     col = mixColors(textColor, QColor(S.window))
                 painter.setPen(col)
@@ -104,37 +112,37 @@ class treeTitleDelegate(QStyledItemDelegate):
             painter.drawText(textRect, Qt.AlignLeft | Qt.AlignVCenter, elidedText)
 
             extraText = ""
-            if item.isFolder() and SettingsManager().viewSettings["Tree"]["InfoFolder"] != "Nothing":
-                if SettingsManager().viewSettings["Tree"]["InfoFolder"] == "Count":
+            if item.isFolder() and self.settings.viewSettings["Tree"]["InfoFolder"] != "Nothing":
+                if self.settings.viewSettings["Tree"]["InfoFolder"] == "Count":
                     extraText = item.childCount()
                     extraText = " [{}]".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoFolder"] == "WC":
+                elif self.settings.viewSettings["Tree"]["InfoFolder"] == "WC":
                     extraText = item.wordCount()
                     extraText = " ({})".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoFolder"] == "CC":
+                elif self.settings.viewSettings["Tree"]["InfoFolder"] == "CC":
                     extraText = item.charCount()
                     extraText = " ({})".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoFolder"] == "Progress":
+                elif self.settings.viewSettings["Tree"]["InfoFolder"] == "Progress":
                     extraText = int(toFloat(item.data(Outline.goalPercentage)) * 100)
                     if extraText:
                         extraText = " ({}%)".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoFolder"] == "Summary":
+                elif self.settings.viewSettings["Tree"]["InfoFolder"] == "Summary":
                     extraText = item.data(Outline.summarySentence)
                     if extraText:
                         extraText = " - {}".format(extraText)
 
-            if item.isText() and SettingsManager().viewSettings["Tree"]["InfoText"] != "Nothing":
-                if SettingsManager().viewSettings["Tree"]["InfoText"] == "WC":
+            if item.isText() and self.settings.viewSettings["Tree"]["InfoText"] != "Nothing":
+                if self.settings.viewSettings["Tree"]["InfoText"] == "WC":
                     extraText = item.wordCount()
                     extraText = " ({})".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoText"] == "CC":
+                elif self.settings.viewSettings["Tree"]["InfoText"] == "CC":
                     extraText = item.charCount()
                     extraText = " ({})".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoText"] == "Progress":
+                elif self.settings.viewSettings["Tree"]["InfoText"] == "Progress":
                     extraText = int(toFloat(item.data(Outline.goalPercentage)) * 100)
                     if extraText:
                         extraText = " ({}%)".format(extraText)
-                elif SettingsManager().viewSettings["Tree"]["InfoText"] == "Summary":
+                elif self.settings.viewSettings["Tree"]["InfoText"] == "Summary":
                     extraText = item.data(Outline.summarySentence)
                     if extraText:
                         extraText = " - {}".format(extraText)

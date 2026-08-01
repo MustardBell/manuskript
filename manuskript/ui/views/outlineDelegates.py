@@ -5,16 +5,25 @@ from PyQt5.QtGui import QColor, QPalette, QIcon, QFont, QFontMetrics, QBrush
 from PyQt5.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QStyle, QComboBox, QStyleOptionComboBox
 from PyQt5.QtWidgets import qApp
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, Outline
-from manuskript.functions import outlineItemColors, mixColors, colorifyPixmap, toInt, toFloat, drawProgress
+from manuskript.functions import mixColors, colorifyPixmap, toInt, toFloat, drawProgress
 from manuskript.ui import style as S
+from manuskript.ui.views.outline_colors import OutlineColorResolver
 
 
 class outlineTitleDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, color_resolver=None, settings=None):
         QStyledItemDelegate.__init__(self, parent)
         self._view = None
+        self.color_resolver = color_resolver or OutlineColorResolver()
+        self.settings = settings
+
+    def set_color_resolver(self, color_resolver):
+        self.color_resolver = color_resolver or OutlineColorResolver()
+
+    def set_settings(self, settings):
+        if settings is not None:
+            self.settings = settings
 
     def setView(self, view):
         self._view = view
@@ -22,7 +31,7 @@ class outlineTitleDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
 
         item = index.internalPointer()
-        colors = outlineItemColors(item)
+        colors = self.color_resolver.colors_for(item)
 
         style = qApp.style()
 
@@ -35,9 +44,9 @@ class outlineTitleDelegate(QStyledItemDelegate):
         # Background
         style.drawPrimitive(style.PE_PanelItemViewItem, opt, painter)
 
-        if SettingsManager().viewSettings["Outline"]["Background"] != "Nothing" and not opt.state & QStyle.State_Selected:
+        if self.settings.viewSettings["Outline"]["Background"] != "Nothing" and not opt.state & QStyle.State_Selected:
 
-            col = colors[SettingsManager().viewSettings["Outline"]["Background"]]
+            col = colors[self.settings.viewSettings["Outline"]["Background"]]
 
             if col != QColor(Qt.transparent):
                 col2 = QColor(S.base)
@@ -68,8 +77,8 @@ class outlineTitleDelegate(QStyledItemDelegate):
             mode = QIcon.Selected
         state = QIcon.On if opt.state & QStyle.State_Open else QIcon.Off
         icon = opt.icon.pixmap(iconRect.size(), mode=mode, state=state)
-        if opt.icon and SettingsManager().viewSettings["Outline"]["Icon"] != "Nothing":
-            color = colors[SettingsManager().viewSettings["Outline"]["Icon"]]
+        if opt.icon and self.settings.viewSettings["Outline"]["Icon"] != "Nothing":
+            color = colors[self.settings.viewSettings["Outline"]["Icon"]]
             colorifyPixmap(icon, color)
         opt.icon = QIcon(icon)
         opt.icon.paint(painter, iconRect, opt.decorationAlignment, mode, state)
@@ -82,13 +91,13 @@ class outlineTitleDelegate(QStyledItemDelegate):
                 col = QColor(S.highlightedText)
                 textColor = col
                 painter.setPen(col)
-            if SettingsManager().viewSettings["Outline"]["Text"] != "Nothing":
-                col = colors[SettingsManager().viewSettings["Outline"]["Text"]]
+            if self.settings.viewSettings["Outline"]["Text"] != "Nothing":
+                col = colors[self.settings.viewSettings["Outline"]["Text"]]
                 if col == Qt.transparent:
                     col = textColor
                 # If text color is Compile and item is selected, we have
                 # to change the color
-                if SettingsManager().viewSettings["Outline"]["Text"] == "Compile" and \
+                if self.settings.viewSettings["Outline"]["Text"] == "Compile" and \
                    item.compile() in [0, "0"]:
                     col = mixColors(textColor, QColor(S.window))
                 painter.setPen(col)

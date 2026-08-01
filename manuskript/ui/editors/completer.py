@@ -4,7 +4,6 @@ from PyQt5.QtCore import pyqtSignal, Qt, QRect
 from PyQt5.QtGui import QBrush, QFontMetrics, QPalette, QColor
 from PyQt5.QtWidgets import QWidget, QListWidgetItem, QStyledItemDelegate, QStyle
 
-from manuskript.functions import mainWindow
 from manuskript.ui.editors.completer_ui import Ui_completer
 from manuskript.models import references as Ref
 from manuskript.ui import style as S
@@ -13,9 +12,10 @@ from manuskript.ui import style as S
 class completer(QWidget, Ui_completer):
     activated = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, data_provider=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self._data_provider = data_provider or (lambda: {})
         self.setWindowFlags(Qt.Popup)
         self.text.textChanged.connect(self.updateListFromData)
         self.text.returnPressed.connect(self.submit)
@@ -24,6 +24,9 @@ class completer(QWidget, Ui_completer):
         self.list.itemClicked.connect(self.submit)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.hide()
+
+    def setDataProvider(self, data_provider):
+        self._data_provider = data_provider or (lambda: {})
 
     def popup(self, completion=""):
         self.updateListFromData()
@@ -39,7 +42,7 @@ class completer(QWidget, Ui_completer):
         self.list.addItem(item)
 
     def updateListFromData(self):
-        data = mainWindow().cheatSheet.data
+        data = self._data_provider()
         self.list.clear()
         for cat in data:
             filtered = [i for i in data[cat] if self.text.text().lower() in i[0].lower()]

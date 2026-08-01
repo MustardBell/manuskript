@@ -1,15 +1,6 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
-import os
-import shutil
-import subprocess
-
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import qApp, QMessageBox
-from PyQt5.QtGui import QCursor
-
-from manuskript.converters import abstractConverter
-from manuskript.functions import mainWindow
+from manuskript.converters.abstractConverter import abstractConverter
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -28,12 +19,12 @@ class markdownConverter(abstractConverter):
     name = "python module markdown"
 
     @classmethod
-    def isValid(self):
+    def isValid(cls):
         return MD != None
 
     @classmethod
-    def convert(self, markdown):
-        if not self.isValid:
+    def convert(cls, markdown):
+        if not cls.isValid():
             LOGGER.error("markdownConverter is called but not valid.")
             return ""
 

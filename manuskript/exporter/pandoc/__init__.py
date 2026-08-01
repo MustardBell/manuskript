@@ -11,7 +11,7 @@ from manuskript.exporter.pandoc.HTML import HTML
 from manuskript.exporter.pandoc.PDF import PDF
 from manuskript.exporter.pandoc.outputFormats import ePub, OpenDocument, DocX
 from manuskript.exporter.pandoc.plainText import reST, markdown, latex, OPML
-from manuskript.functions import mainWindow, safeTranslate
+from manuskript.functions import safeTranslate
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -27,8 +27,8 @@ class pandocExporter(basicExporter):
     absentTip = "Install pandoc to benefit from a wide range of export formats (DocX, ePub, PDF, etc.)"
     absentURL = "http://pandoc.org/installing.html"
 
-    def __init__(self):
-        basicExporter.__init__(self)
+    def __init__(self, context=None):
+        basicExporter.__init__(self, context)
 
         self.exportTo = [
             markdown(self),
@@ -49,6 +49,37 @@ class pandocExporter(basicExporter):
         else:
             return ""
 
+    def metadata_arguments(self):
+        if self.context is None:
+            raise RuntimeError("Export context has not been configured.")
+
+        arguments = []
+        for _name, column, variable in [
+            ("Title", 0, "title"),
+            ("Subtitle", 1, "subtitle"),
+            ("Serie", 2, ""),
+            ("Volume", 3, ""),
+            ("Genre", 4, ""),
+            ("License", 5, ""),
+            ("Author", 6, "author"),
+            ("Email", 7, ""),
+        ]:
+            item = self.context.flat_data_model.item(0, column)
+            if variable and item and item.text().strip():
+                arguments.append(
+                    "--variable={}:{}".format(
+                        variable,
+                        item.text().strip(),
+                    )
+                )
+
+        title = "Untitled"
+        title_item = self.context.flat_data_model.item(0, 0)
+        if title_item and title_item.text().strip():
+            title = title_item.text().strip()
+        arguments.append("--metadata=title:{}".format(title))
+        return arguments
+
     def convert(self, src, args, outputfile=None):
         if self.isValid() == 2:
             run = self.cmd
@@ -58,45 +89,25 @@ class pandocExporter(basicExporter):
             LOGGER.error("No command for pandoc.")
             return None
         args = [run] + args
-
         if outputfile:
             args.append("--output={}".format(outputfile))
-
-        for name, col, var in [
-            ("Title", 0, "title"),
-            ("Subtitle", 1, "subtitle"),
-            ("Serie", 2, ""),
-            ("Volume", 3, ""),
-            ("Genre", 4, ""),
-            ("License", 5, ""),
-            ("Author", 6, "author"),
-            ("Email", 7, ""),
-            ]:
-            item = mainWindow().mdlFlatData.item(0, col)
-            if var and item and item.text().strip():
-                args.append("--variable={}:{}".format(var, item.text().strip()))
-
-        # Add title metadata required for pandoc >= 2.x
-        title = "Untitled"
-        if mainWindow().mdlFlatData.item(0, 0):
-            title = mainWindow().mdlFlatData.item(0, 0).text().strip()
-        args.append("--metadata=title:{}".format(title))
+        args.extend(self.metadata_arguments())
 
         qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
+        try:
+            p = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
 
-        p = subprocess.Popen(
-            args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+            if not type(src) == bytes:
+                src = src.encode("utf-8")  # assumes utf-8
 
-        if not type(src) == bytes:
-            src = src.encode("utf-8")  # assumes utf-8
-
-        stdout, stderr = p.communicate(src)
-
-        qApp.restoreOverrideCursor()
+            stdout, stderr = p.communicate(src)
+        finally:
+            qApp.restoreOverrideCursor()
 
         if stderr or p.returncode != 0:
             err_type = "ERROR" if p.returncode != 0 else "WARNING"
@@ -106,10 +117,13 @@ class pandocExporter(basicExporter):
                 + "Stderr content:\n" + stderr.decode("utf-8")
             if p.returncode != 0:
                 LOGGER.error(err)
-                QMessageBox.critical(mainWindow().dialog, safeTranslate(qApp, "Export", "Error"), err)
+                QMessageBox.critical(
+                    self.context.parent,
+                    safeTranslate(qApp, "Export", "Error"),
+                    err,
+                )
             else:
                 LOGGER.warning(err)
             return None
 
         return stdout.decode("utf-8")
-

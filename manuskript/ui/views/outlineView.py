@@ -3,7 +3,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTreeView, QHeaderView
 
-from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.ui.views.dndView import dndView
 from manuskript.ui.views.outlineBasics import outlineBasics
@@ -23,23 +22,34 @@ class outlineView(QTreeView, dndView, outlineBasics):
 
         self.header().setStretchLastSection(False)
 
-    def setModelCharacters(self, model):
-        # This is used by outlineCharacterDelegate to select character
-        self.modelCharacters = model
-
-    def setModelLabels(self, model):
-        # This is used by outlineLabelDelegate to display labels
-        self.modelLabels = model
-
-    def setModelStatus(self, model):
-        # This is used by outlineStatusDelegate to display statuses
-        self.modelStatus = model
+    def set_outline_context(self, context):
+        outlineBasics.set_outline_context(self, context)
+        if hasattr(self, "outlineTitleDelegate"):
+            self.outlineTitleDelegate.set_color_resolver(
+                context.color_resolver if context is not None else None
+            )
+            if context is not None:
+                self.outlineTitleDelegate.set_settings(context.settings)
+            self.outlineCharacterDelegate.mdlCharacter = (
+                self.modelCharacters
+            )
+            self.outlineStatusDelegate.mdlStatus = self.modelStatus
+            self.outlineLabelDelegate.mdlLabels = self.modelLabels
 
     def setModel(self, model):
         QTreeView.setModel(self, model)
 
         # Setting delegates
-        self.outlineTitleDelegate = outlineTitleDelegate(self)
+        color_resolver = (
+            self.outline_context.color_resolver
+            if self.outline_context is not None
+            else None
+        )
+        self.outlineTitleDelegate = outlineTitleDelegate(
+            self,
+            color_resolver=color_resolver,
+            settings=self.settings,
+        )
         # self.outlineTitleDelegate.setView(self)
         self.setItemDelegateForColumn(Outline.title, self.outlineTitleDelegate)
         self.outlineCharacterDelegate = outlineCharacterDelegate(self.modelCharacters)
@@ -72,7 +82,7 @@ class outlineView(QTreeView, dndView, outlineBasics):
 
         for c in range(self.model().columnCount()):
             self.hideColumn(c)
-        for c in SettingsManager().outlineViewColumns:
+        for c in self.settings.outlineViewColumns:
             self.showColumn(c)
 
     def setRootIndex(self, index):

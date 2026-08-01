@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 import re
+from copy import deepcopy
 
 from PyQt5.QtGui import QTextCharFormat, QFont
 from PyQt5.QtWidgets import qApp, QVBoxLayout, QCheckBox, QWidget, QHBoxLayout, QLabel, QSpinBox, QComboBox
@@ -23,6 +24,7 @@ class abstractPlainText(markdown):
     exportDefaultSuffix = ".SUBCLASSME"
 
     def __init__(self, exporter):
+        super().__init__(exporter.context)
         self.exporter = exporter
 
     def settingsWidget(self):
@@ -35,7 +37,13 @@ class abstractPlainText(markdown):
         else:
             majorVersion = ""
             minorVersion = ""
-        w = pandocSettings(self, majorVersion, minorVersion, toFormat=self.toFormat)
+        w = pandocSettings(
+            self,
+            self.context,
+            majorVersion,
+            minorVersion,
+            toFormat=self.toFormat,
+        )
         w.loadSettings()
         return w
 
@@ -231,12 +239,21 @@ class pandocSettings(markdownSettings):
     }
 
 
-    def __init__(self, _format, majorVersion="", minorVersion="", toFormat=None, parent=None):
-        markdownSettings.__init__(self, _format, parent)
+    def __init__(
+        self,
+        _format,
+        context,
+        majorVersion="",
+        minorVersion="",
+        toFormat=None,
+        parent=None,
+    ):
+        markdownSettings.__init__(self, _format, context, parent)
 
         self.format = toFormat
         self.majorVersion = majorVersion
         self.minorVersion = minorVersion
+        self.settingsList = deepcopy(type(self).settingsList)
 
         dropSettings = []
 
@@ -403,4 +420,3 @@ class pandocSettings(markdownSettings):
                 if rr:
                     r.append(rr+s.suffix)
         return r
-

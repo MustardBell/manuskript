@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import qApp, QMessageBox
 from manuskript.models import outlineItem
 from manuskript.enums import Outline
 from lxml import etree as ET
-from manuskript.functions import mainWindow, safeTranslate
+from manuskript.functions import safeTranslate
 from manuskript.importer.abstractImporter import abstractImporter
 from manuskript.converters import HTML2MD, HTML2PlainText
 
@@ -49,7 +49,20 @@ class mindMapImporter(abstractImporter):
         items = []
 
         if node != None:
-            items.extend(self.parseItems(node, parentItem))
+            def show_conversion_error(message):
+                QMessageBox.critical(
+                    settingsWidget,
+                    safeTranslate(qApp, "Import", "Conversion Error"),
+                    message,
+                )
+
+            items.extend(
+                self.parseItems(
+                    node,
+                    parentItem,
+                    on_conversion_error=show_conversion_error,
+                )
+            )
             ret = True
 
         if not ret:
@@ -81,7 +94,8 @@ class mindMapImporter(abstractImporter):
 
         return widget
 
-    def parseItems(self, underElement, parentItem=None):
+    def parseItems(
+            self, underElement, parentItem=None, on_conversion_error=None):
         items = []
 
         # Title
@@ -108,7 +122,10 @@ class mindMapImporter(abstractImporter):
         if content and content_type == "NODE":
             # Content is title
             # convert rich text title (in html) to plain text
-            title = HTML2PlainText(content) #.replace("\n", " ").strip()
+            title = HTML2PlainText(
+                content,
+                on_error=on_conversion_error,
+            )  # .replace("\n", " ").strip()
             # Count the number of lines
             lines = [l.strip() for l in title.split("\n") if l.strip()]
 
@@ -120,7 +137,7 @@ class mindMapImporter(abstractImporter):
 
         if content:
             # Set the note content as text value
-            content = HTML2MD(content)
+            content = HTML2MD(content, on_error=on_conversion_error)
             item.setData(Outline.notes, content)
 
         if url:
@@ -133,7 +150,13 @@ class mindMapImporter(abstractImporter):
         # Process children
         if children != None and len(children) > 0:
             for c in children:
-                items.extend(self.parseItems(c, item))
+                items.extend(
+                    self.parseItems(
+                        c,
+                        item,
+                        on_conversion_error=on_conversion_error,
+                    )
+                )
 
         # Process if no children
         elif self.getSetting("importTipAs").value() == "Text":

@@ -1,18 +1,32 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 from PyQt5.QtWidgets import QInputDialog
-from manuskript.functions import mainWindow
 
 
-class splitDialog(QInputDialog):
-    """
-    Opens a dialog to split indexes.
-    """
-    def __init__(self, parent, indexes, mark=None):
+def item_for_index(index, root_item):
+    if index.isValid():
+        return index.internalPointer()
+    return root_item
+
+
+def decode_split_mark(mark):
+    return mark.replace("\\n", "\n").replace("\\t", "\t")
+
+
+def split_items(indexes, root_item, mark):
+    for index in indexes:
+        item_for_index(index, root_item).split(mark)
+
+
+class SplitDialog(QInputDialog):
+    """Collect the mark used to split one or more outline items."""
+
+    def __init__(self, parent, indexes, root_item, mark=None):
         """
         @param parent:  a QWidget, for the dialog.
         @param indexes: a list of QModelIndex in the outlineModel
-        @param default: the default split mark
+        @param root_item: the project outline root for an invalid root index
+        @param mark: the default split mark
         """
         QInputDialog.__init__(self, parent)
 
@@ -43,28 +57,29 @@ class splitDialog(QInputDialog):
         if len(indexes) == 0:
             return
         if len(indexes) == 1:
-            idx =  indexes[0]
+            idx = indexes[0]
             self.setWindowTitle(
-                self.tr("Split '{}'").format(self.getItem(idx).title())
+                self.tr("Split '{}'").format(
+                    item_for_index(idx, root_item).title()
+                )
                 )
         else:
             self.setWindowTitle(self.tr("Split items"))
 
-        r = self.exec()
 
-        mark = self.textValue()
+def open_split_dialog(
+        parent, indexes, root_item, mark=None, dialog_type=SplitDialog):
+    """Collect a split mark and apply it to the requested outline items."""
+    if not indexes:
+        return False
 
-        if r and mark:
+    dialog = dialog_type(parent, indexes, root_item, mark)
+    if not dialog.exec():
+        return False
 
-            mark = mark.replace("\\n", "\n")
-            mark = mark.replace("\\t", "\t")
+    mark = dialog.textValue()
+    if not mark:
+        return False
 
-            for idx in indexes:
-                item = self.getItem(idx)
-                item.split(mark)
-
-    def getItem(self, index):
-        if index.isValid():
-            return index.internalPointer()
-        else:
-            return mainWindow().mdlOutline.rootItem
+    split_items(indexes, root_item, decode_split_mark(mark))
+    return True

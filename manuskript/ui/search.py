@@ -7,12 +7,9 @@ from PyQt5.QtGui import QPalette, QFontMetrics, QKeySequence
 from PyQt5.QtWidgets import QWidget, qApp, QListWidgetItem, QStyledItemDelegate, QStyle, QLabel, QToolTip, QShortcut
 
 
-from manuskript.functions import mainWindow
 from manuskript.ui import style
 from manuskript.ui.search_ui import Ui_search
-from manuskript.enums import Model
 
-from manuskript.models.flatDataModelWrapper import flatDataModelWrapper
 from manuskript.ui.searchMenu import searchMenu
 from manuskript.ui.highlighters.searchResultHighlighters.searchResultHighlighter import searchResultHighlighter
 import logging
@@ -42,6 +39,7 @@ class search(QWidget, Ui_search):
         self.searchTextInput.setStyleSheet(style.lineEditSS())
 
         self.searchResultHighlighter = searchResultHighlighter()
+        self._context = None
 
         self.noResultsLabel = QLabel(_translate("Search", "No results found"), self.result)
         self.noResultsLabel.setVisible(False)
@@ -55,6 +53,16 @@ class search(QWidget, Ui_search):
         # translation for them without ":"
         _translate("MainWindow", "Situation")
         _translate("MainWindow", "Status")
+
+    def setContext(self, context):
+        self._context = context
+        self.searchResultHighlighter.setContext(context.result_views)
+
+    def clearContext(self):
+        self._context = None
+        self.searchResultHighlighter.setContext(None)
+        self.result.clear()
+        self.noResultsLabel.hide()
 
     def nextSearchResult(self):
         if self.result.currentRow() < self.result.count() - 1:
@@ -121,31 +129,25 @@ class search(QWidget, Ui_search):
         self.result.setCurrentRow(0)
 
         searchText = self.searchTextInput.text()
-        if len(searchText) > 0:
+        if len(searchText) > 0 and self._context is not None:
             results = list()
             searchRegex = self.prepareRegex(searchText)
             if searchRegex is not None:
                 # Set override cursor
                 qApp.setOverrideCursor(Qt.WaitCursor)
+                try:
+                    for model, modelName in self._context.sources():
+                        filteredColumns = self.searchMenu.columns(modelName)
 
-                for model, modelName in [
-                    (mainWindow().mdlOutline, Model.Outline),
-                    (mainWindow().mdlCharacter, Model.Character),
-                    (flatDataModelWrapper(mainWindow().mdlFlatData), Model.FlatData),
-                    (mainWindow().mdlWorld, Model.World),
-                    (mainWindow().mdlPlots, Model.Plot)
-                ]:
-                    filteredColumns = self.searchMenu.columns(modelName)
+                        if len(filteredColumns):
+                            results += model.searchOccurrences(
+                                searchRegex,
+                                filteredColumns,
+                            )
 
-                    # Searching
-                    if len(filteredColumns):
-                        results += model.searchOccurrences(searchRegex, filteredColumns)
-
-                # Showing results
-                self.generateResultsLists(results)
-
-                # Remove override cursor
-                qApp.restoreOverrideCursor()
+                    self.generateResultsLists(results)
+                finally:
+                    qApp.restoreOverrideCursor()
             else:
                 # No results to generate if there is a problem with the regex
                 self.generateResultsLists(list())

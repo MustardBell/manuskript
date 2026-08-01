@@ -3,11 +3,11 @@
 import re, textwrap
 
 from PyQt5.Qt import QApplication
-from PyQt5.QtCore import QTimer, QModelIndex, Qt, QEvent, pyqtSignal, QRegExp, QLocale, QPersistentModelIndex, QMutex
+from PyQt5.QtCore import QTimer, QModelIndex, Qt, QEvent, pyqtSignal, QLocale, QPersistentModelIndex, QMutex
 from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QFont, QColor, QIcon, QMouseEvent, QTextCursor
 from PyQt5.QtWidgets import QWidget, QTextEdit, qApp, QAction, QMenu, QToolTip
 
-from manuskript.settingsManager import SettingsManager
+from manuskript.commands import DocumentCommand
 from manuskript.enums import Outline, World, Character, Plot
 from manuskript import functions as F
 from manuskript.models import outlineModel, outlineItem
@@ -15,6 +15,9 @@ from manuskript.ui.highlighters import BasicHighlighter
 from manuskript.ui import style as S
 from manuskript.functions import Spellchecker
 from manuskript.models.characterModel import Character, CharacterInfo
+from manuskript.ui.views.text_editor_settings import (
+    DefaultTextEditorSettings,
+)
 
 
 import logging
@@ -26,7 +29,8 @@ PLAIN_TRANSLATION_TABLE = {0x2028: "\n", 0x2029: "\n", 0xfdd0: "\n", 0xfdd1: "\n
 class textEditView(QTextEdit):
 
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
-                 highlighting=False, dict="", autoResize=False):
+                 highlighting=False, dict="", autoResize=False,
+                 settings=None):
         QTextEdit.__init__(self, parent)
         self._column = Outline.text
         self._index = None
@@ -42,12 +46,18 @@ class textEditView(QTextEdit):
         self._fromTheme = False
         self._themeData = None
         self._highlighterClass = BasicHighlighter
+        self.text_editor_context = None
+        self.settings = (
+            settings
+            if settings is not None
+            else DefaultTextEditorSettings()
+        )
 
         if spellcheck == None:
-            spellcheck = SettingsManager().spellcheck
+            spellcheck = self.settings.spellcheck
 
         self.spellcheck = spellcheck
-        self.currentDict = dict if dict else SettingsManager().dict
+        self.currentDict = dict if dict else self.settings.dict
         self._defaultFontSize = qApp.font().pointSize()
         self.highlighter = None
         self.setAutoResize(autoResize)
@@ -87,6 +97,11 @@ class textEditView(QTextEdit):
         if self._highlighting and not self.highlighter:
             self.highlighter = self._highlighterClass(self)
             self.highlighter.setDefaultBlockFormat(self._defaultBlockFormat)
+
+    def set_text_editor_context(self, context):
+        self.text_editor_context = context
+        if context is not None:
+            self.settings = context.settings
     
     def cleanupTimer(self):
         if self.updateTimer:
@@ -182,7 +197,7 @@ class textEditView(QTextEdit):
                 self._column != Outline.text:
             return
 
-        opt = SettingsManager().textEditor
+        opt = self.settings.textEditor
         f = QFont()
         f.fromString(opt["font"])
         background = (opt["background"] if not opt["backgroundTransparent"]
@@ -377,7 +392,7 @@ class textEditView(QTextEdit):
             self.sizeChange()
 
     def sizeChange(self):
-        opt = SettingsManager().textEditor
+        opt = self.settings.textEditor
         docHeight = self.document().size().height() + 2 * opt["marginsTB"]
         if self.heightMin <= docHeight <= self.heightMax:
             self.setMinimumHeight(int(docHeight))
@@ -477,13 +492,14 @@ class textEditView(QTextEdit):
 
             # Update settings
             f = QFont()
-            f.fromString(SettingsManager().textEditor["font"])
+            f.fromString(self.settings.textEditor["font"])
             f.setPointSizeF(f.pointSizeF() + d)
-            SettingsManager().textEditor["font"] = f.toString()
+            self.settings.textEditor["font"] = f.toString()
 
-            # Update font to all textEditView. Drastically.
-            for w in F.mainWindow().findChildren(textEditView, QRegExp(".*")):
-                w.loadFontSettings()
+            if self.text_editor_context is not None:
+                self.text_editor_context.reload_fonts()
+            else:
+                self.loadFontSettings()
 
             # We tell the world that we accepted this event
             event.accept()
@@ -510,36 +526,20 @@ class textEditView(QTextEdit):
     def newCharacter(self):
         text = self.sender().data()
         LOGGER.debug(f'New character: {text}')
-        # switch to character page
-        mw = F.mainWindow()
-        mw.tabMain.setCurrentIndex(mw.TabPersos)
-        # add character
-        c = mw.mdlCharacter.addCharacter(name=text)
-        # switch to character
-        item = mw.lstCharacters.getItemByID(c.ID())
-        mw.lstCharacters.setCurrentItem(item)
+        if self.text_editor_context is not None:
+            self.text_editor_context.create_character(text)
 
     def newPlotItem(self):
         text = self.sender().data()
         LOGGER.debug(f'New plot item: {text}')
-        # switch to plot page
-        mw = F.mainWindow()
-        mw.tabMain.setCurrentIndex(mw.TabPlots)
-        # add character
-        p, ID = mw.mdlPlots.addPlot(text)
-        # switch to character
-        plotIndex = mw.mdlPlots.getIndexFromID(ID.text())
-        # segfaults for some reason
-        # mw.lstSubPlots.setCurrentIndex(plotIndex)
+        if self.text_editor_context is not None:
+            self.text_editor_context.create_plot(text)
 
     def newWorldItem(self):
         text = self.sender().data()
         LOGGER.debug(f'New world item: {text}')
-        mw = F.mainWindow()
-        mw.tabMain.setCurrentIndex(mw.TabWorld)
-        item = mw.mdlWorld.addItem(title=text)
-        mw.treeWorld.setCurrentIndex(
-            mw.mdlWorld.indexFromItem(item))
+        if self.text_editor_context is not None:
+            self.text_editor_context.create_world_item(text)
 
 
     def appendContextMenuEntriesForWord(self, popup_menu, selectedWord):
@@ -735,18 +735,30 @@ class textEditView(QTextEdit):
     # KEYBOARD SHORTCUTS
     ###############################################################################
 
-    def callMainTreeView(self, functionName):
+    def invoke_outline_command(self, command):
         """
         The tree view in main window must have same index as the text
         edit that has focus. So we can pass it the call for documents
         edits like: duplicate, move up, etc.
         """
-        if self._index and self._column == Outline.text:
-            function = getattr(F.mainWindow().treeRedacOutline, functionName)
-            function()
+        if (
+            self._index
+            and self._column == Outline.text
+            and self.text_editor_context is not None
+        ):
+            self.text_editor_context.invoke_outline_command(command)
 
-    def rename(self): self.callMainTreeView("rename")
-    def duplicate(self): self.callMainTreeView("duplicate")
-    def moveUp(self): self.callMainTreeView("moveUp")
-    def moveDown(self): self.callMainTreeView("moveDown")
-    def delete(self): self.callMainTreeView("delete")
+    def rename(self):
+        self.invoke_outline_command(DocumentCommand.RENAME)
+
+    def duplicate(self):
+        self.invoke_outline_command(DocumentCommand.DUPLICATE)
+
+    def moveUp(self):
+        self.invoke_outline_command(DocumentCommand.MOVE_UP)
+
+    def moveDown(self):
+        self.invoke_outline_command(DocumentCommand.MOVE_DOWN)
+
+    def delete(self):
+        self.invoke_outline_command(DocumentCommand.DELETE)

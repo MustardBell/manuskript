@@ -63,17 +63,6 @@ def test_several():
     # colorifyPixmap
     assert F.colorifyPixmap(px, c1) != None
 
-def test_outlineItemColors():
-
-    from manuskript.models import outlineItem
-    item = outlineItem(title="Test")
-
-    r = F.outlineItemColors(item)
-    for i in ["POV", "Label", "Progress", "Compile"]:
-        assert i in r
-    from PyQt5.QtGui import QColor
-    assert r["Compile"].name(QColor.HexArgb) == "#00000000"
-
 def test_paths():
 
     assert F.appPath() != None
@@ -83,19 +72,6 @@ def test_paths():
     f = F.findBackground("spacedreams.jpg")
     assert os.path.join("resources", "backgrounds", "spacedreams.jpg") in f
     assert len(F.customIcons()) > 1
-
-def test_mainWindow():
-
-    from PyQt5.QtWidgets import QWidget, QLCDNumber
-
-    assert F.mainWindow() != None
-    assert F.MW != None
-
-    F.statusMessage("Test")
-    F.printObjects()
-    assert len(F.findWidgetsOfClass(QWidget)) > 0
-    assert len(F.findWidgetsOfClass(QLCDNumber)) == 0
-
 
 def test_search_noMatch():
     assert F.search(re.compile("text"), "foo") == []

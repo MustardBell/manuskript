@@ -7,18 +7,18 @@ from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon, QFontMetrics, QFont
 from PyQt5.QtWidgets import QWidget, QTableWidgetItem, QListWidgetItem, QTreeView
 
-from manuskript.functions import mainWindow, writablePath
+from manuskript.functions import writablePath
 from manuskript.ui.exporters.manuskript.plainTextSettings_ui import Ui_exporterSettings
 from manuskript.ui import style as S
 
 
 class exporterSettings(QWidget, Ui_exporterSettings):
-    def __init__(self, _format, parent=None):
+    def __init__(self, _format, context, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.toolBox.setStyleSheet(S.toolBoxSS())
 
-        self.mw = mainWindow()
+        self.context = context
         self._format = _format
         self.settings = {}
 
@@ -38,8 +38,8 @@ class exporterSettings(QWidget, Ui_exporterSettings):
         # Labels
         self.lstContentLabels.clear()
         h = QFontMetrics(self.font()).height()
-        for i in range(0, self.mw.mdlLabels.rowCount()):
-            item = self.mw.mdlLabels.item(i, 0)
+        for i in range(0, self.context.label_model.rowCount()):
+            item = self.context.label_model.item(i, 0)
             if item:
                 item = QListWidgetItem(item.icon(), item.text())
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -54,8 +54,8 @@ class exporterSettings(QWidget, Ui_exporterSettings):
         # Status
         self.lstContentStatus.clear()
         h = QFontMetrics(self.font()).height()
-        for i in range(0, self.mw.mdlStatus.rowCount()):
-            item = self.mw.mdlStatus.item(i, 0)
+        for i in range(0, self.context.status_model.rowCount()):
+            item = self.context.status_model.item(i, 0)
             if item:
                 item = QListWidgetItem(item.icon(), item.text())
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -68,11 +68,11 @@ class exporterSettings(QWidget, Ui_exporterSettings):
         self.lstContentStatus.setVisible(False)
 
         # Root item
-        self.cmbContentParent.setModel(self.mw.mdlOutline)
+        self.cmbContentParent.setModel(self.context.outline_model)
         v = QTreeView()
         self.cmbContentParent.setView(v)
         v.setHeaderHidden(True)
-        for i in range(1, self.mw.mdlOutline.columnCount()):
+        for i in range(1, self.context.outline_model.columnCount()):
             v.hideColumn(i)
         self.chkContentParent.toggled.connect(self.cmbContentParent.setVisible)
         self.cmbContentParent.hide()
@@ -337,7 +337,7 @@ class exporterSettings(QWidget, Ui_exporterSettings):
         addTextRow()
 
         # Detailed
-        level = self.mw.mdlOutline.maxLevel()
+        level = self.context.outline_model.maxLevel()
 
         for i in range(level):
             addFolderRow(self.tr("{}Level {} folder").format("  " * i, i + 1))

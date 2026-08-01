@@ -29,7 +29,7 @@ class HTML(markdown):
         return MD != None
 
     def settingsWidget(self):
-        w = markdownSettings(self)
+        w = markdownSettings(self, self.context)
         w.loadSettings()
         return w
 

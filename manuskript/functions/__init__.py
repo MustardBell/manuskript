@@ -7,20 +7,17 @@ import sys
 import pathlib
 from random import *
 
-from PyQt5.QtCore import Qt, QRect, QStandardPaths, QObject, QProcess, QRegExp
-from PyQt5.QtCore import QDir, QUrl, QTimer
+from PyQt5.QtCore import Qt, QRect, QStandardPaths, QProcess
+from PyQt5.QtCore import QDir, QUrl
 from PyQt5.QtGui import QBrush, QIcon, QPainter, QColor, QImage, QPixmap
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import qApp, QFileDialog
-
-from manuskript.enums import Outline
 
 import logging
 LOGGER = logging.getLogger(__name__)
 
 # Used to detect multiple connections
 AUC = Qt.AutoConnection | Qt.UniqueConnection
-MW = None
 
 
 translationCache = dict()
@@ -131,18 +128,6 @@ def colorFromProgress(progress):
         return c3
 
 
-def mainWindow():
-    global MW
-    if not MW:
-        for i in qApp.topLevelWidgets():
-            if i.objectName() == "MainWindow":
-                MW = i
-                return MW
-        return None
-    else:
-        return MW
-
-
 def iconColor(icon):
     """Returns a QRgb from a QIcon, assuming its all the same color"""
     px = icon.pixmap(5, 5)
@@ -216,47 +201,6 @@ def mixColors(col1, col2, f=0.5):
     return QColor(r, g, b) if not fromString else QColor(r, g, b).name()
 
 
-def outlineItemColors(item):
-    from manuskript.ui import style as S
-
-    """Takes an OutlineItem and returns a dict of colors."""
-    colors = {}
-    mw = mainWindow()
-
-    # POV
-    colors["POV"] = QColor(Qt.transparent)
-    POV = item.data(Outline.POV)
-    if POV == "":
-        col = QColor(Qt.transparent)
-    else:
-        for i in range(mw.mdlCharacter.rowCount()):
-            if mw.mdlCharacter.ID(i) == POV:
-                colors["POV"] = iconColor(mw.mdlCharacter.icon(i))
-
-    # Label
-    lbl = item.data(Outline.label)
-    if lbl == "":
-        col = QColor(Qt.transparent)
-    else:
-        col = iconColor(mw.mdlLabels.item(toInt(lbl)).icon())
-    # if col == Qt.black:
-    #     # Don't know why, but transparent is rendered as black
-    #     col = QColor(Qt.transparent)
-    colors["Label"] = col
-
-    # Progress
-    pg = item.data(Outline.goalPercentage) if item.data(Outline.setGoal) else None
-    colors["Progress"] = colorFromProgress(pg)
-
-    # Compile
-    if item.compile() in [0, "0"]:
-        colors["Compile"] = mixColors(QColor(S.text), QColor(S.window))
-    else:
-        colors["Compile"] = QColor(Qt.transparent) # will use default
-
-    return colors
-
-
 def colorifyPixmap(pixmap, color):
     # FIXME: ugly
     p = QPainter(pixmap)
@@ -296,23 +240,6 @@ def allPaths(suffix=None):
 def tempFile(name):
     "Returns a temp file."
     return os.path.join(QDir.tempPath(), name)
-
-
-def totalObjects():
-    return len(mainWindow().findChildren(QObject))
-
-
-def printObjects():
-    print("Objects:", str(totalObjects()))
-
-
-def findWidgetsOfClass(cls):
-    """
-    Returns all widgets, children of MainWindow, whose class is cls.
-    @param cls: a class
-    @return: list of QWidgets
-    """
-    return mainWindow().findChildren(cls, QRegExp())
 
 
 def findBackground(filename):
@@ -405,32 +332,6 @@ def customIcons():
         ]
 
     return sorted(r)
-
-def statusMessage(message, duration=5000, importance=1):
-    """
-    Shows a message in MainWindow's status bar.
-    Importance: 0 = low, 1 = normal, 2 = important, 3 = critical.
-    """
-    from manuskript.ui import style as S
-    MW.statusBar().hide()
-    MW.statusLabel.setText(message)
-    if importance == 0:
-        MW.statusLabel.setStyleSheet("color:{};".format(S.textLighter))
-    elif importance == 1:
-        MW.statusLabel.setStyleSheet("color:{};".format(S.textLight))
-    elif importance == 2:
-        MW.statusLabel.setStyleSheet("color:{}; font-weight: bold;".format(S.text))
-    elif importance == 3:
-        MW.statusLabel.setStyleSheet("color:red; font-weight: bold;")
-    MW.statusLabel.adjustSize()
-    g = MW.statusLabel.geometry()
-    # g.moveCenter(MW.mapFromGlobal(MW.geometry().center()))
-    s = int(MW.layout().spacing() / 2)
-    g.setLeft(s)
-    g.moveBottom(MW.mapFromGlobal(MW.geometry().bottomLeft()).y() - s)
-    MW.statusLabel.setGeometry(g)
-    MW.statusLabel.show()
-    QTimer.singleShot(duration, MW.statusLabel.hide)
 
 def openURL(url):
     """
