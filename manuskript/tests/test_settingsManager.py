@@ -187,15 +187,15 @@ class TestSettingsManager(unittest.TestCase):
             repaired.color(
                 QPalette.Inactive,
                 QPalette.ToolTipBase,
-            ),
-            QColor("#ffffdc"),
+            ).rgba(),
+            QColor("#ffffdc").rgba(),
         )
         self.assertEqual(
             repaired.color(
                 QPalette.Inactive,
                 QPalette.ToolTipText,
-            ),
-            QColor("black"),
+            ).rgba(),
+            QColor("black").rgba(),
         )
 
 

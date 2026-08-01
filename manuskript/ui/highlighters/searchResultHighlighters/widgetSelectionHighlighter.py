@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette, QTextCursor
 from PyQt5.QtWidgets import QTextEdit, QTableView, QListView, QLineEdit, QPlainTextEdit, QLabel
 
@@ -78,10 +79,13 @@ class widgetSelectionHighlighter():
     def _highlightLabelSearchResult(self, label, clearOnFocusOut):
         # On focus out, clear label selection.
         oldPalette = QPalette(label.palette())
+        hadExplicitPalette = label.testAttribute(Qt.WA_SetPalette)
         oldAutoFill = label.autoFillBackground()
         if clearOnFocusOut:
             def restore(widget):
-                widget.setPalette(oldPalette)
+                widget.setPalette(
+                    oldPalette if hadExplicitPalette else QPalette()
+                )
                 widget.setAutoFillBackground(oldAutoFill)
 
             self.generateClearHandler(label, restore)

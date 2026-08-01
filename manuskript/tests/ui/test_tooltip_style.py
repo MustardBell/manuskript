@@ -23,6 +23,11 @@ def tooltip_palette(text, background):
     return palette
 
 
+def assert_same_color(actual, expected):
+    """Compare rendered channels, not Qt's platform-specific color spec."""
+    assert actual.rgba() == QColor(expected).rgba()
+
+
 def test_contrast_ratio_matches_wcag_reference_values():
     assert contrast_ratio(
         QColor("black"),
@@ -30,19 +35,19 @@ def test_contrast_ratio_matches_wcag_reference_values():
     ) == pytest.approx(21.0)
 
 
-def test_inaccessible_linux_tooltip_palette_is_repaired():
+def test_inaccessible_tooltip_palette_is_repaired():
     source = tooltip_palette("#ffffff", "#ffffdc")
 
     repaired = accessible_tooltip_palette(source)
 
-    assert repaired.color(
+    assert_same_color(repaired.color(
         QPalette.Inactive,
         QPalette.ToolTipBase,
-    ) == QColor("#ffffdc")
-    assert repaired.color(
+    ), "#ffffdc")
+    assert_same_color(repaired.color(
         QPalette.Inactive,
         QPalette.ToolTipText,
-    ) == QColor("black")
+    ), "black")
     assert contrast_ratio(
         repaired.color(QPalette.Inactive, QPalette.ToolTipText),
         repaired.color(QPalette.Inactive, QPalette.ToolTipBase),
@@ -54,11 +59,11 @@ def test_accessible_system_tooltip_palette_is_unchanged():
 
     repaired = accessible_tooltip_palette(source)
 
-    assert repaired.color(
+    assert_same_color(repaired.color(
         QPalette.Inactive,
         QPalette.ToolTipText,
-    ) == QColor("#202020")
-    assert repaired.color(
+    ), "#202020")
+    assert_same_color(repaired.color(
         QPalette.Inactive,
         QPalette.ToolTipBase,
-    ) == QColor("#ffffdc")
+    ), "#ffffdc")
