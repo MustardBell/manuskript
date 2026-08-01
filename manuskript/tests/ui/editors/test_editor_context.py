@@ -148,6 +148,51 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     window.mainEditor.closeAllTabs()
 
 
+def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
+    window = MWEmptyProject
+    window_was_visible = window.isVisible()
+    old_max_width = window.settingsManager.textEditor["maxWidth"]
+    window.settingsManager.textEditor["maxWidth"] = 600
+    window.resize(1400, 720)
+    window.show()
+    item = outlineItem(title="Centered page", _type="md")
+    item.setData(
+        Outline.text,
+        "A paragraph long enough to make the editor geometry visible.",
+    )
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    try:
+        window.mainEditor.setCurrentModelIndex(index, newTab=True)
+        editor = window.mainEditor.currentEditor()
+        editor.txtRedacText.loadFontSettings()
+        qApp.processEvents()
+
+        host = editor.markdownEditorHost
+        available_width = editor.text.contentsRect().width()
+        expected_left = (available_width - host.width()) // 2
+
+        assert host.maximumWidth() == 600
+        assert host.width() == 600
+        assert abs(host.x() - expected_left) <= 1
+        assert editor.txtRedacText.width() == host.contentsRect().width()
+
+        editor.markdownPresentation.set_mode(
+            MarkdownPresentationMode.READING
+        )
+        qApp.processEvents()
+
+        assert host.currentWidget() is editor.txtRedacText.readingView
+        assert editor.txtRedacText.readingView.width() == (
+            host.contentsRect().width()
+        )
+    finally:
+        window.mainEditor.closeAllTabs()
+        window.settingsManager.textEditor["maxWidth"] = old_max_width
+        if not window_was_visible:
+            window.hide()
+
+
 def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
     window = MWEmptyProject
     first_item = outlineItem(title="First")
