@@ -41,6 +41,20 @@ class outlineBasics(QAbstractItemView):
             else lambda message, duration=5000, importance=1: None
         )
 
+    def bind_project_model(self, model, context):
+        """Attach one complete project context before exposing its indexes."""
+        if model is None or context is None:
+            raise ValueError(
+                "An outline model and context must be bound together."
+            )
+        self.set_outline_context(context)
+        self.setModel(model)
+
+    def unbind_project_model(self):
+        """Detach indexes before releasing their delegate dependencies."""
+        QAbstractItemView.setModel(self, None)
+        self.set_outline_context(None)
+
     def getSelection(self):
         sel = []
         for i in self.selectedIndexes():
