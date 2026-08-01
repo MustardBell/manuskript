@@ -1,9 +1,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from manuskript.domain.project import ProjectState
+from manuskript.domain.persistence import (
+    ProjectLoadResult,
+    ProjectSaveResult,
+)
+from manuskript.domain.project import CloseDecision, ProjectState
 from manuskript.projectManager import ProjectManager
 from manuskript.settingsManager import SettingsManager
+from manuskript.ui.project_lifecycle import ProjectLifecycleView
 
 
 class TestProjectManager(unittest.TestCase):
@@ -16,10 +21,17 @@ class TestProjectManager(unittest.TestCase):
         self.window.settingsManager = settings_manager
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
+        self.autosave = MagicMock()
+        self.last_project_store = MagicMock()
+        self.lifecycle_view = ProjectLifecycleView(self.window)
+        self.lifecycle_view.show_save_failures = MagicMock()
+        self.lifecycle_view.show_load_failures = MagicMock()
         self.project_manager = ProjectManager(
-            self.window,
+            self.lifecycle_view,
             storage=self.storage,
             status_reporter=self.status_reporter,
+            autosave=self.autosave,
+            last_project_store=self.last_project_store,
         )
 
     @patch('os.path.exists')
@@ -78,22 +90,29 @@ class TestProjectManager(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.DIRTY)
+        self.autosave.schedule_after_change.assert_called_once_with()
 
     def test_successful_save_transitions_session_to_clean(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
-        self.storage.save.return_value = True
+        self.storage.save.return_value = ProjectSaveResult()
 
         result = self.project_manager.saveDatas()
 
         self.assertTrue(result)
         self.assertEqual(self.project_manager.session.state, ProjectState.CLEAN)
-        self.storage.save.assert_called_once_with(self.window)
+        self.storage.save.assert_called_once()
+        context = self.storage.save.call_args.args[0]
+        self.assertEqual(context.project_file, "project.msk")
+        self.assertIs(context.models, self.project_manager.models)
+        self.assertIs(context.settings, self.window.settingsManager)
 
     def test_failed_save_preserves_dirty_state(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
-        self.storage.save.return_value = False
+        self.storage.save.return_value = ProjectSaveResult(
+            failed_files=("outline/scene.md",)
+        )
 
         result = self.project_manager.saveDatas()
 
@@ -125,6 +144,27 @@ class TestProjectManager(unittest.TestCase):
         self.assertTrue(self.project_manager.session.is_open)
         self.assertTrue(self.project_manager.session.is_dirty)
 
+    def test_unsaved_change_decision_is_supplied_by_lifecycle_view(self):
+        self.project_manager.session.open("project.msk")
+        self.project_manager.session.mark_dirty()
+        with patch.object(
+            self.lifecycle_view,
+            "confirm_unsaved_changes",
+            return_value=CloseDecision.CANCEL,
+        ):
+            self.assertFalse(
+                self.project_manager.handleUnsavedChanges()
+            )
+
+        with patch.object(
+            self.lifecycle_view,
+            "confirm_unsaved_changes",
+            return_value=CloseDecision.DISCARD,
+        ):
+            self.assertTrue(
+                self.project_manager.handleUnsavedChanges()
+            )
+
     def test_change_signal_after_close_is_ignored(self):
         result = self.project_manager.startTimerNoChanges()
 
@@ -134,7 +174,9 @@ class TestProjectManager(unittest.TestCase):
     def test_failed_save_as_restores_original_project_path(self):
         self.project_manager.session.open("original.msk")
         self.project_manager.session.mark_dirty()
-        self.storage.save.return_value = False
+        self.storage.save.return_value = ProjectSaveResult(
+            failed_files=("renamed.msk",)
+        )
 
         result = self.project_manager.saveDatas("renamed.msk")
 
@@ -151,6 +193,52 @@ class TestProjectManager(unittest.TestCase):
 
         self.assertFalse(result)
         self.assertEqual(self.project_manager.currentProject, "first.msk")
+
+    def test_empty_project_models_are_requested_from_factory(self):
+        factory = MagicMock()
+        models = MagicMock()
+        factory.create.return_value = models
+        self.project_manager.model_factory = factory
+
+        result = self.project_manager.loadEmptyDatas()
+
+        self.assertIs(result, models)
+        self.assertIs(self.project_manager.models, models)
+        factory.create.assert_called_once_with(
+            self.window,
+            self.window.settingsManager,
+        )
+        models.install_on.assert_called_once_with(self.window)
+
+    def test_save_permission_failures_are_presented_by_lifecycle_view(self):
+        self.project_manager.session.open("project.msk")
+        self.project_manager.session.mark_dirty()
+        failures = ("outline/scene.md", "world.opml")
+        self.storage.save.return_value = ProjectSaveResult(
+            failed_files=failures
+        )
+
+        with patch.object(
+            self.lifecycle_view, "show_save_failures"
+        ) as show_failures:
+            result = self.project_manager.saveDatas()
+
+        self.assertFalse(result)
+        show_failures.assert_called_once_with(failures)
+
+    def test_load_permission_failures_are_presented_by_lifecycle_view(self):
+        failures = ("outline/scene.md",)
+        self.storage.load.return_value = ProjectLoadResult(
+            unreadable_files=failures
+        )
+
+        with patch.object(
+            self.lifecycle_view, "show_load_failures"
+        ) as show_failures:
+            result = self.project_manager.loadDatas("project.msk")
+
+        self.assertTrue(result)
+        show_failures.assert_called_once_with(failures)
 
 if __name__ == '__main__':
     unittest.main()

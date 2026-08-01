@@ -4,7 +4,7 @@
 import locale
 import os
 
-from PyQt5.QtCore import QSettings, QRegExp, Qt, QDir
+from PyQt5.QtCore import QRegExp, Qt, QDir
 from PyQt5.QtGui import QIcon, QBrush, QColor
 from PyQt5.QtWidgets import QWidget, QAction, QFileDialog, QSpinBox, QLineEdit, QLabel, QPushButton, QTreeWidgetItem, \
     qApp, QMessageBox
@@ -56,15 +56,15 @@ class welcome(QWidget, Ui_welcome):
         self.loadRecents()
 
     def getLastAccessedDirectory(self):
-        sttgs = QSettings()
-        lastDirectory = sttgs.value("lastAccessedDirectory", defaultValue=".", type=str)
+        lastDirectory = (
+            self.context.project_history.last_accessed_directory()
+        )
         if lastDirectory != '.':
             LOGGER.info("Last accessed directory \"{}\" loaded.".format(lastDirectory))
         return lastDirectory
 
     def setLastAccessedDirectory(self, dir):
-        sttgs = QSettings()
-        sttgs.setValue("lastAccessedDirectory", dir)
+        self.context.project_history.set_last_accessed_directory(dir)
 
     ###############################################################################
     # AUTOLOAD
@@ -93,31 +93,22 @@ class welcome(QWidget, Ui_welcome):
                   welcome widget.
         - `str`:  the absolute path to the last opened project.
         """
-        sttgns = QSettings()
-        autoLoad = sttgns.value("autoLoad", defaultValue=False, type=bool)
-        if autoLoad and sttgns.contains("lastProject"):
-            last = sttgns.value("lastProject")
-        else:
-            last = ""
-
-        return autoLoad, last
+        return self.context.project_history.auto_load_values()
 
     def setAutoLoad(self, v):
-        if type(v) == bool:
-            QSettings().setValue("autoLoad", v)
+        self.context.project_history.set_auto_load(v)
 
     ###############################################################################
     # RECENTS
     ###############################################################################
 
     def loadRecents(self):
-        sttgns = QSettings()
         recent_menu = self.context.recent_menu
         recent_menu.setIcon(QIcon.fromTheme("folder-recent"))
-        if sttgns.contains("recentFiles"):
-            lst = sttgns.value("recentFiles")
+        recent_files = self.context.project_history.recent_files()
+        if recent_files:
             recent_menu.clear()
-            for f in [f for f in lst if os.path.exists(f)]:
+            for f in [f for f in recent_files if os.path.exists(f)]:
                 name = os.path.split(f)[1]
                 a = QAction(name, self)
                 a.setData(f)
@@ -128,17 +119,7 @@ class welcome(QWidget, Ui_welcome):
             self.btnRecent.setMenu(recent_menu)
 
     def appendToRecentFiles(self, project):
-        sttgns = QSettings()
-        if sttgns.contains("recentFiles"):
-            recentFiles = sttgns.value("recentFiles")
-        else:
-            recentFiles = []
-
-        while project in recentFiles:
-            recentFiles.remove(project)
-        recentFiles.insert(0, project)
-        recentFiles = recentFiles[:10]
-        sttgns.setValue("recentFiles", recentFiles)
+        self.context.project_history.remember_recent_file(project)
 
     def loadRecentFile(self):
         act = self.sender()

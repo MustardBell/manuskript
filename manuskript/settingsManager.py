@@ -11,8 +11,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SettingsManager:
-    _instance = None
-    _initialized = False
     _setting_names = (
         "viewSettings",
         "fullscreenSettings",
@@ -43,23 +41,15 @@ class SettingsManager:
         "tooltipStyle",
     )
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(SettingsManager, cls).__new__(cls)
-        return cls._instance
-
     def _initialize_from_defaults(self):
         """Initialize active settings without sharing mutable default values."""
         for name in self._setting_names:
             setattr(self, name, deepcopy(getattr(default_settings, name)))
 
     def __init__(self):
-        if SettingsManager._initialized:
-            return
         self._default_cursor_flash_time = None
         self._initialize_from_defaults()
         self.initDefaultValues()
-        SettingsManager._initialized = True
 
     def configure_cursor_flash_time(self, default_value):
         """Inject a callable returning the platform's cursor flash interval."""

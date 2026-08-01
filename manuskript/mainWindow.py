@@ -14,48 +14,44 @@ from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QSt
 
 from manuskript.commands import DocumentCommand, DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
+from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.world_controller import WorldController
-from manuskript.enums import Character, PlotStep, Plot, World, Outline
+from manuskript.enums import Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
-from manuskript.functions.history.History import History
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
-from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
+from manuskript.services.external_process import ExternalProcessRunner
+from manuskript.services.external_tools import ExternalToolPaths
+from manuskript.services.project_history import ProjectHistory
+from manuskript.services.theme_repository import ThemeRepository
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
 from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
-from manuskript.ui.connections import SignalConnectionRegistry
-from manuskript.ui.editors.editor_context import EditorContext
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
-from manuskript.ui.reference_navigation import reference_navigation_for
-from manuskript.ui.search_context import SearchContext, SearchResultViewAdapter
+from manuskript.ui.navigation_view import MainNavigationView
+from manuskript.ui.project_binding import ProjectBinding
+from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
-from manuskript.ui.views.outlineDelegates import outlineCharacterDelegate
-from manuskript.ui.views.outline_colors import OutlineColorResolver
-from manuskript.ui.views.outline_context import OutlineViewContext
-from manuskript.ui.views.plotDelegate import plotDelegate
 from manuskript.ui.views.MDEditView import MDEditView
-from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
-from manuskript.ui.views.text_editor_context import text_editor_context_for
 from manuskript.functions import Spellchecker
 
 import logging
@@ -87,21 +83,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                             # value. In manuskript.main.
         self._autoLoadProject = None  # Used to load a command line project
         self.sessionStartWordCount = 0  # Used to track session targets
-        self.history = History()
         self._previousSelectionEmpty = True
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
         )
-        self.projectConnections = SignalConnectionRegistry()
         self.characterController = CharacterController(self)
         self.plotController = PlotController(self)
         self.worldController = WorldController(self)
+        self.navigationController = NavigationController(
+            MainNavigationView(self)
+        )
+        self.history = self.navigationController.history
         self.settingsManager = settings_manager
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
         )
         self.referenceService = None
         self.textEditorContext = None
+        self.projectBinding = ProjectBinding(self)
 
         self.readSettings()
 
@@ -111,12 +110,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
+        self.projectLifecycleView = ProjectLifecycleView(self)
+        self.externalProcessRunner = ExternalProcessRunner()
+        self.externalToolPaths = ExternalToolPaths()
+        self.projectHistory = ProjectHistory()
+        self.themeRepository = ThemeRepository()
         self.projectManager = ProjectManager(
-            self,
+            self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
+            last_project_store=self.projectHistory,
         )
         self.welcome.set_context(
-            welcome_context_for(self, self.settingsManager)
+            welcome_context_for(
+                self,
+                self.settingsManager,
+                self.projectHistory,
+            )
         )
 
         # Welcome
@@ -202,8 +211,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
         # Main menu:: Navigate
-        self.actBack.triggered.connect(self.navigateBack)
-        self.actForward.triggered.connect(self.navigateForward)
+        self.actBack.triggered.connect(self.navigationController.back)
+        self.actForward.triggered.connect(
+            self.navigationController.forward
+        )
 
         # Main Menu:: view
         self.generateViewMenu()
@@ -466,89 +477,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # Navigate
     
     def navigateBack(self):
-        self.history.back()
+        self.navigationController.back()
 
     def navigateForward(self):
-        self.history.forward()
+        self.navigationController.forward()
 
     def pushHistory(self, entry):
-        if self._previousSelectionEmpty:
-            self.history.replace(entry)
-        else:
-            self.history.next(entry)
+        self.navigationController.record(
+            entry,
+            replace=self._previousSelectionEmpty,
+        )
 
     def navigated(self, event):
-        if event.entry:
-            first_entry = event.entry[0]
-
-            if first_entry == "character":
-                if self.tabMain.currentIndex() != self.TabPersos:
-                    self.tabMain.setCurrentIndex(self.TabPersos)
-
-                if event.entry[1] is None:
-                    self.lstCharacters.setCurrentItem(None)
-                    self.lstCharacters.clearSelection()
-                else:
-                    if self.lstCharacters.currentCharacterID() != event.entry[1]:
-                        char = self.lstCharacters.getItemByID(event.entry[1])
-                        if char != None:
-                            self.lstCharacters.clearSelection()
-                            self.lstCharacters.setCurrentItem(char)
-            elif first_entry == "plot":
-                if self.tabMain.currentIndex() != self.TabPlots:
-                    self.tabMain.setCurrentIndex(self.TabPlots)
-
-                if event.entry[1] is None:
-                    self.lstPlots.setCurrentItem(None)
-                else:
-                    index = self.lstPlots.currentPlotIndex()
-                    if index and index.row() != event.entry[1]:
-                        plot = self.lstPlots.getItemByID(event.entry[1])
-                        if plot != None:
-                            self.lstPlots.setCurrentItem(plot)
-            elif first_entry == "world":
-                if self.tabMain.currentIndex() != self.TabWorld:
-                    self.tabMain.setCurrentIndex(self.TabWorld)
-
-                if event.entry[1] is None:
-                    self.treeWorld.selectionModel().clear()
-                else:
-                    index = self.worldController.current_index()
-                    if (
-                        not index.isValid()
-                        or self.mdlWorld.ID(index) != event.entry[1]
-                    ):
-                        self.worldController.select_by_id(event.entry[1])
-            elif first_entry == "outline":
-                if self.tabMain.currentIndex() != self.TabOutline:
-                    self.tabMain.setCurrentIndex(self.TabOutline)
-
-                if event.entry[1] is None:
-                    self.treeOutlineOutline.selectionModel().clear()
-                else:
-                    index = self.treeOutlineOutline.selectionModel().currentIndex()
-                    if index and self.mdlOutline.ID(index) != event.entry[1]:
-                        outline = self.mdlOutline.getIndexByID(event.entry[1])
-                        if outline is not None:
-                            self.treeOutlineOutline.setCurrentIndex(outline)
-            elif first_entry == "redac":
-                if self.tabMain.currentIndex() != self.TabRedac:
-                    self.tabMain.setCurrentIndex(self.TabRedac)
-
-                if event.entry[1] is None:
-                    self.treeRedacOutline.selectionModel().clear()
-                else:
-                    index = self.treeRedacOutline.selectionModel().currentIndex()
-                    if index and self.mdlOutline.ID(index) != event.entry[1]:
-                        outline = self.mdlOutline.getIndexByID(event.entry[1])
-                        if outline is not None:
-                            self.treeRedacOutline.setCurrentIndex(outline)
-            elif first_entry == "main":
-                if self.tabMain.currentIndex() != event.entry[1]:
-                    self.lstTabs.setCurrentRow(event.entry[1])
-
-        self.actBack.setEnabled(event.position > 0)
-        self.actForward.setEnabled(event.position < event.count - 1)
+        self.navigationController.navigated(event)
 
     def readSettings(self):
         # Load State and geometry
@@ -619,384 +560,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabMain.currentChanged.connect(self.toolbar.setCurrentGroup)
         self.tabMain.currentChanged.connect(self.tabMainChanged)
 
-        self.history.navigated.connect(self.navigated)
-
         qApp.focusChanged.connect(self.focusChanged)
 
     def makeConnections(self):
-        if self.projectConnections:
-            raise RuntimeError(
-                "Project connections must be released before binding new models."
-            )
-        connect = self.projectConnections.connect
-        self.referenceService = ReferenceService(
-            ReferenceModels(
-                outline=self.mdlOutline,
-                characters=self.mdlCharacter,
-                plots=self.mdlPlots,
-                world=self.mdlWorld,
-                statuses=self.mdlStatus,
-                labels=self.mdlLabels,
-            ),
-            reference_navigation_for(self),
-        )
-
-        # Flat datas (Summary and general infos)
-        for widget, col in [
-            (self.txtSummarySituation, 0),
-            (self.txtSummarySentence, 1),
-            (self.txtSummarySentence_2, 1),
-            (self.txtSummaryPara, 2),
-            (self.txtSummaryPara_2, 2),
-            (self.txtPlotSummaryPara, 2),
-            (self.txtSummaryPage, 3),
-            (self.txtSummaryPage_2, 3),
-            (self.txtPlotSummaryPage, 3),
-            (self.txtSummaryFull, 4),
-            (self.txtPlotSummaryFull, 4),
-        ]:
-            widget.setModel(self.mdlFlatData)
-            widget.setColumn(col)
-            widget.setCurrentModelIndex(self.mdlFlatData.index(1, col))
-
-        for widget, col in [
-            (self.txtGeneralTitle, 0),
-            (self.txtGeneralSubtitle, 1),
-            (self.txtGeneralSerie, 2),
-            (self.txtGeneralVolume, 3),
-            (self.txtGeneralGenre, 4),
-            (self.txtGeneralLicense, 5),
-            (self.txtGeneralAuthor, 6),
-            (self.txtGeneralEmail, 7),
-        ]:
-            widget.setModel(self.mdlFlatData)
-            widget.setColumn(col)
-            widget.setCurrentModelIndex(self.mdlFlatData.index(0, col))
-
-        # Characters
-        self.characterController.configure_info_view(self.tblPersoInfos)
-        self.lstCharacters.setCharactersModel(self.mdlCharacter)
-        self.tblPersoInfos.setModel(self.mdlCharacter)
-        connect(
-            self.btnAddPerso.clicked,
-            self.lstCharacters.addCharacter,
-            F.AUC,
-        )
-        connect(
-            self.btnRmPerso.clicked,
-            self.characterController.delete_characters,
-            F.AUC,
-        )
-        connect(
-            self.btnPersoColor.clicked,
-            self.characterController.choose_character_color,
-            F.AUC,
-        )
-        connect(
-            self.chkPersoPOV.stateChanged,
-            self.characterController.change_character_pov_state,
-            F.AUC,
-        )
-        connect(
-            self.btnPersoAddInfo.clicked,
-            self.characterController.add_character_info,
-            F.AUC,
-        )
-        connect(
-            self.btnPersoRmInfo.clicked,
-            self.characterController.remove_character_info,
-            F.AUC,
-        )
-
-        for w, c in [
-            (self.txtPersoName, Character.name),
-            (self.sldPersoImportance, Character.importance),
-            (self.txtPersoMotivation, Character.motivation),
-            (self.txtPersoGoal, Character.goal),
-            (self.txtPersoConflict, Character.conflict),
-            (self.txtPersoEpiphany, Character.epiphany),
-            (self.txtPersoSummarySentence, Character.summarySentence),
-            (self.txtPersoSummaryPara, Character.summaryPara),
-            (self.txtPersoSummaryFull, Character.summaryFull),
-            (self.txtPersoNotes, Character.notes)
-        ]:
-            w.setModel(self.mdlCharacter)
-            w.setColumn(c)
-        self.tabPersos.setEnabled(False)
-
-        # Plots
-        self.lstSubPlots.setModel(self.mdlPlots)
-        self.lstPlotPerso.setModel(self.mdlPlots)
-        self.lstPlots.setPlotModel(
-            self.mdlPlots,
-            settings=self.settingsManager,
-        )
-        connect(self.btnAddPlot.clicked, self.plotController.add_plot, F.AUC)
-        connect(
-            self.btnRmPlot.clicked,
-            self.plotController.remove_current_plot,
-            F.AUC,
-        )
-        connect(
-            self.btnAddSubPlot.clicked,
-            self.plotController.add_sub_plot,
-            F.AUC,
-        )
-        connect(
-            self.btnRmSubPlot.clicked,
-            self.plotController.remove_selected_sub_plots,
-            F.AUC,
-        )
-        connect(
-            self.lstPlotPerso.selectionModel().selectionChanged,
-            self.plotController.handle_plot_character_selection,
-        )
-        connect(
-            self.btnRmPlotPerso.clicked,
-            self.plotController.remove_selected_plot_characters,
-            F.AUC,
-        )
-        connect(
-            self.lstSubPlots.selectionModel().currentRowChanged,
-            self.plotController.change_current_sub_plot,
-            F.AUC,
-        )
-
-        for w, c in [
-            (self.txtPlotName, Plot.name),
-            (self.txtPlotDescription, Plot.description),
-            (self.txtPlotResult, Plot.result),
-            (self.sldPlotImportance, Plot.importance),
-        ]:
-            w.setModel(self.mdlPlots)
-            w.setColumn(c)
-
-        self.tabPlot.setEnabled(False)
-        self.plotController.refresh_character_menu()
-        connect(
-            self.mdlCharacter.dataChanged,
-            self.plotController.refresh_character_menu,
-        )
-        self.lstOutlinePlots.setPlotModel(
-            self.mdlPlots,
-            settings=self.settingsManager,
-        )
-        self.lstOutlinePlots.setShowSubPlot(True)
-        self.plotCharacterDelegate = outlineCharacterDelegate(self.mdlCharacter, self)
-        self.lstPlotPerso.setItemDelegate(self.plotCharacterDelegate)
-        self.plotDelegate = plotDelegate(self)
-        self.lstSubPlots.setItemDelegateForColumn(PlotStep.meta, self.plotDelegate)
-
-        # World
-        self.treeWorld.setModel(self.mdlWorld)
-        for i in range(self.mdlWorld.columnCount()):
-            self.treeWorld.hideColumn(i)
-        self.treeWorld.showColumn(0)
-        self.worldController.build_data_set_menu()
-        connect(
-            self.treeWorld.selectionModel().selectionChanged,
-            self.worldController.handle_selection_changed,
-            F.AUC,
-        )
-        connect(
-            self.btnAddWorld.clicked,
-            self.worldController.add_item,
-            F.AUC,
-        )
-        connect(
-            self.btnRmWorld.clicked,
-            self.worldController.remove_selected_items,
-            F.AUC,
-        )
-        for w, c in [
-            (self.txtWorldName, World.name),
-            (self.txtWorldDescription, World.description),
-            (self.txtWorldPassion, World.passion),
-            (self.txtWorldConflict, World.conflict),
-        ]:
-            w.setModel(self.mdlWorld)
-            w.setColumn(c)
-        self.tabWorld.setEnabled(False)
-        self.treeWorld.expandAll()
-
-        # Outline
-        self.textEditorContext = text_editor_context_for(
-            self,
-            self.settingsManager,
-        )
-        for editor in self.findChildren(textEditView):
-            editor.set_text_editor_context(self.textEditorContext)
-
-        outline_view_context = OutlineViewContext(
-            character_model=self.mdlCharacter,
-            label_model=self.mdlLabels,
-            status_model=self.mdlStatus,
-            settings=self.settingsManager,
-            color_resolver=OutlineColorResolver(
-                self.mdlCharacter,
-                self.mdlLabels,
-            ),
-            open_index=self.openIndex,
-            open_indexes=self.openIndexes,
-            selection_changed=self.redacMetadata.selectionChanged,
-            show_status=self.statusPresenter.show,
-        )
-        editor_context = EditorContext(
-            outline_model=self.mdlOutline,
-            outline_tree=self.treeRedacOutline,
-            outline_views=outline_view_context,
-            text_editor=self.textEditorContext,
-        )
-        self.treeRedacOutline.set_outline_context(outline_view_context)
-        self.treeOutlineOutline.set_outline_context(outline_view_context)
-        self.mainEditor.set_context(editor_context)
-
-        self.treeRedacOutline.setModel(self.mdlOutline)
-
-        self.redacMetadata.setModels(self.mdlOutline, self.mdlCharacter,
-                                     self.mdlLabels, self.mdlStatus)
-        self.outlineItemEditor.setModels(self.mdlOutline, self.mdlCharacter,
-                                         self.mdlLabels, self.mdlStatus)
-
-        self.treeOutlineOutline.setModel(self.mdlOutline)
-        # self.redacEditor.setModel(self.mdlOutline)
-        self.storylineView.setModels(
-            self.mdlOutline,
-            self.mdlCharacter,
-            self.mdlPlots,
-            self.referenceService,
-            connect=connect,
-        )
-
-        connect(
-            self.treeOutlineOutline.selectionModel().selectionChanged,
-            self.outlineChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeOutlineOutline.selectionModel().selectionChanged,
-            self.outlineItemEditor.selectionChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeOutlineOutline.clicked,
-            self.outlineItemEditor.selectionChanged,
-            F.AUC,
-        )
-
-        # Sync selection
-        connect(
-            self.treeRedacOutline.selectionModel().selectionChanged,
-            self.redacOutlineChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeRedacOutline.selectionModel().selectionChanged,
-            self.redacMetadata.selectionChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeRedacOutline.clicked,
-            self.redacMetadata.selectionChanged,
-            F.AUC,
-        )
-        connect(
-            self.treeRedacOutline.selectionModel().selectionChanged,
-            self.mainEditor.selectionChanged,
-            F.AUC,
-        )
-
-        # Cheat Sheet
-        self.cheatSheet.setModels(
-            self.mdlOutline,
-            self.mdlCharacter,
-            self.mdlPlots,
-            self.mdlWorld,
-            self.referenceService,
-            connect=connect,
-        )
-        completion_data = lambda: self.cheatSheet.data
-        for editor in self.findChildren(MDEditCompleter):
-            editor.setReferenceService(
-                self.referenceService,
-                completion_data,
-            )
-        self.widget.setContext(
-            SearchContext.from_models(
-                outline=self.mdlOutline,
-                characters=self.mdlCharacter,
-                flat_data=self.mdlFlatData,
-                world=self.mdlWorld,
-                plots=self.mdlPlots,
-                result_views=SearchResultViewAdapter(
-                    self,
-                    self.referenceService,
-                ),
-            )
-        )
-
-        # Debug
-        self.mdlFlatData.setVerticalHeaderLabels(["General info", "Summary"])
-        self.tblDebugFlatData.setModel(self.mdlFlatData)
-        self.tblDebugPersos.setModel(self.mdlCharacter)
-        self.tblDebugPersosInfos.setModel(self.mdlCharacter)
-        connect(
-            self.tblDebugPersos.selectionModel().currentChanged,
-            lambda: self.tblDebugPersosInfos.setRootIndex(
-                self.mdlCharacter.index(
-                    self.tblDebugPersos.selectionModel().currentIndex().row(),
-                    Character.name,
-                )
-            ),
-            F.AUC,
-        )
-
-        self.tblDebugPlots.setModel(self.mdlPlots)
-        self.tblDebugPlotsPersos.setModel(self.mdlPlots)
-        self.tblDebugSubPlots.setModel(self.mdlPlots)
-        connect(
-            self.tblDebugPlots.selectionModel().currentChanged,
-            lambda: self.tblDebugPlotsPersos.setRootIndex(
-                self.mdlPlots.index(
-                    self.tblDebugPlots.selectionModel().currentIndex().row(),
-                    Plot.characters,
-                )
-            ),
-            F.AUC,
-        )
-        connect(
-            self.tblDebugPlots.selectionModel().currentChanged,
-            lambda: self.tblDebugSubPlots.setRootIndex(
-                self.mdlPlots.index(
-                    self.tblDebugPlots.selectionModel().currentIndex().row(),
-                    Plot.steps,
-                )
-            ),
-            F.AUC,
-        )
-        self.treeDebugWorld.setModel(self.mdlWorld)
-        self.treeDebugOutline.setModel(self.mdlOutline)
-        self.lstDebugLabels.setModel(self.mdlLabels)
-        self.lstDebugStatus.setModel(self.mdlStatus)
+        self.projectBinding.bind()
+        self.referenceService = self.projectBinding.reference_service
+        self.textEditorContext = self.projectBinding.text_editor_context
 
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
-        self.characterController.reset()
-        self.plotController.reset()
-        self.worldController.reset()
-        self.treeRedacOutline.set_outline_context(None)
-        self.treeOutlineOutline.set_outline_context(None)
-        self.mainEditor.clear_context()
-        for editor in self.findChildren(textEditView):
-            editor.set_text_editor_context(None)
+        self.projectBinding.unbind()
         self.textEditorContext = None
-        for editor in self.findChildren(MDEditCompleter):
-            editor.setReferenceService(None)
-        self.widget.clearContext()
-        self.cheatSheet.clearModels()
-        self.storylineView.clearModels()
         self.referenceService = None
-        self.projectConnections.disconnect_all()
 
     ###############################################################################
     # HELP
@@ -1319,7 +894,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsWindow(4)
 
     def settingsWindow(self, tab=None):
-        self.sw = settingsWindow(self, self.settingsManager)
+        self.sw = settingsWindow(
+            self,
+            self.settingsManager,
+            theme_repository=self.themeRepository,
+        )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)
         self.sw.setWindowFlags(Qt.Dialog)
@@ -1531,6 +1110,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 label_model=self.mdlLabels,
                 status_model=self.mdlStatus,
                 parent=self,
+                tool_paths=self.externalToolPaths,
+                process_runner=self.externalProcessRunner,
             )
         )
         self.dialog.show()
