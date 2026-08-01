@@ -11,7 +11,7 @@ from manuskript.models.abstractItem import abstractItem
 from manuskript.models.searchableItem import searchableItem
 from manuskript import enums
 from manuskript import functions as F
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.converters import HTML2PlainText
 from manuskript.searchLabels import OutlineSearchLabels
 from manuskript.enums import Outline, Model
@@ -173,7 +173,7 @@ class outlineItem(abstractItem, searchableItem):
         # Stuff to do afterwards
         if column == E.text:
             wc = F.wordCount(data)
-            cc = F.charCount(data, settings.countSpaces)
+            cc = F.charCount(data, SettingsManager().countSpaces)
             self.setData(E.wordCount, wc)
             self.setData(E.charCount, cc)
 
@@ -426,7 +426,7 @@ class outlineItem(abstractItem, searchableItem):
             text))
 
     def addRevision(self):
-        if not settings.revisions["keep"]:
+        if not SettingsManager().revisions["keep"]:
             return
 
         if not self.enum.text in self._data:
@@ -436,7 +436,7 @@ class outlineItem(abstractItem, searchableItem):
                 time.time(),
                 self.text())
 
-        if settings.revisions["smartremove"]:
+        if SettingsManager().revisions["smartremove"]:
             self.cleanRevisions()
 
         self.emitDataChanged([self.enum.revisions])
@@ -455,7 +455,7 @@ class outlineItem(abstractItem, searchableItem):
         rev2 = []
         now = time.time()
 
-        rule = settings.revisions["rules"]
+        rule = SettingsManager().revisions["rules"]
 
         revs = {}
         for i in rule:

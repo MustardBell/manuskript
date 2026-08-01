@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QFont
 from PyQt5.QtWidgets import QTextEdit, qApp
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from lxml import etree as ET
 
 from manuskript.enums import Outline

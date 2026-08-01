@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QFrame, QWidget, QPushButton, qApp, QStyle, QComboBo
     QStyleOptionSlider, QHBoxLayout, QVBoxLayout, QMenu, QAction, QDesktopWidget
 
 # Spell checker support
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.models import outlineItem
 from manuskript.functions import allPaths, drawProgress, safeTranslate
@@ -30,7 +30,7 @@ class fullScreenEditor(QWidget):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self._background = None
         self._index = index
-        self._theme = findThemePath(settings.fullScreenTheme)
+        self._theme = findThemePath(SettingsManager().fullScreenTheme)
         self._themeDatas = loadThemeDatas(self._theme)
         self.setMouseTracking(True)
         self._geometries = {}
@@ -38,9 +38,9 @@ class fullScreenEditor(QWidget):
         # Text editor
         self.editor = MDEditView(self,
                                 index=index,
-                                spellcheck=settings.spellcheck,
+                                spellcheck=SettingsManager().spellcheck,
                                 highlighting=True,
-                                dict=settings.dict)
+                                dict=SettingsManager().dict)
         self.editor.setFrameStyle(QFrame.NoFrame)
         self.editor.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.editor.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -126,8 +126,8 @@ class fullScreenEditor(QWidget):
                 self.lstThemes.addItem(name)
                 self.lstThemes.setItemData(self.lstThemes.count()-1, os.path.splitext(t)[0])
 
-        self.lstThemes.setCurrentIndex(self.lstThemes.findData(settings.fullScreenTheme))
-        # self.lstThemes.setCurrentText(settings.fullScreenTheme)
+        self.lstThemes.setCurrentIndex(self.lstThemes.findData(SettingsManager().fullScreenTheme))
+        # self.lstThemes.setCurrentText(SettingsManager().fullScreenTheme)
         self.lstThemes.currentTextChanged.connect(self.setTheme)
         self.lstThemes.setMaximumSize(QSize(300, QFontMetrics(qApp.font()).height()))
         themeLabel = QLabel(self.tr("Theme:"), self)
@@ -195,7 +195,7 @@ class fullScreenEditor(QWidget):
 
     def setTheme(self, themeName):
         themeName = self.lstThemes.currentData()
-        settings.fullScreenTheme = themeName
+        SettingsManager().fullScreenTheme = themeName
         self._theme = findThemePath(themeName)
         self._themeDatas = loadThemeDatas(self._theme)
         self.updateTheme()
@@ -359,11 +359,11 @@ class fullScreenEditor(QWidget):
         pg = item.data(Outline.goalPercentage)
 
         if goal:
-            if settings.fullscreenSettings.get("progress-auto-show", True):
+            if SettingsManager().fullscreenSettings.get("progress-auto-show", True):
                 self.lblProgress.show()
             self.lblWC.setText(self.tr("{} words / {}").format(wc, goal))
         else:
-            if settings.fullscreenSettings.get("progress-auto-show", True):
+            if SettingsManager().fullscreenSettings.get("progress-auto-show", True):
                 self.lblProgress.hide()
             self.lblWC.setText(self.tr("{} words").format(wc))
             pg = 0
@@ -414,7 +414,7 @@ class fullScreenEditor(QWidget):
         
     def createNewText(self):
         item = self._index.internalPointer()
-        newItem = outlineItem(title=safeTranslate(qApp, "outlineBasics", "New"), _type=settings.defaultTextType)
+        newItem = outlineItem(title=safeTranslate(qApp, "outlineBasics", "New"), _type=SettingsManager().defaultTextType)
         self._index.model().insertItem(newItem, item.row() + 1, item.parent().index())
         self.setCurrentModelIndex(newItem.index())
 
@@ -506,7 +506,7 @@ class myScrollBar(QScrollBar):
         Adds viewport height to scrollbar max so that we can center cursor
         on screen.
         """
-        if settings.textEditor["alwaysCenter"]:
+        if SettingsManager().textEditor["alwaysCenter"]:
             self.blockSignals(True)
             self.setMaximum(max + self.parent().height())
             self.blockSignals(False)
@@ -557,7 +557,7 @@ class myPanel(QWidget):
         painter.fillRect(r, self._color)
 
     def _setConfig(self, config_name, value):
-        settings.fullscreenSettings[config_name] = value
+        SettingsManager().fullscreenSettings[config_name] = value
         if config_name in self._callbacks:
             self._callbacks[config_name](config_name, value)
 
@@ -574,17 +574,17 @@ class myPanel(QWidget):
 
     def setAutoHideVariable(self, name):
         if name:
-            self.setAutoHide(settings.fullscreenSettings[name])
+            self.setAutoHide(SettingsManager().fullscreenSettings[name])
         self._autoHideVar = name
 
     def addWidgetSetting(self, label, config_name, widgets):
         setting = (label, config_name, widgets)
         self._settings.append(setting)
-        if settings.fullscreenSettings.get(config_name, None) != None:
-            self._setSettingValue(setting, settings.fullscreenSettings[config_name])
+        if SettingsManager().fullscreenSettings.get(config_name, None) != None:
+            self._setSettingValue(setting, SettingsManager().fullscreenSettings[config_name])
 
     def addSetting(self, label, config_name, default=True):
-        if settings.fullscreenSettings.get(config_name, None) == None:
+        if SettingsManager().fullscreenSettings.get(config_name, None) == None:
             self._setConfig(config_name, default)
         self.addWidgetSetting(label, config_name, None)
 
@@ -607,7 +607,7 @@ class myPanel(QWidget):
                 if item[2]:
                     a.setChecked(item[2][0].isVisible())
                 else:
-                    a.setChecked(settings.fullscreenSettings[item[1]])
+                    a.setChecked(SettingsManager().fullscreenSettings[item[1]])
                 def gen_cb(setting):
                     return lambda v: self._setSettingValue(setting, v)
                 a.toggled.connect(gen_cb(item))
@@ -636,7 +636,7 @@ class myPath(QWidget):
             return lambda: self.popupPath(i)
         # Skip Root
         for i in path[1:]:
-            if not settings.fullscreenSettings.get("title-show-full-path", True) and \
+            if not SettingsManager().fullscreenSettings.get("title-show-full-path", True) and \
                     i.isFolder():
                 continue
             btn = QPushButton(i.title(), self)
@@ -691,7 +691,7 @@ class myClockLabel(QLabel):
 
     def updateClock(self):
         time = QTime.currentTime()
-        if settings.fullscreenSettings.get("clock-show-seconds", True):
+        if SettingsManager().fullscreenSettings.get("clock-show-seconds", True):
             timeStr = time.toString("hh:mm:ss")
         else:
             timeStr = time.toString("hh:mm")

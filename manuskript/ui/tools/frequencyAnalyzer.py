@@ -4,7 +4,7 @@ from PyQt5.QtCore import QVariant, Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QWidget, QTextEdit, QTableWidgetItem, QHeaderView
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Outline
 from manuskript.ui.tools.frequency_ui import Ui_FrequencyAnalyzer
 import re
@@ -28,10 +28,10 @@ class frequencyAnalyzer(QWidget, Ui_FrequencyAnalyzer):
         self.btnAnalyzePhrase.clicked.connect(self.analyzePhrase)
 
         # Settings
-        self.spnWordMin.setValue(settings.frequencyAnalyzer["wordMin"])
-        self.txtWordExclude.setPlainText(settings.frequencyAnalyzer["wordExclude"])
-        self.spnPhraseMin.setValue(settings.frequencyAnalyzer["phraseMin"])
-        self.spnPhraseMax.setValue(settings.frequencyAnalyzer["phraseMax"])
+        self.spnWordMin.setValue(SettingsManager().frequencyAnalyzer["wordMin"])
+        self.txtWordExclude.setPlainText(SettingsManager().frequencyAnalyzer["wordExclude"])
+        self.spnPhraseMin.setValue(SettingsManager().frequencyAnalyzer["phraseMin"])
+        self.spnPhraseMax.setValue(SettingsManager().frequencyAnalyzer["phraseMax"])
         self.spnWordMin.valueChanged.connect(self.updateSettings)
         self.txtWordExclude.textChanged.connect(self.updateSettings)
         self.spnPhraseMin.valueChanged.connect(self.updateSettings)
@@ -115,7 +115,7 @@ class frequencyAnalyzer(QWidget, Ui_FrequencyAnalyzer):
         self.tblWord.setModel(mdl)
 
     def updateSettings(self):
-        settings.frequencyAnalyzer["wordMin"] = self.spnWordMin.value()
-        settings.frequencyAnalyzer["wordExclude"] = self.txtWordExclude.toPlainText()
-        settings.frequencyAnalyzer["phraseMin"] = self.spnPhraseMin.value()
-        settings.frequencyAnalyzer["phraseMax"] = self.spnPhraseMax.value()
+        SettingsManager().frequencyAnalyzer["wordMin"] = self.spnWordMin.value()
+        SettingsManager().frequencyAnalyzer["wordExclude"] = self.txtWordExclude.toPlainText()
+        SettingsManager().frequencyAnalyzer["phraseMin"] = self.spnPhraseMin.value()
+        SettingsManager().frequencyAnalyzer["phraseMax"] = self.spnPhraseMax.value()

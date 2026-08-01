@@ -5,7 +5,7 @@ from PyQt5.QtGui import QColor, QPalette, QIcon, QFont, QFontMetrics, QBrush
 from PyQt5.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QStyle, QComboBox, QStyleOptionComboBox
 from PyQt5.QtWidgets import qApp
 
-from manuskript import settings
+from manuskript.settingsManager import SettingsManager
 from manuskript.enums import Character, Outline
 from manuskript.functions import outlineItemColors, mixColors, colorifyPixmap, toInt, toFloat, drawProgress
 from manuskript.ui import style as S
@@ -35,9 +35,9 @@ class outlineTitleDelegate(QStyledItemDelegate):
         # Background
         style.drawPrimitive(style.PE_PanelItemViewItem, opt, painter)
 
-        if settings.viewSettings["Outline"]["Background"] != "Nothing" and not opt.state & QStyle.State_Selected:
+        if SettingsManager().viewSettings["Outline"]["Background"] != "Nothing" and not opt.state & QStyle.State_Selected:
 
-            col = colors[settings.viewSettings["Outline"]["Background"]]
+            col = colors[SettingsManager().viewSettings["Outline"]["Background"]]
 
             if col != QColor(Qt.transparent):
                 col2 = QColor(S.base)
@@ -68,8 +68,8 @@ class outlineTitleDelegate(QStyledItemDelegate):
             mode = QIcon.Selected
         state = QIcon.On if opt.state & QStyle.State_Open else QIcon.Off
         icon = opt.icon.pixmap(iconRect.size(), mode=mode, state=state)
-        if opt.icon and settings.viewSettings["Outline"]["Icon"] != "Nothing":
-            color = colors[settings.viewSettings["Outline"]["Icon"]]
+        if opt.icon and SettingsManager().viewSettings["Outline"]["Icon"] != "Nothing":
+            color = colors[SettingsManager().viewSettings["Outline"]["Icon"]]
             colorifyPixmap(icon, color)
         opt.icon = QIcon(icon)
         opt.icon.paint(painter, iconRect, opt.decorationAlignment, mode, state)
@@ -82,13 +82,13 @@ class outlineTitleDelegate(QStyledItemDelegate):
                 col = QColor(S.highlightedText)
                 textColor = col
                 painter.setPen(col)
-            if settings.viewSettings["Outline"]["Text"] != "Nothing":
-                col = colors[settings.viewSettings["Outline"]["Text"]]
+            if SettingsManager().viewSettings["Outline"]["Text"] != "Nothing":
+                col = colors[SettingsManager().viewSettings["Outline"]["Text"]]
                 if col == Qt.transparent:
                     col = textColor
                 # If text color is Compile and item is selected, we have
                 # to change the color
-                if settings.viewSettings["Outline"]["Text"] == "Compile" and \
+                if SettingsManager().viewSettings["Outline"]["Text"] == "Compile" and \
                    item.compile() in [0, "0"]:
                     col = mixColors(textColor, QColor(S.window))
                 painter.setPen(col)
