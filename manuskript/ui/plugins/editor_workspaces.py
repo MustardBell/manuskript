@@ -1,6 +1,6 @@
 from functools import partial
 
-from PyQt5.QtCore import QModelIndex, QObject, Qt, pyqtSignal
+from PyQt5.QtCore import QModelIndex, QObject, QPoint, Qt, pyqtSignal
 from PyQt5.QtGui import QKeySequence, QTextCursor
 from PyQt5.QtWidgets import (
     QAction,
@@ -342,6 +342,14 @@ class WorkspaceEditorEndpoint(QObject):
         return self.editor.textCursor().blockNumber()
 
     @property
+    def cursor_position(self):
+        return self.editor.textCursor().position()
+
+    @property
+    def first_visible_block(self):
+        return self.editor.cursorForPosition(QPoint(1, 1)).blockNumber()
+
+    @property
     def block_count(self):
         return self.editor.document().blockCount()
 
@@ -351,10 +359,16 @@ class WorkspaceEditorEndpoint(QObject):
         )
         if not block.isValid():
             return
-        cursor = self.editor.textCursor()
-        cursor.setPosition(block.position())
-        self.editor.setTextCursor(cursor)
-        self.editor.ensureCursorVisible()
+        layout = self.editor.document().documentLayout()
+        block_top = layout.blockBoundingRect(block).top()
+        self.set_scroll_value(round(block_top))
+
+    def scroll_to_text_offset(self, offset):
+        block = self.editor.document().findBlock(
+            max(0, min(int(offset), len(self.text())))
+        )
+        if block.isValid():
+            self.scroll_to_block(block.blockNumber())
 
     def close(self):
         self.submit()
