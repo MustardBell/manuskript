@@ -165,7 +165,15 @@ class ProjectLifecycleView:
         dialog.open()
 
     def prepare_close(self):
+        self.window.mainEditor.close()
         self.window.mainEditor.closeAllTabs()
+
+    def capture_project_state(self):
+        """Copy project-scoped view state into persisted settings."""
+        self.settings.lastTab = self.window.tabMain.currentIndex()
+        self.settings.openIndexes = (
+            self.window.mainEditor.tabSplitter.openIndexes()
+        )
 
     def disconnect_project(self):
         self.window.breakConnections()

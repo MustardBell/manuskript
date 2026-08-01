@@ -132,7 +132,7 @@ class ProjectManager:
             return True
 
         # Make sure data is saved.
-        if self.session.is_dirty and self.ui.settings.saveOnQuit:
+        if self.ui.settings.saveOnQuit:
             if not self.saveDatas():
                 return False
         elif not self.handleUnsavedChanges():
@@ -197,6 +197,7 @@ class ProjectManager:
             LOGGER.error("There is no current project to save.")
             return False
 
+        self.ui.capture_project_state()
         result = self.storage.save(
             self.persistence_context(self.currentProject)
         )
@@ -239,27 +240,44 @@ class ProjectManager:
         result = self.storage.load(self.persistence_context(project))
         if result.unreadable_files:
             self.ui.show_load_failures(result.unreadable_files)
-        errors = result.issues
 
-        # Giving some feedback
-        if not errors:
-            LOGGER.info("Project {} loaded.".format(project))
-            self.status_reporter(
-                    self.ui.translate("Project {} loaded.").format(project), 2000)
-        else:
-            LOGGER.error("Project {} loaded with some errors:".format(project))
-            for e in errors:
-                LOGGER.error(" * {} wasn't found in project file.".format(e))
-            self.status_reporter(
-                    self.ui.translate("Project {} loaded with some errors.").format(project), 5000, importance = 3)
-        
         if not result.succeeded:
-            LOGGER.error("Loading project {} failed.".format(project))
+            LOGGER.error("Loading project %s failed:", project)
+            for error in result.fatal_errors:
+                LOGGER.error(" * %s", error)
             self.status_reporter(
-                    self.ui.translate("Loading project {} failed.").format(project), 5000, importance = 3)
-
+                self.ui.translate(
+                    "Loading project {} failed."
+                ).format(project),
+                5000,
+                importance=3,
+            )
             return False
-        
+
+        if result.issues:
+            LOGGER.warning(
+                "Project %s loaded with recoverable errors:",
+                project,
+            )
+            for filename in result.missing_files:
+                LOGGER.warning(" * Missing file: %s", filename)
+            for filename in result.unreadable_files:
+                LOGGER.warning(" * Unreadable file: %s", filename)
+            self.status_reporter(
+                self.ui.translate(
+                    "Project {} loaded with some errors."
+                ).format(project),
+                5000,
+                importance=3,
+            )
+        else:
+            LOGGER.info("Project %s loaded.", project)
+            self.status_reporter(
+                self.ui.translate(
+                    "Project {} loaded."
+                ).format(project),
+                2000,
+            )
         return True
 
     def clearSaveCache(self):

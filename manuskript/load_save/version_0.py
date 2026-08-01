@@ -4,9 +4,6 @@
 # Version 0 of file saving format.
 # Was used at the beginning and up until version XXX when
 # it was superseded by Version 1, which is more open and flexible
-import os
-import zipfile
-
 from PyQt5.QtCore import QModelIndex, Qt
 from PyQt5.QtGui import QColor, QStandardItem
 from PyQt5.QtWidgets import qApp
@@ -17,23 +14,23 @@ from manuskript.domain.persistence import (
     ProjectSaveResult,
 )
 from manuskript.functions import iconColor, iconFromColorString
+from manuskript.load_save.legacy_archive import (
+    LegacyArchiveReadError,
+    LegacyArchiveWriteError,
+    Version0ProjectArchive,
+)
 from manuskript.models.characterModel import Character, CharacterInfo
 
 import logging
 LOGGER = logging.getLogger(__name__)
 
-try:
-    import zlib  # Used with zipfile for compression
-
-    compression = zipfile.ZIP_DEFLATED
-except:
-    compression = zipfile.ZIP_STORED
+compression = Version0ProjectArchive.COMPRESSION
 
 ###########################################################################################
 # SAVE
 ###########################################################################################
 
-def saveProject(context):
+def saveProject(context, archive=None):
     """
     Saves the whole project. Call this function to save the project in Version 0 format.
     """
@@ -57,19 +54,23 @@ def saveProject(context):
     files.append((context.settings.save(),
                   "settings.pickle"))
 
-    saveFilesToZip(files, context.project_file)
+    archive = (
+        archive if archive is not None else Version0ProjectArchive()
+    )
+    try:
+        archive.write(context.project_file, files)
+    except LegacyArchiveWriteError as error:
+        LOGGER.error("%s", error)
+        return ProjectSaveResult(
+            failed_files=(context.project_file,)
+        )
     return ProjectSaveResult()
 
 def saveFilesToZip(files, zipname):
     """Saves given files to zipname.
     files is actually a list of (content, filename)."""
 
-    zf = zipfile.ZipFile(zipname, mode="w")
-
-    for content, filename in files:
-        zf.writestr(filename, content, compress_type=compression)
-
-    zf.close()
+    Version0ProjectArchive().write(zipname, files)
 
 def saveStandardItemModelXML(mdl, xml=None):
     """Saves the given QStandardItemModel to XML.
@@ -123,10 +124,17 @@ def saveItem(root, mdl, parent=QModelIndex()):
 # LOAD
 ###########################################################################################
 
-def loadProject(context):
+def loadProject(context, archive=None):
     project = context.project_file
 
-    files = loadFilesFromZip(project)
+    archive = (
+        archive if archive is not None else Version0ProjectArchive()
+    )
+    try:
+        files = archive.read(project)
+    except LegacyArchiveReadError as error:
+        LOGGER.error("%s", error)
+        return ProjectLoadResult(fatal_errors=(str(error),))
 
     errors = []
 
@@ -183,14 +191,7 @@ def loadProject(context):
 
 def loadFilesFromZip(zipname):
     """Returns the content of zipfile as a dict of filename:content."""
-    zf = zipfile.ZipFile(zipname)
-    files = {}
-    for f in zf.namelist():
-        # Some archiving programs (e.g. 7-Zip) also store entries for the directories when
-        # creating an archive. We have no use for these entries; skip them entirely.
-        if f[-1:] != '/':
-            files[os.path.normpath(f)] = zf.read(f)
-    return files
+    return Version0ProjectArchive().read(zipname)
 
 
 def loadStandardItemModelXML(mdl, xml, fromString=False):
@@ -199,16 +200,19 @@ def loadStandardItemModelXML(mdl, xml, fromString=False):
 
     # LOGGER.info("Loading {}...".format(xml))
 
-    if not fromString:
-        try:
-            tree = ET.parse(xml)
-        except:
-            LOGGER.error("Failed to load XML for QStandardItemModel (%s).", xml)
-            return
-    else:
-        root = ET.fromstring(xml)
-
-    # root = tree.getroot()
+    try:
+        root = (
+            ET.fromstring(xml)
+            if fromString
+            else ET.parse(xml).getroot()
+        )
+    except (OSError, ValueError, TypeError, ET.XMLSyntaxError) as error:
+        LOGGER.error(
+            "Failed to load XML for QStandardItemModel (%s): %s",
+            xml,
+            error,
+        )
+        return False
 
     # Header
     hLabels = []
