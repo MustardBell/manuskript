@@ -12,6 +12,7 @@ from lxml import etree as ET
 import re
 
 from manuskript import enums
+from manuskript.load_save.xml import parse_project_xml
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -305,7 +306,7 @@ class abstractItem():
         item = self.toXMLProcessItem(item)
 
         for i in self.childItems:
-            item.append(ET.XML(i.toXML()))
+            item.append(parse_project_xml(i.toXML()))
 
         return ET.tostring(item)
 
@@ -316,7 +317,7 @@ class abstractItem():
         return item
 
     def setFromXML(self, xml):
-        root = ET.XML(xml)
+        root = parse_project_xml(xml)
 
         for k in self.enum:
             if k.name in root.attrib:

@@ -6,13 +6,16 @@ from PyQt5.QtWidgets import QWidget, QStyle
 
 from manuskript import exporter
 from manuskript.functions import openURL
+from manuskript.services.application_preferences import (
+    ApplicationPreferences,
+)
 from manuskript.ui.exporters.exporter_ui import Ui_exporter
 from manuskript.ui.exporters.exportersManager import exportersManager
 from manuskript.ui import style as S
 
 
 class exporterDialog(QWidget, Ui_exporter):
-    def __init__(self, context, parent=None):
+    def __init__(self, context, parent=None, preferences=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
 
@@ -22,18 +25,15 @@ class exporterDialog(QWidget, Ui_exporter):
         self.currentExporter = None
         self.settingsWidget = None
         self.previewWidget = None
+        self.preferences = preferences or ApplicationPreferences()
 
+        self.cmbExporters.currentIndexChanged.connect(self.updateUi)
         self.populateExportList()
 
         self.btnManageExporters.clicked.connect(self.openManager)
 
-        self.cmbExporters.currentIndexChanged.connect(self.updateUi)
-        self.cmbExporters.setCurrentIndex(1)
-
         self.btnPreview.clicked.connect(self.preview)
         self.btnExport.clicked.connect(self.export)
-
-        #FIXME: load last export format
 
     def populateExportList(self):
 
@@ -62,6 +62,45 @@ class exporterDialog(QWidget, Ui_exporter):
                 name = f.name if f.implemented else self.tr("{} (not implemented yet)").format(f.name)
                 self.cmbExporters.addItem(QIcon.fromTheme(f.icon), name, E.name)
 
+        self.restoreExportFormat()
+        self.updateUi(self.cmbExporters.currentIndex())
+
+    def restoreExportFormat(self):
+        exporter_name = self.preferences.last_exporter
+        format_name = self.preferences.last_export_format
+        fallback = -1
+        selected = -1
+        for index in range(self.cmbExporters.count()):
+            current_exporter = exporter.get_exporter_by_name(
+                self.exporters,
+                self.cmbExporters.itemData(index),
+            )
+            current_format = (
+                current_exporter.getFormatByName(
+                    self.cmbExporters.itemText(index)
+                )
+                if current_exporter
+                else None
+            )
+            if (
+                current_exporter
+                and current_format
+                and current_format.implemented
+            ):
+                if fallback == -1:
+                    fallback = index
+                if (
+                    current_exporter.name == exporter_name
+                    and current_format.name == format_name
+                ):
+                    selected = index
+                    break
+        previous = self.cmbExporters.blockSignals(True)
+        self.cmbExporters.setCurrentIndex(
+            selected if selected != -1 else fallback
+        )
+        self.cmbExporters.blockSignals(previous)
+
     def updateUi(self, index):
 
         # We check if we have an URL to open
@@ -75,6 +114,8 @@ class exporterDialog(QWidget, Ui_exporter):
             self.setWidgetsEnabled(False)
             return
 
+        self.preferences.last_exporter = E.name
+        self.preferences.last_export_format = F.name
         self.setWidgetsEnabled(True)
 
         self.grpSettings.setVisible(F.requires["Settings"])

@@ -573,7 +573,7 @@ class settingsWindow(QWidget, Ui_Settings):
         filename = QFileDialog.getOpenFileName(self,
                                                self.tr("Open Image"),
                                                lastDirectory,
-                                               self.tr("Image files (*.jpg; *.jpeg; *.png)"))[0]
+                                               self.imageFileFilter())[0]
         if filename:
             try:
                 px = QPixmap()
@@ -589,6 +589,13 @@ class settingsWindow(QWidget, Ui_Settings):
                 QMessageBox.warning(self, self.tr("Error"),
                                     self.tr("Unable to add selected image:\n{}").format(str(e)))
         return None
+
+    def imageFileFilter(self):
+        """Return a translated label with Qt-compatible file patterns."""
+        return "{} (*.png *.jpg *.jpeg);;{} (*)".format(
+            self.tr("Image files"),
+            self.tr("All files"),
+        )
                 
 
     def setCorkImageDefault(self):

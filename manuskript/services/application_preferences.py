@@ -2,11 +2,13 @@ from PyQt5.QtCore import QSettings
 
 
 class ApplicationPreferences:
-    """Own application-scoped style, language, and font preferences."""
+    """Own application-scoped UI preferences."""
 
     STYLE_KEY = "applicationStyle"
     TRANSLATION_KEY = "applicationTranslation"
     FONT_SIZE_KEY = "appFontSize"
+    LAST_EXPORTER_KEY = "lastExporter"
+    LAST_EXPORT_FORMAT_KEY = "lastExportFormat"
 
     def __init__(self, settings=None):
         self._settings = (
@@ -42,6 +44,22 @@ class ApplicationPreferences:
     @font_size.setter
     def font_size(self, value):
         self._set_value(self.FONT_SIZE_KEY, int(value))
+
+    @property
+    def last_exporter(self):
+        return self._optional_value(self.LAST_EXPORTER_KEY)
+
+    @last_exporter.setter
+    def last_exporter(self, value):
+        self._set_value(self.LAST_EXPORTER_KEY, value)
+
+    @property
+    def last_export_format(self):
+        return self._optional_value(self.LAST_EXPORT_FORMAT_KEY)
+
+    @last_export_format.setter
+    def last_export_format(self, value):
+        self._set_value(self.LAST_EXPORT_FORMAT_KEY, value)
 
     def _optional_value(self, key):
         if not self._settings.contains(key):

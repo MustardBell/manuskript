@@ -7,6 +7,7 @@ from PyQt5.QtGui import QStandardItem, QStandardItemModel
 from manuskript import exporter
 from manuskript.exporter.context import ExportContext
 from manuskript.exporter.pandoc import pandocExporter
+from manuskript.exporter.pandoc.abstractPlainText import pandocSettings
 
 busy_cursor_module = importlib.import_module(
     "manuskript.ui.busy_cursor"
@@ -78,6 +79,7 @@ def test_plain_text_output_uses_context_outline_root():
     concatenate.assert_called_once_with(
         context.outline_model.rootItem,
         settings,
+        include_item=True,
     )
 
 
@@ -119,3 +121,18 @@ def test_pandoc_restores_cursor_when_process_start_fails():
 
     application.setOverrideCursor.assert_called_once()
     application.restoreOverrideCursor.assert_called_once_with()
+
+
+def test_pandoc_latex_defaults_match_supported_template_values():
+    settings = pandocSettings.settingsList
+
+    assert settings["latex-ps"].vals == ["letter", "a4", "a5"]
+    assert settings["latex-fs"].type == "combo"
+    assert settings["latex-fs"].vals == ["10pt", "11pt", "12pt"]
+    assert {
+        "scrartcl",
+        "scrreprt",
+        "scrbook",
+    }.issubset(settings["latex-class"].vals)
+    assert settings["latex-indent"].arg == "--variable=indent"
+    assert settings["latex-block-headings"].minVersion == [2, 0]

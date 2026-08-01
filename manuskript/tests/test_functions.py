@@ -29,7 +29,7 @@ def test_convert():
 def test_several():
 
     from PyQt5.QtGui import QPainter, QPixmap, QIcon, QColor
-    from PyQt5.QtCore import QRect
+    from PyQt5.QtCore import QRect, Qt
 
     # drawProgress
     px = QPixmap(10, 10)
@@ -61,7 +61,14 @@ def test_several():
     assert F.mixColors(c1, c2).name() == "#7f7f7f"
 
     # colorifyPixmap
-    assert F.colorifyPixmap(px, c1) != None
+    px.fill(Qt.transparent)
+    painter = QPainter(px)
+    painter.fillRect(2, 2, 4, 4, QColor("white"))
+    painter.end()
+    assert F.colorifyPixmap(px, QColor("red")) is px
+    image = px.toImage()
+    assert image.pixelColor(0, 0).alpha() == 0
+    assert image.pixelColor(3, 3).name() == "#ff0000"
 
 def test_paths():
 

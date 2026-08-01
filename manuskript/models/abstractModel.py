@@ -263,24 +263,24 @@ class abstractModel(QAbstractItemModel):
     # http://doc.qt.io/qt-5/model-view-programming.html#using-drag-and-drop-with-item-views
 
     def flags(self, index):
-        # FIXME when dragging folders, sometimes flags is not called
+        flags = QAbstractItemModel.flags(self, index)
+        if not index.isValid():
+            return flags | Qt.ItemIsDropEnabled
 
-        flags = QAbstractItemModel.flags(self, index) | Qt.ItemIsEditable
+        if index.column() not in (
+            Outline.wordCount,
+            Outline.goalPercentage,
+        ):
+            flags |= Qt.ItemIsEditable
 
-        if index.isValid() and index.internalPointer().isFolder() and index.column() == 0:
+        if index.internalPointer().isFolder() and index.column() == 0:
             flags |= Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
 
-        elif index.isValid() and index.column() == 0:
+        elif index.column() == 0:
             flags |= Qt.ItemIsDragEnabled
 
-        elif not index.isValid():
-            flags |= Qt.ItemIsDropEnabled
-
-        if index.isValid() and index.column() == Outline.compile:
+        if index.column() == Outline.compile:
             flags |= Qt.ItemIsUserCheckable
-
-        if index.column() in [i.value for i in [Outline.wordCount, Outline.goalPercentage]]:
-            flags &= ~ Qt.ItemIsEditable
 
         return flags
 
