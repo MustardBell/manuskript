@@ -182,14 +182,15 @@ def test_pandoc_exposes_bbcode_when_selected_binary_supports_it():
         return_value="html\nmarkdown\nbbcode\n"
     )
 
-    bbcode = pandoc.getFormatByName("BBCode")
+    with patch.object(pandoc, "isValid", return_value=True):
+        bbcode = pandoc.getFormatByName("BBCode")
 
-    assert bbcode.toFormat == "bbcode"
-    assert bbcode.exportDefaultSuffix == ".bbcode"
-    assert bbcode.isValid()
-    assert pandoc.output_formats() == frozenset(
-        {"html", "markdown", "bbcode"}
-    )
+        assert bbcode.toFormat == "bbcode"
+        assert bbcode.exportDefaultSuffix == ".bbcode"
+        assert bbcode.isValid()
+        assert pandoc.output_formats() == frozenset(
+            {"html", "markdown", "bbcode"}
+        )
     pandoc.run.assert_called_once_with(
         ["--list-output-formats"]
     )
@@ -199,10 +200,14 @@ def test_pandoc_hides_bbcode_when_selected_binary_lacks_writer():
     pandoc = pandocExporter(make_context())
     pandoc.run = MagicMock(return_value="html\nmarkdown\n")
 
-    bbcode = pandoc.getFormatByName("BBCode")
+    with patch.object(pandoc, "isValid", return_value=True):
+        bbcode = pandoc.getFormatByName("BBCode")
 
-    assert not bbcode.isValid()
+        assert not bbcode.isValid()
     assert "3.8.3" in bbcode.InvalidBecause
+    pandoc.run.assert_called_once_with(
+        ["--list-output-formats"]
+    )
 
 
 def test_pandoc_refreshes_output_formats_after_path_change():
@@ -215,11 +220,12 @@ def test_pandoc_refreshes_output_formats_after_path_change():
         ]
     )
 
-    assert not pandoc.supports_output_format("bbcode")
+    with patch.object(pandoc, "isValid", return_value=True):
+        assert not pandoc.supports_output_format("bbcode")
 
-    pandoc.setCustomPath("/opt/pandoc/bin/pandoc")
+        pandoc.setCustomPath("/opt/pandoc/bin/pandoc")
 
-    assert pandoc.supports_output_format("bbcode")
+        assert pandoc.supports_output_format("bbcode")
     assert pandoc.run.call_count == 2
     context.tool_paths.set.assert_called_once_with(
         "pandoc",
