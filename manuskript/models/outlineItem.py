@@ -12,6 +12,7 @@ from manuskript.models.searchableItem import searchableItem
 from manuskript import enums
 from manuskript import functions as F
 from manuskript.converters import HTML2PlainText
+from manuskript.domain.revisions import RevisionConfiguration
 from manuskript.models.outline_settings import DefaultOutlineSettings
 from manuskript.searchLabels import OutlineSearchLabels
 from manuskript.enums import Outline, Model
@@ -480,7 +481,10 @@ class outlineItem(abstractItem, searchableItem):
             text))
 
     def addRevision(self):
-        if not self.settings.revisions["keep"]:
+        configuration = RevisionConfiguration.from_mapping(
+            self.settings.revisions
+        )
+        if not configuration.uses_internal_snapshots:
             return
 
         if not self.enum.text in self._data:

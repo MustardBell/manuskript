@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import QListWidgetItem, QMessageBox
 from manuskript.domain.project import CloseDecision
 from manuskript.enums import Outline
 from manuskript.ui.listDialog import ListDialog
+from manuskript.ui.views.textEditView import textEditView
 
 
 class ProjectLifecycleView:
@@ -46,6 +47,7 @@ class ProjectLifecycleView:
         for item in [
             self.window.actSave,
             self.window.actSaveAs,
+            self.window.actGitRevisions,
             self.window.actCloseProject,
             self.window.menuEdit,
             self.window.menuView,
@@ -167,6 +169,15 @@ class ProjectLifecycleView:
     def prepare_close(self):
         self.window.mainEditor.close()
         self.window.mainEditor.closeAllTabs()
+
+    def flush_pending_edits(self):
+        """Submit every model-backed text editor before a revision action."""
+        for editor in self.window.findChildren(textEditView):
+            editor.submit()
+
+    def prepare_model_replacement(self):
+        """Release editor widgets before their models are replaced."""
+        self.prepare_close()
 
     def capture_project_state(self):
         """Copy project-scoped view state into persisted settings."""

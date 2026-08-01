@@ -15,6 +15,9 @@ from manuskript.services.project_persistence import (
     ProjectPersistenceContext,
 )
 from manuskript.services.project_storage import ProjectStorage
+from manuskript.services.revision_coordinator import (
+    ProjectRevisionCoordinator,
+)
 from manuskript.ui.connections import SignalConnectionRegistry
 
 import logging
@@ -24,7 +27,8 @@ LOGGER = logging.getLogger(__name__)
 class ProjectManager:
     def __init__(
             self, lifecycle_view, storage=None, status_reporter=None,
-            model_factory=None, autosave=None, last_project_store=None):
+            model_factory=None, autosave=None, last_project_store=None,
+            revision_coordinator=None):
         self.ui = lifecycle_view
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
@@ -39,6 +43,9 @@ class ProjectManager:
         )
         self.last_project_store = (
             last_project_store or ProjectHistory()
+        )
+        self.revision_coordinator = (
+            revision_coordinator or ProjectRevisionCoordinator()
         )
 
     @property
@@ -95,10 +102,7 @@ class ProjectManager:
         self.ui.apply_loaded_settings()
 
         self.reconfigureAutosave()
-        for model in self.ui.change_models():
-            self.modelConnections.connect(
-                model.dataChanged, self.startTimerNoChanges
-            )
+        self._connectModelChanges()
 
         self.syncUiToState()
         self.last_project_store.remember_last_project(project)
@@ -170,7 +174,13 @@ class ProjectManager:
         self.autosave.schedule_after_change()
         return True
 
-    def saveDatas(self, projectName=None):
+    def saveDatas(
+        self,
+        projectName=None,
+        *,
+        revision_message=None,
+        record_revision=True,
+    ):
         """Saves the current project (in self.currentProject).
 
         If ``projectName`` is given, currentProject becomes projectName.
@@ -216,6 +226,8 @@ class ProjectManager:
             ).format(current_project_name)
             self.status_reporter(feedback, importance=0)
             LOGGER.info("Project {} saved.".format(current_project_name))
+            if record_revision:
+                self._recordRevisionAfterSave(revision_message)
         else:
             if projectName:
                 self.session.rename(previous_project)
@@ -228,6 +240,26 @@ class ProjectManager:
             LOGGER.warning("Project {} not saved.".format(current_project_name))
         return result.succeeded
 
+    def _recordRevisionAfterSave(self, message):
+        try:
+            self.revision_coordinator.after_project_save(
+                self.currentProject,
+                self.ui.settings,
+                message=message,
+            )
+        except Exception as error:
+            LOGGER.exception(
+                "Project saved, but its Git revision could not be "
+                "recorded."
+            )
+            self.status_reporter(
+                self.ui.translate(
+                    "Project saved, but Git could not record the "
+                    "revision: {}"
+                ).format(str(error)),
+                importance=2,
+            )
+
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(
             self.ui.model_parent,
@@ -235,6 +267,170 @@ class ProjectManager:
         )
         self.ui.install_models(self.models)
         return self.models
+
+    def restoreRevisionSnapshot(self, snapshot):
+        """Replace the project through validated models, never Git checkout."""
+        if not self.session.is_open:
+            LOGGER.error(
+                "Cannot restore a revision when no project is open."
+            )
+            return False
+        if not snapshot.load_result.succeeded:
+            LOGGER.error(
+                "Cannot restore invalid revision snapshot %s.",
+                snapshot.commit_id,
+            )
+            return False
+
+        self.ui.flush_pending_edits()
+        if not self.saveDatas(
+            revision_message="Before restoring revision {}".format(
+                snapshot.commit_id[:10]
+            )
+        ):
+            LOGGER.error(
+                "Cannot preserve the current project before restoring %s.",
+                snapshot.commit_id,
+            )
+            return False
+
+        previous_models = self.models
+        previous_settings = self.ui.settings.save()
+        restored_settings = snapshot.settings.save()
+        replacement_attempted = False
+
+        self.autosave.stop()
+        self.ui.prepare_model_replacement()
+        self._disconnectModelChanges()
+        self.ui.disconnect_project()
+
+        try:
+            replacement_attempted = True
+            self._installProjectState(
+                snapshot.models,
+                restored_settings,
+            )
+            self.session.mark_dirty()
+            if not self.saveDatas(
+                revision_message="Restore revision {}".format(
+                    snapshot.commit_id[:10]
+                )
+            ):
+                raise RuntimeError(
+                    "The restored revision could not be saved."
+                )
+        except Exception:
+            LOGGER.exception(
+                "Restoring revision %s failed; reinstating the "
+                "previous project state.",
+                snapshot.commit_id,
+            )
+            rollback_succeeded = self._rollbackProjectState(
+                previous_models,
+                previous_settings,
+                replacement_attempted,
+            )
+            self.reconfigureAutosave()
+            if not rollback_succeeded:
+                self.status_reporter(
+                    self.ui.translate(
+                        "Revision restore failed, and the previous "
+                        "project could not be written back completely."
+                    ),
+                    importance=3,
+                )
+            else:
+                self.status_reporter(
+                    self.ui.translate(
+                        "Revision restore failed; the previous "
+                        "project was restored."
+                    ),
+                    importance=3,
+                )
+            return False
+
+        self._disposeModels(previous_models)
+        self.reconfigureAutosave()
+        self.ui.project_opened()
+        self.status_reporter(
+            self.ui.translate(
+                "Revision {} restored."
+            ).format(snapshot.commit_id[:10]),
+            importance=0,
+        )
+        return True
+
+    def _installProjectState(self, models, serialized_settings):
+        self.ui.settings.load(
+            serialized_settings,
+            fromString=True,
+            protocol=0,
+        )
+        self._adoptLiveSettings(models)
+        self.models = models
+        self.ui.install_models(models)
+        self.ui.connect_project()
+        self.ui.apply_loaded_settings()
+        self._connectModelChanges()
+
+    def _rollbackProjectState(
+        self,
+        previous_models,
+        previous_settings,
+        replacement_attempted,
+    ):
+        self._disconnectModelChanges()
+        if replacement_attempted:
+            try:
+                self.ui.disconnect_project()
+            except Exception:
+                LOGGER.exception(
+                    "Cannot release the failed revision model bindings."
+                )
+
+        try:
+            self._installProjectState(
+                previous_models,
+                previous_settings,
+            )
+            self.session.mark_dirty()
+            rollback_succeeded = self.saveDatas(
+                record_revision=False
+            )
+            self.ui.project_opened()
+            return rollback_succeeded
+        except Exception:
+            LOGGER.exception(
+                "Cannot reinstall the project state from before "
+                "revision restore."
+            )
+            return False
+
+    def _adoptLiveSettings(self, models):
+        outline = getattr(models, "outline", None)
+        if outline is None:
+            return
+        outline.settings = self.ui.settings
+        outline.rootItem.setModel(outline)
+
+    def _connectModelChanges(self):
+        for model in self.ui.change_models():
+            self.modelConnections.connect(
+                model.dataChanged,
+                self.startTimerNoChanges,
+            )
+
+    def _disconnectModelChanges(self):
+        self.modelConnections.disconnect_all()
+
+    @staticmethod
+    def _disposeModels(models):
+        if models is None:
+            return
+        for model in vars(models).values():
+            delete_later = getattr(model, "deleteLater", None)
+            if delete_later is not None:
+                delete_later()
 
     def loadDatas(self, project):
         result = self.storage.load(self.persistence_context(project))

@@ -40,6 +40,7 @@ class MainWindowActionBinding:
             (window.actOpen, window.welcome.openFile),
             (window.actSave, window.projectManager.saveDatas),
             (window.actSaveAs, window.welcome.saveAsFile),
+            (window.actGitRevisions, window.showGitRevisions),
             (window.actImport, window.doImport),
             (window.actCompile, window.doCompile),
             (
