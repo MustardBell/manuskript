@@ -105,8 +105,10 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
         assert item.text() == "Original paragraph."
 
         endpoint.set_editing_locked(False)
-        endpoint.replace_text("Independent translation.")
-        assert item.text() == "Independent translation."
+        endpoint.replace_text(
+            "Independent translation.\n\nSecond paragraph.\n\nThird."
+        )
+        assert item.text().startswith("Independent translation.")
         endpoint.set_presentation_mode(
             MarkdownPresentationMode.SOURCE
         )
@@ -114,6 +116,15 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
             endpoint.presentation.mode
             is MarkdownPresentationMode.SOURCE
         )
+
+        endpoint.set_cursor_position(5, anchor=1)
+        caret = endpoint.cursor_position
+        selection = endpoint.selection_range()
+        endpoint.scroll_to_block(2)
+        endpoint.scroll_to_text_offset(len(endpoint.text()))
+        assert endpoint.cursor_position == caret
+        assert endpoint.selection_range() == selection
+        assert endpoint.first_visible_block >= 0
 
         endpoint.set_maximum_text_width(520)
         assert endpoint.widget.effectiveMaximumWidth == 520
