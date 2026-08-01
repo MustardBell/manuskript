@@ -462,6 +462,7 @@ class EditorWorkspaceShell(QFrame):
 
     def __init__(self, title, description, workspace, close_callback, parent=None):
         super().__init__(parent)
+        self.workspace = workspace
         self.setObjectName("editorWorkspaceShell")
         self.setFrameShape(QFrame.NoFrame)
         self.setAccessibleName(title)
@@ -617,9 +618,22 @@ class EditorWorkspaceHost(QObject):
         return self._shell
 
     def close_workspace(self):
+        shell = self._shell
+        workspace = getattr(shell, "workspace", None)
+        prepare_close = getattr(workspace, "prepare_close", None)
+        if callable(prepare_close):
+            try:
+                prepare_close()
+            except Exception as error:
+                self.window.statusPresenter.show(
+                    self.tr("Plugin workspace cleanup failed: {}").format(
+                        error
+                    ),
+                    8000,
+                    2,
+                )
         if self._editors is not None:
             self._editors.close_all()
-        shell = self._shell
         self._shell = None
         self._active_id = None
         self._active_plugin_id = None
