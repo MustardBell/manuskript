@@ -35,6 +35,9 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.actSave.triggered.connect.assert_called_once_with(
         window.projectManager.saveDatas
     )
+    window.actGitRevisions.triggered.connect.assert_called_once_with(
+        window.showGitRevisions
+    )
     window.actBack.triggered.connect.assert_called_once_with(
         window.navigationController.back
     )
