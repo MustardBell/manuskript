@@ -420,15 +420,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         searchTextInput.setFocus()
         searchTextInput.selectAll()
 
-    def showGitRevisions(self):
+    def showGitRevisions(self, parent=None):
         if not self.projectManager.session.is_open:
             return
+        host = parent if isinstance(parent, QWidget) else self
         if self.gitRevisionDialog is None:
             self.gitRevisionDialog = GitRevisionDialog(
                 self.projectManager,
                 self.settingsManager,
                 self.revisionCoordinator,
-                self,
+                host,
             )
             self.gitRevisionDialog.setAttribute(
                 Qt.WA_DeleteOnClose,
@@ -436,6 +437,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.gitRevisionDialog.destroyed.connect(
                 self._gitRevisionDialogClosed
             )
+        elif self.gitRevisionDialog.parentWidget() is not host:
+            # A child window of an application-modal Settings window
+            # remains interactive; a sibling window is blocked by it.
+            self.gitRevisionDialog.hide()
+            self.gitRevisionDialog.setParent(host, Qt.Dialog)
         self.gitRevisionDialog.show()
         self.gitRevisionDialog.raise_()
         self.gitRevisionDialog.activateWindow()

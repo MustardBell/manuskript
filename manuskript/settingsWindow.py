@@ -217,7 +217,7 @@ class settingsWindow(QWidget, Ui_Settings):
         ]:
             signal.connect(self.revisionsSettingsChanged)
         self.btnManageGitRevisions.clicked.connect(
-            self.mw.showGitRevisions
+            lambda _checked=False: self.mw.showGitRevisions(self)
         )
         self.updateRevisionBackendUi()
 

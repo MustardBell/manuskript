@@ -1,7 +1,11 @@
 import importlib
 from unittest.mock import MagicMock, patch
 
+from PyQt5.QtWidgets import QStyleOptionViewItem, qApp
+
 from manuskript.domain.project import CloseDecision
+from manuskript.enums import Outline
+from manuskript.models import outlineItem
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.views.textEditView import textEditView
 
@@ -91,3 +95,39 @@ def test_lifecycle_view_flushes_every_model_backed_text_editor():
     window.findChildren.assert_called_once_with(textEditView)
     first.submit.assert_called_once_with()
     second.submit.assert_called_once_with()
+
+
+def test_close_then_open_rebinds_outline_models_without_stale_delegates(
+        MWEmptyProject, tmp_path):
+    window = MWEmptyProject
+    item = outlineItem(title="Scene", _type="md")
+    window.mdlOutline.appendItem(item)
+    old_model = window.mdlOutline
+    old_index = old_model.indexFromItem(item)
+    pov_index = old_index.sibling(old_index.row(), Outline.POV)
+    old_delegate = window.treeOutlineOutline.itemDelegateForColumn(
+        Outline.POV
+    )
+    window.projectManager.session.mark_clean()
+
+    assert window.projectManager.closeProject()
+    qApp.processEvents()
+
+    assert window.treeOutlineOutline.model() is None
+    assert window.treeRedacOutline.model() is None
+    assert old_delegate.mdlCharacter is None
+    old_delegate.sizeHint(QStyleOptionViewItem(), pov_index)
+
+    next_project = tmp_path / "mayor.msk"
+    window.welcome.createFile(str(next_project), overwrite=True)
+    qApp.processEvents()
+
+    assert window.currentProject == str(next_project)
+    assert window.treeOutlineOutline.model() is window.mdlOutline
+    assert window.treeRedacOutline.model() is window.mdlOutline
+    assert (
+        window.treeOutlineOutline.itemDelegateForColumn(
+            Outline.POV
+        ).mdlCharacter
+        is window.mdlCharacter
+    )

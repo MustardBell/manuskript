@@ -69,11 +69,16 @@ class ProjectContextBinding:
             outline_views=outline_views,
             text_editor=self.text_editor_context,
         )
-        window.treeRedacOutline.set_outline_context(outline_views)
-        window.treeOutlineOutline.set_outline_context(outline_views)
+        window.treeRedacOutline.bind_project_model(
+            window.mdlOutline,
+            outline_views,
+        )
+        window.treeOutlineOutline.bind_project_model(
+            window.mdlOutline,
+            outline_views,
+        )
         window.mainEditor.set_context(editor_context)
 
-        window.treeRedacOutline.setModel(window.mdlOutline)
         window.redacMetadata.setModels(
             window.mdlOutline,
             window.mdlCharacter,
@@ -86,7 +91,6 @@ class ProjectContextBinding:
             window.mdlLabels,
             window.mdlStatus,
         )
-        window.treeOutlineOutline.setModel(window.mdlOutline)
         window.storylineView.setModels(
             window.mdlOutline,
             window.mdlCharacter,
@@ -125,8 +129,8 @@ class ProjectContextBinding:
 
     def unbind(self):
         window = self.window
-        window.treeRedacOutline.set_outline_context(None)
-        window.treeOutlineOutline.set_outline_context(None)
+        window.treeRedacOutline.unbind_project_model()
+        window.treeOutlineOutline.unbind_project_model()
         window.mainEditor.clear_context()
         for editor in window.findChildren(textEditView):
             editor.set_text_editor_context(None)

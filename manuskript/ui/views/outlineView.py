@@ -23,6 +23,10 @@ class outlineView(QTreeView, dndView, outlineBasics):
         self.header().setStretchLastSection(False)
 
     def set_outline_context(self, context):
+        if context is None and self.model() is not None:
+            # A delegate must never receive indexes from an outline model
+            # after its project-scoped lookup models have been released.
+            QTreeView.setModel(self, None)
         outlineBasics.set_outline_context(self, context)
         if hasattr(self, "outlineTitleDelegate"):
             self.outlineTitleDelegate.set_color_resolver(
