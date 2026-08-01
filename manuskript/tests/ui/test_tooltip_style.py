@@ -35,6 +35,16 @@ def test_contrast_ratio_matches_wcag_reference_values():
     ) == pytest.approx(21.0)
 
 
+def test_contrast_ratio_accounts_for_foreground_opacity():
+    transparent_black = QColor("black")
+    transparent_black.setAlpha(0)
+
+    assert contrast_ratio(
+        transparent_black,
+        QColor("white"),
+    ) == pytest.approx(1.0)
+
+
 def test_inaccessible_tooltip_palette_is_repaired():
     source = tooltip_palette("#ffffff", "#ffffdc")
 
