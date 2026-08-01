@@ -1,12 +1,20 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
+import subprocess
+
 from PyQt5.QtWidgets import qApp, QMessageBox
 
 from manuskript.exporter.basic import basicExporter, basicFormat
 from manuskript.exporter.pandoc.HTML import HTML
 from manuskript.exporter.pandoc.PDF import PDF
 from manuskript.exporter.pandoc.outputFormats import ePub, OpenDocument, DocX
-from manuskript.exporter.pandoc.plainText import reST, markdown, latex, OPML
+from manuskript.exporter.pandoc.plainText import (
+    BBCode,
+    OPML,
+    latex,
+    markdown,
+    reST,
+)
 from manuskript.functions import safeTranslate
 from manuskript.ui.busy_cursor import busy_cursor
 
@@ -26,6 +34,7 @@ class pandocExporter(basicExporter):
 
     def __init__(self, context=None):
         basicExporter.__init__(self, context)
+        self._output_formats = None
 
         self.exportTo = [
             markdown(self),
@@ -37,7 +46,12 @@ class pandocExporter(basicExporter):
             PDF(self),
             reST(self),
             OPML(self),
+            BBCode(self),
         ]
+
+    def setCustomPath(self, path):
+        super().setCustomPath(path)
+        self._output_formats = None
 
     def version(self):
         if self.isValid():
@@ -45,6 +59,34 @@ class pandocExporter(basicExporter):
             return r.split("\n")[0]
         else:
             return ""
+
+    def output_formats(self):
+        """Return output formats advertised by the selected Pandoc."""
+        if self._output_formats is not None:
+            return self._output_formats
+
+        if not self.isValid():
+            self._output_formats = frozenset()
+            return self._output_formats
+
+        try:
+            output = self.run(["--list-output-formats"])
+        except (OSError, subprocess.CalledProcessError):
+            LOGGER.warning(
+                "Could not query Pandoc output formats.",
+                exc_info=True,
+            )
+            output = ""
+
+        self._output_formats = frozenset(
+            line.strip()
+            for line in (output or "").splitlines()
+            if line.strip()
+        )
+        return self._output_formats
+
+    def supports_output_format(self, output_format):
+        return output_format in self.output_formats()
 
     def metadata_arguments(self):
         if self.context is None:

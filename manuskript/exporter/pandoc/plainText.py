@@ -53,3 +53,25 @@ class OPML(abstractPlainText):
     exportFilter = "OPML files (*.opml);; Any files (*)"
     exportDefaultSuffix = ".opml"
 
+
+class BBCode(abstractPlainText):
+    name = "BBCode"
+    description = safeTranslate(
+        qApp,
+        "Export",
+        "Bulletin Board Code used by many forums and community platforms.",
+    )
+    InvalidBecause = safeTranslate(
+        qApp,
+        "Export",
+        "Pandoc with BBCode output support (3.8.3 or newer).",
+    )
+
+    exportVarName = "lastPandocBBCode"
+    toFormat = "bbcode"
+    icon = "text-plain"
+    exportFilter = "BBCode files (*.bbcode *.txt);; Any files (*)"
+    exportDefaultSuffix = ".bbcode"
+
+    def isValid(self):
+        return self.exporter.supports_output_format(self.toFormat)
