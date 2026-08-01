@@ -152,7 +152,13 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
     window = MWEmptyProject
     window_was_visible = window.isVisible()
     old_max_width = window.settingsManager.textEditor["maxWidth"]
+    old_background = window.settingsManager.textEditor["background"]
+    old_transparency = window.settingsManager.textEditor[
+        "backgroundTransparent"
+    ]
     window.settingsManager.textEditor["maxWidth"] = 600
+    window.settingsManager.textEditor["background"] = "#f7f4ee"
+    window.settingsManager.textEditor["backgroundTransparent"] = False
     window.resize(1400, 720)
     window.show()
     item = outlineItem(title="Centered page", _type="md")
@@ -176,6 +182,7 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
         assert host.width() == 600
         assert abs(host.x() - expected_left) <= 1
         assert editor.txtRedacText.width() == host.contentsRect().width()
+        assert "background: #f7f4ee" in editor.text.styleSheet()
 
         editor.markdownPresentation.set_mode(
             MarkdownPresentationMode.READING
@@ -189,6 +196,10 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
     finally:
         window.mainEditor.closeAllTabs()
         window.settingsManager.textEditor["maxWidth"] = old_max_width
+        window.settingsManager.textEditor["background"] = old_background
+        window.settingsManager.textEditor[
+            "backgroundTransparent"
+        ] = old_transparency
         if not window_was_visible:
             window.hide()
 
