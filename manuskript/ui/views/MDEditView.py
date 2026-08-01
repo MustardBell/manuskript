@@ -53,6 +53,7 @@ class MDEditView(textEditView):
         self._presentationHost = None
         self._highlighterSuspendedForReading = False
         self._contentReadOnly = html is not None
+        self._editingLocked = False
         self._markupProfileState = None
         self._pageTypeState = None
         self._markupBaseId = MARKDOWN_BASE_ID
@@ -128,6 +129,7 @@ class MDEditView(textEditView):
         )
         self.setReadOnly(
             self._contentReadOnly
+            or self._editingLocked
             or not self._presentationMode.is_editable
         )
         if reading_active and self._presentationHost is None:
@@ -149,6 +151,20 @@ class MDEditView(textEditView):
         )
         if self.highlighter and active_sibling is None:
             self.highlighter.rehighlight()
+
+    @property
+    def editingLocked(self):
+        return self._editingLocked
+
+    def setEditingLocked(self, locked):
+        """Lock source editing without changing presentation semantics."""
+        locked = bool(locked)
+        if locked == self._editingLocked:
+            return
+        if locked and not self.isReadOnly():
+            self.submit()
+        self._editingLocked = locked
+        self._applyPresentationMode()
 
     def setPresentationHost(self, host):
         if (

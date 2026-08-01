@@ -4,6 +4,7 @@ from manuskript.ui.plugins.manager import PluginManagerDialog
 from manuskript.ui.plugins.markup_profiles import MarkupProfileService
 from manuskript.ui.plugins.page_types import PageTypeService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
+from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
 
 
 class PluginUiController:
@@ -42,6 +43,11 @@ class PluginUiController:
         self.manageAction.triggered.connect(self.show_manager)
         self.globalActions = (self.menu.menuAction(),)
         self.projectPanels = ProjectPanelHost(
+            window,
+            runtime,
+            menu=self.menu,
+        )
+        self.editorWorkspaces = EditorWorkspaceHost(
             window,
             runtime,
             menu=self.menu,
@@ -104,11 +110,14 @@ class PluginUiController:
 
     def refresh_contributions(self):
         self.projectPanels.refresh()
+        self.editorWorkspaces.refresh()
         self.markupProfiles.refresh()
         self.pageTypes.refresh()
 
     def project_opened(self):
         self.projectPanels.project_opened()
+        self.editorWorkspaces.project_opened()
 
     def prepare_project_close(self):
+        self.editorWorkspaces.prepare_project_close()
         self.projectPanels.prepare_project_close()

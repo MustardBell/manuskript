@@ -204,6 +204,30 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
             window.hide()
 
 
+def test_workspace_width_override_preserves_editor_preference(MWEmptyProject):
+    window = MWEmptyProject
+    old_max_width = window.settingsManager.textEditor["maxWidth"]
+    window.settingsManager.textEditor["maxWidth"] = 640
+    item = outlineItem(title="Comparable page", _type="md")
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    try:
+        window.mainEditor.setCurrentModelIndex(index, newTab=True)
+        host = window.mainEditor.currentEditor().markdownEditorHost
+        host.sourceEditor.loadFontSettings()
+
+        host.setMaximumWidthOverride(480)
+        assert host.maximumWidth() == 480
+        assert host.effectiveMaximumWidth == 480
+
+        host.clearMaximumWidthOverride()
+        assert host.maximumWidth() == 640
+        assert host.effectiveMaximumWidth == 640
+    finally:
+        window.mainEditor.closeAllTabs()
+        window.settingsManager.textEditor["maxWidth"] = old_max_width
+
+
 def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
     window = MWEmptyProject
     first_item = outlineItem(title="First")
