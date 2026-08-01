@@ -1,0 +1,3 @@
+[submodule "manuskript/plugins/variant_workspaces"]
+	path = manuskript/plugins/variant_workspaces
+	url = https://github.com/MustardBell/manuskript-variant-workspaces.git
