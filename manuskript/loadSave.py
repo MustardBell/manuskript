@@ -30,6 +30,7 @@ def saveProject(
     version=None,
     cache=None,
     file_access=None,
+    legacy_file_access=None,
 ):
     # While debugging, we don't save the project
     # return
@@ -43,7 +44,10 @@ def saveProject(
         )
 
     if selected_version == 0:
-        return handler.saveProject(context)
+        return handler.saveProject(
+            context,
+            archive=legacy_file_access,
+        )
     return handler.saveProject(
         context,
         cache=cache,
@@ -51,7 +55,12 @@ def saveProject(
     )
 
 
-def loadProject(context, cache=None, file_access=None):
+def loadProject(
+    context,
+    cache=None,
+    file_access=None,
+    legacy_file_access=None,
+):
     project = context.project_file
     try:
         detected = FORMAT_DETECTOR.detect(project)
@@ -72,7 +81,10 @@ def loadProject(context, cache=None, file_access=None):
     )
 
     if version == 0:
-        return handler.loadProject(context)
+        return handler.loadProject(
+            context,
+            archive=legacy_file_access,
+        )
     return handler.loadProject(
         context,
         zip=detected.zipped,

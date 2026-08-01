@@ -60,3 +60,19 @@ def test_lifecycle_view_presents_failed_save_files():
     assert [call.args[0] for call in list_item.call_args_list] == list(
         failures
     )
+
+
+def test_lifecycle_view_captures_project_state_before_cleanup():
+    window = MagicMock()
+    window.tabMain.currentIndex.return_value = 6
+    open_indexes = [1, ["scene-1"], None]
+    window.mainEditor.tabSplitter.openIndexes.return_value = open_indexes
+    view = ProjectLifecycleView(window)
+
+    view.capture_project_state()
+    view.prepare_close()
+
+    assert window.settingsManager.lastTab == 6
+    assert window.settingsManager.openIndexes == open_indexes
+    window.mainEditor.close.assert_called_once_with()
+    window.mainEditor.closeAllTabs.assert_called_once_with()

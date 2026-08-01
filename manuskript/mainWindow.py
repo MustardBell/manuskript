@@ -3,21 +3,22 @@
 import importlib
 import os
 import re
-from functools import partial
 
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
-from PyQt5.QtCore import (pyqtSignal, QSignalMapper, QTimer, QSettings, Qt, QPoint,
+from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
                           QRegExp, QUrl, QSize, QModelIndex)
 from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtWidgets import QMainWindow, qApp, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
+from PyQt5.QtWidgets import QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
-from manuskript.commands import DocumentCommand, DocumentCommandRouter
+from manuskript.commands import DocumentCommandRouter
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
+from manuskript.controllers.view_configuration_controller import (
+    ViewConfigurationController,
+)
 from manuskript.controllers.world_controller import WorldController
-from manuskript.enums import Outline
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -29,6 +30,9 @@ from manuskript.exporter.context import ExportContext
 from manuskript.projectManager import ProjectManager
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
+from manuskript.services.application_preferences import (
+    ApplicationPreferences,
+)
 from manuskript.services.project_history import ProjectHistory
 from manuskript.services.theme_repository import ThemeRepository
 from manuskript.settingsWindow import settingsWindow
@@ -40,11 +44,15 @@ from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
+from manuskript.ui.main_window_action_binding import (
+    MainWindowActionBinding,
+)
 from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
+from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
@@ -52,6 +60,11 @@ from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
 from manuskript.ui.views.textEditView import textEditView
+from manuskript.ui.view_configuration import (
+    MainViewConfiguration,
+    ViewSettingsMenuBuilder,
+)
+from manuskript.ui.window_state import MainWindowStateController
 from manuskript.functions import Spellchecker
 
 import logging
@@ -72,7 +85,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     SHOW_DEBUG_TAB = False
 
-    def __init__(self, settings_manager):
+    def __init__(
+        self,
+        settings_manager,
+        application_preferences=None,
+    ):
         QMainWindow.__init__(self)
         self.setupUi(self)
 
@@ -95,14 +112,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.history = self.navigationController.history
         self.settingsManager = settings_manager
+        self.applicationPreferences = (
+            application_preferences
+            if application_preferences is not None
+            else ApplicationPreferences()
+        )
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
+        )
+        self.viewConfigurationController = (
+            ViewConfigurationController(
+                MainViewConfiguration(self),
+                self.settingsManager,
+            )
+        )
+        self.viewSettingsMenu = ViewSettingsMenuBuilder(
+            self,
+            self.viewConfigurationController,
         )
         self.referenceService = None
         self.textEditorContext = None
         self.projectBinding = ProjectBinding(self)
+        self.windowState = MainWindowStateController(self)
 
-        self.readSettings()
+        self.windowState.restore()
 
         # UI
         self.setupMoreUi()
@@ -115,6 +148,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.externalToolPaths = ExternalToolPaths()
         self.projectHistory = ProjectHistory()
         self.themeRepository = ThemeRepository()
+        self.themePreviewRenderer = ThemePreviewRenderer()
         self.projectManager = ProjectManager(
             self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
@@ -147,91 +181,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cmbSummary.setCurrentIndex(0)
         self.cmbSummary.currentIndexChanged.emit(0)
 
-        # Main Menu
-        self.projectManager.syncUiToState()
-
-        # Main Menu:: File
-        self.actOpen.triggered.connect(self.welcome.openFile)
-        self.actSave.triggered.connect(self.projectManager.saveDatas)
-        self.actSaveAs.triggered.connect(self.welcome.saveAsFile)
-        self.actImport.triggered.connect(self.doImport)
-        self.actCompile.triggered.connect(self.doCompile)
-        self.actCloseProject.triggered.connect(self.projectManager.closeProject)
-        self.actQuit.triggered.connect(self.close)
-
-        # Main menu:: Edit
-        for action, command in [
-            (self.actCopy, DocumentCommand.COPY),
-            (self.actCut, DocumentCommand.CUT),
-            (self.actPaste, DocumentCommand.PASTE),
-            (self.actRename, DocumentCommand.RENAME),
-            (self.actDuplicate, DocumentCommand.DUPLICATE),
-            (self.actDelete, DocumentCommand.DELETE),
-        ]:
-            action.triggered.connect(
-                partial(self.documentCommands.dispatch, command)
-            )
-        self.actSearch.triggered.connect(self.doSearch)
-        self.actLabels.triggered.connect(self.settingsLabel)
-        self.actStatus.triggered.connect(self.settingsStatus)
-        self.actSettings.triggered.connect(self.settingsWindow)
-
-        # Main menu:: Edit:: Format
-        self.actHeaderSetextL1.triggered.connect(self.formatSetext1)
-        self.actHeaderSetextL2.triggered.connect(self.formatSetext2)
-        self.actHeaderAtxL1.triggered.connect(self.formatAtx1)
-        self.actHeaderAtxL2.triggered.connect(self.formatAtx2)
-        self.actHeaderAtxL3.triggered.connect(self.formatAtx3)
-        self.actHeaderAtxL4.triggered.connect(self.formatAtx4)
-        self.actHeaderAtxL5.triggered.connect(self.formatAtx5)
-        self.actHeaderAtxL6.triggered.connect(self.formatAtx6)
-        self.actFormatBold.triggered.connect(self.formatBold)
-        self.actFormatItalic.triggered.connect(self.formatItalic)
-        self.actFormatStrike.triggered.connect(self.formatStrike)
-        self.actFormatVerbatim.triggered.connect(self.formatVerbatim)
-        self.actFormatSuperscript.triggered.connect(self.formatSuperscript)
-        self.actFormatSubscript.triggered.connect(self.formatSubscript)
-        self.actFormatCommentLines.triggered.connect(self.formatCommentLines)
-        self.actFormatList.triggered.connect(self.formatList)
-        self.actFormatOrderedList.triggered.connect(self.formatOrderedList)
-        self.actFormatBlockquote.triggered.connect(self.formatBlockquote)
-        self.actFormatCommentBlock.triggered.connect(self.formatCommentBlock)
-        self.actFormatClear.triggered.connect(self.formatClear)
-
-        # Main menu:: Organize
-        for action, command in [
-            (self.actMoveUp, DocumentCommand.MOVE_UP),
-            (self.actMoveDown, DocumentCommand.MOVE_DOWN),
-            (self.actSplitDialog, DocumentCommand.SPLIT_DIALOG),
-            (self.actSplitCursor, DocumentCommand.SPLIT_CURSOR),
-            (self.actMerge, DocumentCommand.MERGE),
-        ]:
-            action.triggered.connect(
-                partial(self.documentCommands.dispatch, command)
-            )
-
-        # Main menu:: Navigate
-        self.actBack.triggered.connect(self.navigationController.back)
-        self.actForward.triggered.connect(
-            self.navigationController.forward
-        )
-
-        # Main Menu:: view
-        self.generateViewMenu()
-        self.actModeGroup = QActionGroup(self)
-        self.actModeSimple.setActionGroup(self.actModeGroup)
-        self.actModeFiction.setActionGroup(self.actModeGroup)
-        self.actModeSimple.triggered.connect(self.setViewModeSimple)
-        self.actModeFiction.triggered.connect(self.setViewModeFiction)
-
-        # Main Menu:: Tool
-        self.actToolFrequency.triggered.connect(self.frequencyAnalyzer)
-        self.actToolTargets.triggered.connect(self.sessionTargets)
-        self.actSupport.triggered.connect(self.support)
-        self.actLocateLog.triggered.connect(self.locateLogFile)
-        self.actAbout.triggered.connect(self.about)
-
-        self.makeUIConnections()
+        self.actionBinding = MainWindowActionBinding(self)
+        self.actionBinding.bind()
 
         # Tools non-modal windows
         self.td = None  # Targets Dialog
@@ -254,38 +205,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._autoLoadProject = None
         return project
 
-    def updateDockVisibility(self, restore=False):
-        """
-        Saves the state of the docks visibility. Or if `restore` is True,
-        restores from `self._dckVisibility`. This allows to hide the docks
-        while showing the welcome screen, and then restore them as they
-        were.
-
-        If `self._dckVisibility` contains "LOCK", then we don't override values
-        with current visibility state. This is used the first time we load.
-        "LOCK" is then removed.
-        """
-        docks = [
-            self.dckCheatSheet,
-            self.dckNavigation,
-            self.dckSearch,
-        ]
-
-        for d in docks:
-            if not restore:
-                # We store the values, but only if "LOCK" is not present
-                if not "LOCK" in self._dckVisibility:
-                    self._dckVisibility[d.objectName()] = d.isVisible()
-                # Hide the dock
-                d.setVisible(False)
-            else:
-                # Restore the dock's visibility based on stored value
-                d.setVisible(self._dckVisibility[d.objectName()])
-
-        # Lock is used only once, at start up. We can remove it
-        if "LOCK" in self._dckVisibility:
-            self._dckVisibility.pop("LOCK")
-
     def switchToWelcome(self):
         """
         While switching to welcome screen, we have to hide all the docks.
@@ -294,8 +213,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         But we also want to restore them to their visibility prior to switching,
         so we store states.
         """
-        # Stores the state of docks
-        self.updateDockVisibility()
+        self.windowState.hide_project_docks()
         # Hides the toolbar
         self.toolbar.setVisible(False)
         # Switch to welcome screen
@@ -303,8 +221,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def switchToProject(self):
         """Restores docks and toolbar visibility, and switch to project."""
-        # Restores the docks visibility
-        self.updateDockVisibility(restore=True)
+        self.windowState.restore_project_docks()
         # Show the toolbar
         self.toolbar.setVisible(True)
         self.stack.setCurrentIndex(1)
@@ -314,6 +231,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self.projectManager.closeProject():
             event.ignore()
             return
+        self.windowState.save()
         super().closeEvent(event)
 
     ###############################################################################
@@ -491,77 +409,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def navigated(self, event):
         self.navigationController.navigated(event)
 
-    def readSettings(self):
-        # Load State and geometry
-        sttgns = QSettings(qApp.organizationName(), qApp.applicationName())
-        if sttgns.contains("geometry"):
-            self.restoreGeometry(sttgns.value("geometry"))
-        if sttgns.contains("windowState"):
-            self.restoreState(sttgns.value("windowState"))
-
-        if sttgns.contains("docks"):
-            self._dckVisibility = {}
-            vals = sttgns.value("docks")
-            for name in vals:
-                self._dckVisibility[name] = vals[name]
-        else:
-            # Create default settings
-            self._dckVisibility = {
-                self.dckNavigation.objectName() : True,
-                self.dckCheatSheet.objectName() : False,
-                self.dckSearch.objectName() : False,
-            }
-        self._dckVisibility["LOCK"] = True  # prevent overriding loaded values
-
-        if sttgns.contains("metadataState"):
-            state = [False if v == "false" else True for v in sttgns.value("metadataState")]
-            self.redacMetadata.restoreState(state)
-        if sttgns.contains("revisionsState"):
-            state = [False if v == "false" else True for v in sttgns.value("revisionsState")]
-            self.redacMetadata.revisions.restoreState(state)
-        if sttgns.contains("splitterRedacH"):
-            self.splitterRedacH.restoreState(sttgns.value("splitterRedacH"))
-        if sttgns.contains("splitterRedacV"):
-            self.splitterRedacV.restoreState(sttgns.value("splitterRedacV"))
-        if sttgns.contains("toolbar"):
-            # self.toolbar is not initialized yet, so we just store value
-            self._toolbarState = sttgns.value("toolbar")
-        else:
-            self._toolbarState = ""
-
-    ###############################################################################
-    # MAIN CONNECTIONS
-    ###############################################################################
-
-    def makeUIConnections(self):
-        "Connections that have to be made once only, even when a new project is loaded."
-        # Characters
-        self.txtPersosFilter.textChanged.connect(self.lstCharacters.setFilter, F.AUC)
-        self.lstCharacters.itemSelectionChanged.connect(
-            self.characterController.handle_selection_changed,
-            F.AUC,
-        )
-
-        # Plots
-        self.txtPlotFilter.textChanged.connect(self.lstPlots.setFilter, F.AUC)
-        self.lstPlots.currentItemChanged.connect(
-            self.plotController.handle_plot_selection_changed,
-            F.AUC,
-        )
-
-        # Outline
-        self.btnRedacAddFolder.clicked.connect(self.treeRedacOutline.addFolder, F.AUC)
-        self.btnOutlineAddFolder.clicked.connect(self.treeOutlineOutline.addFolder, F.AUC)
-        self.btnRedacAddText.clicked.connect(self.treeRedacOutline.addText, F.AUC)
-        self.btnOutlineAddText.clicked.connect(self.treeOutlineOutline.addText, F.AUC)
-        self.btnRedacRemoveItem.clicked.connect(self.outlineRemoveItemsRedac, F.AUC)
-        self.btnOutlineRemoveItem.clicked.connect(self.outlineRemoveItemsOutline, F.AUC)
-
-        self.tabMain.currentChanged.connect(self.toolbar.setCurrentGroup)
-        self.tabMain.currentChanged.connect(self.tabMainChanged)
-
-        qApp.focusChanged.connect(self.focusChanged)
-
     def makeConnections(self):
         self.projectBinding.bind()
         self.referenceService = self.projectBinding.reference_service
@@ -670,8 +517,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.toolbar.addCustomWidget(self.tr("Project tree"), self.treeRedacWidget, self.TabRedac, True)
         self.toolbar.addCustomWidget(self.tr("Metadata"), self.redacMetadata, self.TabRedac, False)
         self.toolbar.addCustomWidget(self.tr("Story line"), self.storylineView, self.TabRedac, False)
-        if self._toolbarState:
-            self.toolbar.restoreState(self._toolbarState)
+        self.windowState.restore_toolbar(self.toolbar)
 
         # Hides navigation dock title bar
         self.dckNavigation.setTitleBarWidget(QWidget(None))
@@ -898,6 +744,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self,
             self.settingsManager,
             theme_repository=self.themeRepository,
+            theme_preview_renderer=self.themePreviewRenderer,
+            application_preferences=self.applicationPreferences,
         )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)
@@ -930,122 +778,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
 
     def generateViewMenu(self):
-
-        values = [
-            (self.tr("Nothing"), "Nothing"),
-            (self.tr("POV"), "POV"),
-            (self.tr("Label"), "Label"),
-            (self.tr("Progress"), "Progress"),
-            (self.tr("Compile"), "Compile"),
-        ]
-
-        menus = [
-            (self.tr("Tree"), "Tree", "view-list-tree"),
-            (self.tr("Index cards"), "Cork", "view-cards"),
-            (self.tr("Outline"), "Outline", "view-outline")
-        ]
-
-        submenus = {
-            "Tree": [
-                (self.tr("Icon color"), "Icon"),
-                (self.tr("Text color"), "Text"),
-                (self.tr("Background color"), "Background"),
-            ],
-            "Cork": [
-                (self.tr("Icon"), "Icon"),
-                (self.tr("Text"), "Text"),
-                (self.tr("Background"), "Background"),
-                (self.tr("Border"), "Border"),
-                (self.tr("Corner"), "Corner"),
-            ],
-            "Outline": [
-                (self.tr("Icon color"), "Icon"),
-                (self.tr("Text color"), "Text"),
-                (self.tr("Background color"), "Background"),
-            ],
-        }
-
-        self.menuView.clear()
-        self.menuView.addMenu(self.menuMode)
-        self.menuView.addSeparator()
-
-        # LOGGER.debug("Generating menus with %s.", self.settingsManager.viewSettings)
-
-        for mnu, mnud, icon in menus:
-            m = QMenu(mnu, self.menuView)
-            if icon:
-                m.setIcon(QIcon.fromTheme(icon))
-            for s, sd in submenus[mnud]:
-                m2 = QMenu(s, m)
-                agp = QActionGroup(m2)
-                for v, vd in values:
-                    a = QAction(v, m)
-                    a.setCheckable(True)
-                    a.setData("{},{},{}".format(mnud, sd, vd))
-                    if self.settingsManager.viewSettings[mnud][sd] == vd:
-                        a.setChecked(True)
-                    a.triggered.connect(self.setViewSettingsAction, F.AUC)
-                    agp.addAction(a)
-                    m2.addAction(a)
-                m.addMenu(m2)
-            self.menuView.addMenu(m)
-
-    def setViewSettingsAction(self):
-        action = self.sender()
-        item, part, element = action.data().split(",")
-        self.setViewSettings(item, part, element)
+        self.viewSettingsMenu.rebuild()
 
     def setViewSettings(self, item, part, element):
-        self.settingsManager.viewSettings[item][part] = element
-        if item == "Cork":
-            self.mainEditor.updateCorkView()
-        if item == "Outline":
-            self.mainEditor.updateTreeView()
-            self.treeOutlineOutline.viewport().update()
-        if item == "Tree":
-            self.treeRedacOutline.viewport().update()
+        self.viewConfigurationController.set_view_setting(
+            item,
+            part,
+            element,
+        )
 
     ###############################################################################
     # VIEW MODES
     ###############################################################################
 
-    def setViewModeSimple(self):
-        self.settingsManager.viewMode = "simple"
-        self.tabMain.setCurrentIndex(self.TabRedac)
-        self.viewModeFictionVisibilitySwitch(False)
-        self.actModeSimple.setChecked(True)
+    def setViewModeSimple(self, _checked=False):
+        self.viewConfigurationController.set_simple()
 
-    def setViewModeFiction(self):
-        self.settingsManager.viewMode = "fiction"
-        self.viewModeFictionVisibilitySwitch(True)
-        self.actModeFiction.setChecked(True)
-
-    def viewModeFictionVisibilitySwitch(self, val):
-        """
-        Switches the visibility of some UI components useful for fiction only
-        @param val: sets visibility to val
-        """
-
-        # Menu navigation & button in toolbar
-        self.toolbar.setDockVisibility(self.dckNavigation, val)
-
-        # POV in metadata
-        from manuskript.ui.views.propertiesView import propertiesView
-        for w in self.findChildren(propertiesView):
-            w.lblPOV.setVisible(val)
-            w.cmbPOV.setVisible(val)
-
-        # POV in outline view
-        if val is None and Outline.POV in self.settingsManager.outlineViewColumns:
-            self.settingsManager.outlineViewColumns.remove(Outline.POV)
-
-        from manuskript.ui.views.outlineView import outlineView
-        for w in self.findChildren(outlineView):
-            w.hideColumns()
-
-        # TODO: clean up all other fiction things in non-fiction view mode
-        # Character in search widget
-        # POV in settings / views
+    def setViewModeFiction(self, _checked=False):
+        self.viewConfigurationController.set_fiction()
 
     ###############################################################################
     # IMPORT / EXPORT

@@ -4,7 +4,7 @@ import os
 import shutil
 from collections import OrderedDict
 
-from PyQt5.QtCore import QSize, QSettings, QRegExp, QTranslator, QObject
+from PyQt5.QtCore import QSize, QRegExp, QTranslator, QObject
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIntValidator, QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
 from PyQt5.QtGui import QStyleHints
@@ -12,6 +12,9 @@ from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListW
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
+from manuskript.services.application_preferences import (
+    ApplicationPreferences,
+)
 from manuskript.services.theme_repository import ThemeRepository
 # Spell checker support
 from manuskript.enums import Outline
@@ -23,7 +26,7 @@ from manuskript.functions import (
 )
 from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.tabSplitter import tabSplitter
-from manuskript.ui.editors.themes import createThemePreview
+from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.settings_ui import Ui_Settings
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.textEditView import textEditView
@@ -37,13 +40,27 @@ class settingsWindow(QWidget, Ui_Settings):
         mainWindow,
         settings_manager,
         theme_repository=None,
+        theme_preview_renderer=None,
+        application_preferences=None,
     ):
         QWidget.__init__(self)
         self.setupUi(self)
         self.mw = mainWindow
         self.settings = settings_manager
         self.themeRepository = (
-            theme_repository or ThemeRepository()
+            theme_repository
+            if theme_repository is not None
+            else ThemeRepository()
+        )
+        self.themePreviewRenderer = (
+            theme_preview_renderer
+            if theme_preview_renderer is not None
+            else ThemePreviewRenderer()
+        )
+        self.applicationPreferences = (
+            application_preferences
+            if application_preferences is not None
+            else ApplicationPreferences()
         )
 
         # UI
@@ -117,13 +134,12 @@ class settingsWindow(QWidget, Ui_Settings):
         for name in tr:
             self.cmbTranslation.addItem(name, tr[name])
 
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        if (sttgs.contains("applicationTranslation")
-            and sttgs.value("applicationTranslation") in tr.values()):
+        translation = self.applicationPreferences.translation
+        if translation is not None and translation in tr.values():
             # Sets the correct translation
             self.cmbTranslation.setCurrentText(
                 [i for i in tr
-                 if tr[i] == sttgs.value("applicationTranslation")][0])
+                 if tr[i] == translation][0])
 
         self.cmbTranslation.currentIndexChanged.connect(self.setTranslation)
 
@@ -356,16 +372,12 @@ class settingsWindow(QWidget, Ui_Settings):
     ####################################################################################################
 
     def setStyle(self, style):
-        # Save style to Qt Settings
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        sttgs.setValue("applicationStyle", style)
+        self.applicationPreferences.style = style
         qApp.setStyle(style)
 
     def setTranslation(self, index):
         path = self.cmbTranslation.currentData()
-        # Save settings
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        sttgs.setValue("applicationTranslation", path)
+        self.applicationPreferences.translation = path
 
         # QMessageBox.information(self, "Warning", "You'll have to restart manuskript.")
 
@@ -377,8 +389,7 @@ class settingsWindow(QWidget, Ui_Settings):
         f.setPointSize(val)
         qApp.setFont(f)
         self.mw.setFont(f)
-        sttgs = QSettings(qApp.organizationName(), qApp.applicationName())
-        sttgs.setValue("appFontSize", val)
+        self.applicationPreferences.font_size = val
 
     def charSettingsChanged(self):
         self.settings.progressChars = True if self.chkProgressChars.checkState() else False
@@ -792,7 +803,10 @@ class settingsWindow(QWidget, Ui_Settings):
                 screenRect = qApp.desktop().screenGeometry(
                     currentScreen
                 )
-                thumb = createThemePreview(theme.path, screenRect)
+                thumb = self.themePreviewRenderer.render(
+                    theme.path,
+                    screenRect,
+                )
 
             icon = QPixmap(thumb).scaled(
                 200,
@@ -1048,7 +1062,11 @@ class settingsWindow(QWidget, Ui_Settings):
         currentScreen = qApp.desktop().screenNumber(self)
         screen = qApp.desktop().screenGeometry(currentScreen)
 
-        px = createThemePreview(self.themeEditor.data, screen, self.lblPreview.size())
+        px = self.themePreviewRenderer.render(
+            self.themeEditor.data,
+            screen,
+            self.lblPreview.size(),
+        )
         self.lblPreview.setPixmap(px)
 
     def setButtonColor(self, btn, color):
