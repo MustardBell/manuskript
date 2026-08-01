@@ -251,18 +251,23 @@ class textEditView(QTextEdit):
             self.setStyleSheet("")
         self._defaultFontSize = f.pointSize()
 
-        # We set the parent background to the editor's background in case
-        # there are margins. We check that the parent class is a QWidget because
-        # if textEditView is used in fullScreenEditor, then we don't want to
-        # set the background.
-        if self.parent().__class__ == QWidget:
-            self.parent().setStyleSheet("""
+        # Paint the layout-owned canvas behind a width-constrained editor.
+        # With a MarkdownEditorHost, that canvas is one level above the source
+        # QTextEdit; standalone editors retain the original direct-parent
+        # behavior. Keep the exact QWidget check so full-screen containers are
+        # not restyled.
+        background_parent = style_owner.parentWidget()
+        if (
+            background_parent is not None
+            and background_parent.__class__ == QWidget
+        ):
+            background_parent.setStyleSheet("""
                 QWidget#{name}{{
                     background: {bg};
                 }}""".format(
                 # We style by name, otherwise all inheriting widgets get the same
                 # colored background, for example context menu.
-                name=self.parent().objectName(),
+                name=background_parent.objectName(),
                 bg=background,
             ))
 
