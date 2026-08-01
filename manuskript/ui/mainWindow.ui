@@ -2111,7 +2111,17 @@
      <addaction name="actModeSimple"/>
      <addaction name="actModeFiction"/>
     </widget>
+    <widget class="QMenu" name="menuMarkdownMode">
+     <property name="title">
+      <string>Markdown &amp;Editor</string>
+     </property>
+     <addaction name="actMarkdownSource"/>
+     <addaction name="actMarkdownFormattedSource"/>
+     <addaction name="actMarkdownLivePreview"/>
+     <addaction name="actMarkdownReading"/>
+    </widget>
     <addaction name="menuMode"/>
+    <addaction name="menuMarkdownMode"/>
     <addaction name="separator"/>
    </widget>
    <widget class="QMenu" name="menuOrganize">
@@ -2377,6 +2387,53 @@
    </property>
    <property name="shortcut">
     <string notr="true"/>
+   </property>
+  </action>
+  <action name="actMarkdownSource">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Source</string>
+   </property>
+   <property name="statusTip">
+    <string>Show all Markdown syntax without rendered text styling</string>
+   </property>
+  </action>
+  <action name="actMarkdownLivePreview">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Live Preview</string>
+   </property>
+   <property name="statusTip">
+    <string>Render Markdown while revealing syntax in the active block</string>
+   </property>
+  </action>
+  <action name="actMarkdownFormattedSource">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Formatted Source</string>
+   </property>
+   <property name="statusTip">
+    <string>Show Markdown syntax and rendered text styling together</string>
+   </property>
+  </action>
+  <action name="actMarkdownReading">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Reading</string>
+   </property>
+   <property name="statusTip">
+    <string>Show a fully rendered, read-only document</string>
    </property>
   </action>
   <action name="actViewCork">

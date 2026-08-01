@@ -8,8 +8,17 @@ from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 from manuskript.commands import DocumentCommand
 from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
+from manuskript.ui.editors.markdownModeToolButton import (
+    MarkdownModeToolButton,
+)
+from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import open_split_dialog
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationDefaults,
+    MarkdownPresentationMode,
+    MarkdownPresentationState,
+)
 
 
 class editorWidget(QWidget, Ui_editorWidget_ui):
@@ -46,6 +55,12 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def __init__(self, parent, editor_context=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self.horizontalLayout_2.removeWidget(self.txtRedacText)
+        self.markdownEditorHost = MarkdownEditorHost(
+            self.txtRedacText,
+            self.text,
+        )
+        self.horizontalLayout_2.addWidget(self.markdownEditorHost)
         self.main_editor = (
             parent if hasattr(parent, "updateTargets") else None
         )
@@ -54,9 +69,24 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.outline_context = None
         if editor_context is not None:
             self.set_context(editor_context)
+        self.markdownPresentation = MarkdownPresentationState(
+            MarkdownPresentationDefaults.load(self.settings),
+            parent=self,
+        )
+        self.txtRedacText.setPresentationState(
+            self.markdownPresentation
+        )
+        self.markdownModeButton = MarkdownModeToolButton(
+            self.markdownPresentation,
+            self,
+        )
+        self.markdownModeButton.resize(38, 28)
+        self._positionMarkdownModeButton()
+        self.markdownModeButton.raise_()
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
+        self.markdownEditorHosts = []
         self.scroll.setBackgroundRole(QPalette.Base)
         self.toggledSpellcheck.connect(self.txtRedacText.toggleSpellcheck, AUC)
         self.dictChanged.connect(self.txtRedacText.setDict, AUC)
@@ -72,6 +102,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtEditScrollBar = self.txtRedacText.verticalScrollBar()
         self.txtEditScrollBar.setParent(self)
         self.stack.currentChanged.connect(self.setScrollBarVisibility)
+        self.txtRedacText.presentationModeChanged.connect(
+            self.setScrollBarVisibility
+        )
 
         # def setModel(self, model):
         # self._model = model
@@ -102,15 +135,31 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         r.setWidth(w)
         r.moveRight(self.geometry().width())
         self.txtEditScrollBar.setGeometry(r)
+        self._positionMarkdownModeButton()
+        self.markdownModeButton.raise_()
 
         QWidget.resizeEvent(self, event)
 
-    def setScrollBarVisibility(self):
+    def _positionMarkdownModeButton(self):
+        self.markdownModeButton.move(
+            max(0, self.width() - self.markdownModeButton.width() - 12),
+            4,
+        )
+
+    def setScrollBarVisibility(self, *_args):
         """
         Since the texteEdit scrollBar has been reparented to self, it is not
         hidden when stack changes. We have to do it manually.
         """
-        self.txtEditScrollBar.setVisible(self.stack.currentIndex() == 0)
+        source_editor_visible = (
+            self.stack.currentIndex() == 0
+            and self.txtRedacText.presentationMode
+            not in (
+                MarkdownPresentationMode.LIVE_PREVIEW,
+                MarkdownPresentationMode.READING,
+            )
+        )
+        self.txtEditScrollBar.setVisible(source_editor_visible)
 
     def setFolderView(self, v):
         oldV = self.folderView
@@ -126,6 +175,13 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
         if oldV != self.folderView and self.currentIndex:
             self.setCurrentModelIndex(self.currentIndex)
+
+        self._updateMarkdownModeButtonVisibility()
+
+    def _updateMarkdownModeButtonVisibility(self):
+        self.markdownModeButton.setVisible(
+            self.stack.currentIndex() in (0, 1)
+        )
 
     def setCorkSizeFactor(self, v):
         self.corkView.itemDelegate().setCorkSizeFactor(v)
@@ -224,6 +280,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                                highlighting=True,
                                autoResize=True,
                                settings=self.settings)
+            host = MarkdownEditorHost(edt, self)
+            edt.setPresentationState(self.markdownPresentation)
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
                     self.editor_context.text_editor
@@ -234,7 +292,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.dictChanged.connect(edt.setDict, AUC)
             # edt.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             self.txtEdits.append(edt)
-            l.addWidget(edt)
+            self.markdownEditorHosts.append(host)
+            l.addWidget(host)
 
         def addChildren(itm):
             for c in range(itm.childCount()):
@@ -282,6 +341,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             # self.scroll.setWidgetResizable(False)
 
             self.txtEdits = []
+            self.markdownEditorHosts = []
 
             if item != self._model.rootItem:
                 addTitle(item)
@@ -350,6 +410,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             pass
 
         self.updateStatusBar()
+        self._updateMarkdownModeButtonVisibility()
+        self.markdownModeButton.raise_()
 
     def setCurrentModelIndex(self, index=None):
         if index and index.isValid():

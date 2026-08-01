@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 from manuskript.commands import DocumentCommand
-
-
 @dataclass(frozen=True)
 class TextEditorContext:
     """Application actions available to project-bound text editors."""
@@ -18,7 +16,6 @@ class TextEditorContext:
 
 def text_editor_context_for(window, settings):
     """Adapt the main UI to the text editor action boundary."""
-
     def reload_fonts():
         from manuskript.ui.views.textEditView import textEditView
 

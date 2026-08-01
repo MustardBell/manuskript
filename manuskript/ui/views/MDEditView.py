@@ -3,7 +3,14 @@
 
 import re
 
-from PyQt5.QtCore import QRegExp, Qt, QTimer, QRect, QPoint
+from PyQt5.QtCore import (
+    QRegExp,
+    Qt,
+    QTimer,
+    QRect,
+    QPoint,
+    pyqtSignal,
+)
 from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import qApp, QToolTip
 
@@ -14,12 +21,17 @@ from manuskript.ui.highlighters.markdownTokenizer import MarkdownTokenizer as MT
 from manuskript.ui.editors.markdownInlineFormatting import (
     plan_inline_markup_toggle,
 )
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 from manuskript import functions as F
 
 import logging
 LOGGER = logging.getLogger(__name__)
 
 class MDEditView(textEditView):
+
+    presentationModeChanged = pyqtSignal(object)
 
     blockquoteRegex = QRegExp("^ {0,3}(>\\s*)+")
     listRegex = QRegExp(r"^(\s*)([+*-]|([0-9a-z])+([.\)]))(\s+)")
@@ -32,6 +44,10 @@ class MDEditView(textEditView):
                  settings=None):
         self._noFocusMode = False
         self._lastCursorPosition = None
+        self._presentationState = None
+        self._presentationHost = None
+        self._highlighterSuspendedForReading = False
+        self._contentReadOnly = html is not None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
                               autoResize=autoResize, settings=settings,
@@ -50,6 +66,11 @@ class MDEditView(textEditView):
 
         # Highlighter
         self._textFormat = "md"
+        self.readingView = None
+        self._presentationMode = (
+            MarkdownPresentationMode.FORMATTED_SOURCE
+        )
+        self._applyPresentationMode()
 
         if index:
             # We have to setup things anew, for the highlighter notably
@@ -66,6 +87,110 @@ class MDEditView(textEditView):
         )
         self.setMouseTracking(True)
         self.scheduleInteractionRectUpdate()
+
+    @property
+    def presentationMode(self):
+        return self._presentationMode
+
+    def setPresentationMode(self, mode):
+        mode = MarkdownPresentationMode.from_value(mode)
+        if (
+            not self._contentReadOnly
+            and mode is MarkdownPresentationMode.READING
+            and self._presentationHost is None
+        ):
+            raise RuntimeError(
+                "Reading mode requires a MarkdownEditorHost"
+            )
+        if mode is self._presentationMode:
+            self._applyPresentationMode()
+            return
+
+        self._presentationMode = mode
+        self._applyPresentationMode()
+        self.presentationModeChanged.emit(mode)
+
+    def _applyPresentationMode(self):
+        reading_active = (
+            not self._contentReadOnly
+            and self._presentationMode
+            is MarkdownPresentationMode.READING
+        )
+        self.setReadOnly(
+            self._contentReadOnly
+            or not self._presentationMode.is_editable
+        )
+        if reading_active and self._presentationHost is None:
+            raise RuntimeError(
+                "Reading mode requires a MarkdownEditorHost"
+            )
+        effective_mode = (
+            self._presentationMode
+            if not self._contentReadOnly
+            else MarkdownPresentationMode.FORMATTED_SOURCE
+        )
+        active_sibling = (
+            self._presentationHost.setPresentationMode(effective_mode)
+            if self._presentationHost is not None
+            else None
+        )
+        self._setHighlighterSuspended(
+            active_sibling is not None
+        )
+        if self.highlighter and active_sibling is None:
+            self.highlighter.rehighlight()
+
+    def setPresentationHost(self, host):
+        if (
+            self._presentationHost is not None
+            and self._presentationHost is not host
+        ):
+            raise RuntimeError(
+                "A Markdown editor can belong to only one presentation host"
+            )
+        self._presentationHost = host
+        if self.styleSheet():
+            host.setStyleSheet(self.styleSheet())
+            self.setStyleSheet("")
+        self._applyPresentationMode()
+
+    def _setHighlighterSuspended(self, suspended):
+        if not self.highlighter:
+            return
+        if (
+            suspended
+            and not self._highlighterSuspendedForReading
+        ):
+            self.highlighter.setDocument(None)
+            self._highlighterSuspendedForReading = True
+        elif (
+            not suspended
+            and self._highlighterSuspendedForReading
+        ):
+            self.highlighter.setDocument(self.document())
+            self._highlighterSuspendedForReading = False
+
+    def setPresentationState(self, state):
+        """Attach this view to its owning editor leaf's presentation state."""
+        if self._presentationState is not None:
+            try:
+                self._presentationState.modeChanged.disconnect(
+                    self.setPresentationMode
+                )
+            except (RuntimeError, TypeError):
+                pass
+
+        self._presentationState = state
+        if state is not None:
+            state.modeChanged.connect(self.setPresentationMode)
+            self.setPresentationMode(state.mode)
+        else:
+            self.setPresentationMode(
+                MarkdownPresentationMode.FORMATTED_SOURCE
+            )
+
+    def set_text_editor_context(self, context):
+        textEditView.set_text_editor_context(self, context)
 
     ###########################################################################
     # KEYPRESS
@@ -270,14 +395,24 @@ class MDEditView(textEditView):
 
     def cursorPositionHasChanged(self):
         self.centerCursor()
-        # Focus mode
-        if self.highlighter and self.settings.textEditor["focusMode"]:
-            if self._lastCursorPosition:
-                block = self.document().findBlock(self._lastCursorPosition)
-                self.highlighter.rehighlightBlock(block)
-            self._lastCursorPosition = self.textCursor().position()
-            block = self.document().findBlock(self._lastCursorPosition)
-            self.highlighter.rehighlightBlock(block)
+        current_position = self.textCursor().position()
+        presentation_reveal = (
+            self._presentationMode.reveals_active_block
+        )
+        focus_mode = self.settings.textEditor["focusMode"]
+        if (
+            self.highlighter
+            and self.highlighter.document() is self.document()
+            and (focus_mode or presentation_reveal)
+        ):
+            if self._lastCursorPosition is not None:
+                previous_block = self.document().findBlock(
+                    self._lastCursorPosition
+                )
+                self.highlighter.rehighlightBlock(previous_block)
+            current_block = self.document().findBlock(current_position)
+            self.highlighter.rehighlightBlock(current_block)
+        self._lastCursorPosition = current_position
 
     def centerCursor(self, force=False):
         cursor = self.cursorRect()
@@ -613,6 +748,34 @@ class MDEditView(textEditView):
     def resizeEvent(self, event):
         textEditView.resizeEvent(self, event)
         self.scheduleInteractionRectUpdate()
+
+    def sizeChange(self):
+        if not self._autoResize:
+            return
+        visible_view = (
+            self._presentationHost.currentWidget()
+            if self._presentationHost is not None
+            else self
+        )
+        opt = self.settings.textEditor
+        doc_height = (
+            visible_view.document().size().height()
+            + 2 * opt["marginsTB"]
+        )
+        if self.heightMin <= doc_height <= self.heightMax:
+            size_target = self._presentationHost or self
+            size_target.setMinimumHeight(int(doc_height))
+
+    def copy(self):
+        current_view = (
+            self._presentationHost.currentWidget()
+            if self._presentationHost is not None
+            else self
+        )
+        if current_view is not self:
+            current_view.copy()
+            return
+        textEditView.copy(self)
 
     def scrollContentsBy(self, dx, dy):
         textEditView.scrollContentsBy(self, dx, dy)

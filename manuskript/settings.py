@@ -81,7 +81,8 @@ textEditor = {
     "marginsTB": 20,
     "backgroundTransparent": False,
     "alwaysCenter": False,
-    "focusMode": False  # "line", "paragraph", "sentence"
+    "focusMode": False,  # "line", "paragraph", "sentence"
+    "markdownDefaultMode": "formatted-source",
     }
 
 revisions = {
