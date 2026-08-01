@@ -6,7 +6,12 @@ from PyQt5.QtGui import QStandardItem, QStandardItemModel
 
 from manuskript.enums import Outline
 from manuskript.exporter.manuskript.plainText import plainText
+from manuskript.exporter.pandoc.HTML import HTML as PandocHTML
+from manuskript.exporter.pandoc.PDF import PDF as PandocPDF
+from manuskript.exporter.pandoc.outputFormats import DocX, ePub
+from manuskript.exporter.pandoc.plainText import latex as PandocLatex
 from manuskript.models import outlineItem, outlineModel
+from manuskript.plugins import PageExportDocument
 from manuskript.ui.exporters.manuskript.plainTextSettings import (
     exporterSettings,
 )
@@ -180,3 +185,54 @@ def test_export_filter_settings_round_trip_selected_values():
         restored.lstContentStatus.item(1).checkState()
         == Qt.Unchecked
     )
+
+
+def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
+    class PageTypes:
+        def __init__(self):
+            self.targets = []
+
+        def export_document(
+                self, item, target_format, source=None,
+                route_id=None):
+            self.targets.append((target_format, route_id))
+            if target_format == "markdown":
+                return PageExportDocument(
+                    "semantic **Markdown**",
+                    "markdown",
+                )
+            return PageExportDocument(
+                "<custom-{}>```</custom-{}>".format(
+                    target_format,
+                    target_format,
+                ),
+                target_format,
+            )
+
+    page_types = PageTypes()
+    exporter = SimpleNamespace(
+        context=SimpleNamespace(page_types=page_types)
+    )
+    item = outlineItem(title="Custom page", _type="md")
+    item.setData(Outline.text, "raw plugin source")
+    settings = make_settings()
+
+    html = PandocHTML(exporter).processItemText(item, settings)
+    latex = PandocLatex(exporter).processItemText(item, settings)
+    pdf = PandocPDF(exporter).processItemText(item, settings)
+    epub = ePub(exporter).processItemText(item, settings)
+    docx = DocX(exporter).processItemText(item, settings)
+
+    assert "````{=html}" in html
+    assert "<custom-html>```</custom-html>" in html
+    assert "````{=latex}" in latex
+    assert "````{=latex}" in pdf
+    assert "````{=html}" in epub
+    assert docx == "semantic **Markdown**\n"
+    assert page_types.targets == [
+        ("html", "html:html"),
+        ("latex", "latex:latex"),
+        ("latex", "pdf:latex"),
+        ("html", "epub:html"),
+        ("markdown", "docx:markdown"),
+    ]

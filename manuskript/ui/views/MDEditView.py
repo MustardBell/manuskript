@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
+import html
 import re
 
 from PyQt5.QtCore import (
@@ -16,6 +17,7 @@ from PyQt5.QtWidgets import qApp, QToolTip
 
 from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.highlighters import MarkdownHighlighter
+from manuskript.ui.highlighters import BasicHighlighter
 from manuskript.ui.highlighters.markdownEnums import MarkdownState as MS
 from manuskript.ui.highlighters.markdownTokenizer import MarkdownTokenizer as MT
 from manuskript.ui.editors.markdownInlineFormatting import (
@@ -24,6 +26,9 @@ from manuskript.ui.editors.markdownInlineFormatting import (
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
+from manuskript.ui.plugins.markup_profiles import MARKDOWN_BASE_ID
+from manuskript.plugins.api import RenderedDocument
+from manuskript.plugins.execution import run_page_renderer
 from manuskript import functions as F
 
 import logging
@@ -48,6 +53,11 @@ class MDEditView(textEditView):
         self._presentationHost = None
         self._highlighterSuspendedForReading = False
         self._contentReadOnly = html is not None
+        self._markupProfileState = None
+        self._pageTypeState = None
+        self._markupBaseId = MARKDOWN_BASE_ID
+        self._markupBehaviors = ()
+        self._readingRenderer = None
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
                               autoResize=autoResize, settings=settings,
@@ -149,6 +159,7 @@ class MDEditView(textEditView):
                 "A Markdown editor can belong to only one presentation host"
             )
         self._presentationHost = host
+        host.setReadingRenderer(self._readingRenderer)
         if self.styleSheet():
             host.setStyleSheet(self.styleSheet())
             self.setStyleSheet("")
@@ -189,6 +200,215 @@ class MDEditView(textEditView):
                 MarkdownPresentationMode.FORMATTED_SOURCE
             )
 
+    def setMarkupProfileState(self, state):
+        if self._markupProfileState is not None:
+            try:
+                self._markupProfileState.changed.disconnect(
+                    self._applyMarkupProfile
+                )
+            except (RuntimeError, TypeError):
+                pass
+        self._markupProfileState = state
+        if state is not None:
+            state.changed.connect(self._applyMarkupProfile)
+        self._applyMarkupProfile()
+
+    def setPageTypeState(self, state):
+        if self._pageTypeState is not None:
+            try:
+                self._pageTypeState.changed.disconnect(
+                    self._applyPageType
+                )
+            except (RuntimeError, TypeError):
+                pass
+        self._pageTypeState = state
+        if state is not None:
+            state.changed.connect(self._applyPageType)
+        self._applyPageType()
+
+    def _applyMarkupProfile(self):
+        state = self._markupProfileState
+        self._markupBaseId = (
+            state.base_id if state is not None else MARKDOWN_BASE_ID
+        )
+        base_contribution = (
+            state.base_contribution if state is not None else None
+        )
+        if base_contribution is None:
+            self._installHighlighter(
+                lambda editor: MarkdownHighlighter(editor),
+                contribution=None,
+            )
+        else:
+            self._installHighlighter(
+                base_contribution.highlighter_factory,
+                contribution=base_contribution,
+            )
+
+        extensions = []
+        behaviors = []
+        contributions = (
+            state.additive_contributions
+            if state is not None
+            else ()
+        )
+        for contribution in contributions:
+            try:
+                extension = contribution.highlighter_factory(self)
+                if not callable(
+                    getattr(extension, "highlight_block", None)
+                ):
+                    raise TypeError(
+                        "Additive highlighter factories must return "
+                        "objects with highlight_block(highlighter, text)."
+                    )
+                extensions.append(
+                    _PluginHighlightGuard(
+                        contribution,
+                        extension,
+                        self._reportMarkupError,
+                    )
+                )
+            except Exception as error:
+                self._reportMarkupError(contribution, error)
+            behavior = self._createMarkupBehavior(contribution)
+            if behavior is not None:
+                behaviors.append(behavior)
+
+        if base_contribution is not None:
+            behavior = self._createMarkupBehavior(base_contribution)
+            if behavior is not None:
+                behaviors.insert(0, behavior)
+        self._markupBehaviors = tuple(behaviors)
+        if isinstance(self.highlighter, MarkdownHighlighter):
+            self.highlighter.setPluginExtensions(extensions)
+        self.scheduleInteractionRectUpdate()
+
+    def _applyPageType(self):
+        state = self._pageTypeState
+        wizard_contribution = (
+            state.contribution
+            if state is not None
+            and state.contribution is not None
+            and state.contribution.wizard_factory is not None
+            else None
+        )
+        renderer_contribution = (
+            state.contribution
+            if state is not None
+            and state.contribution is not None
+            and state.contribution.renderer_factory is not None
+            else None
+        )
+        self._readingRenderer = (
+            _PluginReadingRendererGuard(
+                renderer_contribution,
+                self._reportPageTypeError,
+            )
+            if renderer_contribution is not None
+            else None
+        )
+        if self._presentationHost is not None:
+            self._presentationHost.setReadingRenderer(
+                self._readingRenderer
+            )
+            self._presentationHost.setPageWizardFactory(
+                (
+                    wizard_contribution.wizard_factory
+                    if wizard_contribution is not None
+                    else None
+                ),
+                error_handler=(
+                    lambda error, contribution=wizard_contribution:
+                    self._reportPageTypeError(contribution, error)
+                    if contribution is not None
+                    else None
+                ),
+            )
+
+    def _installHighlighter(self, factory, contribution):
+        old = self.highlighter
+        if old is not None:
+            old.setDocument(None)
+            old.deleteLater()
+        try:
+            highlighter = factory(self)
+            if not isinstance(highlighter, BasicHighlighter):
+                raise TypeError(
+                    "Replacement highlighter factories must return "
+                    "BasicHighlighter instances."
+                )
+        except Exception as error:
+            if contribution is not None:
+                self._reportMarkupError(contribution, error)
+            highlighter = BasicHighlighter(self)
+        self.highlighter = highlighter
+        highlighter.setDefaultBlockFormat(self._defaultBlockFormat)
+        highlighter.setDefaultCharFormat(self._defaultCharFormat)
+        highlighter.updateColorScheme(rehighlight=False)
+        if self._highlighterSuspendedForReading:
+            highlighter.setDocument(None)
+        else:
+            highlighter.rehighlight()
+
+    def _createMarkupBehavior(self, contribution):
+        if contribution.behavior_factory is None:
+            return None
+        try:
+            behavior = contribution.behavior_factory(self)
+            if not any(
+                callable(getattr(behavior, method, None))
+                for method in (
+                    "key_press_event",
+                    "command",
+                    "plain_text",
+                )
+            ):
+                raise TypeError(
+                    "Markup behavior factories must return objects with "
+                    "editor behavior methods."
+                )
+            return _PluginBehaviorGuard(
+                contribution,
+                behavior,
+                self._reportMarkupError,
+            )
+        except Exception as error:
+            self._reportMarkupError(contribution, error)
+            return None
+
+    def _reportMarkupError(self, contribution, error):
+        state = self._markupProfileState
+        if state is not None:
+            state.service.report_error(contribution, error)
+
+    def _reportPageTypeError(self, contribution, error):
+        state = self._pageTypeState
+        if state is not None:
+            state.service.report_error(contribution, error)
+
+    def _dispatchMarkupCommand(self, command, *arguments):
+        for behavior in self._markupBehaviors:
+            if behavior.command(self, command, *arguments):
+                return True
+        return self._markupBaseId != MARKDOWN_BASE_ID
+
+    def _pluginPlainText(self, text, remove_comments):
+        for behavior in self._markupBehaviors:
+            value = behavior.plain_text(
+                self,
+                text,
+                remove_comments=remove_comments,
+            )
+            if value is not None:
+                return str(value)
+        return None
+
+    def setupEditorForIndex(self, index):
+        textEditView.setupEditorForIndex(self, index)
+        if self._markupProfileState is not None:
+            self._applyMarkupProfile()
+
     def set_text_editor_context(self, context):
         textEditView.set_text_editor_context(self, context)
 
@@ -197,6 +417,13 @@ class MDEditView(textEditView):
     ###########################################################################
 
     def keyPressEvent(self, event):
+        for behavior in self._markupBehaviors:
+            if behavior.key_press_event(self, event):
+                return
+        if self._markupBaseId != MARKDOWN_BASE_ID:
+            textEditView.keyPressEvent(self, event)
+            return
+
         k = event.key()
         m = event.modifiers()
         cursor = self.textCursor()
@@ -438,16 +665,45 @@ class MDEditView(textEditView):
     # FORMATTING
     ###########################################################################
 
-    def bold(self): self.insertFormattingMarkup("**")
-    def italic(self): self.insertFormattingMarkup("*")
-    def underline(self): self.insertFormattingMarkup("<u>", "</u>")
-    def strike(self): self.insertFormattingMarkup("~~")
-    def verbatim(self): self.insertFormattingMarkup("`")
-    def superscript(self): self.insertFormattingMarkup("^")
-    def subscript(self): self.insertFormattingMarkup("~")
-    def blockquote(self): self.lineFormattingMarkup("> ")
-    def orderedList(self): self.lineFormattingMarkup(" 1. ")
-    def unorderedList(self): self.lineFormattingMarkup("  - ")
+    def bold(self):
+        if not self._dispatchMarkupCommand("bold"):
+            self.insertFormattingMarkup("**")
+
+    def italic(self):
+        if not self._dispatchMarkupCommand("italic"):
+            self.insertFormattingMarkup("*")
+
+    def underline(self):
+        if not self._dispatchMarkupCommand("underline"):
+            self.insertFormattingMarkup("<u>", "</u>")
+
+    def strike(self):
+        if not self._dispatchMarkupCommand("strike"):
+            self.insertFormattingMarkup("~~")
+
+    def verbatim(self):
+        if not self._dispatchMarkupCommand("verbatim"):
+            self.insertFormattingMarkup("`")
+
+    def superscript(self):
+        if not self._dispatchMarkupCommand("superscript"):
+            self.insertFormattingMarkup("^")
+
+    def subscript(self):
+        if not self._dispatchMarkupCommand("subscript"):
+            self.insertFormattingMarkup("~")
+
+    def blockquote(self):
+        if not self._dispatchMarkupCommand("blockquote"):
+            self.lineFormattingMarkup("> ")
+
+    def orderedList(self):
+        if not self._dispatchMarkupCommand("ordered-list"):
+            self.lineFormattingMarkup(" 1. ")
+
+    def unorderedList(self):
+        if not self._dispatchMarkupCommand("unordered-list"):
+            self.lineFormattingMarkup("  - ")
 
     def selectWord(self, cursor):
         if cursor.selectedText():
@@ -462,6 +718,8 @@ class MDEditView(textEditView):
         cursor.movePosition(QTextCursor.EndOfBlock, QTextCursor.KeepAnchor)
 
     def comment(self):
+        if self._dispatchMarkupCommand("comment"):
+            return
         cursor = self.textCursor()
 
         # Select beginning and end of words
@@ -477,6 +735,8 @@ class MDEditView(textEditView):
             self.setTextCursor(cursor)
 
     def commentLine(self):
+        if self._dispatchMarkupCommand("comment-lines"):
+            return
         cursor = self.textCursor()
 
         start = cursor.selectionStart()
@@ -650,6 +910,8 @@ class MDEditView(textEditView):
         return len(text)
 
     def clearFormat(self):
+        if self._dispatchMarkupCommand("clear-format"):
+            return
         cursor = self.textCursor()
         text = cursor.selectedText()
         if not text:
@@ -659,15 +921,33 @@ class MDEditView(textEditView):
         cursor.insertText(text)
 
     def clearedFormat(self, text):
+        replacement = self._pluginPlainText(
+            text,
+            remove_comments=False,
+        )
+        if replacement is not None:
+            return replacement
+        if self._markupBaseId != MARKDOWN_BASE_ID:
+            return text
         return F.clearMarkdownFormatting(text)
 
     def clearedFormatForStats(self, text):
+        replacement = self._pluginPlainText(
+            text,
+            remove_comments=True,
+        )
+        if replacement is not None:
+            return replacement
+        if self._markupBaseId != MARKDOWN_BASE_ID:
+            return text
         return F.clearMarkdownFormatting(
             text,
             remove_comments=True,
         )
 
     def titleSetext(self, level):
+        if self._dispatchMarkupCommand("heading-setext", level):
+            return
         cursor = self.textCursor()
 
         cursor.beginEditBlock()
@@ -697,6 +977,8 @@ class MDEditView(textEditView):
         cursor.endEditBlock()
 
     def titleATX(self, level):
+        if self._dispatchMarkupCommand("heading-atx", level):
+            return
         cursor = self.textCursor()
         text = cursor.block().text()
 
@@ -794,6 +1076,9 @@ class MDEditView(textEditView):
         Parses the whole texte to catch clickable things: links and images.
         Stores the result so that it can be used elsewhere.
         """
+        if self._markupBaseId != MARKDOWN_BASE_ID:
+            self.clickRects = []
+            return
         cursor = self.textCursor()
         refs = []
         text = self.toPlainText()
@@ -912,6 +1197,90 @@ class ClickThing:
         self.rect = rect
         self.regex = regex
         self.texts = texts
+
+
+class _PluginHighlightGuard:
+    def __init__(self, contribution, extension, report_error):
+        self.contribution = contribution
+        self.extension = extension
+        self.report_error = report_error
+        self.failed = False
+
+    def highlight_block(self, highlighter, text):
+        if self.failed:
+            return
+        try:
+            self.extension.highlight_block(highlighter, text)
+        except Exception as error:
+            self.failed = True
+            self.report_error(self.contribution, error)
+
+
+class _PluginBehaviorGuard:
+    def __init__(self, contribution, behavior, report_error):
+        self.contribution = contribution
+        self.behavior = behavior
+        self.report_error = report_error
+        self.failed = False
+
+    def key_press_event(self, editor, event):
+        return bool(
+            self._call("key_press_event", False, editor, event)
+        )
+
+    def command(self, editor, command, *arguments):
+        return bool(
+            self._call(
+                "command",
+                False,
+                editor,
+                command,
+                *arguments,
+            )
+        )
+
+    def plain_text(self, editor, text, remove_comments=False):
+        return self._call(
+            "plain_text",
+            None,
+            editor,
+            text,
+            remove_comments=remove_comments,
+        )
+
+    def _call(self, method, default, *arguments, **keywords):
+        if self.failed:
+            return default
+        operation = getattr(self.behavior, method, None)
+        if not callable(operation):
+            return default
+        try:
+            return operation(*arguments, **keywords)
+        except Exception as error:
+            self.failed = True
+            self.report_error(self.contribution, error)
+            return default
+
+
+class _PluginReadingRendererGuard:
+    def __init__(self, contribution, report_error):
+        self.contribution = contribution
+        self.report_error = report_error
+        self.failed = False
+
+    def render(self, source):
+        if not self.failed:
+            try:
+                return run_page_renderer(
+                    self.contribution,
+                    source,
+                )
+            except Exception as error:
+                self.failed = True
+                self.report_error(self.contribution, error)
+        return RenderedDocument(
+            "<pre>{}</pre>".format(html.escape(source))
+        )
 
 from PyQt5.QtNetwork import QNetworkRequest, QNetworkAccessManager, QNetworkReply
 from PyQt5.QtCore import QIODevice, QUrl, QBuffer

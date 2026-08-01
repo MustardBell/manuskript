@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
+import json
 import time
 import locale
 from PyQt5.QtCore import Qt
@@ -105,6 +106,42 @@ class outlineItem(abstractItem, searchableItem):
 
     def charCount(self):
         return self._data.get(self.enum.charCount, 0)
+
+    def pluginData(self):
+        """Return JSON-compatible per-item data owned by plugins."""
+        value = self.data(self.enum.pluginData)
+        if isinstance(value, dict):
+            return dict(value)
+        if not value:
+            return {}
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            LOGGER.warning(
+                "Ignoring malformed plugin data on outline item %s.",
+                self.ID(),
+            )
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    def pluginValue(self, key, default=None):
+        return self.pluginData().get(str(key), default)
+
+    def hasPluginValue(self, key):
+        return str(key) in self.pluginData()
+
+    def setPluginValue(self, key, value):
+        values = self.pluginData()
+        values[str(key)] = value
+        self.setData(
+            self.enum.pluginData,
+            json.dumps(
+                values,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
 
     def __str__(self):
         return "{id}: {folder}{title}{children}".format(

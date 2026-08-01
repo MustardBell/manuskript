@@ -1,5 +1,6 @@
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QFrame, QStackedWidget
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QTextCursor
+from PyQt5.QtWidgets import QFrame, QLabel, QStackedWidget, QWidget
 
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -18,8 +19,16 @@ class MarkdownEditorHost(QStackedWidget):
         self.setFrameShape(QFrame.NoFrame)
         self.sourceEditor = source_editor
         self.readingView = None
+        self.readingRenderer = None
+        self.pageWizard = None
+        self.pageWizardFactory = None
+        self.pageWizardErrorHandler = None
+        self._wizardRefreshPending = False
         self.addWidget(source_editor)
         source_editor.setPresentationHost(self)
+        source_editor.document().contentsChanged.connect(
+            self._sourceChanged
+        )
 
     @property
     def canonicalEditor(self):
@@ -43,6 +52,11 @@ class MarkdownEditorHost(QStackedWidget):
     def _viewForMode(self, mode):
         if mode is MarkdownPresentationMode.READING:
             return self._ensureReadingView()
+        if (
+            mode is MarkdownPresentationMode.LIVE_PREVIEW
+            and self.pageWizardFactory is not None
+        ):
+            return self._ensurePageWizard()
         return self.sourceEditor
 
     def _ensureReadingView(self):
@@ -53,4 +67,106 @@ class MarkdownEditorHost(QStackedWidget):
             )
             self.addWidget(self.readingView)
             self.sourceEditor.readingView = self.readingView
+            self.readingView.setRenderer(self.readingRenderer)
         return self.readingView
+
+    def setReadingRenderer(self, renderer):
+        self.readingRenderer = renderer
+        if self.readingView is not None:
+            self.readingView.setRenderer(renderer)
+
+    def setPageWizardFactory(self, factory, error_handler=None):
+        """Install an item-specific structured editor factory.
+
+        Page wizard widgets are isolated from the canonical QTextDocument.
+        They receive source through ``load_source(str)`` and may request one
+        explicit replacement through an ``applyRequested(str)`` signal.
+        """
+        self.pageWizardErrorHandler = error_handler
+        if factory is self.pageWizardFactory:
+            return
+        refresh_live_view = (
+            self.currentWidget() is self.pageWizard
+            or self.sourceEditor.presentationMode
+            is MarkdownPresentationMode.LIVE_PREVIEW
+        )
+        if self.pageWizard is not None:
+            self.removeWidget(self.pageWizard)
+            self.pageWizard.deleteLater()
+            self.pageWizard = None
+        self.pageWizardFactory = factory
+        if refresh_live_view:
+            self.setPresentationMode(
+                MarkdownPresentationMode.LIVE_PREVIEW
+            )
+
+    def _ensurePageWizard(self):
+        if self.pageWizard is not None:
+            return self.pageWizard
+        try:
+            wizard = self.pageWizardFactory()
+            if not isinstance(wizard, QWidget):
+                raise TypeError(
+                    "Page wizard factories must return QWidget instances."
+                )
+            load_source = getattr(wizard, "load_source", None)
+            apply_requested = getattr(wizard, "applyRequested", None)
+            if not callable(load_source) or not hasattr(
+                apply_requested, "connect"
+            ):
+                raise TypeError(
+                    "Page wizards require load_source(source) and an "
+                    "applyRequested(str) signal."
+                )
+            apply_requested.connect(self._applyWizardSource)
+        except Exception as error:
+            if self.pageWizardErrorHandler is not None:
+                self.pageWizardErrorHandler(error)
+            wizard = QLabel(
+                self.tr("The page wizard could not be loaded: {}")
+                .format(error),
+                self,
+            )
+            wizard.setWordWrap(True)
+            wizard.setAlignment(Qt.AlignCenter)
+        self.pageWizard = wizard
+        self.addWidget(wizard)
+        self._loadWizardSource()
+        return wizard
+
+    def _sourceChanged(self):
+        if self.pageWizard is None or self._wizardRefreshPending:
+            return
+        self._wizardRefreshPending = True
+        QTimer.singleShot(0, self._loadWizardSource)
+
+    def _loadWizardSource(self):
+        self._wizardRefreshPending = False
+        if self.pageWizard is None:
+            return
+        load_source = getattr(self.pageWizard, "load_source", None)
+        if not callable(load_source):
+            return
+        try:
+            load_source(self.sourceEditor.toPlainText())
+        except Exception as error:
+            if self.pageWizardErrorHandler is not None:
+                self.pageWizardErrorHandler(error)
+
+    def _applyWizardSource(self, source):
+        source = str(source)
+        editor = self.sourceEditor
+        if source == editor.toPlainText():
+            return
+        old_cursor = editor.textCursor()
+        position = old_cursor.position()
+        cursor = QTextCursor(editor.document())
+        cursor.beginEditBlock()
+        cursor.select(QTextCursor.Document)
+        cursor.insertText(source)
+        cursor.endEditBlock()
+        old_cursor.setPosition(min(position, len(source)))
+        editor.setTextCursor(old_cursor)
+        # Persist through the editor/model owner immediately. The wizard never
+        # writes an outline item or project file directly.
+        editor.submit()

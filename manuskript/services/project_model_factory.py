@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from PyQt5.QtGui import QStandardItemModel
 
+from manuskript.domain.plugin_data import ProjectPluginData
 from manuskript.models import outlineModel
 from manuskript.models.characterModel import characterModel
 from manuskript.models.outline_search_context import OutlineSearchContext
@@ -18,6 +19,7 @@ class ProjectModels:
     plots: object
     outline: object
     world: object
+    plugin_data: ProjectPluginData
 
     def install_on(self, window):
         """Expose the model graph through the legacy window attributes."""
@@ -28,6 +30,7 @@ class ProjectModels:
         window.mdlPlots = self.plots
         window.mdlOutline = self.outline
         window.mdlWorld = self.world
+        window.projectPluginData = self.plugin_data
 
 
 class ProjectModelFactory:
@@ -52,6 +55,7 @@ class ProjectModelFactory:
             settings=settings,
         )
         world = worldModel(parent)
+        plugin_data = ProjectPluginData()
         return ProjectModels(
             flat_data=flat_data,
             characters=characters,
@@ -60,4 +64,5 @@ class ProjectModelFactory:
             plots=plots,
             outline=outline,
             world=world,
+            plugin_data=plugin_data,
         )

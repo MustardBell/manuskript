@@ -81,6 +81,7 @@ def test_lifecycle_view_captures_project_state_before_cleanup():
     assert window.settingsManager.openIndexes == open_indexes
     window.mainEditor.close.assert_called_once_with()
     window.mainEditor.closeAllTabs.assert_called_once_with()
+    window.pluginUi.prepare_project_close.assert_called_once_with()
 
 
 def test_lifecycle_view_flushes_every_model_backed_text_editor():

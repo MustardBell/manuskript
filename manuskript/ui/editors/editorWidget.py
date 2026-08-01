@@ -11,6 +11,9 @@ from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.editors.markdownModeToolButton import (
     MarkdownModeToolButton,
 )
+from manuskript.ui.editors.markupProfileToolButton import (
+    MarkupProfileToolButton,
+)
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.tools.splitDialog import open_split_dialog
@@ -81,12 +84,55 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self,
         )
         self.markdownModeButton.resize(38, 28)
+        self.pageType = None
+        markup_profiles = (
+            self.editor_context.text_editor.markup_profiles
+            if self.editor_context is not None
+            and self.editor_context.text_editor is not None
+            else None
+        )
+        self.markupProfile = (
+            markup_profiles.create_state(parent=self)
+            if markup_profiles is not None
+            else None
+        )
+        self.markupProfileButton = (
+            MarkupProfileToolButton(self.markupProfile, self)
+            if self.markupProfile is not None
+            else None
+        )
+        if self.markupProfileButton is not None:
+            self.markupProfileButton.resize(38, 28)
+            self.markupProfile.changed.connect(
+                self._markupProfileChanged
+            )
+            self.txtRedacText.setMarkupProfileState(
+                self.markupProfile
+            )
+            self._markupProfileChanged()
+        page_types = (
+            self.editor_context.text_editor.page_types
+            if self.editor_context is not None
+            and self.editor_context.text_editor is not None
+            else None
+        )
+        self.pageType = (
+            page_types.create_state(parent=self)
+            if page_types is not None
+            else None
+        )
+        if self.pageType is not None:
+            self.pageType.changed.connect(self._pageTypeChanged)
+            self.txtRedacText.setPageTypeState(self.pageType)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        if self.markupProfileButton is not None:
+            self.markupProfileButton.raise_()
         self.currentIndex = QModelIndex()
         self.currentID = None
         self.txtEdits = []
         self.markdownEditorHosts = []
+        self.pageTypeStates = []
         self.scroll.setBackgroundRole(QPalette.Base)
         self.toggledSpellcheck.connect(self.txtRedacText.toggleSpellcheck, AUC)
         self.dictChanged.connect(self.txtRedacText.setDict, AUC)
@@ -137,6 +183,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtEditScrollBar.setGeometry(r)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        if self.markupProfileButton is not None:
+            self.markupProfileButton.raise_()
 
         QWidget.resizeEvent(self, event)
 
@@ -145,6 +193,42 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             max(0, self.width() - self.markdownModeButton.width() - 12),
             4,
         )
+        if self.markupProfileButton is not None:
+            self.markupProfileButton.move(
+                max(
+                    0,
+                    self.markdownModeButton.x()
+                    - self.markupProfileButton.width()
+                    - 4,
+                ),
+                4,
+            )
+
+    def _markupProfileChanged(self):
+        self._refreshPresentationModes()
+        for editor in [self.txtRedacText] + list(
+            getattr(self, "txtEdits", [])
+        ):
+            if not getattr(editor, "_contentReadOnly", False):
+                editor.setMarkupProfileState(self.markupProfile)
+
+    def _pageTypeChanged(self):
+        self._refreshPresentationModes()
+
+    def _refreshPresentationModes(self):
+        page_modes = (
+            self.pageType.allowed_presentation_modes
+            if self.pageType is not None
+            else None
+        )
+        modes = (
+            page_modes
+            if page_modes is not None
+            else tuple(MarkdownPresentationMode)
+            if self.markupProfile is None
+            else self.markupProfile.allowed_presentation_modes
+        )
+        self.markdownPresentation.set_allowed_modes(modes)
 
     def setScrollBarVisibility(self, *_args):
         """
@@ -179,9 +263,16 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self._updateMarkdownModeButtonVisibility()
 
     def _updateMarkdownModeButtonVisibility(self):
-        self.markdownModeButton.setVisible(
-            self.stack.currentIndex() in (0, 1)
-        )
+        visible = self.stack.currentIndex() in (0, 1)
+        self.markdownModeButton.setVisible(visible)
+        if self.markupProfileButton is not None:
+            service = self.markupProfile.service
+            has_profiles = bool(
+                service.replacements() or service.augmentations()
+            )
+            self.markupProfileButton.setVisible(
+                visible and has_profiles
+            )
 
     def setCorkSizeFactor(self, v):
         self.corkView.itemDelegate().setCorkSizeFactor(v)
@@ -282,6 +373,20 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                                settings=self.settings)
             host = MarkdownEditorHost(edt, self)
             edt.setPresentationState(self.markdownPresentation)
+            if self.markupProfile is not None:
+                edt.setMarkupProfileState(self.markupProfile)
+            if (
+                self.editor_context.text_editor is not None
+                and self.editor_context.text_editor.page_types is not None
+            ):
+                page_type = (
+                    self.editor_context.text_editor.page_types.create_state(
+                        item=itm,
+                        parent=edt,
+                    )
+                )
+                self.pageTypeStates.append(page_type)
+                edt.setPageTypeState(page_type)
             if self.editor_context.text_editor is not None:
                 edt.set_text_editor_context(
                     self.editor_context.text_editor
@@ -342,6 +447,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
             self.txtEdits = []
             self.markdownEditorHosts = []
+            self.pageTypeStates = []
 
             if item != self._model.rootItem:
                 addTitle(item)
@@ -412,6 +518,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.updateStatusBar()
         self._updateMarkdownModeButtonVisibility()
         self.markdownModeButton.raise_()
+        if self.markupProfileButton is not None:
+            self.markupProfileButton.raise_()
 
     def setCurrentModelIndex(self, index=None):
         if index and index.isValid():
@@ -421,6 +529,14 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         else:
             self.currentIndex = QModelIndex()
             self.currentID = None
+
+        if self.pageType is not None:
+            item = (
+                self.currentIndex.internalPointer()
+                if self.currentIndex.isValid()
+                else None
+            )
+            self.pageType.set_item(item)
 
         if self._model:
             self.setView()
@@ -467,6 +583,10 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # We are only concerned with minor changes to the current index,
         # so there is no need to call updateIndexFromID() nor setView().
         if topLeft.row() <= self.currentIndex.row() <= bottomRight.row():
+            if self.pageType is not None:
+                self.pageType.refresh(force=True)
+            for state in self.pageTypeStates:
+                state.refresh(force=True)
             self.updateTabTitle()
             self.updateStatusBar()
 

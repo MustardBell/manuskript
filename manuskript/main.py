@@ -11,10 +11,13 @@ from PyQt5.QtCore import QLocale, QTranslator, QSettings, Qt
 from PyQt5.QtGui import QIcon, QColor, QPalette
 from PyQt5.QtWidgets import QApplication, qApp, QStyleFactory
 
-from manuskript.functions import appPath, writablePath, resetTranslation
+from manuskript.functions import appPath, resetTranslation
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
+from manuskript.plugins.runtime import PluginRuntime
+from manuskript.services.plugin_options import PluginOptionStore
+from manuskript.services.plugin_preferences import PluginPreferences
 from manuskript.version import getVersion
 
 try:
@@ -171,6 +174,15 @@ def prepare(arguments, tests=False):
     settings_manager = SettingsManager()
     settings_manager.applyTooltipStyle()
 
+    plugin_settings = QSettings()
+    plugin_runtime = PluginRuntime(
+        [appPath("manuskript/plugins")],
+        PluginPreferences(plugin_settings),
+    )
+    plugin_runtime.discover()
+    plugin_runtime.load_enabled()
+    plugin_option_store = PluginOptionStore(plugin_settings)
+
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
 
@@ -186,6 +198,8 @@ def prepare(arguments, tests=False):
     MW = MainWindow(
         settings_manager,
         application_preferences=preferences,
+        plugin_runtime=plugin_runtime,
+        plugin_option_store=plugin_option_store,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary

@@ -20,6 +20,8 @@ class HTML(markdown):
     description = safeTranslate(qApp, "Export", "Basic HTML output using the Python module 'markdown'.")
     InvalidBecause = safeTranslate(qApp, "Export", "Python module 'markdown'.")
     icon = "text-html"
+    format_id = "html"
+    artifact_media_type = "text/html"
 
     exportVarName = "lastManuskriptHTML"
     exportFilter = "HTML files (*.html);; Any files (*)"

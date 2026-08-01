@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QUrl
 from PyQt5.QtGui import QTextDocument
 from PyQt5.QtWidgets import QFrame, QTextBrowser
 
@@ -17,6 +17,7 @@ class MarkdownReadingView(QTextBrowser):
             self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._active = False
         self._dirty = True
+        self._renderer = None
 
         self._refreshTimer = QTimer(self)
         self._refreshTimer.setSingleShot(True)
@@ -30,6 +31,12 @@ class MarkdownReadingView(QTextBrowser):
         self._active = bool(active)
         if active:
             self.refreshIfNeeded()
+
+    def setRenderer(self, renderer):
+        if renderer is self._renderer:
+            return
+        self._renderer = renderer
+        self.scheduleRefresh()
 
     def scheduleRefresh(self):
         self._dirty = True
@@ -73,10 +80,17 @@ class MarkdownReadingView(QTextBrowser):
 
         document = self.document()
         document.setDefaultFont(self._sourceEditor.font())
-        document.setMarkdown(
-            self._sourceEditor.toPlainText(),
-            QTextDocument.MarkdownDialectGitHub,
-        )
+        source = self._sourceEditor.toPlainText()
+        if self._renderer is None:
+            document.setBaseUrl(QUrl())
+            document.setMarkdown(
+                source,
+                QTextDocument.MarkdownDialectGitHub,
+            )
+        else:
+            rendered = self._renderer.render(source)
+            document.setBaseUrl(QUrl(rendered.base_url))
+            document.setHtml(rendered.html)
         self._dirty = False
         self.setProjectionWidth(self.viewport().width())
         if self._sourceEditor._autoResize:

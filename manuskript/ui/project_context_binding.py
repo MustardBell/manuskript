@@ -84,6 +84,11 @@ class ProjectContextBinding:
             window.mdlCharacter,
             window.mdlLabels,
             window.mdlStatus,
+            page_types=(
+                window.pluginUi.pageTypes
+                if window.pluginUi is not None
+                else None
+            ),
         )
         window.outlineItemEditor.setModels(
             window.mdlOutline,
