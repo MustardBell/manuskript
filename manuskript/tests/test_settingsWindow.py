@@ -27,8 +27,7 @@ def test_general(MWSampleProject):
     from PyQt5.QtWidgets import qApp, QStyleFactory
     from PyQt5.QtCore import QSettings, Qt
     qS = QSettings(qApp.organizationName(), qApp.applicationName())
-    from manuskript.settingsManager import SettingsManager
-    S = SettingsManager()
+    S = MW.settingsManager
 
     # Style
     assert SW.cmbStyle.count() == len(list(QStyleFactory.keys()))
@@ -143,8 +142,11 @@ def test_general(MWSampleProject):
     item = SW.lstThemes.item(count)
     SW.lstThemes.setCurrentItem(item)
     SW.editTheme()
+    line_spacing_connections = SW.cmbThemeLineSpacing.receivers(
+        SW.cmbThemeLineSpacing.currentIndexChanged
+    )
     switchCheckBoxAndAssert(SW.chkThemeIndent,
-                            lambda: SW._themeData["Spacings/IndentFirstLine"])
+                            lambda: SW.themeEditor.data["Spacings/IndentFirstLine"])
     SW.updateThemeFont(None)
     SW.updateThemeBackground(0)
     SW.updateThemeBackground(1)
@@ -152,13 +154,16 @@ def test_general(MWSampleProject):
     for i in range(4):
         SW.updateLineSpacing(i)
         SW.updateUIFromTheme() # No time to wait on timer
-    assert SW._editingTheme != None
+    assert SW.themeEditor.is_editing
     SW.resize(SW.geometry().size()) # resizeEvent
     #TODO: other edit test (see SW.loadTheme
     SW.saveTheme()
     item = SW.lstThemes.item(count)
     SW.lstThemes.setCurrentItem(item)
     SW.editTheme()
+    assert SW.cmbThemeLineSpacing.receivers(
+        SW.cmbThemeLineSpacing.currentIndexChanged
+    ) == line_spacing_connections
     SW.cancelEdit()
     item = SW.lstThemes.item(count)
     SW.lstThemes.setCurrentItem(item)

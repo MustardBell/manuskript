@@ -13,24 +13,22 @@ class TestSettingsManager(unittest.TestCase):
         with patch.object(self.settings, "apply_loaded_settings_effects"):
             self.settings.reset_to_defaults()
 
-    def test_singleton_behavior(self):
-        """Test that SettingsManager is a proper singleton."""
+    def test_instances_have_explicit_independent_ownership(self):
         s1 = SettingsManager()
         s2 = SettingsManager()
-        
-        # Should be the same instance
-        self.assertIs(s1, s2)
-        self.assertEqual(id(s1), id(s2))
-    
-    def test_singleton_state_persistence(self):
-        """Test that settings persist across multiple SettingsManager() calls."""
+
+        self.assertIsNot(s1, s2)
+        self.assertEqual(s1.viewSettings, s2.viewSettings)
+        self.assertIsNot(s1.viewSettings, s2.viewSettings)
+
+    def test_instance_state_does_not_leak(self):
         s1 = SettingsManager()
         original_value = s1.spellcheck
         s1.spellcheck = not original_value
 
         s2 = SettingsManager()
-        self.assertEqual(s2.spellcheck, not original_value)
-        self.assertIs(s1, s2)
+        self.assertEqual(s2.spellcheck, original_value)
+        self.assertIsNot(s1, s2)
 
     def test_load_save_persistence(self):
         """Test that loaded settings persist and can be saved correctly."""
@@ -47,17 +45,16 @@ class TestSettingsManager(unittest.TestCase):
         }
         settings_json = json.dumps(test_settings)
 
-        s1 = SettingsManager()
-        with patch.object(s1, "apply_loaded_settings_effects"):
-            s1.load(settings_json)
+        settings = SettingsManager()
+        with patch.object(settings, "apply_loaded_settings_effects"):
+            settings.load(settings_json)
 
-        s2 = SettingsManager()
-        self.assertTrue(s2.spellcheck)
-        self.assertEqual(s2.corkSizeFactor, 150)
-        self.assertEqual(s2.folderView, "outline")
-        self.assertEqual(s2.tooltipStyle["textColor"], "#123456")
+        self.assertTrue(settings.spellcheck)
+        self.assertEqual(settings.corkSizeFactor, 150)
+        self.assertEqual(settings.folderView, "outline")
+        self.assertEqual(settings.tooltipStyle["textColor"], "#123456")
 
-        saved_json = s2.save()
+        saved_json = settings.save()
         saved_settings = json.loads(saved_json)
         self.assertTrue(saved_settings["spellcheck"])
         self.assertEqual(saved_settings["corkSizeFactor"], 150)
@@ -76,12 +73,11 @@ class TestSettingsManager(unittest.TestCase):
         with patch.object(s1, "apply_loaded_settings_effects"):
             s1.reset_to_defaults()
 
-        s2 = SettingsManager()
-        self.assertEqual(s2.spellcheck, default_settings.spellcheck)
-        self.assertEqual(s2.corkSizeFactor, default_settings.corkSizeFactor)
-        self.assertEqual(s2.folderView, default_settings.folderView)
-        self.assertEqual(s2.viewSettings, default_settings.viewSettings)
-        self.assertEqual(s2.revisions, default_settings.revisions)
+        self.assertEqual(s1.spellcheck, default_settings.spellcheck)
+        self.assertEqual(s1.corkSizeFactor, default_settings.corkSizeFactor)
+        self.assertEqual(s1.folderView, default_settings.folderView)
+        self.assertEqual(s1.viewSettings, default_settings.viewSettings)
+        self.assertEqual(s1.revisions, default_settings.revisions)
 
     def test_active_settings_do_not_mutate_defaults(self):
         """Active nested settings must not leak into the defaults module."""
