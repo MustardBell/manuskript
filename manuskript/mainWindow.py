@@ -388,6 +388,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def formatAtx6(self): self.callLastMDEditView("titleATX", [6])
     def formatBold(self): self.callLastMDEditView("bold")
     def formatItalic(self): self.callLastMDEditView("italic")
+    def formatUnderline(self): self.callLastMDEditView("underline")
     def formatStrike(self): self.callLastMDEditView("strike")
     def formatVerbatim(self): self.callLastMDEditView("verbatim")
     def formatSuperscript(self): self.callLastMDEditView("superscript")

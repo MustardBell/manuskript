@@ -92,6 +92,9 @@ class MarkdownTokenizer(HighlightTokenizer):
     emphasisRegex.setMinimal(True)
     strongRegex = QRegExp("\\*\\*(?=\\S).*\\S\\*\\*(?!\\*)|__(?=\\S).*\\S__(?!_)")
     strongRegex.setMinimal(True)
+    underlineRegex = QRegExp("<u>(?=\\S).*\\S</u>")
+    underlineRegex.setMinimal(True)
+    underlineRegex.setCaseSensitivity(Qt.CaseInsensitive)
     strikethroughRegex = QRegExp("~~[^\\s]+.*[^\\s]+~~")
     strikethroughRegex.setMinimal(True)
     superScriptRegex = QRegExp(r"\^([^\s]|(\\\\\s))+\^")  # Spaces must be escaped "\ "
@@ -617,6 +620,7 @@ class MarkdownTokenizer(HighlightTokenizer):
         escapedText = self.tokenizeMatches(MTT.TokenAutomaticLink, escapedText, self.automaticLinkRegex, 0, 0, False, True)
         escapedText = self.tokenizeMatches(MTT.TokenStrong, escapedText, self.strongRegex, 2, 2, True)
         escapedText = self.tokenizeMatches(MTT.TokenEmphasis, escapedText, self.emphasisRegex, 1, 1, True)
+        escapedText = self.tokenizeMatches(MTT.TokenUnderline, escapedText, self.underlineRegex, 3, 4, True)
         escapedText = self.tokenizeMatches(MTT.TokenMention, escapedText, self.mentionRegex, 0, 0, False, True)
         escapedText = self.tokenizeMatches(MTT.TokenCMAddition, escapedText, self.CMAdditionRegex, 3, 3, True)
         escapedText = self.tokenizeMatches(MTT.TokenCMDeletion, escapedText, self.CMDeletionRegex, 3, 3, True)

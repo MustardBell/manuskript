@@ -347,6 +347,8 @@ class MarkdownHighlighter(BasicHighlighter):
             "italic":True}
         theme[MTT.TokenStrong] = {
             "bold":True}
+        theme[MTT.TokenUnderline] = {
+            "underline":True}
         theme[MTT.TokenStrikethrough] = {
             "strike":True}
         theme[MTT.TokenVerbatim] = {

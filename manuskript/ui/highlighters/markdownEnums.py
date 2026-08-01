@@ -85,7 +85,8 @@ class MarkdownTokenType:
     TokenCMSubstitution = 39 #{~~ ~> ~~}
     TokenCMComment = 40 # {>> <<}
     TokenCMHighlight = 41 # {== ==}{>> <<}
-    TokenLast = 42
+    TokenUnderline = 42
+    TokenLast = 43
 
     TITLES =  [TokenAtxHeading1, TokenAtxHeading2, TokenAtxHeading3,
                TokenAtxHeading4, TokenAtxHeading5, TokenAtxHeading6,
