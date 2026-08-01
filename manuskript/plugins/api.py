@@ -73,6 +73,37 @@ class ProjectSnapshot:
 
 
 @dataclass(frozen=True)
+class WorkspaceDocument:
+    """Portable description of one editable outline document."""
+
+    id: str
+    title: str
+    kind: str
+    text: str = ""
+    compile: bool = True
+    parent_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EditorWorkspaceContext:
+    """Project-scoped capabilities supplied to an editor workspace.
+
+    The service objects deliberately use capability-based interfaces. Plugins
+    receive only their project-file namespace, a guarded outline gateway, and
+    an editor factory instead of the main window or raw project models.
+    """
+
+    plugin_id: str
+    project_file: str
+    selected_item_ids: tuple[str, ...]
+    files: Any
+    outline: Any
+    editors: Any
+    show_status: Callable[..., None]
+    close_workspace: Callable[[], None]
+
+
+@dataclass(frozen=True)
 class ConversionArtifact:
     content: Union[str, bytes]
     suggested_name: str = "converted.txt"
@@ -185,6 +216,51 @@ class ProjectPanelContribution:
 
 
 @dataclass(frozen=True)
+class EditorWorkspaceContribution:
+    """Add a project-scoped workspace to Manuskript's editor area.
+
+    ``workspace_factory`` receives ``(EditorWorkspaceContext, parent)`` and
+    must return a QWidget. The Qt type is checked by the UI host so the stable
+    registration contract remains importable without Qt.
+    """
+
+    descriptor: ExtensionDescriptor
+    workspace_factory: Callable[..., Any]
+    action_label: str = ""
+    shortcut: str = ""
+    minimum_selection: int = 0
+    maximum_selection: Optional[int] = None
+
+    def __post_init__(self):
+        minimum = int(self.minimum_selection)
+        maximum = (
+            None
+            if self.maximum_selection is None
+            else int(self.maximum_selection)
+        )
+        if minimum < 0:
+            raise ValueError(
+                "Workspace minimum_selection cannot be negative."
+            )
+        if maximum is not None and maximum < minimum:
+            raise ValueError(
+                "Workspace maximum_selection cannot be smaller than its "
+                "minimum_selection."
+            )
+        if not callable(self.workspace_factory):
+            raise ValueError(
+                "Editor workspaces require a callable workspace_factory."
+            )
+        object.__setattr__(self, "minimum_selection", minimum)
+        object.__setattr__(self, "maximum_selection", maximum)
+        object.__setattr__(
+            self,
+            "action_label",
+            str(self.action_label or self.descriptor.name),
+        )
+
+
+@dataclass(frozen=True)
 class PageTypeContribution:
     descriptor: ExtensionDescriptor
     property_label: str
@@ -270,6 +346,7 @@ Contribution = Union[
     ImportContribution,
     ConversionContribution,
     ProjectPanelContribution,
+    EditorWorkspaceContribution,
     PageTypeContribution,
     PageRendererContribution,
     MarkupContribution,
