@@ -60,6 +60,7 @@ class propertiesView(QWidget, Ui_propertiesView):
                 (self.formLayout_2, multi_checkbox),
             ):
                 layout.removeWidget(widget)
+                widget.setParent(None)
                 widget.deleteLater()
         self._pluginPropertyRows = []
         if self._pageTypes is None:
