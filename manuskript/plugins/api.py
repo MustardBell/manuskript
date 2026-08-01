@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import PurePosixPath
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
 
@@ -27,8 +27,8 @@ class OptionField:
     default: Any = None
     description: str = ""
     choices: tuple[tuple[str, Any], ...] = ()
-    minimum: float | None = None
-    maximum: float | None = None
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
     section: str = ""
 
     def __post_init__(self):
@@ -74,7 +74,7 @@ class ProjectSnapshot:
 
 @dataclass(frozen=True)
 class ConversionArtifact:
-    content: str | bytes
+    content: Union[str, bytes]
     suggested_name: str = "converted.txt"
     media_type: str = "application/octet-stream"
     warnings: tuple[str, ...] = ()
@@ -112,7 +112,7 @@ class ExportContribution:
     descriptor: ExtensionDescriptor
     engine_factory: Callable[[], Any]
     options: tuple[OptionField, ...] = ()
-    options_view_factory: Callable[..., Any] | None = None
+    options_view_factory: Optional[Callable[..., Any]] = None
     output_format: str = ""
 
     def __post_init__(self):
@@ -130,7 +130,7 @@ class ImportContribution:
     file_filter: str
     source_kind: str = "file"
     options: tuple[OptionField, ...] = ()
-    options_view_factory: Callable[..., Any] | None = None
+    options_view_factory: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         if self.source_kind not in ("file", "folder"):
@@ -146,7 +146,7 @@ class ConversionContribution:
     source_formats: tuple[str, ...]
     target_formats: tuple[str, ...]
     options: tuple[OptionField, ...] = ()
-    options_view_factory: Callable[..., Any] | None = None
+    options_view_factory: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         object.__setattr__(
@@ -188,11 +188,11 @@ class ProjectPanelContribution:
 class PageTypeContribution:
     descriptor: ExtensionDescriptor
     property_label: str
-    detector: Callable[[str], bool] | None = None
-    parser_factory: Callable[[], Any] | None = None
-    renderer_factory: Callable[[], Any] | None = None
-    wizard_factory: Callable[..., Any] | None = None
-    activation_warning: Callable[[str], str] | None = None
+    detector: Optional[Callable[[str], bool]] = None
+    parser_factory: Optional[Callable[[], Any]] = None
+    renderer_factory: Optional[Callable[[], Any]] = None
+    wizard_factory: Optional[Callable[..., Any]] = None
+    activation_warning: Optional[Callable[[str], str]] = None
     item_kinds: tuple[str, ...] = ("md",)
 
     def __post_init__(self):
@@ -222,7 +222,7 @@ class PageRendererContribution:
     renderer_factory: Callable[[], Any]
     target_formats: tuple[str, ...]
     options: tuple[OptionField, ...] = ()
-    options_view_factory: Callable[..., Any] | None = None
+    options_view_factory: Optional[Callable[..., Any]] = None
     priority: int = 0
 
     def __post_init__(self):
@@ -248,7 +248,7 @@ class MarkupContribution:
     descriptor: ExtensionDescriptor
     mode: MarkupMode
     highlighter_factory: Callable[..., Any]
-    behavior_factory: Callable[..., Any] | None = None
+    behavior_factory: Optional[Callable[..., Any]] = None
     base_ids: tuple[str, ...] = ("markdown",)
 
     def __post_init__(self):
@@ -265,15 +265,15 @@ class MarkupContribution:
             )
 
 
-Contribution = (
-    ExportContribution
-    | ImportContribution
-    | ConversionContribution
-    | ProjectPanelContribution
-    | PageTypeContribution
-    | PageRendererContribution
-    | MarkupContribution
-)
+Contribution = Union[
+    ExportContribution,
+    ImportContribution,
+    ConversionContribution,
+    ProjectPanelContribution,
+    PageTypeContribution,
+    PageRendererContribution,
+    MarkupContribution,
+]
 
 
 def contribution_descriptor(contribution: Contribution):
@@ -287,7 +287,7 @@ def contribution_descriptor(contribution: Contribution):
 
 def normalize_options(
     fields: Sequence[OptionField],
-    values: Mapping[str, Any] | None = None,
+    values: Optional[Mapping[str, Any]] = None,
 ):
     """Return JSON-compatible option values with declared defaults."""
     supplied = dict(values or {})
