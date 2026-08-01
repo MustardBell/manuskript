@@ -4,8 +4,10 @@
 """Tests for outlineItem"""
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
+from PyQt5.QtCore import QModelIndex, Qt
 
 from manuskript.enums import Outline
 from manuskript.models import outlineItem, outlineModel
@@ -198,3 +200,63 @@ def test_revision_policy_is_read_from_assigned_model_settings():
     item.setData(Outline.text, "Second")
 
     assert item.revisions()[-1][1] == "First"
+
+
+def test_outline_model_exposes_consistent_drag_and_drop_flags():
+    model = outlineModel()
+    folder = outlineItem(
+        title="Folder",
+        parent=model.rootItem,
+    )
+    text = outlineItem(
+        title="Scene",
+        _type="md",
+        parent=model.rootItem,
+    )
+
+    root_flags = model.flags(QModelIndex())
+    folder_flags = model.flags(folder.index(Outline.title))
+    text_flags = model.flags(text.index(Outline.title))
+    count_flags = model.flags(text.index(Outline.wordCount))
+
+    assert root_flags & Qt.ItemIsDropEnabled
+    assert not root_flags & Qt.ItemIsEditable
+    assert folder_flags & Qt.ItemIsDragEnabled
+    assert folder_flags & Qt.ItemIsDropEnabled
+    assert text_flags & Qt.ItemIsDragEnabled
+    assert not text_flags & Qt.ItemIsDropEnabled
+    assert not count_flags & Qt.ItemIsEditable
+
+
+def test_word_count_batch_recomputes_nested_folders_once():
+    model = outlineModel()
+    root = model.rootItem
+
+    with patch.object(
+        root,
+        "updateWordCount",
+        wraps=root.updateWordCount,
+    ) as root_update:
+        with model.batchWordCountUpdates():
+            chapter = outlineItem(
+                title="Chapter",
+                parent=root,
+            )
+            for number in range(5):
+                scene = outlineItem(
+                    title="Scene {}".format(number),
+                    _type="md",
+                    parent=chapter,
+                )
+                scene.setData(
+                    Outline.text,
+                    "two words",
+                )
+
+            assert root_update.call_count == 0
+            assert model.wordCountUpdatesDeferred
+
+    assert root_update.call_count == 1
+    assert chapter.wordCount() == 10
+    assert root.wordCount() == 10
+    assert not model.wordCountUpdatesDeferred

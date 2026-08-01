@@ -4,6 +4,19 @@
 """Tests for settingsWindow"""
 
 from manuskript import functions as F
+from manuskript.settingsWindow import settingsWindow
+
+
+def test_background_image_filter_uses_qt_pattern_separator():
+    translator = type(
+        "Translator",
+        (),
+        {"tr": lambda self, text: text},
+    )()
+
+    assert settingsWindow.imageFileFilter(translator) == (
+        "Image files (*.png *.jpg *.jpeg);;All files (*)"
+    )
 
 def test_general(MWSampleProject):
     MW = MWSampleProject

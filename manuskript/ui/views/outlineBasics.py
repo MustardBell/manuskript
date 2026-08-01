@@ -270,9 +270,6 @@ class outlineBasics(QAbstractItemView):
             self.menuLabel.setEnabled(False)
             self.menuCustomIcons.setEnabled(False)
 
-        if len(sel) > 1:
-            self.actRename.setEnabled(False)
-
         return menu
 
     def openItem(self):
@@ -286,12 +283,47 @@ class outlineBasics(QAbstractItemView):
             self.outline_context.open_indexes(self._indexesToOpen)
 
     def rename(self):
-        if len(self.getSelection()) == 1:
+        selection = self.getSelection()
+        if len(selection) == 1:
             index = self.currentIndex()
             self.edit(index)
-        elif len(self.getSelection()) > 1:
-            # FIXME: add smart rename
-            pass
+        elif len(selection) > 1:
+            pattern, accepted = QInputDialog.getText(
+                self,
+                self.tr("Rename items"),
+                self.tr(
+                    "Name pattern ({number} and {title} are available):"
+                ),
+                text="{title} {number}",
+            )
+            if not accepted:
+                return
+            try:
+                titles = self.bulkRenameTitles(
+                    [
+                        index.data(Outline.title)
+                        for index in selection
+                    ],
+                    pattern,
+                )
+            except (KeyError, ValueError, IndexError) as error:
+                self.show_status(
+                    self.tr("Invalid rename pattern: {}").format(error)
+                )
+                return
+
+            for index, title in zip(selection, titles):
+                self.model().setData(
+                    index.sibling(index.row(), Outline.title),
+                    title,
+                )
+
+    @staticmethod
+    def bulkRenameTitles(titles, pattern):
+        return [
+            pattern.format(number=number, title=title)
+            for number, title in enumerate(titles, 1)
+        ]
 
     def addFolder(self):
         self.addItem("folder")

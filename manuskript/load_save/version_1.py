@@ -24,6 +24,7 @@ from manuskript.converters import HTML2PlainText
 from lxml import etree as ET
 
 from manuskript.load_save.project_files import Version1ProjectFiles
+from manuskript.load_save.xml import parse_project_xml
 from manuskript.models.characterModel import CharacterInfo
 from manuskript.models import outlineItem
 
@@ -740,7 +741,7 @@ def loadProject(
 
     # Adds revisions
     if "revisions.xml" in files:
-        root = ET.fromstring(files["revisions.xml"])
+        root = parse_project_xml(files["revisions.xml"])
         appendRevisions(mdl, root)
 
     # Check IDS

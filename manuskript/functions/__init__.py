@@ -201,11 +201,75 @@ def mixColors(col1, col2, f=0.5):
     return QColor(r, g, b) if not fromString else QColor(r, g, b).name()
 
 
+def clearMarkdownFormatting(text, remove_comments=False):
+    """Remove Markdown inline and block markup from ``text``."""
+    paragraph_separator = "\u2029"
+    uses_paragraph_separator = (
+        paragraph_separator in text and "\n" not in text
+    )
+    text = text.replace(paragraph_separator, "\n")
+
+    comment_replacement = "" if remove_comments else r"\1"
+    text = re.sub(
+        r"<!--\s*(.*?)\s*-->",
+        comment_replacement,
+        text,
+        flags=re.S,
+    )
+
+    block_patterns = (
+        (r"^[ \t]{0,3}(?:`{3,}|~{3,}).*$", ""),
+        (r"^[ \t]{0,3}(?:=+|-+)[ \t]*$", ""),
+        (
+            r"^[ \t]{0,3}#{1,6}[ \t]+(.*?)[ \t]*#*[ \t]*$",
+            r"\1",
+        ),
+        (r"^[ \t]{0,3}(?:>[ \t]*)+", ""),
+        (
+            r"^(\s*)(?:[-+*]|\d+[.)]|[A-Za-z][.)])\s+",
+            r"\1",
+        ),
+        (r"^(?: {4}|\t)", ""),
+    )
+    for pattern, replacement in block_patterns:
+        text = re.sub(
+            pattern,
+            replacement,
+            text,
+            flags=re.M,
+        )
+
+    inline_patterns = (
+        (r"!\[([^\]]*)\]\([^)]*\)", r"\1"),
+        (r"\[([^\]]+)\]\([^)]*\)", r"\1"),
+        (r"\[([^\]]+)\]\[[^\]]*\]", r"\1"),
+        (r"<((?:https?://|mailto:)[^>]+)>", r"\1"),
+        (r"`+([^`\n]+?)`+", r"\1"),
+        (r"\*\*([^*\n]+?)\*\*", r"\1"),
+        (r"__([^_\n]+?)__", r"\1"),
+        (r"~~([^~\n]+?)~~", r"\1"),
+        (r"\^([^^\n]+?)\^", r"\1"),
+        (r"(?<!~)~([^~\n]+?)~(?!~)", r"\1"),
+        (r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"\1"),
+        (r"(?<!_)_([^_\n]+?)_(?!_)", r"\1"),
+    )
+    for pattern, replacement in inline_patterns:
+        text = re.sub(pattern, replacement, text)
+
+    text = re.sub(r"\\([\\`*_[\]{}()#+.!>~-])", r"\1", text)
+    if uses_paragraph_separator:
+        text = text.replace("\n", paragraph_separator)
+    return text
+
+
 def colorifyPixmap(pixmap, color):
-    # FIXME: ugly
-    p = QPainter(pixmap)
-    p.setCompositionMode(p.CompositionMode_Overlay)
-    p.fillRect(pixmap.rect(), color)
+    """Tint the non-transparent pixels of ``pixmap`` in place."""
+    painter = QPainter(pixmap)
+    try:
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), color)
+    finally:
+        painter.end()
     return pixmap
 
 

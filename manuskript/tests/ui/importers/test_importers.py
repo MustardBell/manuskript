@@ -40,3 +40,28 @@ def test_loadImportWiget(MWSampleProject):
     start_import.assert_called_once_with(MW.mdlOutline)
     status.assert_called_once_with("Import complete!", 5000)
     assert not I.isVisible()
+
+
+def test_import_batches_aggregate_word_count_updates(
+        MWSampleProject):
+    model = MWSampleProject.mdlOutline
+    MWSampleProject.doImport()
+    dialog = MWSampleProject.dialog
+    dialog.fileName = "import.md"
+    dialog.settingsWidget.importInTopLevelFolder = MagicMock(
+        return_value=False
+    )
+    imported = MagicMock()
+    imported.startImport.return_value = []
+    dialog._format = imported
+
+    with patch.object(
+        model,
+        "batchWordCountUpdates",
+        wraps=model.batchWordCountUpdates,
+    ) as batch:
+        assert dialog.startImport(model)
+
+    batch.assert_called_once_with()
+    imported.startImport.assert_called_once()
+    dialog.close()

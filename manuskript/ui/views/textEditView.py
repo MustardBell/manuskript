@@ -30,7 +30,7 @@ class textEditView(QTextEdit):
 
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
                  highlighting=False, dict="", autoResize=False,
-                 settings=None):
+                 settings=None, highlighter_class=None):
         QTextEdit.__init__(self, parent)
         self._column = Outline.text
         self._index = None
@@ -45,7 +45,7 @@ class textEditView(QTextEdit):
         # When setting up a theme, this becomes true.
         self._fromTheme = False
         self._themeData = None
-        self._highlighterClass = BasicHighlighter
+        self._highlighterClass = highlighter_class or BasicHighlighter
         self.text_editor_context = None
         self.settings = (
             settings

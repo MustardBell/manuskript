@@ -519,7 +519,7 @@ class Ui_exporterSettings(object):
         item.setText(_translate("exporterSettings", "Text"))
         self.chkContentMore.setText(_translate("exporterSettings", "I need more granularity"))
         self.grpContentFilters.setTitle(_translate("exporterSettings", "Fi&lters"))
-        self.label_2.setText(_translate("exporterSettings", "<html><head/><body><p>Filters what items will be included in the final export.<br/><span style=\" color:#773333;\">(Not fully implemented yet.)</span></p></body></html>"))
+        self.label_2.setText(_translate("exporterSettings", "Filters what items will be included in the final export."))
         self.chkContentIgnoreCompile.setText(_translate("exporterSettings", "Ignore compile status (include all items)"))
         self.chkContentParent.setText(_translate("exporterSettings", "Subitems of:"))
         self.chkContentLabels.setText(_translate("exporterSettings", "Labels"))

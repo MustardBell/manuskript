@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QColor, QPalette, QTextCursor
 from PyQt5.QtWidgets import QTextEdit, QTableView, QListView, QLineEdit, QPlainTextEdit, QLabel
 
 
@@ -77,10 +77,17 @@ class widgetSelectionHighlighter():
 
     def _highlightLabelSearchResult(self, label, clearOnFocusOut):
         # On focus out, clear label selection.
-        # FIXME: This would overwrite all styles!
-        oldStyle = label.styleSheet()
+        oldPalette = QPalette(label.palette())
+        oldAutoFill = label.autoFillBackground()
         if clearOnFocusOut:
-            self.generateClearHandler(label, lambda widget: widget.setStyleSheet(oldStyle))
+            def restore(widget):
+                widget.setPalette(oldPalette)
+                widget.setAutoFillBackground(oldAutoFill)
+
+            self.generateClearHandler(label, restore)
 
         # Highlight search result on label.
-        label.setStyleSheet("background-color: steelblue")
+        palette = QPalette(oldPalette)
+        palette.setColor(QPalette.Window, QColor("steelblue"))
+        label.setAutoFillBackground(True)
+        label.setPalette(palette)
