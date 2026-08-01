@@ -1,6 +1,12 @@
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QTextCursor
-from PyQt5.QtWidgets import QFrame, QLabel, QStackedWidget, QWidget
+from PyQt5.QtWidgets import (
+    QFrame,
+    QLabel,
+    QStackedWidget,
+    QWIDGETSIZE_MAX,
+    QWidget,
+)
 
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -24,11 +30,38 @@ class MarkdownEditorHost(QStackedWidget):
         self.pageWizardFactory = None
         self.pageWizardErrorHandler = None
         self._wizardRefreshPending = False
+        self._configuredMaximumWidth = QWIDGETSIZE_MAX
+        self._maximumWidthOverride = None
         self.addWidget(source_editor)
         source_editor.setPresentationHost(self)
         source_editor.document().contentsChanged.connect(
             self._sourceChanged
         )
+
+    def setConfiguredMaximumWidth(self, width):
+        """Apply the user's editor width unless a workspace overrides it."""
+        self._configuredMaximumWidth = int(width or QWIDGETSIZE_MAX)
+        self._applyMaximumWidth()
+
+    def setMaximumWidthOverride(self, width):
+        """Temporarily give a workspace identical editor geometry."""
+        self._maximumWidthOverride = int(width or QWIDGETSIZE_MAX)
+        self._applyMaximumWidth()
+
+    def clearMaximumWidthOverride(self):
+        self._maximumWidthOverride = None
+        self._applyMaximumWidth()
+
+    @property
+    def effectiveMaximumWidth(self):
+        return (
+            self._configuredMaximumWidth
+            if self._maximumWidthOverride is None
+            else self._maximumWidthOverride
+        )
+
+    def _applyMaximumWidth(self):
+        self.setMaximumWidth(self.effectiveMaximumWidth)
 
     @property
     def canonicalEditor(self):

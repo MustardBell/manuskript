@@ -5,7 +5,7 @@ import locale, os
 from PyQt5.QtCore import QModelIndex, QRect, QPoint, pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter, QIcon
-from PyQt5.QtWidgets import QWidget, qApp, QDesktopWidget
+from PyQt5.QtWidgets import QStackedWidget, QWidget, qApp, QDesktopWidget
 
 from manuskript.enums import Outline
 from manuskript.functions import AUC, drawProgress, appPath, uiParse
@@ -66,10 +66,28 @@ class mainEditor(QWidget, Ui_mainEditor):
     """
 
     activeMarkdownPresentationStateChanged = pyqtSignal(object)
+    pluginWorkspaceClosed = pyqtSignal()
 
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
+        self._contentStack = QStackedWidget(self)
+        self._contentStack.setObjectName("mainEditorContentStack")
+        self.verticalLayout.removeWidget(self.tabSplitter)
+        self._contentStack.addWidget(self.tabSplitter)
+        self.verticalLayout.insertWidget(0, self._contentStack, 1)
+        self._pluginWorkspace = None
+        self._nativeFooterWidgets = (
+            self.btnGoUp,
+            self.btnRedacFolderText,
+            self.btnRedacFolderCork,
+            self.btnRedacFolderOutline,
+            self.sldCorkSizeFactor,
+            self.lblRedacWC,
+            self.lblRedacProgress,
+            self.cmbMarkdownMode,
+            self.btnRedacFullscreen,
+        )
         self._updating = False
         self._fullScreen = None
 
@@ -132,6 +150,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         )
 
     def clear_context(self):
+        self.closePluginWorkspace()
         self.attachMarkdownPresentationState(None)
         self.tabSplitter.set_context(None)
         self.editor_context = None
@@ -369,7 +388,35 @@ class mainEditor(QWidget, Ui_mainEditor):
     ###############################################################################
 
     def document_command_target(self, _command):
-        return self.currentEditor()
+        return None if self.pluginWorkspaceActive else self.currentEditor()
+
+    @property
+    def pluginWorkspaceActive(self):
+        return self._pluginWorkspace is not None
+
+    def showPluginWorkspace(self, widget):
+        if widget is self._pluginWorkspace:
+            return
+        self.closePluginWorkspace()
+        self._pluginWorkspace = widget
+        self._contentStack.addWidget(widget)
+        self._contentStack.setCurrentWidget(widget)
+        for control in self._nativeFooterWidgets:
+            control.hide()
+        self.attachMarkdownPresentationState(None)
+        widget.setFocus(Qt.OtherFocusReason)
+
+    def closePluginWorkspace(self):
+        workspace = self._pluginWorkspace
+        if workspace is None:
+            return
+        self._pluginWorkspace = None
+        self._contentStack.setCurrentWidget(self.tabSplitter)
+        self._contentStack.removeWidget(workspace)
+        for control in self._nativeFooterWidgets:
+            control.show()
+        self.tabChanged()
+        self.pluginWorkspaceClosed.emit()
 
     ###############################################################################
     # UI
