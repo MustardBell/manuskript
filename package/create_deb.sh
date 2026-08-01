@@ -36,14 +36,21 @@ echo " [✓]"
 # Using the current direction as source
 
 echo -n "Copying manuskript content"
+PluginFilter=$(mktemp)
+python3 "$Root/util/plugin_packaging.py" --rsync-filter "$PluginFilter"
 rsync -a --exclude=.git \
+	 --filter="merge $PluginFilter" \
 	 --exclude=dist \
 	 --exclude=rpmbuild \
 	 --exclude=snap \
 	 --exclude=package \
+	 --exclude='.github' \
+	 --exclude='manuskript/plugins/*/tests' \
+	 --exclude='manuskript/plugins/*/__pycache__' \
 	 --include="*.msk" \
 	 --exclude-from="$Root/.gitignore" \
       "$ScriptPath/../"  "$Dest/usr/share/manuskript"
+rm "$PluginFilter"
 cp "$ScriptPath/create_deb/manuskript" "$Dest/usr/bin/manuskript"
 cp "$ScriptPath/create_deb/manuskript.desktop" \
    "$Dest/usr/share/applications/manuskript.desktop"

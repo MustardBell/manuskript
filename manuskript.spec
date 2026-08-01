@@ -16,6 +16,7 @@ sys.path.append(file_dir)
 # We're grabbing the current git SHA short to use in the version.
 
 from util.hashed_version import writeVersionPlusHash
+from util.plugin_packaging import plugin_data_entries
 
 version = writeVersionPlusHash()
 
@@ -29,7 +30,7 @@ a = Analysis(
         ("resources", "resources"),
         ("sample-projects", "sample-projects"),
         ("i18n", "i18n"),
-    ],
+    ] + plugin_data_entries("manuskript/plugins"),
     hiddenimports=["xml.dom"],
     hookspath=[],
     runtime_hooks=[],
