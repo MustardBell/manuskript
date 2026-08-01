@@ -21,7 +21,12 @@ CONTRIBUTION_ID = "example.variant-workspace.compare"
 def _install_workspace(window, received, endpoint_box):
     def factory(context, parent):
         received.append(context)
-        widget = QWidget(parent)
+        class TestWorkspace(QWidget):
+            def prepare_close(self):
+                self.prepared = True
+
+        widget = TestWorkspace(parent)
+        widget.prepared = False
         layout = QVBoxLayout(widget)
         endpoint = context.editors.create(
             context.selected_item_ids[0],
@@ -141,6 +146,7 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
 
         received[0].close_workspace()
         qApp.processEvents()
+        assert shell.workspace.prepared
         assert not window.mainEditor.pluginWorkspaceActive
     finally:
         _remove_workspace(window)
