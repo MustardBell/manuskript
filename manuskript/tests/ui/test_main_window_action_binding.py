@@ -4,6 +4,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from manuskript.commands import DocumentCommand
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
 )
@@ -36,7 +39,17 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         window.navigationController.back
     )
     window.generateViewMenu.assert_called_once_with()
+    (
+        window.mainEditor.activeMarkdownPresentationStateChanged.connect
+        .assert_called_once_with(window.attachMarkdownPresentationState)
+    )
     window.actModeSimple.setActionGroup.assert_called_once_with(
+        action_group
+    )
+    window.actMarkdownLivePreview.setActionGroup.assert_called_once_with(
+        action_group
+    )
+    window.actMarkdownFormattedSource.setActionGroup.assert_called_once_with(
         action_group
     )
 
@@ -44,6 +57,13 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     copy_slot()
     window.documentCommands.dispatch.assert_called_once_with(
         DocumentCommand.COPY
+    )
+    live_preview_slot = (
+        window.actMarkdownLivePreview.triggered.connect.call_args.args[0]
+    )
+    live_preview_slot()
+    window.setMarkdownPresentationMode.assert_called_once_with(
+        MarkdownPresentationMode.LIVE_PREVIEW
     )
     assert binding.bound
 

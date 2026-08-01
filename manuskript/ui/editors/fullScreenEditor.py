@@ -16,6 +16,11 @@ from manuskript.ui.editors.locker import locker
 from manuskript.ui.editors.themes import findThemePath, generateTheme, setThemeEditorDatas
 from manuskript.ui.editors.themes import loadThemeDatas
 from manuskript.ui.views.MDEditView import MDEditView
+from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationDefaults,
+    MarkdownPresentationState,
+)
 from manuskript.functions import Spellchecker
 
 import logging
@@ -26,7 +31,7 @@ class fullScreenEditor(QWidget):
 
     def __init__(
             self, index, settings, text_editor_context=None, parent=None,
-            screenNumber=None):
+            screenNumber=None, presentation_mode=None):
         QWidget.__init__(self, parent)
         self.settings = settings
         self.setAttribute(Qt.WA_DeleteOnClose, True)
@@ -44,15 +49,31 @@ class fullScreenEditor(QWidget):
                                 highlighting=True,
                                 dict=self.settings.dict,
                                 settings=self.settings)
+        self.editorHost = MarkdownEditorHost(self.editor, self)
+        self.markdownPresentation = MarkdownPresentationState(
+            presentation_mode
+            if presentation_mode is not None
+            else MarkdownPresentationDefaults.load(settings),
+            parent=self,
+        )
+        self.editor.setPresentationState(self.markdownPresentation)
         if text_editor_context is not None:
             self.editor.set_text_editor_context(text_editor_context)
         self.editor.setFrameStyle(QFrame.NoFrame)
-        self.editor.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.editor.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.activeEditorView = self.editorHost.currentWidget()
+        self.activeEditorView.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )
+        self.activeEditorView.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )
         self.editor.installEventFilter(self)
-        self.editor.setMouseTracking(True)
-        self.editor.setVerticalScrollBar(myScrollBar(self.settings))
-        self.scrollBar = self.editor.verticalScrollBar()
+        self.editorHost.installEventFilter(self)
+        self.activeEditorView.setMouseTracking(True)
+        self.activeEditorView.setVerticalScrollBar(
+            myScrollBar(self.settings)
+        )
+        self.scrollBar = self.activeEditorView.verticalScrollBar()
         self.scrollBar.setParent(self)
 
         # Top Panel
@@ -218,6 +239,10 @@ class fullScreenEditor(QWidget):
         self._background = generateTheme(self._themeDatas, rect)
 
         setThemeEditorDatas(self.editor, self._themeDatas, self._background, rect)
+        editor_geometry = self.editor.geometry()
+        self.editorHost.setGeometry(editor_geometry)
+        self.editorHost.setStyleSheet(self.editor.styleSheet())
+        self.editor.setStyleSheet("")
 
         # Colors
         if self._themeDatas["Foreground/Color"] == self._themeDatas["Background/Color"] or \
@@ -232,7 +257,7 @@ class fullScreenEditor(QWidget):
                 self._fgcolor = QColor(self._themeDatas["Background/Color"])
 
         # ScrollBar
-        r = self.editor.geometry()
+        r = self.editorHost.geometry()
         w = qApp.style().pixelMetric(QStyle.PM_ScrollBarExtent)
         r.setWidth(w)
         r.moveRight(rect.right() - rect.left())
@@ -286,7 +311,8 @@ class fullScreenEditor(QWidget):
         # self.lblWC.setPalette(p)
 
         self.update()
-        self.editor.centerCursor()
+        if hasattr(self.activeEditorView, "centerCursor"):
+            self.activeEditorView.centerCursor()
 
     def paintEvent(self, event):
         if self._background:
@@ -339,7 +365,8 @@ class fullScreenEditor(QWidget):
             widget.move(self._geometries[widget].topLeft())
 
     def eventFilter(self, obj, event):
-        if obj == self.editor and event.type() == QEvent.Enter:
+        if obj in (self.editor, self.editorHost) and \
+                event.type() == QEvent.Enter:
             for w in [self.scrollBar, self.topPanel,
                       self.bottomPanel, self.leftPanel]:
                 # w.setVisible(False)

@@ -9,7 +9,7 @@ regexp, but not yet perfect.
 import re
 from PyQt5.QtCore import Qt, pyqtSignal, qWarning, QRegExp
 from PyQt5.QtGui import (QSyntaxHighlighter, QTextBlock, QColor, QFont,
-                         QTextCharFormat, QBrush, QPalette)
+                         QTextCharFormat, QTextFormat, QBrush, QPalette)
 from PyQt5.QtWidgets import qApp, QStyle
 
 from manuskript.ui.highlighters import BasicHighlighter
@@ -17,6 +17,9 @@ from manuskript.ui.highlighters import MarkdownTokenizer
 from manuskript.ui.highlighters import MarkdownState as MS
 from manuskript.ui.highlighters import MarkdownTokenType as MTT
 from manuskript.ui.highlighters import BlockquoteStyle as BS
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 from manuskript.ui import style as S
 from manuskript import functions as F
 
@@ -29,6 +32,36 @@ GW_FADE_ALPHA = 140
 
 class MarkdownHighlighter(BasicHighlighter):
 
+    MarkupHiddenProperty = QTextFormat.UserProperty + 1
+    _SOURCE_THEME_KEYS = frozenset({
+        "color",
+        "background",
+        "monospace",
+        "markupBold",
+        "markupColor",
+        "markupBackground",
+        "markupMonospace",
+    })
+    _HIDEABLE_MARKUP_TOKENS = frozenset({
+        MTT.TokenAtxHeading1,
+        MTT.TokenAtxHeading2,
+        MTT.TokenAtxHeading3,
+        MTT.TokenAtxHeading4,
+        MTT.TokenAtxHeading5,
+        MTT.TokenAtxHeading6,
+        MTT.TokenEmphasis,
+        MTT.TokenStrong,
+        MTT.TokenStrikethrough,
+        MTT.TokenVerbatim,
+        MTT.TokenSuperScript,
+        MTT.TokenSubScript,
+        MTT.TokenCMAddition,
+        MTT.TokenCMDeletion,
+        MTT.TokenCMSubstitution,
+        MTT.TokenCMComment,
+        MTT.TokenCMHighlight,
+        MTT.TokenUnderline,
+    })
     highlightBlockAtPosition = pyqtSignal(int)
     headingFound = pyqtSignal(int, str, QTextBlock)
     headingRemoved = pyqtSignal(int)
@@ -477,9 +510,15 @@ class MarkdownHighlighter(BasicHighlighter):
 
             theme = self.theme.get(token.type)
             if theme:
-                fmt, markupFormat = self.formatsFromTheme(theme,
-                                                          fmt,
-                                                          markupFormat)
+                presentation_theme = self._themeForPresentation(theme)
+                fmt, markupFormat = self.formatsFromTheme(
+                    presentation_theme,
+                    fmt,
+                    markupFormat,
+                )
+
+            if self._markupShouldBeHidden(token):
+                self._hideMarkup(markupFormat)
 
             # Focus mode
             unfocus = self.unfocusConditions()
@@ -510,6 +549,51 @@ class MarkdownHighlighter(BasicHighlighter):
         else:
             qWarning("MarkdownHighlighter.applyFormattingForToken() was passed"
                      " in a token of unknown type.")
+
+    def _presentationMode(self):
+        return getattr(
+            self.editor,
+            "presentationMode",
+            MarkdownPresentationMode.FORMATTED_SOURCE,
+        )
+
+    def _themeForPresentation(self, theme):
+        if self._presentationMode().renders_markdown:
+            return theme
+        return {
+            key: value
+            for key, value in theme.items()
+            if key in self._SOURCE_THEME_KEYS
+        }
+
+    def _markupShouldBeHidden(self, token):
+        if token.type not in self._HIDEABLE_MARKUP_TOKENS:
+            return False
+
+        mode = self._presentationMode()
+        if mode in (
+            MarkdownPresentationMode.SOURCE,
+            MarkdownPresentationMode.FORMATTED_SOURCE,
+        ):
+            return False
+
+        # Live Preview is the canonical source document. Only its character
+        # formats change; no text is inserted, removed, or position-mapped.
+        cursor_block = self.editor.textCursor().block()
+        return self.currentBlock() != cursor_block
+
+    def _hideMarkup(self, markupFormat):
+        foreground = markupFormat.foreground().color()
+        if not foreground.isValid():
+            foreground = QColor(self.defaultTextColor)
+        foreground.setAlpha(0)
+        markupFormat.setForeground(QBrush(foreground))
+        markupFormat.clearBackground()
+        # QTextDocument has no hidden-range decoration. The minimum supported
+        # font stretch collapses delimiters horizontally without changing
+        # point size and causing line-height/layout feedback loops.
+        markupFormat.setFontStretch(1)
+        markupFormat.setProperty(self.MarkupHiddenProperty, True)
 
     def formatsFromTheme(self, theme, format=None,
                          markupFormat=QTextCharFormat()):

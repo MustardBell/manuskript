@@ -53,6 +53,9 @@ from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.editors.themes import ThemePreviewRenderer
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
@@ -96,6 +99,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Var
         self._lastFocus = None
         self._lastMDEditView = None
+        self._markdownPresentationState = None
         self._defaultCursorFlashTime = 1000 # Overridden at startup with system
                                             # value. In manuskript.main.
         self._autoLoadProject = None  # Used to load a command line project
@@ -290,11 +294,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         We get notified by qApp when focus changes, from old to new widget.
         """
 
-        # If new is a MDEditView, we keep it in memory
-        if issubclass(type(new), MDEditView):
-            self._lastMDEditView = new
-        else:
-            self._lastMDEditView = None
+        # Projection widgets are siblings of their canonical editor in a
+        # MarkdownEditorHost.
+        markdown_editor = new
+        while (
+            markdown_editor is not None
+            and not isinstance(markdown_editor, MDEditView)
+        ):
+            canonical_editor = getattr(
+                markdown_editor,
+                "canonicalEditor",
+                None,
+            )
+            if isinstance(canonical_editor, MDEditView):
+                markdown_editor = canonical_editor
+                break
+            markdown_editor = markdown_editor.parent()
+        self._lastMDEditView = markdown_editor
 
         # Determine which view had focus last, to send the keyboard shortcuts
         # to the right place
@@ -400,6 +416,43 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def formatCommentBlock(self): self.callLastMDEditView("comment")
     def formatClear(self): self.callLastMDEditView("clearFormat")
 
+    def setMarkdownPresentationMode(self, mode):
+        if self._markdownPresentationState is not None:
+            self._markdownPresentationState.set_mode(mode)
+
+    def attachMarkdownPresentationState(self, state):
+        if self._markdownPresentationState is not None:
+            try:
+                self._markdownPresentationState.modeChanged.disconnect(
+                    self.syncMarkdownPresentationActions
+                )
+            except (RuntimeError, TypeError):
+                pass
+
+        self._markdownPresentationState = state
+        self.menuMarkdownMode.setEnabled(state is not None)
+        if state is None:
+            return
+
+        state.modeChanged.connect(
+            self.syncMarkdownPresentationActions
+        )
+        self.syncMarkdownPresentationActions(state.mode)
+
+    def syncMarkdownPresentationActions(self, mode):
+        mode = MarkdownPresentationMode.from_value(mode)
+        actions = {
+            MarkdownPresentationMode.SOURCE:
+                self.actMarkdownSource,
+            MarkdownPresentationMode.FORMATTED_SOURCE:
+                self.actMarkdownFormattedSource,
+            MarkdownPresentationMode.LIVE_PREVIEW:
+                self.actMarkdownLivePreview,
+            MarkdownPresentationMode.READING:
+                self.actMarkdownReading,
+        }
+        actions[mode].setChecked(True)
+
     # Navigate
     
     def navigateBack(self):
@@ -425,6 +478,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
         self.projectBinding.unbind()
+        self.attachMarkdownPresentationState(None)
         self.textEditorContext = None
         self.referenceService = None
 

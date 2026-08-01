@@ -95,6 +95,7 @@ class ViewSettingsMenuBuilder:
 
         window.menuView.clear()
         window.menuView.addMenu(window.menuMode)
+        window.menuView.addMenu(window.menuMarkdownMode)
         window.menuView.addSeparator()
 
         for title, category, icon_name in menus:
