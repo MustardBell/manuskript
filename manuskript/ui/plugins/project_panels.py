@@ -205,7 +205,9 @@ class ProjectPanelHost:
         self.rawDataDialog = None
 
     def _dock_destroyed(self, contribution_id, _object=None):
-        self.docks.pop(contribution_id, None)
+        docks = getattr(self, "docks", None)
+        if docks is not None:
+            docks.pop(contribution_id, None)
 
     def _project_is_open(self):
         manager = getattr(self.window, "projectManager", None)

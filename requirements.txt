@@ -1,4 +1,5 @@
 lxml==6.1.0
+Markdown==3.9
 pyenchant==3.2.2
 PyQt5==5.15.11
 PyQt5-Qt5==5.15.17
