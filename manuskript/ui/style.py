@@ -45,6 +45,36 @@ textLighter = F.mixColors(window, text, .85)
 #QColor(S.highlightLight)
 
 
+def editorOverlayButtonSS():
+    """Chrome for tool buttons floating above editor text.
+
+    mainWindowSS strips tool button background and border, which is right
+    for toolbars but leaves these invisible over a document. They get an
+    explicit surface so the writer can see what they are clicking.
+    """
+    return """
+    QToolButton{{
+        background: {background};
+        border: 1px solid {border};
+        border-radius: 4px;
+        padding: 1px 0px 1px 2px;
+    }}
+    QToolButton:hover{{
+        background: {backgroundHover};
+        border: 1px solid {borderHover};
+    }}
+    QToolButton::menu-button{{
+        border: none;
+        width: 12px;
+    }}
+    """.format(
+        background=window,
+        border=midlighter,
+        backgroundHover=highlightLight,
+        borderHover=mid,
+    )
+
+
 def mainWindowSS():
     return """
     QMenuBar#menubar{{border:none;}}
