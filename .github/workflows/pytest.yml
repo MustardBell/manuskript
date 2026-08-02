@@ -48,9 +48,23 @@ jobs:
         python -c "import os,sys; sys.exit(0)"
       shell: bash
 
-    - name: Install project requirements
+    - name: Install project requirements (Linux, exact pins)
+      if: runner.os == 'Linux'
       run: |
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      shell: bash
+
+    - name: Install project requirements (Windows and macOS)
+      # requirements.txt pins PyQt5-Qt5 and PyQt5_sip, whose versions are
+      # decided by the platform: the pinned PyQt5-Qt5 exists only as a Linux
+      # wheel, so an exact install cannot resolve here. Install the same
+      # libraries and let pip pick the Qt build for this platform, which is
+      # what a Windows or macOS user gets anyway.
+      if: runner.os != 'Linux'
+      run: |
+        grep -vE '^(PyQt5-Qt5|PyQt5_sip)==' requirements.txt > portable-requirements.txt
+        cat portable-requirements.txt
+        pip install -r portable-requirements.txt
       shell: bash
 
     - name: Install Linux Qt dependencies
