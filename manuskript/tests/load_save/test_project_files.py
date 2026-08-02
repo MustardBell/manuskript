@@ -133,3 +133,60 @@ def test_stale_cache_cannot_remove_paths_outside_project_root(
 
     assert not result.succeeded
     assert protected.read_text(encoding="utf-8") == "keep"
+
+
+def test_permissions_survive_a_file_being_removed_and_written_again(
+        tmp_path):
+    """An undone deletion must not silently reset a file's mode.
+
+    Manuskript rewrites the whole project on save, so a restored item is a
+    brand new file. Left alone it lands with the default umask, which turns
+    one undo into a pile of spurious mode changes in a versioned project.
+    """
+    import os
+    import stat
+
+    project = tmp_path / "story.msk"
+    cache = {}
+    access = Version1ProjectFiles()
+    scene = ("outline/chapter/scene.md", "Once upon a time")
+    access.write(
+        str(project), zipped=False, files=[scene], moves=[], cache=cache)
+
+    on_disk = tmp_path / "story" / "outline" / "chapter" / "scene.md"
+    os.chmod(on_disk, 0o755)
+    assert stat.S_IMODE(on_disk.stat().st_mode) == 0o755
+
+    # Delete it the way removing an outline item does.
+    access.write(
+        str(project), zipped=False, files=[], moves=[], cache=cache)
+    assert not on_disk.exists()
+
+    # Undo puts the item back; the next save writes the file again.
+    access.write(
+        str(project), zipped=False, files=[scene], moves=[], cache=cache)
+
+    assert on_disk.exists()
+    assert on_disk.read_text(encoding="utf-8") == scene[1]
+    assert stat.S_IMODE(on_disk.stat().st_mode) == 0o755
+
+
+def test_rewriting_an_existing_file_keeps_its_permissions(tmp_path):
+    import os
+    import stat
+
+    project = tmp_path / "story.msk"
+    cache = {}
+    access = Version1ProjectFiles()
+    access.write(
+        str(project), zipped=False,
+        files=[("infos.txt", "before")], moves=[], cache=cache)
+    on_disk = tmp_path / "story" / "infos.txt"
+    os.chmod(on_disk, 0o600)
+
+    access.write(
+        str(project), zipped=False,
+        files=[("infos.txt", "after")], moves=[], cache=cache)
+
+    assert on_disk.read_text(encoding="utf-8") == "after"
+    assert stat.S_IMODE(on_disk.stat().st_mode) == 0o600
