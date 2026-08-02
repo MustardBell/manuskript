@@ -1,10 +1,15 @@
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QLabel,
     QLineEdit,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -128,3 +133,46 @@ def plugin_options_widget(contribution, option_store, parent=None):
             "with a values() method."
         )
     return widget
+
+
+class PluginOptionsDialog(QDialog):
+    """Standard editor for one contribution's declared options."""
+
+    def __init__(self, contribution, option_store, parent=None):
+        super().__init__(parent)
+        self.contribution = contribution
+        self.option_store = option_store
+        self.setWindowTitle(
+            self.tr("Configure {}").format(contribution.descriptor.name)
+        )
+        self.resize(760, 650)
+        layout = QVBoxLayout(self)
+        description = QLabel(contribution.descriptor.description, self)
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        self.optionsWidget = plugin_options_widget(
+            contribution,
+            option_store,
+            None,
+        )
+        self.optionsScroll = QScrollArea(self)
+        self.optionsScroll.setWidgetResizable(True)
+        self.optionsScroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )
+        self.optionsScroll.setWidget(self.optionsWidget)
+        layout.addWidget(self.optionsScroll, 1)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _save(self):
+        self.option_store.save(
+            self.contribution.descriptor.id,
+            self.optionsWidget.values(),
+        )
+        self.accept()

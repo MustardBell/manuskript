@@ -16,3 +16,7 @@ class PluginLoadError(PluginError):
 
 class PluginRegistrationError(PluginError):
     pass
+
+
+class PluginScopeError(PluginError):
+    """A plugin reached past the contributions it owns."""

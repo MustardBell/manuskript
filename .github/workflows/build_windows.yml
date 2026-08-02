@@ -30,6 +30,8 @@ jobs:
     steps:
     # We use the version from this commit and not just the current branch.  This is for R&D builds too.
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:

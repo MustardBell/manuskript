@@ -4,6 +4,8 @@ from manuskript.plugins.api import (
     PLUGIN_API_VERSION,
     ConversionContribution,
     ConversionArtifact,
+    EditorWorkspaceContext,
+    EditorWorkspaceContribution,
     ExportArtifact,
     ExportContribution,
     ExtensionDescriptor,
@@ -18,9 +20,12 @@ from manuskript.plugins.api import (
     PageExportDocument,
     PageRendererContribution,
     PageTypeContribution,
+    PluginSettingsContext,
+    PluginSettingsContribution,
     ProjectPanelContribution,
     ProjectSnapshot,
     RenderedDocument,
+    WorkspaceDocument,
 )
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.plugins.runtime import PluginRuntime
@@ -29,6 +34,8 @@ __all__ = [
     "PLUGIN_API_VERSION",
     "ConversionContribution",
     "ConversionArtifact",
+    "EditorWorkspaceContext",
+    "EditorWorkspaceContribution",
     "ExportArtifact",
     "ExportContribution",
     "ExtensionDescriptor",
@@ -45,7 +52,10 @@ __all__ = [
     "PageTypeContribution",
     "PluginRegistry",
     "PluginRuntime",
+    "PluginSettingsContext",
+    "PluginSettingsContribution",
     "ProjectPanelContribution",
     "ProjectSnapshot",
     "RenderedDocument",
+    "WorkspaceDocument",
 ]

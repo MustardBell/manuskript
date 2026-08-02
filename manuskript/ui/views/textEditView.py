@@ -243,9 +243,16 @@ class textEditView(QTextEdit):
         # constraining the inner QTextEdit pinned the text column to the
         # host's left edge. Constrain the layout-owned widget instead so every
         # presentation mode shares the native centered geometry.
-        style_owner.setMaximumWidth(
-            opt["maxWidth"] or QWIDGETSIZE_MAX
+        maximum_width = opt["maxWidth"] or QWIDGETSIZE_MAX
+        configure_width = getattr(
+            style_owner,
+            "setConfiguredMaximumWidth",
+            None,
         )
+        if callable(configure_width):
+            configure_width(maximum_width)
+        else:
+            style_owner.setMaximumWidth(maximum_width)
         style_owner.setStyleSheet(editor_style)
         if style_owner is not self:
             self.setStyleSheet("")

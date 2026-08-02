@@ -5,11 +5,13 @@ from enum import Enum
 from manuskript.plugins.api import (
     Contribution,
     ConversionContribution,
+    EditorWorkspaceContribution,
     ExportContribution,
     ImportContribution,
     MarkupContribution,
     PageRendererContribution,
     PageTypeContribution,
+    PluginSettingsContribution,
     ProjectPanelContribution,
     contribution_descriptor,
 )
@@ -21,6 +23,8 @@ class ContributionKind(str, Enum):
     IMPORTER = "importer"
     CONVERTER = "converter"
     PROJECT_PANEL = "project_panel"
+    SETTINGS_PANEL = "settings_panel"
+    EDITOR_WORKSPACE = "editor_workspace"
     PAGE_TYPE = "page_type"
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
@@ -31,6 +35,8 @@ CONTRIBUTION_TYPES = {
     ContributionKind.IMPORTER: ImportContribution,
     ContributionKind.CONVERTER: ConversionContribution,
     ContributionKind.PROJECT_PANEL: ProjectPanelContribution,
+    ContributionKind.SETTINGS_PANEL: PluginSettingsContribution,
+    ContributionKind.EDITOR_WORKSPACE: EditorWorkspaceContribution,
     ContributionKind.PAGE_TYPE: PageTypeContribution,
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
@@ -70,6 +76,12 @@ class PluginRegistrar:
 
     def register_project_panel(self, contribution):
         self._add(ContributionKind.PROJECT_PANEL, contribution)
+
+    def register_settings_panel(self, contribution):
+        self._add(ContributionKind.SETTINGS_PANEL, contribution)
+
+    def register_editor_workspace(self, contribution):
+        self._add(ContributionKind.EDITOR_WORKSPACE, contribution)
 
     def register_page_type(self, contribution):
         self._add(ContributionKind.PAGE_TYPE, contribution)
@@ -165,6 +177,19 @@ class PluginRegistry:
         kind = ContributionKind(kind)
         return tuple(self._by_kind[kind].values())
 
+    def plugin_records(self, plugin_id, kind=None):
+        """Contributions installed by one plugin, in registration order."""
+        records = tuple(self._by_plugin.get(plugin_id, ()))
+        if kind is None:
+            return records
+        kind = ContributionKind(kind)
+        return tuple(r for r in records if r.kind is kind)
+
+    def owner_of(self, kind, contribution_id):
+        """The plugin ID that registered a contribution, or ''."""
+        record = self._by_kind[ContributionKind(kind)].get(contribution_id)
+        return record.plugin_id if record is not None else ''
+
     @property
     def exporters(self):
         return self.contributions(ContributionKind.EXPORTER)
@@ -180,6 +205,14 @@ class PluginRegistry:
     @property
     def project_panels(self):
         return self.contributions(ContributionKind.PROJECT_PANEL)
+
+    @property
+    def settings_panels(self):
+        return self.contributions(ContributionKind.SETTINGS_PANEL)
+
+    @property
+    def editor_workspaces(self):
+        return self.contributions(ContributionKind.EDITOR_WORKSPACE)
 
     @property
     def page_types(self):

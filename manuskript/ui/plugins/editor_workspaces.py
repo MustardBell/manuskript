@@ -1,0 +1,706 @@
+from functools import partial
+
+from PyQt5.QtCore import QModelIndex, QObject, QPoint, Qt, pyqtSignal
+from PyQt5.QtGui import QKeySequence, QTextCursor
+from PyQt5.QtWidgets import (
+    QAction,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QShortcut,
+    QVBoxLayout,
+    QWidget,
+)
+
+from manuskript.enums import Outline
+from manuskript.models.outlineItem import outlineItem
+from manuskript.plugins.api import EditorWorkspaceContext, WorkspaceDocument
+from manuskript.ui.connections import SignalConnectionRegistry
+from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationDefaults,
+    MarkdownPresentationMode,
+    MarkdownPresentationState,
+)
+from manuskript.ui.views.MDEditView import MDEditView
+
+
+class WorkspaceOutlineGateway(QObject):
+    """Guard project-outline mutations exposed to editor workspaces."""
+
+    documentChanged = pyqtSignal(str)
+    structureChanged = pyqtSignal()
+    selectionChanged = pyqtSignal(object)
+
+    def __init__(self, model, tree, parent=None):
+        super().__init__(parent)
+        self.model = model
+        self.tree = tree
+        self._connections = SignalConnectionRegistry()
+        self._connections.connect(model.dataChanged, self._data_changed)
+        for signal_name in (
+            "rowsInserted",
+            "rowsRemoved",
+            "modelReset",
+            "layoutChanged",
+        ):
+            signal = getattr(model, signal_name, None)
+            if signal is not None:
+                self._connections.connect(signal, self._structure_changed)
+        selection_model = tree.selectionModel()
+        if selection_model is not None:
+            self._connections.connect(
+                selection_model.selectionChanged,
+                self._selection_changed,
+            )
+
+    def close(self):
+        self._connections.disconnect_all()
+
+    def selected_item_ids(self):
+        selection_model = self.tree.selectionModel()
+        if selection_model is None:
+            return ()
+        indexes = selection_model.selectedRows(Outline.title)
+        if not indexes:
+            current = self.tree.currentIndex()
+            indexes = [current] if current.isValid() else []
+        return tuple(dict.fromkeys(
+            str(index.internalPointer().ID())
+            for index in indexes
+            if index.isValid()
+        ))
+
+    def documents(self):
+        result = []
+
+        def visit(item):
+            if item is not self.model.rootItem:
+                result.append(self._snapshot(item))
+            for child in item.children():
+                visit(child)
+
+        visit(self.model.rootItem)
+        return tuple(result)
+
+    def document(self, item_id):
+        item = self.model.getItemByID(str(item_id))
+        return self._snapshot(item) if item is not None else None
+
+    def set_text(self, item_id, text):
+        return self._set(item_id, Outline.text, str(text), text_only=True)
+
+    def set_title(self, item_id, title):
+        return self._set(item_id, Outline.title, str(title))
+
+    def set_compile(self, item_id, compile_document):
+        return self._set(
+            item_id,
+            Outline.compile,
+            2 if bool(compile_document) else 0,
+        )
+
+    def set_compile_many(self, compile_by_id):
+        changed = False
+        batch = getattr(self.model, "batchWordCountUpdates", None)
+        context = batch() if callable(batch) else _NullContext()
+        with context:
+            for item_id, value in compile_by_id.items():
+                changed = self.set_compile(item_id, value) or changed
+        return changed
+
+    def create_text_document(
+            self, title, text="", parent_id=None, after_id=None,
+            compile_document=False):
+        """Create ordinary outline prose for a plugin-managed relationship."""
+        parent_index = QModelIndex()
+        if after_id is not None:
+            after_index = self.model.getIndexByID(str(after_id))
+            if not after_index.isValid():
+                raise KeyError(
+                    "Unknown outline item {!r}.".format(after_id)
+                )
+            parent_index = after_index.parent()
+        elif parent_id is not None:
+            parent_index = self.model.getIndexByID(str(parent_id))
+            if not parent_index.isValid():
+                raise KeyError(
+                    "Unknown outline parent {!r}.".format(parent_id)
+                )
+            if not parent_index.internalPointer().isFolder():
+                raise ValueError("New text documents require a folder parent.")
+
+        item = outlineItem(
+            title=str(title),
+            _type="md",
+            settings=getattr(self.model, "settings", None),
+        )
+        item.setData(Outline.text, str(text))
+        item.setData(
+            Outline.compile,
+            2 if bool(compile_document) else 0,
+        )
+        if after_id is not None:
+            inserted = self.model.insertItem(
+                item,
+                after_index.row() + 1,
+                parent_index,
+            )
+        else:
+            inserted = self.model.insertItem(
+                item,
+                self.model.rowCount(parent_index),
+                parent_index,
+            )
+        if not inserted:
+            raise RuntimeError("The outline rejected the new text document.")
+        return self._snapshot(item)
+
+    def duplicate_text_document(
+            self, item_id, title=None, compile_document=False):
+        source = self.document(item_id)
+        if source is None:
+            raise KeyError("Unknown outline item {!r}.".format(item_id))
+        if source.kind != "md":
+            raise ValueError("Only text documents can be duplicated.")
+        return self.create_text_document(
+            title=title or "{} copy".format(source.title),
+            text=source.text,
+            after_id=source.id,
+            compile_document=compile_document,
+        )
+
+    def _set(self, item_id, column, value, text_only=False):
+        item = self.model.getItemByID(str(item_id))
+        if item is None:
+            raise KeyError("Unknown outline item {!r}.".format(item_id))
+        if text_only and not item.isText():
+            raise ValueError("Only text outline items have editable prose.")
+        index = self.model.getIndexByID(str(item_id), column=column)
+        if not index.isValid():
+            raise KeyError("Unknown outline item {!r}.".format(item_id))
+        if index.data(Qt.EditRole) == value:
+            return False
+        self.model.setData(index, value, Qt.EditRole)
+        return True
+
+    def _snapshot(self, item):
+        parent = item.parent()
+        return WorkspaceDocument(
+            id=str(item.ID()),
+            title=str(item.title()),
+            kind=str(item.type()),
+            text=str(item.text() or "") if item.isText() else "",
+            compile=bool(item.compile()),
+            parent_id=(
+                str(parent.ID())
+                if parent is not None and parent is not self.model.rootItem
+                else None
+            ),
+        )
+
+    def _data_changed(self, top_left, bottom_right, *_args):
+        parent = top_left.parent()
+        for row in range(top_left.row(), bottom_right.row() + 1):
+            index = self.model.index(row, Outline.title, parent)
+            if index.isValid():
+                self.documentChanged.emit(
+                    str(index.internalPointer().ID())
+                )
+
+    def _structure_changed(self, *_args):
+        self.structureChanged.emit()
+
+    def _selection_changed(self, *_args):
+        self.selectionChanged.emit(self.selected_item_ids())
+
+
+class _NullContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+class WorkspaceEditorEndpoint(QObject):
+    """Public, geometry-aware façade around one native Markdown editor."""
+
+    scrolled = pyqtSignal(int)
+    cursorChanged = pyqtSignal(int, int)
+    selectionChanged = pyqtSignal(int, int)
+    textChanged = pyqtSignal()
+
+    def __init__(
+            self, item_id, editor, host, presentation,
+            markup_profile=None, page_type=None, parent=None):
+        super().__init__(parent or host)
+        self.item_id = str(item_id)
+        self.widget = host
+        self.editor = editor
+        self.presentation = presentation
+        self.markup_profile = markup_profile
+        self.page_type = page_type
+        scrollbar = editor.verticalScrollBar()
+        scrollbar.valueChanged.connect(self.scrolled)
+        editor.cursorPositionChanged.connect(self._cursor_changed)
+        editor.selectionChanged.connect(self._selection_changed)
+        editor.textChanged.connect(self.textChanged)
+
+    @property
+    def title(self):
+        index = self.editor.currentIndex()
+        return (
+            str(index.internalPointer().title())
+            if index.isValid()
+            else ""
+        )
+
+    def text(self):
+        return self.editor.toPlainText()
+
+    def selected_text(self):
+        return self.editor.textCursor().selectedText().replace("\u2029", "\n")
+
+    def selection_range(self):
+        cursor = self.editor.textCursor()
+        return (cursor.selectionStart(), cursor.selectionEnd())
+
+    def set_cursor_position(self, position, anchor=None):
+        text_length = len(self.text())
+        position = max(0, min(int(position), text_length))
+        cursor = self.editor.textCursor()
+        if anchor is None:
+            cursor.setPosition(position)
+        else:
+            anchor = max(0, min(int(anchor), text_length))
+            cursor.setPosition(anchor)
+            cursor.setPosition(position, QTextCursor.KeepAnchor)
+        self.editor.setTextCursor(cursor)
+
+    def insert_at_cursor(self, text):
+        if self.editor.editingLocked:
+            raise PermissionError("This workspace editor is locked.")
+        self.editor.textCursor().insertText(str(text))
+        self.submit()
+
+    def replace_text(self, text):
+        if self.editor.editingLocked:
+            raise PermissionError("This workspace editor is locked.")
+        self.editor.setPlainText(str(text))
+        self.submit()
+
+    def submit(self):
+        self.editor.submit()
+
+    @property
+    def editing_locked(self):
+        return self.editor.editingLocked
+
+    def set_editing_locked(self, locked):
+        self.editor.setEditingLocked(locked)
+
+    def set_presentation_mode(self, mode):
+        mode = MarkdownPresentationMode.from_value(mode)
+        if mode not in (
+            MarkdownPresentationMode.SOURCE,
+            MarkdownPresentationMode.FORMATTED_SOURCE,
+        ):
+            raise ValueError(
+                "Workspace editors support source presentation modes only."
+            )
+        self.presentation.set_mode(mode)
+
+    def set_maximum_text_width(self, width):
+        self.widget.setMaximumWidthOverride(width)
+
+    def clear_maximum_text_width(self):
+        self.widget.clearMaximumWidthOverride()
+
+    @property
+    def viewport_width(self):
+        return self.editor.viewport().width()
+
+    @property
+    def scroll_value(self):
+        return self.editor.verticalScrollBar().value()
+
+    @property
+    def scroll_maximum(self):
+        return self.editor.verticalScrollBar().maximum()
+
+    def set_scroll_value(self, value):
+        scrollbar = self.editor.verticalScrollBar()
+        scrollbar.setValue(max(scrollbar.minimum(), min(
+            int(value), scrollbar.maximum()
+        )))
+
+    @property
+    def cursor_block(self):
+        return self.editor.textCursor().blockNumber()
+
+    @property
+    def cursor_position(self):
+        return self.editor.textCursor().position()
+
+    @property
+    def first_visible_block(self):
+        return self.editor.cursorForPosition(QPoint(1, 1)).blockNumber()
+
+    @property
+    def block_count(self):
+        return self.editor.document().blockCount()
+
+    def scroll_to_block(self, block_number):
+        block = self.editor.document().findBlockByNumber(
+            max(0, min(int(block_number), self.block_count - 1))
+        )
+        if not block.isValid():
+            return
+        layout = self.editor.document().documentLayout()
+        block_top = layout.blockBoundingRect(block).top()
+        self.set_scroll_value(round(block_top))
+
+    def scroll_to_text_offset(self, offset):
+        block = self.editor.document().findBlock(
+            max(0, min(int(offset), len(self.text())))
+        )
+        if block.isValid():
+            self.scroll_to_block(block.blockNumber())
+
+    def close(self):
+        self.submit()
+
+    def _cursor_changed(self):
+        cursor = self.editor.textCursor()
+        self.cursorChanged.emit(cursor.position(), cursor.blockNumber())
+
+    def _selection_changed(self):
+        self.selectionChanged.emit(*self.selection_range())
+
+
+class WorkspaceEditorFactory(QObject):
+    """Build native editor endpoints without exposing editor internals."""
+
+    def __init__(self, editor_context, outline, parent=None):
+        super().__init__(parent)
+        self.editor_context = editor_context
+        self.outline = outline
+        self._endpoints = []
+
+    def create(self, item_id, parent=None, editing_locked=False):
+        document = self.outline.document(item_id)
+        if document is None:
+            raise KeyError("Unknown outline item {!r}.".format(item_id))
+        if document.kind != "md":
+            raise ValueError("Workspace editor panes require text items.")
+
+        text_context = self.editor_context.text_editor
+        editor = MDEditView(
+            parent=None,
+            settings=(text_context.settings if text_context else None),
+        )
+        if text_context is not None:
+            editor.set_text_editor_context(text_context)
+        host = MarkdownEditorHost(editor, parent)
+        presentation = MarkdownPresentationState(
+            MarkdownPresentationDefaults.load(text_context.settings)
+            if text_context is not None
+            else MarkdownPresentationMode.FORMATTED_SOURCE,
+            parent=host,
+        )
+        editor.setPresentationState(presentation)
+
+        markup_profile = None
+        page_type = None
+        if text_context is not None and text_context.markup_profiles is not None:
+            markup_profile = text_context.markup_profiles.create_state(
+                parent=host
+            )
+            editor.setMarkupProfileState(markup_profile)
+        item = self.editor_context.outline_model.getItemByID(str(item_id))
+        if text_context is not None and text_context.page_types is not None:
+            page_type = text_context.page_types.create_state(
+                item=item,
+                parent=host,
+            )
+            editor.setPageTypeState(page_type)
+
+        index = self.editor_context.outline_model.getIndexByID(
+            str(item_id),
+            column=Outline.text,
+        )
+        editor.setCurrentModelIndex(index)
+        editor.setEditingLocked(editing_locked)
+        endpoint = WorkspaceEditorEndpoint(
+            item_id,
+            editor,
+            host,
+            presentation,
+            markup_profile=markup_profile,
+            page_type=page_type,
+            parent=host,
+        )
+        self._endpoints.append(endpoint)
+        host.destroyed.connect(partial(self._discard, endpoint))
+        return endpoint
+
+    def close_all(self):
+        for endpoint in tuple(self._endpoints):
+            endpoint.close()
+        self._endpoints = []
+
+    def _discard(self, endpoint, *_args):
+        if endpoint in self._endpoints:
+            self._endpoints.remove(endpoint)
+
+
+class EditorWorkspaceShell(QFrame):
+    """Accessible application-owned chrome around a plugin workspace."""
+
+    def __init__(self, title, description, workspace, close_callback, parent=None):
+        super().__init__(parent)
+        self.workspace = workspace
+        self.setObjectName("editorWorkspaceShell")
+        self.setFrameShape(QFrame.NoFrame)
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(description)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        heading_layout = QHBoxLayout()
+        heading = QLabel(title, self)
+        heading.setObjectName("editorWorkspaceHeading")
+        heading.setAccessibleName(title)
+        font = heading.font()
+        font.setBold(True)
+        heading.setFont(font)
+        heading_layout.addWidget(heading)
+        heading_layout.addStretch(1)
+        close_button = QPushButton(self.tr("Close workspace"), self)
+        close_button.setObjectName("closeEditorWorkspace")
+        close_button.setToolTip(self.tr("Return to the normal editor"))
+        close_button.setMinimumHeight(32)
+        close_button.clicked.connect(close_callback)
+        heading_layout.addWidget(close_button)
+        layout.addLayout(heading_layout)
+        layout.addWidget(workspace, 1)
+        self.closeShortcut = QShortcut(
+            QKeySequence(Qt.Key_Escape),
+            self,
+        )
+        self.closeShortcut.activated.connect(close_callback)
+
+
+class EditorWorkspaceHost(QObject):
+    """Own plugin workspace actions and project-scoped lifecycles."""
+
+    def __init__(self, window, runtime, menu, parent=None):
+        super().__init__(parent or window)
+        self.window = window
+        self.runtime = runtime
+        self.menu = menu
+        self.actions = {}
+        self._menu_entries = []
+        self._active_id = None
+        self._active_plugin_id = None
+        self._outline = None
+        self._editors = None
+        self._shell = None
+        self._project_open = False
+        self.refresh()
+
+    def refresh(self):
+        records = {
+            record.id: record
+            for record in self.runtime.registry.records("editor_workspace")
+        }
+        if self._active_id is not None and self._active_id not in records:
+            self.close_workspace()
+        for action in self._menu_entries:
+            self.menu.removeAction(action)
+            action.deleteLater()
+        self._menu_entries = []
+        self.actions = {}
+        if records:
+            separator = self.menu.addSeparator()
+            self._menu_entries.append(separator)
+        for contribution_id, record in sorted(
+                records.items(),
+                key=lambda value: value[1].contribution.descriptor.name):
+            contribution = record.contribution
+            action = QAction(contribution.action_label, self.menu)
+            action.setObjectName("editorWorkspace.{}".format(contribution_id))
+            action.setStatusTip(contribution.descriptor.description)
+            action.setToolTip(contribution.descriptor.description)
+            if contribution.shortcut:
+                action.setShortcut(QKeySequence(contribution.shortcut))
+            action.triggered.connect(
+                partial(self.open_workspace, contribution_id)
+            )
+            self.menu.addAction(action)
+            self._menu_entries.append(action)
+            self.actions[contribution_id] = action
+        self._update_action_states()
+
+    def project_opened(self):
+        self._project_open = True
+        self._install_services()
+        self._update_action_states()
+
+    def prepare_project_close(self):
+        self.close_workspace()
+        self._release_services()
+        self._project_open = False
+        self._update_action_states()
+
+    def open_workspace(self, contribution_id):
+        if not self._project_open:
+            return None
+        record = next((
+            value
+            for value in self.runtime.registry.records("editor_workspace")
+            if value.id == contribution_id
+        ), None)
+        if record is None:
+            return None
+        self._install_services()
+        selected_ids = self._outline.selected_item_ids()
+        contribution = record.contribution
+        if not self._selection_allowed(contribution, selected_ids):
+            self._update_action_states()
+            return None
+
+        self.close_workspace()
+        self._install_services()
+        context = EditorWorkspaceContext(
+            plugin_id=record.plugin_id,
+            project_file=self.window.currentProject or "",
+            selected_item_ids=selected_ids,
+            files=self.window.projectPluginData.namespace(
+                record.plugin_id,
+                on_change=self.window.projectManager.startTimerNoChanges,
+            ),
+            outline=self._outline,
+            editors=self._editors,
+            show_status=self.window.statusPresenter.show,
+            close_workspace=self.close_workspace,
+        )
+        try:
+            workspace = contribution.workspace_factory(
+                context,
+                self.window.mainEditor,
+            )
+            if not isinstance(workspace, QWidget):
+                raise TypeError(
+                    "Editor workspace factories must return QWidget instances."
+                )
+        except Exception as error:
+            QMessageBox.critical(
+                self.window,
+                self.window.tr("Plugin workspace failed"),
+                "{}\n\n{}".format(contribution.descriptor.name, error),
+            )
+            return None
+
+        self._shell = EditorWorkspaceShell(
+            contribution.descriptor.name,
+            contribution.descriptor.description,
+            workspace,
+            self.close_workspace,
+            parent=self.window.mainEditor,
+        )
+        self._active_id = contribution_id
+        self._active_plugin_id = record.plugin_id
+        self.window.mainEditor.showPluginWorkspace(self._shell)
+        return self._shell
+
+    def close_workspace(self):
+        shell = self._shell
+        workspace = getattr(shell, "workspace", None)
+        prepare_close = getattr(workspace, "prepare_close", None)
+        if callable(prepare_close):
+            try:
+                prepare_close()
+            except Exception as error:
+                self.window.statusPresenter.show(
+                    self.tr("Plugin workspace cleanup failed: {}").format(
+                        error
+                    ),
+                    8000,
+                    2,
+                )
+        if self._editors is not None:
+            self._editors.close_all()
+        self._shell = None
+        self._active_id = None
+        self._active_plugin_id = None
+        self.window.mainEditor.closePluginWorkspace()
+        if shell is not None:
+            shell.deleteLater()
+
+    def close_plugin(self, plugin_id):
+        if self._active_plugin_id == plugin_id:
+            self.close_workspace()
+
+    def _install_services(self):
+        if self._outline is not None:
+            return
+        context = self.window.mainEditor.editor_context
+        if context is None:
+            return
+        self._outline = WorkspaceOutlineGateway(
+            context.outline_model,
+            context.outline_tree,
+            parent=self,
+        )
+        self._outline.selectionChanged.connect(self._update_action_states)
+        self._editors = WorkspaceEditorFactory(
+            context,
+            self._outline,
+            parent=self,
+        )
+
+    def _release_services(self):
+        if self._editors is not None:
+            self._editors.close_all()
+            self._editors.deleteLater()
+        self._editors = None
+        if self._outline is not None:
+            self._outline.close()
+            self._outline.deleteLater()
+        self._outline = None
+
+    def _update_action_states(self, *_args):
+        selected_ids = (
+            self._outline.selected_item_ids()
+            if self._outline is not None
+            else ()
+        )
+        records = {
+            record.id: record
+            for record in self.runtime.registry.records("editor_workspace")
+        }
+        for contribution_id, action in self.actions.items():
+            record = records.get(contribution_id)
+            action.setEnabled(bool(
+                self._project_open
+                and record is not None
+                and self._selection_allowed(
+                    record.contribution,
+                    selected_ids,
+                )
+            ))
+
+    @staticmethod
+    def _selection_allowed(contribution, selected_ids):
+        count = len(selected_ids)
+        return (
+            count >= contribution.minimum_selection
+            and (
+                contribution.maximum_selection is None
+                or count <= contribution.maximum_selection
+            )
+        )
