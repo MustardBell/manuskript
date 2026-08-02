@@ -65,6 +65,9 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.plugins.controller import PluginUiController
+from manuskript.ui.plugins.index_card_styles import (
+    IndexCardStyleService,
+)
 from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
@@ -157,6 +160,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
         self.pluginRuntime = plugin_runtime
         self.pluginOptionStore = plugin_option_store
+        self.cardStyles = IndexCardStyleService(
+            plugin_runtime.registry if plugin_runtime is not None else None,
+            report_error=self.statusPresenter.show,
+            parent=self,
+        )
         self.pluginUi = (
             PluginUiController(
                 self,
