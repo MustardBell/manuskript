@@ -28,6 +28,9 @@ from manuskript.functions import (
 from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.tabSplitter import tabSplitter
 from manuskript.ui.editors.themes import ThemePreviewRenderer
+from manuskript.ui.plugins.index_card_styles import (
+    IndexCardStyleService,
+)
 from manuskript.ui.settings_ui import Ui_Settings
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.textEditView import textEditView
@@ -43,6 +46,7 @@ class settingsWindow(QWidget, Ui_Settings):
         theme_repository=None,
         theme_preview_renderer=None,
         application_preferences=None,
+        card_styles=None,
     ):
         QWidget.__init__(self)
         self.setupUi(self)
@@ -62,6 +66,11 @@ class settingsWindow(QWidget, Ui_Settings):
             application_preferences
             if application_preferences is not None
             else ApplicationPreferences()
+        )
+        self.cardStyles = (
+            card_styles
+            if card_styles is not None
+            else IndexCardStyleService()
         )
 
         # UI
@@ -260,12 +269,8 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkCountSpaces.setChecked(self.settings.countSpaces);
         self.chkCountSpaces.stateChanged.connect(self.countSpacesChanged)
 
-        self.rdoCorkOldStyle.setChecked(
-            self.settings.indexCardStyle == "manuskript.card.ruled")
-        self.rdoCorkNewStyle.setChecked(
-            self.settings.indexCardStyle == "manuskript.card.plain")
-        self.rdoCorkNewStyle.toggled.connect(self.setCorkStyle)
-        self.rdoCorkOldStyle.toggled.connect(self.setCorkStyle)
+        self.populateCorkStyles()
+        self.cmbCorkStyle.currentIndexChanged.connect(self.setCorkStyle)
 
         self.populatesCmbBackgrounds(self.cmbCorkImage)
         self.setCorkImageDefault()
@@ -581,11 +586,28 @@ class settingsWindow(QWidget, Ui_Settings):
             # Update Cork view
             self.mw.mainEditor.updateCorkBackground()
 
+    def populateCorkStyles(self):
+        """List built-in and plugin card styles without firing a save."""
+        previous = self.cmbCorkStyle.blockSignals(True)
+        try:
+            self.cmbCorkStyle.clear()
+            for style_id, name in self.cardStyles.styles():
+                self.cmbCorkStyle.addItem(name, style_id)
+            index = self.cmbCorkStyle.findData(
+                self.settings.indexCardStyle)
+            if index < 0:
+                # The project names a style whose plugin is gone.
+                index = self.cmbCorkStyle.findData(
+                    self.cardStyles.DEFAULT_ID)
+            self.cmbCorkStyle.setCurrentIndex(max(0, index))
+        finally:
+            self.cmbCorkStyle.blockSignals(previous)
+
     def setCorkStyle(self):
-        self.settings.indexCardStyle = (
-            "manuskript.card.plain"
-            if self.rdoCorkNewStyle.isChecked()
-            else "manuskript.card.ruled")
+        style_id = self.cmbCorkStyle.currentData()
+        if not style_id:
+            return
+        self.settings.indexCardStyle = style_id
         self.mw.mainEditor.updateCorkView()
 
     def updateCorkColor(self):

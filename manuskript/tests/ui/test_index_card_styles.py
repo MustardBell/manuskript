@@ -203,3 +203,44 @@ def test_cork_view_follows_the_project_setting(MWEmptyProject):
     finally:
         window.settingsManager.indexCardStyle = previous
         window.mainEditor.closeAllTabs()
+
+
+def test_settings_dropdown_lists_styles_and_persists_the_choice(
+        MWEmptyProject):
+    window = MWEmptyProject
+    previous = window.settingsManager.indexCardStyle
+    window.settingsWindow()
+    dialog = window.sw
+
+    try:
+        listed = {
+            dialog.cmbCorkStyle.itemData(i): dialog.cmbCorkStyle.itemText(i)
+            for i in range(dialog.cmbCorkStyle.count())
+        }
+        assert listed == {PLAIN: "Plain card", RULED: "Ruled index card"}
+
+        dialog.cmbCorkStyle.setCurrentIndex(
+            dialog.cmbCorkStyle.findData(RULED))
+
+        assert window.settingsManager.indexCardStyle == RULED
+    finally:
+        window.settingsManager.indexCardStyle = previous
+        dialog.close()
+
+
+def test_settings_dropdown_survives_an_uninstalled_style(MWEmptyProject):
+    window = MWEmptyProject
+    previous = window.settingsManager.indexCardStyle
+    window.settingsManager.indexCardStyle = "gone.away"
+
+    window.settingsWindow()
+    dialog = window.sw
+
+    try:
+        # Falls back to the default rather than showing an empty combo,
+        # and must not silently rewrite the setting just by opening.
+        assert dialog.cmbCorkStyle.currentData() == PLAIN
+        assert window.settingsManager.indexCardStyle == "gone.away"
+    finally:
+        window.settingsManager.indexCardStyle = previous
+        dialog.close()

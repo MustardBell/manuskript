@@ -1,6 +1,6 @@
 """Ruled index card: rounded border, coloured title bar, notebook rules."""
 
-from PyQt5.QtCore import QPoint, QRect, QSize, Qt
+from PyQt5.QtCore import QCoreApplication, QPoint, QRect, QSize, Qt
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QRegion
 
 from manuskript.enums import Outline
@@ -14,7 +14,13 @@ RULE_COLOR = "#EEE"
 
 class RuledCardStyle(IndexCardStyle):
     id = "manuskript.card.ruled"
-    name = "Ruled index card"
+
+    @property
+    def name(self):
+        # Translated on access: the translator is installed after
+        # this module is imported.
+        return QCoreApplication.translate(
+            "IndexCardStyle", "Ruled index card")
 
     def size_hint(self, factor):
         return self.scaled(QSize(300, 200), factor)

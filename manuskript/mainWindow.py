@@ -932,6 +932,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             theme_repository=self.themeRepository,
             theme_preview_renderer=self.themePreviewRenderer,
             application_preferences=self.applicationPreferences,
+            card_styles=self.cardStyles,
         )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)

@@ -1,6 +1,6 @@
 """Flat index card: no border chrome, a folder tab, a corner label flag."""
 
-from PyQt5.QtCore import QPoint, QPointF, QRect, QSize, Qt
+from PyQt5.QtCore import QCoreApplication, QPoint, QPointF, QRect, QSize, Qt
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPolygonF
 
 from manuskript.enums import Outline
@@ -10,7 +10,13 @@ from manuskript.ui.views.cards.base import CardLayout, IndexCardStyle
 
 class PlainCardStyle(IndexCardStyle):
     id = "manuskript.card.plain"
-    name = "Plain card"
+
+    @property
+    def name(self):
+        # Translated on access: the translator is installed after
+        # this module is imported.
+        return QCoreApplication.translate(
+            "IndexCardStyle", "Plain card")
 
     def size_hint(self, factor):
         return self.scaled(QSize(300, 210), factor)
