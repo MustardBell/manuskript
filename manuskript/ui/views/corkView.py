@@ -45,11 +45,12 @@ class corkView(QListView, dndView, outlineBasics):
 
     def updateCardStyle(self):
         """Apply the style the project asked for, or the default."""
-        if self.card_styles is None or self.settings is None:
-            return
-        self.cork_delegate.set_style(
-            self.card_styles.resolve(self.settings.indexCardStyle)
-        )
+        if self.card_styles is not None and self.settings is not None:
+            self.cork_delegate.set_style(
+                self.card_styles.resolve(self.settings.indexCardStyle)
+            )
+        # Repaint even when the style could not be resolved, since callers
+        # rely on this to refresh the view after any cork setting changes.
         self.viewport().update()
 
     def updateBackground(self):

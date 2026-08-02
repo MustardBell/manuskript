@@ -164,8 +164,13 @@ def test_builtin_styles_disagree_about_card_size():
         2 * PlainCardStyle().size_hint(1.0).width())
 
 
-def test_cork_view_follows_the_project_setting(MWEmptyProject):
-    """The delegate paints whichever style the project names."""
+def test_changing_the_setting_repaints_with_the_new_style(MWEmptyProject):
+    """Drive the real path: the dropdown, not the view's own helper.
+
+    setCorkStyle stores the id and calls mainEditor.updateCorkView(). If
+    that only repaints, the cork board keeps drawing whatever style it
+    resolved when the project opened.
+    """
     from PyQt5.QtWidgets import qApp
     from manuskript.models.outlineItem import outlineItem
 
@@ -181,23 +186,53 @@ def test_cork_view_follows_the_project_setting(MWEmptyProject):
     editor.setFolderView("cork")
     previous = window.settingsManager.indexCardStyle
 
-    try:
-        window.settingsManager.indexCardStyle = RULED
-        editor.corkView.updateCardStyle()
-        qApp.processEvents()
-        assert isinstance(
-            editor.corkView.cork_delegate.style, RuledCardStyle)
+    # Start on ruled, the way a migrated pre-2026 project does.
+    window.settingsManager.indexCardStyle = RULED
+    window.mainEditor.updateCorkView()
+    qApp.processEvents()
+    assert isinstance(editor.corkView.cork_delegate.style, RuledCardStyle)
 
-        window.settingsManager.indexCardStyle = PLAIN
-        editor.corkView.updateCardStyle()
+    window.settingsWindow()
+    dialog = window.sw
+    try:
+        dialog.cmbCorkStyle.setCurrentIndex(
+            dialog.cmbCorkStyle.findData(PLAIN))
         qApp.processEvents()
+
+        assert window.settingsManager.indexCardStyle == PLAIN
         assert isinstance(
             editor.corkView.cork_delegate.style, PlainCardStyle)
 
-        # An uninstalled style must not break the view.
-        window.settingsManager.indexCardStyle = "gone.away"
-        editor.corkView.updateCardStyle()
+        dialog.cmbCorkStyle.setCurrentIndex(
+            dialog.cmbCorkStyle.findData(RULED))
         qApp.processEvents()
+
+        assert isinstance(
+            editor.corkView.cork_delegate.style, RuledCardStyle)
+    finally:
+        dialog.close()
+        window.settingsManager.indexCardStyle = previous
+        window.mainEditor.closeAllTabs()
+
+
+def test_an_uninstalled_style_still_draws(MWEmptyProject):
+    from PyQt5.QtWidgets import qApp
+    from manuskript.models.outlineItem import outlineItem
+
+    window = MWEmptyProject
+    folder = outlineItem(window.mdlOutline, title="Act", _type="folder")
+    window.mdlOutline.appendItem(folder)
+    window.mainEditor.setCurrentModelIndex(
+        window.mdlOutline.indexFromItem(folder), newTab=True)
+    editor = window.mainEditor.currentEditor()
+    editor.setFolderView("cork")
+    previous = window.settingsManager.indexCardStyle
+
+    try:
+        window.settingsManager.indexCardStyle = "gone.away"
+        window.mainEditor.updateCorkView()
+        qApp.processEvents()
+
         assert isinstance(
             editor.corkView.cork_delegate.style, PlainCardStyle)
     finally:

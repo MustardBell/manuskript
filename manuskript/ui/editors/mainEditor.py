@@ -522,8 +522,11 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.settings.corkSizeFactor = val
 
     def updateCorkView(self):
+        # Re-resolve the style rather than only repainting: this is the
+        # entry point used after cork settings change, and the chosen card
+        # style is one of them.
         for w in self.allAllTabs():
-            w.corkView.viewport().update()
+            w.corkView.updateCardStyle()
 
     def updateCorkBackground(self):
         for w in self.allAllTabs():
