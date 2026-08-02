@@ -1,7 +1,13 @@
+from functools import partial
+
 from PyQt5.QtWidgets import QAction
 
+from manuskript.plugins.api import PluginSettingsContext
+from manuskript.plugins.errors import PluginScopeError
 from manuskript.ui.plugins.manager import PluginManagerDialog
+from manuskript.ui.plugins.options import PluginOptionsDialog
 from manuskript.ui.plugins.markup_profiles import MarkupProfileService
+from manuskript.ui.plugins.page_routing import PageRoutingGateway
 from manuskript.ui.plugins.page_types import PageTypeService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
 from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
@@ -79,8 +85,7 @@ class PluginUiController:
                 self.runtime,
                 self.window,
                 option_store=self.option_store,
-                page_types=self.pageTypes,
-                export_routes_provider=self._export_routes,
+                settings_context_provider=self._settings_context,
             )
             self.manager.finished.connect(self._manager_closed)
             self.manager.pluginsChanged.connect(
@@ -89,6 +94,39 @@ class PluginUiController:
         self.manager.show()
         self.manager.raise_()
         self.manager.activateWindow()
+
+    def _settings_context(self, plugin_id):
+        """Capabilities a plugin may use to configure itself."""
+        return PluginSettingsContext(
+            plugin_id=plugin_id,
+            page_routing=PageRoutingGateway(
+                plugin_id,
+                self.runtime.registry,
+                self.pageTypes,
+                export_routes_provider=self._export_routes,
+            ),
+            option_store=self.option_store,
+            edit_options=partial(self._edit_options, plugin_id),
+            show_status=self.window.statusPresenter.show,
+        )
+
+    def _edit_options(self, plugin_id, contribution, parent=None):
+        """Open the standard options editor for a plugin's own work."""
+        owned = {
+            record.id
+            for record in self.runtime.registry.plugin_records(plugin_id)
+        }
+        if contribution.descriptor.id not in owned:
+            raise PluginScopeError(
+                "Plugin {} cannot configure {!r}, which it does not "
+                "provide.".format(plugin_id, contribution.descriptor.id)
+            )
+        dialog = PluginOptionsDialog(
+            contribution,
+            self.option_store,
+            parent if parent is not None else self.window,
+        )
+        return dialog.exec()
 
     def _export_routes(self):
         from manuskript import exporter

@@ -2,10 +2,8 @@ import html
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -22,7 +20,6 @@ from PyQt5.QtWidgets import (
 
 from manuskript.plugins.registry import ContributionKind
 from manuskript.plugins.runtime import PluginStatus
-from manuskript.ui.plugins.options import plugin_options_widget
 
 
 class PluginManagerDialog(QDialog):
@@ -32,14 +29,12 @@ class PluginManagerDialog(QDialog):
 
     def __init__(
             self, runtime, parent=None, option_store=None,
-            page_types=None, export_routes_provider=None):
+            settings_context_provider=None):
         super().__init__(parent)
         self.runtime = runtime
         self.option_store = option_store
-        self.pageTypes = page_types
-        self.exportRoutesProvider = export_routes_provider
-        self._exportRoutes = ()
-        self._syncingRendererRoute = False
+        self.settingsContextProvider = settings_context_provider
+        self.pluginPanels = {}
         self.setWindowTitle(self.tr("Manage Plugins"))
         self.resize(960, 700)
         self.setMinimumSize(720, 520)
@@ -116,10 +111,10 @@ class PluginManagerDialog(QDialog):
             Qt.TextSelectableByMouse
         )
         details_layout.addWidget(self.errorLabel)
-        self.rendererGroup = self._build_renderer_group(
-            self.detailsWidget
-        )
-        details_layout.addWidget(self.rendererGroup)
+        self.pluginSpace = QWidget(self.detailsWidget)
+        self.pluginSpaceLayout = QVBoxLayout(self.pluginSpace)
+        self.pluginSpaceLayout.setContentsMargins(0, 0, 0, 0)
+        details_layout.addWidget(self.pluginSpace)
         details_layout.addStretch(1)
         self.detailsScroll.setWidget(self.detailsWidget)
         self.splitter.setStretchFactor(0, 1)
@@ -155,39 +150,6 @@ class PluginManagerDialog(QDialog):
         self.disableButton.clicked.connect(self.disable_selected)
 
         self.refresh()
-
-    def _build_renderer_group(self, parent):
-        group = QGroupBox(self.tr("Page renderer routing"), parent)
-        form = QFormLayout(group)
-        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
-        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.pageTypeCombo = QComboBox(group)
-        self.renderTargetCombo = QComboBox(group)
-        self.pageRendererCombo = QComboBox(group)
-        self.configureRendererButton = QPushButton(
-            self.tr("Configure renderer…"),
-            group,
-        )
-        self.rendererInfoLabel = QLabel(group)
-        self.rendererInfoLabel.setWordWrap(True)
-        form.addRow(self.tr("Page type"), self.pageTypeCombo)
-        form.addRow(self.tr("Export format"), self.renderTargetCombo)
-        form.addRow(self.tr("Renderer"), self.pageRendererCombo)
-        form.addRow("", self.configureRendererButton)
-        form.addRow("", self.rendererInfoLabel)
-        self.pageTypeCombo.currentIndexChanged.connect(
-            self._page_type_route_changed
-        )
-        self.renderTargetCombo.currentIndexChanged.connect(
-            self._renderer_target_changed
-        )
-        self.pageRendererCombo.currentIndexChanged.connect(
-            self._renderer_route_changed
-        )
-        self.configureRendererButton.clicked.connect(
-            self._configure_renderer
-        )
-        return group
 
     def refresh(self):
         selected_id = self.selected_plugin_id()
@@ -239,205 +201,41 @@ class PluginManagerDialog(QDialog):
         return result == QMessageBox.Yes
 
     def _populate(self, selected_id=None):
-        self.pluginList.clear()
-        selected_item = None
-        for plugin_id, record in sorted(self.runtime.records.items()):
-            item = QTreeWidgetItem(
-                [
-                    record.manifest.name,
-                    record.manifest.version,
-                    self._status_text(record.status),
-                ]
-            )
-            item.setData(0, Qt.UserRole, plugin_id)
-            if record.error:
-                item.setToolTip(2, record.error)
-            self.pluginList.addTopLevelItem(item)
-            if plugin_id == selected_id:
-                selected_item = item
+        # clear() and setCurrentItem() both emit currentItemChanged, which
+        # would rebuild the plugin's panel widget several times per refresh.
+        # Silence the list and refresh the details exactly once, at the end.
+        previously_blocked = self.pluginList.blockSignals(True)
+        try:
+            self.pluginList.clear()
+            selected_item = None
+            for plugin_id, record in sorted(self.runtime.records.items()):
+                item = QTreeWidgetItem(
+                    [
+                        record.manifest.name,
+                        record.manifest.version,
+                        self._status_text(record.status),
+                    ]
+                )
+                item.setData(0, Qt.UserRole, plugin_id)
+                if record.error:
+                    item.setToolTip(2, record.error)
+                self.pluginList.addTopLevelItem(item)
+                if plugin_id == selected_id:
+                    selected_item = item
 
-        self.pluginList.resizeColumnToContents(0)
-        self.pluginList.resizeColumnToContents(1)
-        if selected_item is None and self.pluginList.topLevelItemCount():
-            selected_item = self.pluginList.topLevelItem(0)
-        self.pluginList.setCurrentItem(selected_item)
+            self.pluginList.resizeColumnToContents(0)
+            self.pluginList.resizeColumnToContents(1)
+            if (
+                selected_item is None
+                and self.pluginList.topLevelItemCount()
+            ):
+                selected_item = self.pluginList.topLevelItem(0)
+            self.pluginList.setCurrentItem(selected_item)
+        finally:
+            self.pluginList.blockSignals(previously_blocked)
+        self._discard_plugin_panels()
         self._show_discovery_issues()
         self._selection_changed(selected_item)
-        self._populate_renderer_routes()
-
-    def _populate_renderer_routes(self):
-        self._exportRoutes = (
-            tuple(self.exportRoutesProvider())
-            if self.exportRoutesProvider is not None
-            else ()
-        )
-        available = (
-            self.pageTypes is not None
-            and self.option_store is not None
-            and bool(self.runtime.registry.page_types)
-            and bool(self.runtime.registry.page_renderers)
-            and bool(self._exportRoutes)
-        )
-        self.rendererGroup.setVisible(available)
-        if not available:
-            return
-        selected_page = self.pageTypeCombo.currentData()
-        self._syncingRendererRoute = True
-        try:
-            self.pageTypeCombo.clear()
-            for contribution in sorted(
-                    self.runtime.registry.page_types,
-                    key=lambda value: value.descriptor.name):
-                self.pageTypeCombo.addItem(
-                    contribution.descriptor.name,
-                    contribution.descriptor.id,
-                )
-            index = self.pageTypeCombo.findData(selected_page)
-            self.pageTypeCombo.setCurrentIndex(max(0, index))
-            self._populate_render_targets()
-        finally:
-            self._syncingRendererRoute = False
-        self._populate_renderer_choices()
-
-    def _populate_render_targets(self):
-        selected = self.renderTargetCombo.currentData()
-        self.renderTargetCombo.clear()
-        duplicate_labels = {
-            route.label
-            for route in self._exportRoutes
-            if sum(
-                other.label == route.label
-                for other in self._exportRoutes
-            ) > 1
-        }
-        for route in self._exportRoutes:
-            label = route.label
-            if route.label in duplicate_labels:
-                label = "{} — {}".format(label, route.exporter_name)
-            self.renderTargetCombo.addItem(
-                self.tr(label),
-                route.id,
-            )
-        index = self.renderTargetCombo.findData(selected)
-        self.renderTargetCombo.setCurrentIndex(max(0, index))
-
-    def _populate_renderer_choices(self):
-        if self._syncingRendererRoute or self.pageTypes is None:
-            return
-        page_type_id = self.pageTypeCombo.currentData()
-        route = self._selected_export_route()
-        if route is None:
-            self.pageRendererCombo.clear()
-            self._update_renderer_details()
-            return
-        representation_format = route.representation_format
-        self._syncingRendererRoute = True
-        try:
-            self.pageRendererCombo.clear()
-            candidates = self.pageTypes.renderers_for(
-                page_type_id,
-                representation_format,
-            )
-            owners = {
-                record.id: record.plugin_id
-                for record in self.runtime.registry.records(
-                    ContributionKind.PAGE_RENDERER
-                )
-            }
-            for renderer in candidates:
-                fallback = (
-                    representation_format
-                    not in renderer.target_formats
-                )
-                label = renderer.descriptor.name
-                if fallback:
-                    label += self.tr(" (compatible fallback)")
-                owner = owners.get(renderer.descriptor.id)
-                if owner:
-                    label += " — " + owner
-                self.pageRendererCombo.addItem(
-                    label,
-                    renderer.descriptor.id,
-                )
-            selected = self.pageTypes.selected_renderer_id(
-                page_type_id,
-                route.id,
-            )
-            index = self.pageRendererCombo.findData(selected)
-            self.pageRendererCombo.setCurrentIndex(max(0, index))
-        finally:
-            self._syncingRendererRoute = False
-        self._update_renderer_details()
-
-    def _page_type_route_changed(self, _index):
-        if self._syncingRendererRoute:
-            return
-        self._syncingRendererRoute = True
-        try:
-            self._populate_render_targets()
-        finally:
-            self._syncingRendererRoute = False
-        self._populate_renderer_choices()
-
-    def _renderer_target_changed(self, _index):
-        if not self._syncingRendererRoute:
-            self._populate_renderer_choices()
-
-    def _renderer_route_changed(self, _index):
-        if self._syncingRendererRoute or self.pageTypes is None:
-            return
-        renderer_id = self.pageRendererCombo.currentData()
-        if renderer_id:
-            route = self._selected_export_route()
-            if route is None:
-                return
-            self.pageTypes.select_renderer(
-                self.pageTypeCombo.currentData(),
-                route.id,
-                renderer_id,
-                representation_format=route.representation_format,
-            )
-        self._update_renderer_details()
-
-    def _selected_export_route(self):
-        route_id = self.renderTargetCombo.currentData()
-        return next((
-            route
-            for route in self._exportRoutes
-            if route.id == route_id
-        ), None)
-
-    def _selected_renderer(self):
-        renderer_id = self.pageRendererCombo.currentData()
-        return next((
-            renderer
-            for renderer in self.runtime.registry.page_renderers
-            if renderer.descriptor.id == renderer_id
-        ), None)
-
-    def _update_renderer_details(self):
-        renderer = self._selected_renderer()
-        if renderer is None:
-            self.rendererInfoLabel.setText(
-                self.tr("No renderer is available for this route.")
-            )
-            self.configureRendererButton.setEnabled(False)
-            return
-        self.rendererInfoLabel.setText(renderer.descriptor.description)
-        self.configureRendererButton.setEnabled(bool(
-            renderer.options or renderer.options_view_factory
-        ))
-
-    def _configure_renderer(self):
-        renderer = self._selected_renderer()
-        if renderer is None or self.option_store is None:
-            return
-        dialog = PageRendererOptionsDialog(
-            renderer,
-            self.option_store,
-            self,
-        )
-        dialog.exec()
 
     def _selection_changed(self, item, _previous=None):
         plugin_id = (
@@ -451,6 +249,7 @@ class PluginManagerDialog(QDialog):
             self.descriptionLabel.clear()
             self.metadataLabel.clear()
             self.errorLabel.clear()
+            self._show_plugin_panel(None)
             self.enableButton.setEnabled(False)
             self.disableButton.setEnabled(False)
             return
@@ -499,6 +298,7 @@ class PluginManagerDialog(QDialog):
                 else ""
             )
         )
+        self._show_plugin_panel(plugin_id)
         self.enableButton.setEnabled(
             record.status is not PluginStatus.LOADED
         )
@@ -506,6 +306,72 @@ class PluginManagerDialog(QDialog):
             record.status is not PluginStatus.DISABLED
             or plugin_id in self.runtime.preferences.enabled_plugin_ids
         )
+
+    def _show_plugin_panel(self, plugin_id):
+        """Give the lower details pane to the selected plugin, or to no one.
+
+        Manuskript draws nothing of its own here. A plugin that registers no
+        settings panel simply gets empty space, which is why one plugin's
+        configuration can never appear while another is selected.
+        """
+        for widget in self.pluginPanels.values():
+            widget.setVisible(False)
+        if plugin_id is None:
+            self.pluginSpace.setVisible(False)
+            return
+        widget = self.pluginPanels.get(plugin_id)
+        if widget is None:
+            widget = self._build_plugin_panel(plugin_id)
+            if widget is not None:
+                self.pluginPanels[plugin_id] = widget
+                self.pluginSpaceLayout.addWidget(widget)
+        self.pluginSpace.setVisible(widget is not None)
+        if widget is not None:
+            widget.setVisible(True)
+
+    def _build_plugin_panel(self, plugin_id):
+        records = self.runtime.registry.plugin_records(
+            plugin_id,
+            ContributionKind.SETTINGS_PANEL,
+        )
+        if not records or self.settingsContextProvider is None:
+            return None
+        container = QWidget(self.pluginSpace)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        context = self.settingsContextProvider(plugin_id)
+        for record in records:
+            contribution = record.contribution
+            group = QGroupBox(contribution.descriptor.name, container)
+            group_layout = QVBoxLayout(group)
+            try:
+                widget = contribution.widget_factory(context, group)
+                if not isinstance(widget, QWidget):
+                    raise TypeError(
+                        "Plugin settings factories must return QWidget "
+                        "instances."
+                    )
+            except Exception as error:
+                # A broken panel must not take the manager down with it.
+                failure = QLabel(
+                    self.tr("This plugin's settings failed to load.")
+                    + "\n{}: {}".format(type(error).__name__, error),
+                    group,
+                )
+                failure.setWordWrap(True)
+                group_layout.addWidget(failure)
+            else:
+                group_layout.addWidget(widget)
+            layout.addWidget(group)
+        return container
+
+    def _discard_plugin_panels(self):
+        """Drop cached panels so enable/disable rebuilds them from scratch."""
+        for widget in self.pluginPanels.values():
+            self.pluginSpaceLayout.removeWidget(widget)
+            widget.setParent(None)
+            widget.deleteLater()
+        self.pluginPanels = {}
 
     def _show_discovery_issues(self):
         issues = self.runtime.discovery_issues
@@ -533,44 +399,3 @@ class PluginManagerDialog(QDialog):
             PluginStatus.FAILED: self.tr("Failed"),
         }[status]
 
-
-class PageRendererOptionsDialog(QDialog):
-    def __init__(self, contribution, option_store, parent=None):
-        super().__init__(parent)
-        self.contribution = contribution
-        self.option_store = option_store
-        self.setWindowTitle(
-            self.tr("Configure {}")
-            .format(contribution.descriptor.name)
-        )
-        self.resize(760, 650)
-        layout = QVBoxLayout(self)
-        description = QLabel(contribution.descriptor.description, self)
-        description.setWordWrap(True)
-        layout.addWidget(description)
-        self.optionsWidget = plugin_options_widget(
-            contribution,
-            option_store,
-            None,
-        )
-        self.optionsScroll = QScrollArea(self)
-        self.optionsScroll.setWidgetResizable(True)
-        self.optionsScroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff
-        )
-        self.optionsScroll.setWidget(self.optionsWidget)
-        layout.addWidget(self.optionsScroll, 1)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel,
-            parent=self,
-        )
-        buttons.accepted.connect(self._save)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def _save(self):
-        self.option_store.save(
-            self.contribution.descriptor.id,
-            self.optionsWidget.values(),
-        )
-        self.accept()

@@ -216,6 +216,43 @@ class ProjectPanelContribution:
 
 
 @dataclass(frozen=True)
+class PluginSettingsContribution:
+    """Render plugin-owned settings in the plugin manager's details pane.
+
+    The details pane shows application-owned identity above (name, version,
+    author, location) and this widget below. Manuskript never draws its own
+    controls in that lower region: whatever appears there belongs to the
+    selected plugin, so nothing one plugin configures can surface under
+    another.
+
+    ``widget_factory`` receives ``(PluginSettingsContext, parent)`` and must
+    return a QWidget. The Qt type is checked by the UI host so the stable
+    registration contract remains importable without Qt.
+    """
+
+    descriptor: ExtensionDescriptor
+    widget_factory: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class PluginSettingsContext:
+    """Capabilities offered to one plugin's settings panel.
+
+    Like EditorWorkspaceContext, the services are capability interfaces
+    scoped to the plugin rather than the registry or main window.
+    ``page_routing`` only exposes page types this plugin registered and
+    rejects attempts to route anything else, so the scoping is enforced by
+    the host instead of trusted to the panel.
+    """
+
+    plugin_id: str
+    page_routing: Any
+    option_store: Any
+    edit_options: Callable[..., None]
+    show_status: Callable[..., None]
+
+
+@dataclass(frozen=True)
 class EditorWorkspaceContribution:
     """Add a project-scoped workspace to Manuskript's editor area.
 
@@ -346,6 +383,7 @@ Contribution = Union[
     ImportContribution,
     ConversionContribution,
     ProjectPanelContribution,
+    PluginSettingsContribution,
     EditorWorkspaceContribution,
     PageTypeContribution,
     PageRendererContribution,
