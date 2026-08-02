@@ -179,6 +179,12 @@ class ProjectLifecycleView:
     def prepare_close(self):
         if self.window.pluginUi is not None:
             self.window.pluginUi.prepare_project_close()
+        # Structure history belongs to one project. Undoing a deletion from
+        # the previous manuscript into a newly opened one would reinsert
+        # items that never belonged to it.
+        undo_stack = getattr(self.window, "undoStack", None)
+        if undo_stack is not None:
+            undo_stack.clear()
         self.window.mainEditor.close()
         self.window.mainEditor.closeAllTabs()
 

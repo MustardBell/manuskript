@@ -65,6 +65,7 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.plugins.controller import PluginUiController
+from PyQt5.QtWidgets import QUndoStack
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
 )
@@ -160,6 +161,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
         self.pluginRuntime = plugin_runtime
         self.pluginOptionStore = plugin_option_store
+        # Structure edits are undoable per project; the stack is
+        # cleared whenever a different project is opened.
+        self.undoStack = QUndoStack(self)
         self.cardStyles = IndexCardStyleService(
             plugin_runtime.registry if plugin_runtime is not None else None,
             report_error=self.statusPresenter.show,

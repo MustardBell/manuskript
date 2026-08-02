@@ -12,6 +12,9 @@ from manuskript.ui.editors.editorOverlayButton import (
     OVERLAY_HEIGHT,
     OVERLAY_MARGIN,
 )
+from manuskript.ui.editors.historyToolButtons import (
+    HistoryToolButton,
+)
 from manuskript.ui.editors.markdownModeToolButton import (
     MarkdownModeToolButton,
 )
@@ -88,6 +91,15 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self,
         )
         self.markdownModeButton.resize(38, OVERLAY_HEIGHT)
+        undo_stack = (
+            self.editor_context.outline_views.undo_stack
+            if self.editor_context is not None
+            else None
+        )
+        self.undoButton = HistoryToolButton(undo_stack, False, self)
+        self.redoButton = HistoryToolButton(undo_stack, True, self)
+        for button in (self.undoButton, self.redoButton):
+            button.resize(32, OVERLAY_HEIGHT)
         self.pageType = None
         markup_profiles = (
             self.editor_context.text_editor.markup_profiles
@@ -130,6 +142,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.txtRedacText.setPageTypeState(self.pageType)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
         self.currentIndex = QModelIndex()
@@ -187,6 +201,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtEditScrollBar.setGeometry(r)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
 
@@ -207,6 +223,11 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                 ),
                 OVERLAY_MARGIN,
             )
+        self.undoButton.move(12, OVERLAY_MARGIN)
+        self.redoButton.move(
+            self.undoButton.x() + self.undoButton.width() + 4,
+            OVERLAY_MARGIN,
+        )
         self._reserveOverlaySpace()
 
     def _reserveOverlaySpace(self):
@@ -289,6 +310,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def _updateMarkdownModeButtonVisibility(self):
         visible = self.stack.currentIndex() in (0, 1)
         self.markdownModeButton.setVisible(visible)
+        for button in (self.undoButton, self.redoButton):
+            button.setVisible(visible)
         if self.markupProfileButton is not None:
             service = self.markupProfile.service
             has_profiles = bool(
@@ -543,6 +566,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.updateStatusBar()
         self._updateMarkdownModeButtonVisibility()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
 

@@ -53,6 +53,7 @@ class MainWindowActionBinding:
 
     def _bind_edit_actions(self):
         window = self.window
+        self._install_history_actions()
         for action, command in [
             (window.actCopy, DocumentCommand.COPY),
             (window.actCut, DocumentCommand.CUT),
@@ -71,6 +72,29 @@ class MainWindowActionBinding:
             (window.actSettings, window.settingsWindow),
         ]:
             action.triggered.connect(slot)
+
+    def _install_history_actions(self):
+        """Put project history at the top of the Edit menu.
+
+        No shortcut is attached here. A window-level Ctrl+Z is dispatched
+        before the focused widget sees the key, which would take undo away
+        from whichever text editor is being typed in. The outline views bind
+        it themselves, scoped to the widget.
+        """
+        window = self.window
+        stack = getattr(window, "undoStack", None)
+        if stack is None:
+            return
+        window.actUndo = stack.createUndoAction(
+            window, window.tr("Undo")
+        )
+        window.actRedo = stack.createRedoAction(
+            window, window.tr("Redo")
+        )
+        first = window.menuEdit.actions()[0]
+        window.menuEdit.insertAction(first, window.actUndo)
+        window.menuEdit.insertAction(first, window.actRedo)
+        window.menuEdit.insertSeparator(first)
 
     def _bind_format_actions(self):
         window = self.window
