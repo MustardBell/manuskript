@@ -2,7 +2,7 @@
 
 from PyQt5.QtCore import QModelIndex, Qt
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QUndoStack
+from PyQt5.QtWidgets import QUndoStack, qApp
 
 from manuskript.commands.outline_commands import RemoveOutlineItemsCommand
 from manuskript.enums import Outline
@@ -195,32 +195,49 @@ def test_closing_a_project_forgets_its_history(MWEmptyProject):
     assert not window.undoStack.canUndo()
 
 
-def test_the_editor_offers_undo_and_redo_buttons(MWEmptyProject):
+def test_the_editor_buttons_undo_typing_not_the_outline(MWEmptyProject):
+    """The buttons sit in a text editor, so they reverse editing.
+
+    Outline structure has its own history; a control inside the prose must
+    not silently reverse a change to the book's structure instead.
+    """
     window = MWEmptyProject
     model = window.mdlOutline
-    folder = outlineItem(model, title="Buttoned", _type="folder")
-    model.appendItem(folder)
-    item = scene(model, "Undoable", model.indexFromItem(folder))
+    item = scene(model, "Typed in", text="Original text.")
     window.mainEditor.setCurrentModelIndex(
         model.indexFromItem(item), newTab=True)
     editor = window.mainEditor.currentEditor()
+    qApp.processEvents()
 
     try:
-        assert editor.undoButton.stack is window.undoStack
         assert not editor.undoButton.isEnabled()
-        assert "Nothing to undo" in editor.undoButton.toolTip()
 
+        # A structure change must NOT light up the editor's buttons.
+        other = scene(model, "Elsewhere")
         window.undoStack.push(RemoveOutlineItemsCommand(
-            model, [model.indexFromItem(item)]))
+            model, [model.indexFromItem(other)]))
+        qApp.processEvents()
+
+        assert not editor.undoButton.isEnabled()
+
+        # Typing must.
+        editor.txtRedacText.setFocus()
+        editor.txtRedacText.insertPlainText(" gggggg")
+        qApp.processEvents()
 
         assert editor.undoButton.isEnabled()
-        assert "Undoable" in editor.undoButton.toolTip()
         assert not editor.redoButton.isEnabled()
 
         editor.undoButton.click()
+        qApp.processEvents()
 
+        assert editor.txtRedacText.toPlainText() == "Original text."
         assert editor.redoButton.isEnabled()
-        assert "Undoable" in editor.redoButton.toolTip()
+
+        editor.redoButton.click()
+        qApp.processEvents()
+
+        assert "gggggg" in editor.txtRedacText.toPlainText()
     finally:
         window.undoStack.clear()
         window.mainEditor.closeAllTabs()

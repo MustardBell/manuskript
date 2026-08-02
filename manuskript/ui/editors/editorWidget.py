@@ -12,6 +12,9 @@ from manuskript.ui.editors.editorOverlayButton import (
     OVERLAY_HEIGHT,
     OVERLAY_MARGIN,
 )
+from manuskript.ui.editors.editorTextHistory import (
+    EditorTextHistory,
+)
 from manuskript.ui.editors.historyToolButtons import (
     HistoryToolButton,
 )
@@ -91,13 +94,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self,
         )
         self.markdownModeButton.resize(38, OVERLAY_HEIGHT)
-        undo_stack = (
-            self.editor_context.outline_views.undo_stack
-            if self.editor_context is not None
-            else None
-        )
-        self.undoButton = HistoryToolButton(undo_stack, False, self)
-        self.redoButton = HistoryToolButton(undo_stack, True, self)
+        self.textHistory = EditorTextHistory(self, parent=self)
+        self.undoButton = HistoryToolButton(self.textHistory, False, self)
+        self.redoButton = HistoryToolButton(self.textHistory, True, self)
         for button in (self.undoButton, self.redoButton):
             button.resize(32, OVERLAY_HEIGHT)
         self.pageType = None
