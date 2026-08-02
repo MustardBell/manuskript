@@ -146,7 +146,7 @@ def test_general(MWSampleProject):
     # Can't test because of the dialog
     # assert SW.setCorkColor() == None
     SW.sldTreeIconSize.setValue(SW.sldTreeIconSize.value() + 1)
-    SW.rdoCorkNewStyle.toggled.emit(True)
+    SW.cmbCorkStyle.setCurrentIndex(SW.cmbCorkStyle.count() - 1)
     SW.cmbCorkImage.currentIndexChanged.emit(0)
     SW.cmbCorkImage.currentIndexChanged.emit(1)
     # Test editor: same problem as above

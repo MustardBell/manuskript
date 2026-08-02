@@ -16,6 +16,7 @@ class corkView(QListView, dndView, outlineBasics):
 
         self.setResizeMode(QListView.Adjust)
         self.setWrapping(True)
+        self.card_styles = None
         self.cork_delegate = corkDelegate(self)
         self.setItemDelegate(self.cork_delegate)
         self.setSpacing(5)
@@ -30,9 +31,26 @@ class corkView(QListView, dndView, outlineBasics):
         self.cork_delegate.set_color_resolver(
             context.color_resolver if context is not None else None
         )
+        if self.card_styles is not None:
+            self.card_styles.stylesChanged.disconnect(self.updateCardStyle)
+        self.card_styles = (
+            context.card_styles if context is not None else None
+        )
+        if self.card_styles is not None:
+            self.card_styles.stylesChanged.connect(self.updateCardStyle)
         if context is not None:
             self.cork_delegate.set_settings(context.settings)
+            self.updateCardStyle()
             self.updateBackground()
+
+    def updateCardStyle(self):
+        """Apply the style the project asked for, or the default."""
+        if self.card_styles is None or self.settings is None:
+            return
+        self.cork_delegate.set_style(
+            self.card_styles.resolve(self.settings.indexCardStyle)
+        )
+        self.viewport().update()
 
     def updateBackground(self):
         if self.settings is None:

@@ -58,6 +58,7 @@ class ProjectContextBinding:
                 window.mdlCharacter,
                 window.mdlLabels,
             ),
+            card_styles=getattr(window, "cardStyles", None),
             open_index=window.openIndex,
             open_indexes=window.openIndexes,
             selection_changed=window.redacMetadata.selectionChanged,

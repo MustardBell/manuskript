@@ -59,7 +59,7 @@ corkBackground = {
     "color": "#926239",
     "image": "writingdesk"
         }
-corkStyle = "new"
+indexCardStyle = "manuskript.card.plain"
 defaultTextType = "md"
 fullScreenTheme = "spacedreams"
 

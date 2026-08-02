@@ -151,6 +151,9 @@ class PluginUiController:
         self.editorWorkspaces.refresh()
         self.markupProfiles.refresh()
         self.pageTypes.refresh()
+        cardStyles = getattr(self.window, "cardStyles", None)
+        if cardStyles is not None:
+            cardStyles.refresh()
 
     def project_opened(self):
         self.projectPanels.project_opened()

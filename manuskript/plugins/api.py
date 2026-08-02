@@ -216,6 +216,20 @@ class ProjectPanelContribution:
 
 
 @dataclass(frozen=True)
+class IndexCardStyleContribution:
+    """Draw cork board index cards in a style of the plugin's own design.
+
+    ``style_factory`` takes no arguments and must return an
+    ``IndexCardStyle``. The base class owns the drawing sequence shared by
+    every card; a style supplies only geometry and the parts that make it
+    look like itself, so styles stay small and cannot skip a phase.
+    """
+
+    descriptor: ExtensionDescriptor
+    style_factory: Callable[..., Any]
+
+
+@dataclass(frozen=True)
 class PluginSettingsContribution:
     """Render plugin-owned settings in the plugin manager's details pane.
 
@@ -384,6 +398,7 @@ Contribution = Union[
     ConversionContribution,
     ProjectPanelContribution,
     PluginSettingsContribution,
+    IndexCardStyleContribution,
     EditorWorkspaceContribution,
     PageTypeContribution,
     PageRendererContribution,
