@@ -260,8 +260,10 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkCountSpaces.setChecked(self.settings.countSpaces);
         self.chkCountSpaces.stateChanged.connect(self.countSpacesChanged)
 
-        self.rdoCorkOldStyle.setChecked(self.settings.corkStyle == "old")
-        self.rdoCorkNewStyle.setChecked(self.settings.corkStyle == "new")
+        self.rdoCorkOldStyle.setChecked(
+            self.settings.indexCardStyle == "manuskript.card.ruled")
+        self.rdoCorkNewStyle.setChecked(
+            self.settings.indexCardStyle == "manuskript.card.plain")
         self.rdoCorkNewStyle.toggled.connect(self.setCorkStyle)
         self.rdoCorkOldStyle.toggled.connect(self.setCorkStyle)
 
@@ -580,7 +582,10 @@ class settingsWindow(QWidget, Ui_Settings):
             self.mw.mainEditor.updateCorkBackground()
 
     def setCorkStyle(self):
-        self.settings.corkStyle = "new" if self.rdoCorkNewStyle.isChecked() else "old"
+        self.settings.indexCardStyle = (
+            "manuskript.card.plain"
+            if self.rdoCorkNewStyle.isChecked()
+            else "manuskript.card.ruled")
         self.mw.mainEditor.updateCorkView()
 
     def updateCorkColor(self):

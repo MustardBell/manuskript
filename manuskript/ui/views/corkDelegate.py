@@ -47,7 +47,9 @@ class corkDelegate(QStyledItemDelegate):
         return self.status_model.item(int(status), 0)
 
     def newStyle(self):
-        return self.settings is None or self.settings.corkStyle == "new"
+        return (self.settings is None
+                or self.settings.indexCardStyle
+                == "manuskript.card.plain")
 
     def setCorkSizeFactor(self, v):
         self.factor = v / 100.
