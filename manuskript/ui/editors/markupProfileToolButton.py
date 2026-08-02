@@ -1,26 +1,24 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QAction, QActionGroup, QMenu, QToolButton
+from PyQt5.QtWidgets import QAction, QActionGroup, QMenu, QStyle
 
+from manuskript.ui.editors.editorOverlayButton import (
+    EditorOverlayToolButton,
+    overlay_icon,
+)
 from manuskript.ui.plugins.markup_profiles import MARKDOWN_BASE_ID
 
 
-class MarkupProfileToolButton(QToolButton):
+class MarkupProfileToolButton(EditorOverlayToolButton):
     """Editor-local base markup and additive syntax selector."""
 
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.state = state
         self.setObjectName("markupProfileToolButton")
-        self.setAutoRaise(True)
-        self.setFocusPolicy(Qt.NoFocus)
-        self.setPopupMode(QToolButton.InstantPopup)
-        self.setIcon(
-            QIcon.fromTheme(
-                "code-context",
-                QIcon.fromTheme("text-x-script"),
-            )
-        )
+        self.setPopupMode(self.InstantPopup)
+        self.setIcon(overlay_icon(
+            ("code-context", "text-x-script", "text-x-generic"),
+            QStyle.SP_FileDialogListView,
+        ))
         self.menu = QMenu(self)
         self.setMenu(self.menu)
         self.baseActions = {}
