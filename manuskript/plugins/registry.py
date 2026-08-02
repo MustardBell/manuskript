@@ -8,6 +8,7 @@ from manuskript.plugins.api import (
     EditorWorkspaceContribution,
     ExportContribution,
     ImportContribution,
+    IndexCardStyleContribution,
     MarkupContribution,
     PageRendererContribution,
     PageTypeContribution,
@@ -24,6 +25,7 @@ class ContributionKind(str, Enum):
     CONVERTER = "converter"
     PROJECT_PANEL = "project_panel"
     SETTINGS_PANEL = "settings_panel"
+    INDEX_CARD_STYLE = "index_card_style"
     EDITOR_WORKSPACE = "editor_workspace"
     PAGE_TYPE = "page_type"
     PAGE_RENDERER = "page_renderer"
@@ -36,6 +38,7 @@ CONTRIBUTION_TYPES = {
     ContributionKind.CONVERTER: ConversionContribution,
     ContributionKind.PROJECT_PANEL: ProjectPanelContribution,
     ContributionKind.SETTINGS_PANEL: PluginSettingsContribution,
+    ContributionKind.INDEX_CARD_STYLE: IndexCardStyleContribution,
     ContributionKind.EDITOR_WORKSPACE: EditorWorkspaceContribution,
     ContributionKind.PAGE_TYPE: PageTypeContribution,
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
@@ -79,6 +82,9 @@ class PluginRegistrar:
 
     def register_settings_panel(self, contribution):
         self._add(ContributionKind.SETTINGS_PANEL, contribution)
+
+    def register_index_card_style(self, contribution):
+        self._add(ContributionKind.INDEX_CARD_STYLE, contribution)
 
     def register_editor_workspace(self, contribution):
         self._add(ContributionKind.EDITOR_WORKSPACE, contribution)
@@ -209,6 +215,10 @@ class PluginRegistry:
     @property
     def settings_panels(self):
         return self.contributions(ContributionKind.SETTINGS_PANEL)
+
+    @property
+    def index_card_styles(self):
+        return self.contributions(ContributionKind.INDEX_CARD_STYLE)
 
     @property
     def editor_workspaces(self):
