@@ -16,6 +16,46 @@ class GitNotAvailableError(GitRevisionError):
 
 
 @dataclass(frozen=True)
+class GitAvailability:
+    """Why Git history is or is not usable for a project.
+
+    The two reasons need telling apart in the interface: a missing Git is
+    something the writer must fix outside Manuskript, while a project that
+    simply is not in a repository yet can be fixed here.
+    """
+
+    git_installed: bool
+    repository_root: object = None
+
+    @property
+    def usable(self):
+        return self.git_installed and self.repository_root is not None
+
+    @property
+    def needs_repository(self):
+        return self.git_installed and self.repository_root is None
+
+
+def inspect_git_availability(project_file, runner=None):
+    """Report Git usability without raising, for settings and status UI."""
+    runner = runner or GitCommandRunner()
+    if not runner.available:
+        return GitAvailability(git_installed=False)
+    if not project_file:
+        return GitAvailability(git_installed=True)
+    try:
+        backend = GitRevisionBackend(project_file, runner=runner)
+    except GitNotAvailableError:
+        return GitAvailability(git_installed=True)
+    except GitRevisionError:
+        return GitAvailability(git_installed=True)
+    return GitAvailability(
+        git_installed=True,
+        repository_root=backend.repository.root,
+    )
+
+
+@dataclass(frozen=True)
 class GitCommandResult:
     arguments: tuple
     stdout: bytes

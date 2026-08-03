@@ -87,7 +87,7 @@ textEditor = {
 
 revisions = {
     "keep": False,
-    "backend": "internal",
+    "backend": "git",
     "smartremove": True,
     "git": {
         "autoCommit": False,
