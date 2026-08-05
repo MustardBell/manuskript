@@ -81,6 +81,18 @@ def test_book_summary_is_built_by_its_factory(MWEmptyProject):
     window.comboBox_2.setCurrentIndex(0)
 
 
+def test_storyline_is_built_by_its_factory(MWEmptyProject):
+    """Same contract as the book summary: factory-built, same slot,
+    same objectName, and the model wiring still finds it by attribute.
+    """
+    window = MWEmptyProject
+    view = window.storylineView
+
+    assert window.splitterRedacV.indexOf(view) == 1
+    assert view.objectName() == "storylineView"
+    assert window.panelHost.instance(STORYLINE).widget is view
+
+
 def test_declaring_core_panels_twice_is_harmless():
     """The registry outlives any window, so the second window finds the
     panels already declared and must not trip over them.

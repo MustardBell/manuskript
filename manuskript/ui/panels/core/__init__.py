@@ -6,8 +6,9 @@ registers the core panels, so the registry stays importable before any
 QApplication exists.
 """
 
-from manuskript.panels.core import BOOK_SUMMARY
+from manuskript.panels.core import BOOK_SUMMARY, STORYLINE
 from manuskript.ui.panels.core.book_summary import build_book_summary
+from manuskript.ui.panels.core.storyline import build_storyline
 
 
 def core_panel_factories():
@@ -19,4 +20,5 @@ def core_panel_factories():
     """
     return {
         BOOK_SUMMARY: build_book_summary,
+        STORYLINE: build_storyline,
     }

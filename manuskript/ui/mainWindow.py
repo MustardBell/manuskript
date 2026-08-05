@@ -869,8 +869,6 @@ class Ui_MainWindow(object):
         self.mainEditor.setObjectName("mainEditor")
         self.redacMetadata = metadataView(self.splitterRedacH)
         self.redacMetadata.setObjectName("redacMetadata")
-        self.storylineView = storylineView(self.splitterRedacV)
-        self.storylineView.setObjectName("storylineView")
         self.verticalLayout_15.addWidget(self.splitterRedacV)
         self.tabMain.addTab(self.lytTabRedac, "")
         self.lytTabDebug = QtWidgets.QWidget()
@@ -1637,6 +1635,5 @@ from manuskript.ui.views.metadataView import metadataView
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.plotTreeView import plotTreeView
 from manuskript.ui.views.sldImportance import sldImportance
-from manuskript.ui.views.storylineView import storylineView
 from manuskript.ui.views.treeView import treeView
 from manuskript.ui.welcome import welcome
