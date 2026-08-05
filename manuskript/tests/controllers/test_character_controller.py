@@ -1,51 +1,68 @@
-from unittest.mock import MagicMock, call, patch
+"""The character controller drives a panel, not a window.
 
-from PyQt5.QtWidgets import QMessageBox
+It used to take the whole window and reach for twenty of its attributes.
+These tests are written the way it works now: it is handed the panel, the
+models, and the two services every panel needs, so a test says what it
+is driving rather than mocking everything a window can do.
+"""
+
+from unittest.mock import MagicMock, call
 
 from manuskript.controllers.character_controller import CharacterController
+from manuskript.ui.views.character_panel import CharacterPanelView
 
 
-def make_controller():
-    window = MagicMock()
-    window.tr.side_effect = lambda text: text
-    return CharacterController(window), window
+def make_controller(confirm=True):
+    models = MagicMock()
+    panel = CharacterPanelView(
+        characters=MagicMock(),
+        tabs=MagicMock(),
+        info=MagicMock(),
+        color_button=MagicMock(),
+        pov_checkbox=MagicMock(),
+        importance_slider=MagicMock(),
+        fields=(MagicMock(), MagicMock()),
+    )
+    navigation = MagicMock()
+    dialogs = MagicMock()
+    dialogs.translate.side_effect = lambda text: text
+    dialogs.confirm.return_value = confirm
+    controller = CharacterController(models, panel, navigation, dialogs)
+    return controller, models, panel, navigation, dialogs
 
 
 def test_character_selection_text_handles_multiple_and_empty_selections():
-    controller, window = make_controller()
+    controller, _models, panel, _nav, _dialogs = make_controller()
     alice = MagicMock()
     alice.name.return_value = "Alice"
     bob = MagicMock()
     bob.name.return_value = "Bob"
-    window.lstCharacters.currentCharacters.return_value = [alice, bob]
+    panel.characters.currentCharacters.return_value = [alice, bob]
 
     assert controller.character_selection_text() == '"Alice", "Bob"'
 
-    window.lstCharacters.currentCharacters.return_value = []
+    panel.characters.currentCharacters.return_value = []
     assert controller.character_selection_text() == ""
 
 
 def test_delete_characters_removes_each_character_and_clears_pov_references():
-    controller, window = make_controller()
-    window.lstCharacters.currentCharacterIDs.return_value = ["alice", "bob"]
-    window.mdlOutline.findItemsByPOV.side_effect = [
+    controller, models, panel, _nav, _dialogs = make_controller()
+    panel.characters.currentCharacterIDs.return_value = ["alice", "bob"]
+    models.outline.findItemsByPOV.side_effect = [
         ["alice-scene"],
         ["bob-scene"],
     ]
     alice_scene = MagicMock()
     bob_scene = MagicMock()
-    window.mdlOutline.getItemByID.side_effect = {
+    models.outline.getItemByID.side_effect = {
         "alice-scene": alice_scene,
         "bob-scene": bob_scene,
     }.get
 
-    with patch.object(
-        QMessageBox, "warning", return_value=QMessageBox.Yes
-    ):
-        deleted = controller.delete_characters()
+    deleted = controller.delete_characters()
 
     assert deleted == ["alice", "bob"]
-    assert window.mdlCharacter.removeCharacter.call_args_list == [
+    assert models.characters.removeCharacter.call_args_list == [
         call("alice"),
         call("bob"),
     ]
@@ -54,35 +71,76 @@ def test_delete_characters_removes_each_character_and_clears_pov_references():
 
 
 def test_delete_characters_respects_cancel():
-    controller, window = make_controller()
-    window.lstCharacters.currentCharacterIDs.return_value = ["alice"]
+    controller, models, panel, _nav, _dialogs = make_controller(
+        confirm=False
+    )
+    panel.characters.currentCharacterIDs.return_value = ["alice"]
 
-    with patch.object(
-        QMessageBox, "warning", return_value=QMessageBox.No
-    ):
-        deleted = controller.delete_characters()
+    deleted = controller.delete_characters()
 
     assert deleted == []
-    window.mdlCharacter.removeCharacter.assert_not_called()
+    models.characters.removeCharacter.assert_not_called()
 
 
 def test_remove_character_info_passes_explicit_unique_rows_to_model():
-    controller, window = make_controller()
-    window.lstCharacters.currentCharacterID.return_value = "alice"
-    first = MagicMock()
-    first.row.return_value = 2
-    duplicate = MagicMock()
-    duplicate.row.return_value = 2
-    second = MagicMock()
-    second.row.return_value = 0
-    window.tblPersoInfos.selectedIndexes.return_value = [
-        first,
-        duplicate,
-        second,
-    ]
+    controller, models, panel, _nav, _dialogs = make_controller()
+    panel.characters.currentCharacterID.return_value = "alice"
+    rows = []
+    for row in (2, 2, 0):
+        index = MagicMock()
+        index.row.return_value = row
+        rows.append(index)
+    panel.info.selectedIndexes.return_value = rows
 
     controller.remove_character_info()
 
-    window.mdlCharacter.removeCharacterInfo.assert_called_once_with(
+    models.characters.removeCharacterInfo.assert_called_once_with(
         "alice", {0, 2}
     )
+
+
+def test_selection_is_recorded_as_one_statement():
+    """Pushing the entry and saying whether the selection was empty were
+    always used together -- the second decides whether the first replaces
+    the last entry or follows it.
+    """
+    controller, _models, panel, navigation, _dialogs = make_controller()
+    alice = MagicMock()
+    alice.ID.return_value = "alice"
+    panel.characters.currentCharacters.return_value = [alice]
+
+    controller.record_current_selection()
+
+    navigation.record.assert_called_once_with(
+        ("character", "alice"),
+        selection_empty=False,
+    )
+
+    panel.characters.currentCharacters.return_value = []
+    navigation.record.reset_mock()
+
+    controller.record_current_selection()
+
+    navigation.record.assert_called_once_with(
+        ("character", None),
+        selection_empty=True,
+    )
+
+
+def test_information_is_asked_for_through_the_dialog_service():
+    controller, models, panel, _nav, dialogs = make_controller()
+    panel.characters.currentCharacterID.return_value = "alice"
+    dialogs.ask_name_and_value.return_value = ("Eyes", "Green")
+
+    controller.add_character_info()
+
+    models.characters.addCharacterInfo.assert_called_once_with(
+        "alice", "Eyes", "Green",
+    )
+
+    models.characters.addCharacterInfo.reset_mock()
+    dialogs.ask_name_and_value.return_value = None
+
+    controller.add_character_info()
+
+    models.characters.addCharacterInfo.assert_not_called()

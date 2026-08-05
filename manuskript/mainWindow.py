@@ -21,6 +21,11 @@ from manuskript.controllers.view_configuration_controller import (
     ViewConfigurationController,
 )
 from manuskript.controllers.world_controller import WorldController
+from manuskript.ui.panel_services import PanelDialogs, PanelNavigation
+from manuskript.ui.views.character_panel import (
+    CharacterModels,
+    CharacterPanelView,
+)
 from manuskript.media_types import core_registry
 from manuskript.panels import PanelContext, PanelRegistry
 from manuskript.panels import core as core_panels
@@ -142,13 +147,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
         )
-        self.characterController = CharacterController(self)
-        self.plotController = PlotController(self)
-        self.worldController = WorldController(self)
-        self.navigationController = NavigationController(
-            MainNavigationView(self)
-        )
-        self.history = self.navigationController.history
         # The project layer. A window is one view of it, so it may be
         # handed one that already exists; a window given none composes
         # its own, which is a single-window application.
@@ -157,6 +155,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if project_runtime is not None
             else ProjectRuntime(settings_manager=settings_manager)
         )
+        # Panel controllers are given the panel they drive and the two
+        # services every panel needs, rather than a window that can
+        # answer anything.
+        self.panelNavigation = PanelNavigation(self)
+        self.panelDialogs = PanelDialogs(self)
+        self.characterController = CharacterController(
+            CharacterModels(self.projectRuntime),
+            CharacterPanelView.for_window(self),
+            self.panelNavigation,
+            self.panelDialogs,
+        )
+        self.plotController = PlotController(self)
+        self.worldController = WorldController(self)
+        self.navigationController = NavigationController(
+            MainNavigationView(self)
+        )
+        self.history = self.navigationController.history
         # Aliases onto the runtime for everything that still reaches
         # these by attribute. They retire as callers learn to ask the
         # runtime; what they name has moved, not what it does.
