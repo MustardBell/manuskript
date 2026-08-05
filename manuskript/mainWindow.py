@@ -21,6 +21,7 @@ from manuskript.controllers.view_configuration_controller import (
 from manuskript.controllers.world_controller import WorldController
 from manuskript.media_types import core_registry
 from manuskript.panels import PanelRegistry
+from manuskript.ui.panels import PanelHost
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
 )
@@ -187,6 +188,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             panel_registry if panel_registry is not None
             else PanelRegistry()
         )
+        # Window scope: this window's own copies of whatever the shared
+        # registry describes.
+        self.panelHost = PanelHost(self, self.panelRegistry)
         # Structure edits are undoable per project; the stack is
         # cleared whenever a different project is opened.
         self.undoStack = QUndoStack(self)

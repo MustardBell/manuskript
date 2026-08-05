@@ -5,30 +5,54 @@ from PyQt5.QtWidgets import (
     QAction,
     QDialog,
     QDialogButtonBox,
-    QDockWidget,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
     QVBoxLayout,
-    QWidget,
 )
 
 from manuskript.domain.plugin_data import PluginProjectContext
+from manuskript.panels import (
+    DOCK,
+    PanelContext,
+    PanelDescriptor,
+    PanelRegistry,
+)
+from manuskript.ui.panels import PanelHost
 
 
 class ProjectPanelHost:
-    """Host project-scoped plugin widgets and their raw files."""
+    """Offer project-scoped plugin panels: registry entries and a menu.
 
-    def __init__(self, window, runtime, menu=None):
+    The docks themselves are built by the window's PanelHost like any
+    other panel; this class translates plugin contributions into panel
+    descriptors, keeps them current as plugins come and go, and gates
+    the menu on a project being open.
+    """
+
+    def __init__(
+            self, window, runtime, menu=None,
+            panel_registry=None, panel_host=None):
         self.window = window
         self.runtime = runtime
+        self.panelRegistry = (
+            panel_registry
+            if panel_registry is not None
+            else getattr(window, "panelRegistry", None) or PanelRegistry()
+        )
+        self.panels = (
+            panel_host
+            if panel_host is not None
+            else getattr(window, "panelHost", None)
+            or PanelHost(window, self.panelRegistry)
+        )
         self.actions = {}
-        self.docks = {}
+        self._panelIds = {}
+        self._owners = {}
         self.rawDataDialog = None
         self._menuEntries = []
 
@@ -45,9 +69,12 @@ class ProjectPanelHost:
             record.id: record
             for record in self.runtime.registry.records("project_panel")
         }
-        for contribution_id in tuple(self.docks):
+        for contribution_id in tuple(self._panelIds):
             if contribution_id not in records:
-                self.close_panel(contribution_id)
+                self._forget(contribution_id)
+        for contribution_id, record in records.items():
+            if contribution_id not in self._panelIds:
+                self._declare(contribution_id, record)
 
         for action in self._menuEntries:
             self.menu.removeAction(action)
@@ -83,6 +110,81 @@ class ProjectPanelHost:
         self.rawDataAction.triggered.connect(self.open_raw_data)
         self.set_project_open(self._project_is_open())
 
+    # -------------------------------------------------- registry bridge
+
+    def _declare(self, contribution_id, record):
+        """One contribution becomes one panel the whole application sees.
+
+        The dock keeps its historic objectName so saved window layouts
+        keep recognising it; only the panel id is new vocabulary.
+        """
+        panel_id = "plugin.{}.{}".format(
+            record.plugin_id,
+            contribution_id,
+        )
+        self.panelRegistry.register(PanelDescriptor(
+            id=panel_id,
+            title=record.contribution.descriptor.name,
+            placement=DOCK,
+            requires_project=True,
+            object_name="pluginProjectPanel.{}".format(contribution_id),
+            widget_factory=partial(self._build_widget, contribution_id),
+        ))
+        self._panelIds[contribution_id] = panel_id
+        self._owners[contribution_id] = record.plugin_id
+
+    def _forget(self, contribution_id):
+        panel_id = self._panelIds.pop(contribution_id)
+        self._owners.pop(contribution_id, None)
+        self.panels.close(panel_id)
+        self.panelRegistry.deregister(panel_id)
+
+    def _build_widget(self, contribution_id, context, parent):
+        """Build the plugin's widget with its own context, looked up
+        fresh so a reloaded plugin serves its current code."""
+        record = self._record(contribution_id)
+        if record is None:
+            raise RuntimeError(
+                "Plugin panel {} is no longer registered.".format(
+                    contribution_id
+                )
+            )
+        window = context.window
+        contribution = record.contribution
+        plugin_context = PluginProjectContext(
+            plugin_id=record.plugin_id,
+            project_file=window.currentProject,
+            files=window.projectPluginData.namespace(
+                record.plugin_id,
+                on_change=window.projectManager.startTimerNoChanges,
+            ),
+            default_file=contribution.default_file,
+            show_status=window.statusPresenter.show,
+        )
+        return contribution.widget_factory(plugin_context, parent)
+
+    def _record(self, contribution_id):
+        return next(
+            (
+                value
+                for value in self.runtime.registry.records(
+                    "project_panel"
+                )
+                if value.id == contribution_id
+            ),
+            None,
+        )
+
+    @property
+    def docks(self):
+        """The open dock containers, by contribution id."""
+        docks = {}
+        for contribution_id, panel_id in self._panelIds.items():
+            instance = self.panels.instance(panel_id)
+            if instance is not None:
+                docks[contribution_id] = instance.container
+        return docks
+
     def set_project_open(self, project_open):
         for action in self.actions.values():
             action.setEnabled(project_open)
@@ -100,84 +202,31 @@ class ProjectPanelHost:
     def open_panel(self, contribution_id):
         if not self._project_is_open():
             return None
-        existing = self.docks.get(contribution_id)
-        if existing is not None:
-            existing.show()
-            existing.raise_()
-            return existing
-
-        record = next(
-            (
-                value
-                for value in self.runtime.registry.records(
-                    "project_panel"
-                )
-                if value.id == contribution_id
-            ),
-            None,
-        )
-        if record is None:
+        panel_id = self._panelIds.get(contribution_id)
+        if panel_id is None:
             return None
-        contribution = record.contribution
-        context = PluginProjectContext(
-            plugin_id=record.plugin_id,
-            project_file=self.window.currentProject,
-            files=self.window.projectPluginData.namespace(
-                record.plugin_id,
-                on_change=self.window.projectManager.startTimerNoChanges,
-            ),
-            default_file=contribution.default_file,
+        instance = self.panels.open(panel_id, PanelContext(
+            window=self.window,
             show_status=self.window.statusPresenter.show,
-        )
-        dock = QDockWidget(contribution.descriptor.name, self.window)
-        dock.setObjectName(
-            "pluginProjectPanel.{}".format(contribution_id)
-        )
-        dock.setAttribute(Qt.WA_DeleteOnClose, True)
-        try:
-            widget = contribution.widget_factory(context, dock)
-            if not isinstance(widget, QWidget):
-                raise TypeError(
-                    "Project panel factories must return QWidget "
-                    "instances."
-                )
-        except Exception as error:
-            dock.deleteLater()
-            QMessageBox.critical(
-                self.window,
-                self.window.tr("Plugin panel failed"),
-                "{}\n\n{}".format(
-                    contribution.descriptor.name,
-                    error,
-                ),
-            )
-            return None
-
-        dock.setWidget(widget)
-        dock.destroyed.connect(
-            partial(self._dock_destroyed, contribution_id)
-        )
-        self.window.addDockWidget(Qt.RightDockWidgetArea, dock)
-        self.docks[contribution_id] = dock
-        dock.show()
-        return dock
+        ))
+        return instance.container if instance is not None else None
 
     def close_panel(self, contribution_id):
-        dock = self.docks.pop(contribution_id, None)
-        if dock is not None:
-            dock.close()
+        panel_id = self._panelIds.get(contribution_id)
+        if panel_id is not None:
+            self.panels.close(panel_id)
 
     def close_plugin(self, plugin_id):
         ids = [
-            record.id
-            for record in self.runtime.registry.records("project_panel")
-            if record.plugin_id == plugin_id
+            contribution_id
+            for contribution_id, owner in self._owners.items()
+            if owner == plugin_id
         ]
         for contribution_id in ids:
             self.close_panel(contribution_id)
 
     def close_all(self):
-        for contribution_id in tuple(self.docks):
+        for contribution_id in tuple(self._panelIds):
             self.close_panel(contribution_id)
         if self.rawDataDialog is not None:
             self.rawDataDialog.close()
@@ -203,11 +252,6 @@ class ProjectPanelHost:
         if self.rawDataDialog is not None:
             self.rawDataDialog.deleteLater()
         self.rawDataDialog = None
-
-    def _dock_destroyed(self, contribution_id, _object=None):
-        docks = getattr(self, "docks", None)
-        if docks is not None:
-            docks.pop(contribution_id, None)
 
     def _project_is_open(self):
         manager = getattr(self.window, "projectManager", None)

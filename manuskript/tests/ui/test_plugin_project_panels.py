@@ -89,10 +89,12 @@ def test_refresh_closes_panel_when_contribution_disappears():
     assert host.actions == {}
 
 
-def test_late_dock_destruction_tolerates_host_teardown():
-    host = ProjectPanelHost.__new__(ProjectPanelHost)
+def test_late_container_destruction_tolerates_host_teardown():
+    from manuskript.ui.panels import PanelHost
 
-    host._dock_destroyed("example.notes.panel")
+    host = PanelHost.__new__(PanelHost)
+
+    host._container_destroyed("plugin.example.notes.example.notes.panel")
 
 
 def test_raw_plugin_data_remains_editable_without_plugin():

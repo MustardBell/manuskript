@@ -1,0 +1,131 @@
+"""One window's panels, built from the shared registry.
+
+Each workspace window owns one host. The host builds a panel's widget
+from its descriptor, wraps it in whatever its placement calls for, and
+keeps the living instance. It is the only code that knows how a panel is
+mounted -- which is what makes moving an instance to another window a
+change of host rather than a storm of signals.
+"""
+
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, Optional
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QDockWidget, QMessageBox, QWidget
+
+from manuskript.panels import DOCK, PanelDescriptor
+
+
+@dataclass
+class PanelInstance:
+    """One living panel in one window.
+
+    ``container`` is the mount -- a dock today, possibly nothing for a
+    widget sitting directly in a splitter. ``action`` is the visibility
+    toggle where the panel has one. The instance belongs to exactly one
+    host at a time; transfer means release from one and adopt by another.
+    """
+
+    descriptor: PanelDescriptor
+    widget: QWidget
+    container: Optional[QWidget] = None
+    action: Optional[Any] = None
+    host: Optional["PanelHost"] = None
+
+
+class PanelHost:
+    """Build, track and close the panels of a single window."""
+
+    def __init__(self, window, registry):
+        self.window = window
+        self.registry = registry
+        self._instances = {}
+
+    def instance(self, panel_id):
+        return self._instances.get(panel_id)
+
+    @property
+    def instances(self):
+        return dict(self._instances)
+
+    def open(self, panel_id, context):
+        """Show a panel, building it first if this window has none.
+
+        Returns the instance, or None when the factory failed -- the
+        failure is reported to the person, not raised at the caller,
+        because a broken panel must not take the action that opened it
+        down with it.
+        """
+        existing = self._instances.get(panel_id)
+        if existing is not None:
+            if existing.container is not None:
+                existing.container.show()
+                existing.container.raise_()
+            return existing
+        descriptor = self.registry.descriptor(panel_id)
+        if descriptor.placement != DOCK:
+            raise NotImplementedError(
+                "Panel {} has placement {!r}, which this host cannot "
+                "mount yet.".format(panel_id, descriptor.placement)
+            )
+        return self._open_dock(descriptor, context)
+
+    def _open_dock(self, descriptor, context):
+        window = self.window
+        dock = QDockWidget(descriptor.title, window)
+        dock.setObjectName(
+            descriptor.object_name or "panel.{}".format(descriptor.id)
+        )
+        dock.setAttribute(Qt.WA_DeleteOnClose, True)
+        try:
+            if descriptor.widget_factory is None:
+                raise TypeError(
+                    "Panel {} has no widget factory.".format(
+                        descriptor.id
+                    )
+                )
+            widget = descriptor.widget_factory(context, dock)
+            if not isinstance(widget, QWidget):
+                raise TypeError(
+                    "Panel factories must return QWidget instances."
+                )
+        except Exception as error:
+            dock.deleteLater()
+            QMessageBox.critical(
+                window,
+                window.tr("Panel failed"),
+                "{}\n\n{}".format(descriptor.title, error),
+            )
+            return None
+
+        dock.setWidget(widget)
+        dock.destroyed.connect(
+            partial(self._container_destroyed, descriptor.id)
+        )
+        window.addDockWidget(Qt.RightDockWidgetArea, dock)
+        instance = PanelInstance(
+            descriptor=descriptor,
+            widget=widget,
+            container=dock,
+            host=self,
+        )
+        self._instances[descriptor.id] = instance
+        dock.show()
+        return instance
+
+    def close(self, panel_id):
+        instance = self._instances.pop(panel_id, None)
+        if instance is not None and instance.container is not None:
+            instance.container.close()
+
+    def close_all(self):
+        for panel_id in tuple(self._instances):
+            self.close(panel_id)
+
+    def _container_destroyed(self, panel_id, _object=None):
+        # Qt may destroy containers after the host is already being torn
+        # down, so nothing here can assume attributes still exist.
+        instances = getattr(self, "_instances", None)
+        if instances is not None:
+            instances.pop(panel_id, None)

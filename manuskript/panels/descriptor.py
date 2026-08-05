@@ -50,6 +50,10 @@ class PanelDescriptor:
     group: str = ""
     default_visible: bool = True
     requires_project: bool = False
+    #: The Qt objectName for the panel's container. Saved window layouts
+    #: identify docks by this, so it stays what it always was even where
+    #: the panel id could not (plugin docks predate panel ids).
+    object_name: str = ""
     widget_factory: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):

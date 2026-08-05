@@ -1,5 +1,6 @@
 """Panel descriptions and their application-wide registry, Qt-free."""
 
+from manuskript.panels.context import PanelContext
 from manuskript.panels.descriptor import (
     DOCK,
     PLACEMENTS,
@@ -16,6 +17,7 @@ __all__ = [
     "DOCK",
     "PLACEMENTS",
     "SPLITTER_SLOT",
+    "PanelContext",
     "PanelDescriptor",
     "PanelRegistry",
     "PanelRegistryError",
