@@ -312,9 +312,44 @@ class EditorWorkspaceContribution:
 
 
 @dataclass(frozen=True)
+class ContentSignature:
+    """A pattern core matches so a plugin need not read foreign documents.
+
+    A page type has to be recognised before any property marks an item as
+    belonging to it, and only the plugin knows its own format. Declaring the
+    format instead of inspecting the text resolves that: the plugin remains
+    the authority on what its pages look like, while core does the matching
+    and the plugin is never handed a document it does not own.
+
+    All declared parts must match. Patterns are regular expressions applied
+    with MULTILINE, against text normalised to newline endings.
+    """
+
+    starts_with: str = ""
+    ends_with: str = ""
+    contains: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "contains",
+            tuple(str(value) for value in self.contains),
+        )
+        if not any((self.starts_with, self.ends_with, self.contains)):
+            raise ValueError(
+                "A content signature must declare at least one pattern."
+            )
+
+
+@dataclass(frozen=True)
 class PageTypeContribution:
     descriptor: ExtensionDescriptor
     property_label: str
+    #: Declarative recognition. Preferred: core matches it, so the plugin
+    #: never receives the text of a document that is not its own.
+    signature: Optional[ContentSignature] = None
+    #: Escape hatch for formats a signature cannot express. Receives a
+    #: bounded window of the document, not the whole of it.
     detector: Optional[Callable[[str], bool]] = None
     parser_factory: Optional[Callable[[], Any]] = None
     renderer_factory: Optional[Callable[[], Any]] = None

@@ -3,6 +3,7 @@
 from manuskript.plugins.api import (
     PLUGIN_API_VERSION,
     ConversionContribution,
+    ContentSignature,
     ConversionArtifact,
     EditorWorkspaceContext,
     EditorWorkspaceContribution,
@@ -34,6 +35,7 @@ from manuskript.plugins.runtime import PluginRuntime
 __all__ = [
     "PLUGIN_API_VERSION",
     "ConversionContribution",
+    "ContentSignature",
     "ConversionArtifact",
     "EditorWorkspaceContext",
     "EditorWorkspaceContribution",

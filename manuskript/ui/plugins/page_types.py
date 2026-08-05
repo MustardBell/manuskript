@@ -1,4 +1,5 @@
 import logging
+import re
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -13,6 +14,30 @@ from manuskript.ui.editors.markdownPresentation import (
 
 
 LOGGER = logging.getLogger(__name__)
+
+#: Bytes of head and of tail a callable detector may inspect.
+RECOGNITION_WINDOW = 4096
+
+
+def matches_signature(signature, text):
+    """Whether ``text`` satisfies every part of a declared signature."""
+    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    checks = []
+    if signature.starts_with:
+        checks.append(signature.starts_with)
+    if signature.ends_with:
+        checks.append(signature.ends_with)
+    checks.extend(signature.contains)
+    for pattern in checks:
+        try:
+            if re.search(pattern, normalized, re.MULTILINE) is None:
+                return False
+        except re.error:
+            LOGGER.exception(
+                "Invalid page type signature pattern %r", pattern
+            )
+            return False
+    return True
 
 
 class PageTypeService(QObject):
@@ -57,14 +82,38 @@ class PageTypeService(QObject):
             return False
         contribution_id = contribution.descriptor.id
         if item.hasPluginValue(contribution_id):
+            # Already decided for this item: recognition is a cold start
+            # problem only, and the answer is recorded once it is known.
             return bool(item.pluginValue(contribution_id))
+        if contribution.signature is not None:
+            # Core matches the plugin's declared pattern, so plugin code is
+            # never handed the text of a document that is not its own.
+            return matches_signature(contribution.signature, item.text())
         if contribution.detector is None:
             return False
         try:
-            return bool(contribution.detector(item.text()))
+            return bool(contribution.detector(
+                self.recognition_window(item.text())
+            ))
         except Exception as error:
             self.report_error(contribution, error)
             return False
+
+    @staticmethod
+    def recognition_window(text):
+        """The slice a callable detector may see.
+
+        A signature is preferred precisely because it needs no window. For
+        formats a signature cannot express, the head and tail are enough to
+        spot a delimited document while keeping the body out of reach.
+        """
+        text = str(text or "")
+        if len(text) <= 2 * RECOGNITION_WINDOW:
+            return text
+        return "{}\n{}".format(
+            text[:RECOGNITION_WINDOW],
+            text[-RECOGNITION_WINDOW:],
+        )
 
     def set_enabled(self, item, contribution, enabled):
         if not self.is_applicable(item, contribution):
