@@ -14,6 +14,7 @@ from manuskript.plugins.api import (
     PageTypeContribution,
     PluginSettingsContribution,
     ProjectPanelContribution,
+    TransformContribution,
     contribution_descriptor,
 )
 from manuskript.plugins.errors import (
@@ -33,6 +34,7 @@ class ContributionKind(str, Enum):
     PAGE_TYPE = "page_type"
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
+    TRANSFORM = "transform"
 
 
 CONTRIBUTION_TYPES = {
@@ -46,7 +48,33 @@ CONTRIBUTION_TYPES = {
     ContributionKind.PAGE_TYPE: PageTypeContribution,
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
+    ContributionKind.TRANSFORM: TransformContribution,
 }
+
+
+#: Where each kind of contribution names the media types it works with.
+#:
+#: ExportContribution is deliberately absent: its ``output_format`` falls
+#: back to the descriptor ID, so it doubles as an identifier and cannot be
+#: read as a media type without guessing which one it is.
+MEDIA_TYPE_FIELDS = {
+    ContributionKind.CONVERTER: ("source_formats", "target_formats"),
+    ContributionKind.PAGE_RENDERER: ("target_formats",),
+    ContributionKind.TRANSFORM: ("media_type",),
+}
+
+
+def contribution_media_types(kind, contribution):
+    """Every media type one contribution names."""
+    names = set()
+    for attribute in MEDIA_TYPE_FIELDS.get(ContributionKind(kind), ()):
+        value = getattr(contribution, attribute, ())
+        if isinstance(value, str):
+            if value:
+                names.add(value)
+        else:
+            names.update(str(entry) for entry in value)
+    return names
 
 
 @dataclass(frozen=True)
@@ -115,6 +143,9 @@ class PluginRegistrar:
 
     def register_markup(self, contribution):
         self._add(ContributionKind.MARKUP, contribution)
+
+    def register_transform(self, contribution):
+        self._add(ContributionKind.TRANSFORM, contribution)
 
     def _add(self, kind, contribution):
         expected = CONTRIBUTION_TYPES[kind]
@@ -253,3 +284,21 @@ class PluginRegistry:
     @property
     def markup(self):
         return self.contributions(ContributionKind.MARKUP)
+
+    @property
+    def transforms(self):
+        return self.contributions(ContributionKind.TRANSFORM)
+
+    def transforms_for(self, media_type):
+        """Middleware over one media type, in the order it runs."""
+        return tuple(sorted(
+            (
+                contribution
+                for contribution in self.transforms
+                if contribution.media_type == media_type
+            ),
+            key=lambda value: (
+                -value.priority,
+                value.descriptor.id,
+            ),
+        ))

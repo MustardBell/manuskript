@@ -36,7 +36,7 @@ def register(api):
             id='pages.renderer', name='Fancy renderer'),
         page_type_id='pages.type',
         renderer_factory=object,
-        target_formats=('markdown',),
+        target_formats=('text/markdown',),
     ))
     api.register_settings_panel(PluginSettingsContribution(
         descriptor=ExtensionDescriptor(
@@ -70,7 +70,7 @@ def register(api):
             id='other.renderer', name='Borrowed renderer'),
         page_type_id='pages.type',
         renderer_factory=object,
-        target_formats=('markdown',),
+        target_formats=('text/markdown',),
         priority=5,
     ))
 """
@@ -92,9 +92,17 @@ def register(api):
 
 ROUTES = (
     PageRendererRoute(
-        "plain:markdown", "Plain text", "plain", "markdown", "Manuskript",
+        "text/plain|text/markdown", "Plain text",
+        "text/plain", "text/markdown", "Manuskript",
     ),
 )
+
+
+#: Every fixture below renders Markdown, so they all promise the same thing.
+MARKDOWN_PROMISE = {
+    "media_types": ["text/markdown"],
+    "produces": ["text/markdown"],
+}
 
 
 def build_runtime(tmp_path, *sources):
@@ -102,7 +110,12 @@ def build_runtime(tmp_path, *sources):
     for index, source in enumerate(sources):
         plugin_id = "plugin.{}".format(index)
         ids.append(plugin_id)
-        create_plugin(tmp_path, plugin_id=plugin_id, source=source)
+        create_plugin(
+            tmp_path,
+            plugin_id=plugin_id,
+            source=source,
+            manifest=MARKDOWN_PROMISE,
+        )
     runtime = PluginRuntime([tmp_path], InMemoryPluginPreferences(ids))
     runtime.discover()
     runtime.load_enabled()
@@ -231,8 +244,8 @@ def test_gateway_refuses_a_page_type_the_plugin_does_not_own(tmp_path):
         stranger.selected("pages.type", "plain:markdown")
     with pytest.raises(PluginScopeError):
         stranger.select(
-            "pages.type", "plain:markdown", "pages.renderer",
-            representation_format="markdown",
+            "pages.type", "text/plain|text/markdown", "pages.renderer",
+            representation_format="text/markdown",
         )
 
     assert store.load_values(
@@ -249,7 +262,7 @@ def test_gateway_offers_another_plugins_renderer_for_its_own_page_type(
     gateway = PageRoutingGateway(
         "plugin.0", runtime.registry, page_types, lambda: ROUTES)
 
-    candidates = gateway.candidates("pages.type", "markdown")
+    candidates = gateway.candidates("pages.type", "text/markdown")
     ids = [renderer.descriptor.id for renderer in candidates]
 
     # Routing spans plugins: plugin.1's renderer is a legitimate choice
@@ -259,10 +272,10 @@ def test_gateway_offers_another_plugins_renderer_for_its_own_page_type(
     assert gateway.owner_of("pages.renderer") == "plugin.0"
 
     gateway.select(
-        "pages.type", "plain:markdown", "other.renderer",
-        representation_format="markdown",
+        "pages.type", "text/plain|text/markdown", "other.renderer",
+        representation_format="text/markdown",
     )
 
-    assert gateway.selected("pages.type", "plain:markdown") == (
+    assert gateway.selected("pages.type", "text/plain|text/markdown") == (
         "other.renderer"
     )

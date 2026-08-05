@@ -3,8 +3,16 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from manuskript.media_types import MediaType, MediaTypeError
 from manuskript.plugins.errors import PluginManifestError
 
+
+#: The manifest keys that state a promise, and how to say each one.
+PROMISE_VERBS = {
+    "produces": "produce",
+    "consumes": "consume",
+    "transforms": "transform",
+}
 
 PLUGIN_ID = re.compile(
     r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
@@ -29,6 +37,30 @@ class PluginManifest:
     homepage: str = ""
     #: Capability names this plugin cannot work without.
     requires: tuple = ()
+    #: Formats this plugin knows about. Declaring is not a promise: it says
+    #: the name exists and this plugin has an interest in what it resolves
+    #: to. Entries are MediaType objects; one naming a format nobody has
+    #: introduced carries an identifier and nothing else.
+    media_types: tuple = ()
+    #: Converts the raw manuscript into these formats itself.
+    produces: tuple = ()
+    #: Grabs an existing producer of these formats rather than implementing
+    #: them.
+    consumes: tuple = ()
+    #: Middleware: grabs an existing producer of these formats and adds
+    #: things on the way out.
+    transforms: tuple = ()
+
+    @property
+    def promised_media_types(self):
+        """Every format this plugin promised something about."""
+        return tuple(sorted(
+            set(self.produces) | set(self.consumes) | set(self.transforms)
+        ))
+
+    @property
+    def declared_media_type_ids(self):
+        return tuple(media_type.id for media_type in self.media_types)
 
     @classmethod
     def load(cls, filename):
@@ -91,6 +123,12 @@ class PluginManifest:
             )
 
         requires = cls._read_requires(value)
+        media_types = cls._read_media_types(value)
+        promises = {
+            name: cls._read_promise(value, name)
+            for name in ("produces", "consumes", "transforms")
+        }
+        cls._require_declared(plugin_id, media_types, promises)
 
         return cls(
             id=plugin_id,
@@ -104,6 +142,8 @@ class PluginManifest:
             author=str(value.get("author", "")).strip(),
             homepage=str(value.get("homepage", "")).strip(),
             requires=requires,
+            media_types=media_types,
+            **promises,
         )
 
     @staticmethod
@@ -130,3 +170,95 @@ class PluginManifest:
             if name not in names:
                 names.append(name)
         return tuple(names)
+
+    @staticmethod
+    def _read_media_types(value):
+        """Formats this plugin knows about, introduced or merely known.
+
+        A bare string re-declares a format somebody else names, which is
+        the common case: a plugin usually cares about formats core already
+        has. An object introduces one, and only then are attributes needed.
+        """
+        declared = value.get("media_types", ())
+        if isinstance(declared, str) or not isinstance(
+            declared, (list, tuple)
+        ):
+            raise PluginManifestError(
+                "Plugin media_types must be a list of identifiers or "
+                "objects."
+            )
+        media_types = []
+        seen = set()
+        for entry in declared:
+            if isinstance(entry, str):
+                identifier, attributes = entry.strip(), {}
+            elif isinstance(entry, dict):
+                identifier = str(entry.get("id", "")).strip()
+                attributes = {
+                    "label": str(entry.get("label", "")).strip(),
+                    "base": str(entry.get("base", "")).strip(),
+                    "textual": bool(entry.get("textual", True)),
+                }
+            else:
+                raise PluginManifestError(
+                    "Each media_types entry must be an identifier or an "
+                    "object, not {}.".format(type(entry).__name__)
+                )
+            if not identifier:
+                raise PluginManifestError(
+                    "A media_types entry needs an identifier."
+                )
+            if identifier in seen:
+                continue
+            seen.add(identifier)
+            try:
+                media_types.append(MediaType(identifier, **attributes))
+            except MediaTypeError as error:
+                raise PluginManifestError(
+                    "Invalid media type {}: {}".format(identifier, error)
+                ) from error
+        return tuple(media_types)
+
+    @staticmethod
+    def _read_promise(value, key):
+        declared = value.get(key, ())
+        if isinstance(declared, str) or not isinstance(
+            declared, (list, tuple)
+        ):
+            raise PluginManifestError(
+                "Plugin {} must be a list of media type identifiers."
+                .format(key)
+            )
+        names = []
+        for entry in declared:
+            if not isinstance(entry, str) or not entry.strip():
+                raise PluginManifestError(
+                    "Plugin {} entries must be non-empty media type "
+                    "identifiers.".format(key)
+                )
+            name = entry.strip()
+            if name not in names:
+                names.append(name)
+        return tuple(names)
+
+    @staticmethod
+    def _require_declared(plugin_id, media_types, promises):
+        """A promise about an undeclared format refuses the plugin.
+
+        Both facts are in the manifest, so this is settled at discovery and
+        the plugin's code is never imported. Declaring without promising is
+        fine and useful; promising without declaring is a manifest that
+        contradicts itself.
+        """
+        declared = {media_type.id for media_type in media_types}
+        for key, names in sorted(promises.items()):
+            undeclared = [name for name in names if name not in declared]
+            if undeclared:
+                raise PluginManifestError(
+                    "Plugin {} promises to {} {}, which it does not "
+                    "declare in media_types.".format(
+                        plugin_id,
+                        PROMISE_VERBS[key],
+                        ", ".join(sorted(undeclared)),
+                    )
+                )

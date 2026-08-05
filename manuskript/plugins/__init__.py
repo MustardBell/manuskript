@@ -27,6 +27,7 @@ from manuskript.plugins.api import (
     ProjectPanelContribution,
     ProjectSnapshot,
     RenderedDocument,
+    TransformContribution,
     WorkspaceDocument,
 )
 from manuskript.converters.markdownToBBCode import MarkupRule
@@ -89,5 +90,6 @@ __all__ = [
     "ProjectPanelContribution",
     "ProjectSnapshot",
     "RenderedDocument",
+    "TransformContribution",
     "WorkspaceDocument",
 ]

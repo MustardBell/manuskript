@@ -401,6 +401,36 @@ class PageRendererContribution:
             )
 
 
+@dataclass(frozen=True)
+class TransformContribution:
+    """Middleware over whatever produces a format.
+
+    A transform takes content in one media type and returns it in the same
+    one: a table-of-contents injector, a link rewriter, a house-style pass.
+    It converts nothing, which is why it is not a converter, and it does not
+    produce the format either -- it waits for something that does and adds
+    to the result.
+
+    Transforms stack. Several may apply to one media type and they run in
+    priority order, highest first, between the producer and the output.
+    """
+
+    descriptor: ExtensionDescriptor
+    media_type: str
+    engine_factory: Callable[[], Any]
+    options: tuple[OptionField, ...] = ()
+    options_view_factory: Optional[Callable[..., Any]] = None
+    priority: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(self, "media_type", str(self.media_type).strip())
+        object.__setattr__(self, "options", tuple(self.options))
+        if not self.media_type:
+            raise ValueError(
+                "Transforms must name the media type they take and return."
+            )
+
+
 class MarkupMode(str, Enum):
     AUGMENT = "augment"
     REPLACE = "replace"
@@ -438,6 +468,7 @@ Contribution = Union[
     EditorWorkspaceContribution,
     PageTypeContribution,
     PageRendererContribution,
+    TransformContribution,
     MarkupContribution,
 ]
 

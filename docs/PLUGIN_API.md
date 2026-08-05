@@ -45,7 +45,17 @@ and the boundary test will refuse a plugin that reaches for it.
   "description": "One sentence.",
   "author": "You",
   "homepage": "https://example.com/thing",
-  "requires": ["markup.bbcode"]
+  "requires": ["markup.bbcode"],
+
+  "media_types": [
+    "text/markdown",
+    "text/x-bbcode",
+    {"id": "application/x-fictionbook+xml",
+     "label": "FictionBook 2", "textual": false}
+  ],
+  "produces":   ["text/markdown"],
+  "consumes":   ["text/x-bbcode"],
+  "transforms": []
 }
 ```
 
@@ -63,6 +73,59 @@ The difference matters:
 
 A malformed `requires` is rejected during discovery, so a typo is reported
 against the manifest rather than surfacing later as a missing service.
+
+---
+
+## Media types: declaring and promising
+
+These are two different acts and the difference is the whole design.
+
+### `media_types` — declaring
+
+Declaring says a format exists and **you have an interest in it**. It is not
+a promise to produce it, consume it, or use it at all.
+
+Declaration is global, non-exclusive, and expected to be repeated. Declare
+`text/x-bbcode` even though Manuskript already does: you did not invent it,
+but if you have a BBCode processor you care what that name resolves to, and
+being on record is what lets the user be warned before they change it.
+
+- a **bare string** re-declares a format somebody already named
+- an **object** introduces one, and supplies `label`, optionally `base`, and
+  `textual`
+
+`base` names the format yours is a kind of — `text/vnd.reddit+markdown` bases
+on `text/markdown` — which seeds what stands in for it when nothing produces
+it yet. Whoever names a format first supplies its attributes; a later
+declaration of the same identifier keeps them and is not an error.
+
+Declaring a format nobody has introduced is fine. The identifier goes on
+record and the attributes arrive when their owner does.
+
+### `produces` / `consumes` / `transforms` — promising
+
+| promise | meaning | needs an existing producer |
+|---|---|---|
+| `produces` | you convert the raw manuscript into this format yourself | no — you *are* one |
+| `consumes` | you grab an existing producer of it rather than implementing it | yes |
+| `transforms` | you are middleware: you grab an existing producer and add things on the way out | yes |
+
+SAMPLE Pages is the worked example. It *consumes* `text/x-bbcode`, because its
+renderer takes Manuskript's BBCode converter rather than implementing
+Markdown→BBCode itself, and it *produces* `text/markdown`, which it builds
+from its own page model. One plugin, different promises, different formats.
+
+**Every format you promise must appear in your own `media_types`, or the
+plugin does not activate.** Both facts are in the manifest, so this is
+settled at discovery and your code is never imported.
+
+A `consumes` or `transforms` entry that nothing currently provides is **not**
+an error. That is the *unassigned* state: the route waits for a plugin, and
+the export includes the page source unrendered rather than failing.
+
+Your contributions must stay inside your promises. A renderer, converter or
+transform naming a format you did not promise to produce, consume or
+transform rejects registration — atomically, so nothing installs.
 
 ---
 
@@ -99,6 +162,7 @@ the plugin is disabled.
 | `register_settings_panel` | `PluginSettingsContribution` |
 | `register_editor_workspace` | `EditorWorkspaceContribution` |
 | `register_index_card_style` | `IndexCardStyleContribution` |
+| `register_transform` | `TransformContribution` |
 
 ---
 
@@ -230,6 +294,10 @@ supported route.
 | Incompatible | `api_version` mismatch |
 | Unsatisfied | a `requires` entry core does not provide |
 | Failed | discovery, import or registration error — see the details pane |
+
+A promise about a format you did not declare, and a contribution naming a
+format you did not promise, both land in **Failed** with the offending
+media type named. The first happens before your code is imported.
 
 An unsatisfied plugin's code is **never imported**. Refusal happens before
 the entry point loads.
