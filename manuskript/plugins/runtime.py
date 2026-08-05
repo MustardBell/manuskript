@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 
 from manuskript.plugins.api import PLUGIN_API_VERSION
+from manuskript.plugins.capabilities import grant
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
     PluginLoadError,
@@ -24,6 +25,8 @@ class PluginStatus(str, Enum):
     DISABLED = "disabled"
     LOADED = "loaded"
     INCOMPATIBLE = "incompatible"
+    #: Sound plugin, but it asked for a service core does not provide.
+    UNSATISFIED = "unsatisfied"
     FAILED = "failed"
 
 
@@ -177,7 +180,24 @@ class PluginRuntime:
             record.error = str(error)
             return record
 
-        registrar = self.registry.registrar(plugin_id)
+        # Negotiate before anything of the plugin's runs. A plugin whose
+        # requirements core cannot meet is refused, not half-started.
+        capabilities, missing = grant(manifest.requires)
+        if missing:
+            record.status = PluginStatus.UNSATISFIED
+            record.error = (
+                "Plugin {} requires {} which this Manuskript does not "
+                "provide.".format(
+                    manifest.id,
+                    ", ".join(missing),
+                )
+            )
+            return record
+
+        registrar = self.registry.registrar(
+            plugin_id,
+            capabilities=capabilities,
+        )
         module_prefix = self._module_prefix(manifest)
         try:
             entry = self._load_entry_point(

@@ -396,6 +396,7 @@ class PluginManagerDialog(QDialog):
             PluginStatus.DISABLED: self.tr("Disabled"),
             PluginStatus.LOADED: self.tr("Enabled"),
             PluginStatus.INCOMPATIBLE: self.tr("Incompatible"),
+            PluginStatus.UNSATISFIED: self.tr("Unsatisfied"),
             PluginStatus.FAILED: self.tr("Failed"),
         }[status]
 

@@ -27,6 +27,8 @@ class PluginManifest:
     description: str = ""
     author: str = ""
     homepage: str = ""
+    #: Capability names this plugin cannot work without.
+    requires: tuple = ()
 
     @classmethod
     def load(cls, filename):
@@ -88,6 +90,8 @@ class PluginManifest:
                 "Plugin entry_point must use 'module:callable' syntax."
             )
 
+        requires = cls._read_requires(value)
+
         return cls(
             id=plugin_id,
             name=name,
@@ -99,4 +103,30 @@ class PluginManifest:
             description=str(value.get("description", "")).strip(),
             author=str(value.get("author", "")).strip(),
             homepage=str(value.get("homepage", "")).strip(),
+            requires=requires,
         )
+
+    @staticmethod
+    def _read_requires(value):
+        """Read declared capability names, rejecting anything unusable.
+
+        A typo here should surface at discovery, where it can be reported
+        against the manifest, rather than as a missing service later.
+        """
+        declared = value.get("requires", ())
+        if isinstance(declared, str) or not isinstance(
+            declared, (list, tuple)
+        ):
+            raise PluginManifestError(
+                "Plugin requires must be a list of capability names."
+            )
+        names = []
+        for entry in declared:
+            if not isinstance(entry, str) or not entry.strip():
+                raise PluginManifestError(
+                    "Plugin requires entries must be non-empty strings."
+                )
+            name = entry.strip()
+            if name not in names:
+                names.append(name)
+        return tuple(names)

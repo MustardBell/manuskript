@@ -16,7 +16,10 @@ from manuskript.plugins.api import (
     ProjectPanelContribution,
     contribution_descriptor,
 )
-from manuskript.plugins.errors import PluginRegistrationError
+from manuskript.plugins.errors import (
+    PluginRegistrationError,
+    PluginScopeError,
+)
 
 
 class ContributionKind(str, Enum):
@@ -60,9 +63,24 @@ class RegisteredContribution:
 class PluginRegistrar:
     """Stage one plugin's contributions before atomically installing them."""
 
-    def __init__(self, plugin_id):
+    def __init__(self, plugin_id, capabilities=None):
         self.plugin_id = plugin_id
         self._contributions = []
+        self._capabilities = dict(capabilities or {})
+
+    def capability(self, name):
+        """A service this plugin declared and core granted.
+
+        Refuses anything undeclared rather than returning it, so a plugin
+        cannot quietly widen the surface its manifest advertises.
+        """
+        try:
+            return self._capabilities[name]
+        except KeyError:
+            raise PluginScopeError(
+                "Plugin {} did not declare capability {!r} in its "
+                "manifest.".format(self.plugin_id, name)
+            ) from None
 
     @property
     def contributions(self):
@@ -135,8 +153,8 @@ class PluginRegistry:
         self._by_kind = defaultdict(dict)
         self._by_plugin = defaultdict(list)
 
-    def registrar(self, plugin_id):
-        return PluginRegistrar(plugin_id)
+    def registrar(self, plugin_id, capabilities=None):
+        return PluginRegistrar(plugin_id, capabilities=capabilities)
 
     def install(self, plugin_id, contributions):
         contributions = tuple(contributions)
