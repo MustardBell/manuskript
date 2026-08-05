@@ -15,6 +15,9 @@ from PyQt5.QtCore import QObject
 from PyQt5.QtWidgets import QUndoStack
 
 from manuskript.projectManager import ProjectManager
+from manuskript.services.project_view_registry import (
+    ProjectViewRegistry,
+)
 from manuskript.services.revision_coordinator import (
     ProjectRevisionCoordinator,
 )
@@ -49,25 +52,32 @@ class ProjectRuntime(QObject):
             if revision_coordinator is not None
             else ProjectRevisionCoordinator()
         )
-        self.views = None
+        # Every window viewing this project, behind one view-shaped
+        # object, so the manager keeps talking to a single "view".
+        self.views = ProjectViewRegistry()
         self.projectManager = None
         self._projectHistory = project_history
 
-    def attach(self, views, status_reporter):
-        """Give the runtime the view side it reports to, and build the
-        manager around it.
+    def attach(self, view, status_reporter=None):
+        """Register a window's view side, building the manager on the
+        first one.
 
-        Deferred because the first window is what supplies both, and the
-        runtime is composed before any window exists.
+        The manager is deferred because the runtime is composed before
+        any window exists; later windows join a project already running.
         """
-        self.views = views
-        self.projectManager = ProjectManager(
-            views,
-            status_reporter=status_reporter,
-            last_project_store=self._projectHistory,
-            revision_coordinator=self.revisionCoordinator,
-        )
+        self.views.register(view)
+        if self.projectManager is None:
+            self.projectManager = ProjectManager(
+                self.views,
+                status_reporter=status_reporter,
+                last_project_store=self._projectHistory,
+                revision_coordinator=self.revisionCoordinator,
+            )
         return self.projectManager
+
+    def detach(self, view):
+        """Drop a window's view side. The project stays open."""
+        self.views.unregister(view)
 
     @property
     def models(self):

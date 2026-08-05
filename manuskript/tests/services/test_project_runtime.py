@@ -42,15 +42,28 @@ def test_attach_builds_the_manager_around_the_given_view_side():
     runtime = ProjectRuntime(project_history=history)
     assert runtime.projectManager is None
 
-    views = MagicMock()
+    view = MagicMock()
     reporter = MagicMock()
-    manager = runtime.attach(views, status_reporter=reporter)
+    manager = runtime.attach(view, status_reporter=reporter)
 
     assert runtime.projectManager is manager
-    assert runtime.views is views
-    assert manager.ui is views
+    # The manager talks to the registry of views, not to one window, so
+    # a second window can join without the manager changing.
+    assert manager.ui is runtime.views
+    assert runtime.views.views == (view,)
+    assert runtime.views.primary is view
     assert manager.last_project_store is history
     assert manager.revision_coordinator is runtime.revisionCoordinator
+
+    # A second window joins the running project rather than replacing
+    # its manager.
+    second = MagicMock()
+    assert runtime.attach(second) is manager
+    assert runtime.views.views == (view, second)
+
+    runtime.detach(view)
+    assert runtime.views.primary is second
+    assert runtime.projectManager is manager
 
 
 def test_project_facts_read_through_to_the_manager():

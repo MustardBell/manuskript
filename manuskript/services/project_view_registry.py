@@ -1,0 +1,147 @@
+"""Every window viewing one project, behind one view-shaped object.
+
+The project manager talks to a view. With several windows on one project
+there is no single view, so this stands in for all of them and keeps the
+shape the manager already expects.
+
+Two kinds of call, and the difference is what makes this correct rather
+than merely convenient:
+
+* **Announcements** -- models installed, project opened, project closed
+  -- go to every window, because each has its own widgets to update.
+* **Questions** -- save before closing? which project name? -- go to the
+  primary view alone. Asking four windows whether to save would ask the
+  person four times, and state shared by all of them would be captured
+  four times over.
+
+With one window registered this behaves exactly as that window did.
+"""
+
+
+class ProjectViewRegistry:
+    """The project's views, addressable as one."""
+
+    def __init__(self, views=()):
+        self._views = list(views)
+
+    def register(self, view):
+        if view not in self._views:
+            self._views.append(view)
+        return view
+
+    def unregister(self, view):
+        if view in self._views:
+            self._views.remove(view)
+
+    @property
+    def views(self):
+        return tuple(self._views)
+
+    @property
+    def primary(self):
+        """The view that answers questions.
+
+        The first registered -- the window the project was opened from --
+        until it goes away and the next one inherits the role.
+        """
+        return self._views[0] if self._views else None
+
+    # ------------------------------------------- shared project state
+    # Identical whichever view is asked, since all of them show the one
+    # project.
+
+    @property
+    def settings(self):
+        view = self.primary
+        return view.settings if view is not None else None
+
+    @property
+    def model_parent(self):
+        view = self.primary
+        return view.model_parent if view is not None else None
+
+    # ------------------------------------------------- announcements
+
+    def install_models(self, models):
+        for view in self.views:
+            view.install_models(models)
+
+    def sync_to_state(self, project_open):
+        for view in self.views:
+            view.sync_to_state(project_open)
+
+    def connect_project(self):
+        for view in self.views:
+            view.connect_project()
+
+    def apply_loaded_settings(self):
+        for view in self.views:
+            view.apply_loaded_settings()
+
+    def project_opened(self):
+        for view in self.views:
+            view.project_opened()
+
+    def prepare_close(self):
+        for view in self.views:
+            view.prepare_close()
+
+    def prepare_model_replacement(self):
+        for view in self.views:
+            view.prepare_model_replacement()
+
+    def flush_pending_edits(self):
+        for view in self.views:
+            view.flush_pending_edits()
+
+    def disconnect_project(self):
+        for view in self.views:
+            view.disconnect_project()
+
+    def project_closed(self):
+        for view in self.views:
+            view.project_closed()
+
+    # ------------------------------------------------------ questions
+
+    def translate(self, text):
+        view = self.primary
+        return view.translate(text) if view is not None else text
+
+    def project_name(self):
+        view = self.primary
+        return view.project_name() if view is not None else ""
+
+    def change_models(self):
+        """The models whose edits mark the project dirty.
+
+        One project, one set of models, so the primary view speaks for
+        all of them -- connecting the same model once per window would
+        mark the project dirty once per window per edit.
+        """
+        view = self.primary
+        return view.change_models() if view is not None else []
+
+    def confirm_unsaved_changes(self):
+        view = self.primary
+        return view.confirm_unsaved_changes() if view is not None else None
+
+    def show_save_failures(self, files):
+        view = self.primary
+        if view is not None:
+            view.show_save_failures(files)
+
+    def show_load_failures(self, files):
+        view = self.primary
+        if view is not None:
+            view.show_load_failures(files)
+
+    def capture_project_state(self):
+        """Copy view state into the project's settings, once.
+
+        The settings hold one last tab and one set of open documents, so
+        the primary window's are the ones recorded.
+        """
+        view = self.primary
+        if view is not None:
+            view.capture_project_state()
