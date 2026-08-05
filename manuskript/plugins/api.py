@@ -1,5 +1,7 @@
 """Stable, mostly Qt-free contracts exposed to Manuskript plugins."""
 
+import re
+
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import PurePosixPath
@@ -43,6 +45,13 @@ class OptionField:
             )
 
 
+#: Same characters a plugin ID allows, and at least one dot: extension IDs
+#: are addressed globally, so they carry their namespace with them.
+EXTENSION_ID = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+)
+
+
 @dataclass(frozen=True)
 class ExtensionDescriptor:
     id: str
@@ -54,6 +63,12 @@ class ExtensionDescriptor:
     def __post_init__(self):
         if not self.id or not self.name:
             raise ValueError("Extension IDs and names are required.")
+        if not EXTENSION_ID.match(self.id) or "." not in self.id:
+            raise ValueError(
+                "Invalid extension ID {!r}: use a dotted name of letters, "
+                "digits, '.', '_' and '-', prefixed with your plugin's "
+                "namespace, like 'vendor.notes.panel'.".format(self.id)
+            )
 
 
 @dataclass(frozen=True)

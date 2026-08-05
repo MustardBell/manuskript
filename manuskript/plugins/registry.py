@@ -197,7 +197,11 @@ class PluginRegistry:
         collisions = [
             (record.kind.value, record.id)
             for record in contributions
+            # A plugin's own records are about to be replaced, so only
+            # somebody else holding the ID is a conflict: reinstalling a
+            # plugin over itself must not refuse the plugin.
             if record.id in self._by_kind[record.kind]
+            and self._by_kind[record.kind][record.id].plugin_id != plugin_id
         ]
         if collisions:
             kind, contribution_id = collisions[0]

@@ -158,6 +158,13 @@ def register(api):
 Nothing you register takes effect until every contribution validates.
 Registration is atomic: one rejected contribution installs none of them.
 
+Every `ExtensionDescriptor` ID must be a dotted name — letters, digits,
+`.`, `_` and `-`, with at least one dot — and should start with your
+plugin's namespace: `vendor.notes.panel`, not `panel`. IDs are addressed
+globally (routing selections persist them, other plugins may name them),
+so two plugins claiming the same ID for the same kind of contribution is
+a conflict, and the second one to load is refused.
+
 Returning an object from your entry point gives the plugin a lifecycle.
 Both methods are optional, and returning nothing stays valid:
 

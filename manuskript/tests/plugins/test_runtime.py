@@ -110,7 +110,7 @@ def test_failed_registration_leaves_no_partial_contributions(tmp_path):
             "ExportContribution, ExtensionDescriptor)\n"
             "def contribution():\n"
             "    return ExportContribution(\n"
-            "        ExtensionDescriptor('duplicate', 'Duplicate'),"
+            "        ExtensionDescriptor('example.duplicate', 'Duplicate'),"
             " object)\n"
             "def register(api):\n"
             "    api.register_exporter(contribution())\n"
@@ -308,7 +308,7 @@ def test_plugin_package_supports_relative_imports(tmp_path):
             "ExportContribution, ExtensionDescriptor)\n"
             "def register(api):\n"
             "    api.register_exporter(ExportContribution(\n"
-            "        ExtensionDescriptor('relative', extension_name),"
+            "        ExtensionDescriptor('example.relative', extension_name),"
             " object))\n"
         ),
     )
