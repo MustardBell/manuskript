@@ -116,9 +116,7 @@ class PanelHost:
     def _open_dock(self, descriptor, context):
         window = self.window
         dock = QDockWidget(descriptor.title, window)
-        dock.setObjectName(
-            descriptor.object_name or "panel.{}".format(descriptor.id)
-        )
+        dock.setObjectName(self._dock_name(descriptor))
         dock.setAttribute(Qt.WA_DeleteOnClose, True)
         try:
             if descriptor.widget_factory is None:
@@ -145,7 +143,7 @@ class PanelHost:
         dock.destroyed.connect(
             partial(self._container_destroyed, descriptor.id)
         )
-        window.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self._place_dock(dock)
         instance = PanelInstance(
             descriptor=descriptor,
             widget=widget,
@@ -155,6 +153,39 @@ class PanelHost:
         self._instances[descriptor.id] = instance
         dock.show()
         return instance
+
+    @staticmethod
+    def _dock_name(descriptor):
+        """The one name this panel's dock answers to.
+
+        Saved window layouts identify docks by it, so a panel that had
+        one before the panel vocabulary existed keeps it.
+        """
+        return (
+            descriptor.object_name
+            or "panel.{}".format(descriptor.id)
+        )
+
+    def _place_dock(self, dock, default_area=Qt.RightDockWidgetArea):
+        """Put a dock where the person last left it, if that is known.
+
+        Panels are built when they are asked for, which is long after
+        the window applied its saved layout -- and QMainWindow.restoreState
+        can only place docks that existed when it ran. So every dock
+        created later asks to be restored by name, and falls back to the
+        default area when the layout has never seen it.
+        """
+        window = self.window
+        # Asked for by name before being put anywhere. Adding it to an
+        # area first commits it there and makes the restore silently do
+        # nothing -- it still reports success, which is how this looked
+        # like Qt ignoring us rather than us asking too late.
+        if window.restoreDockWidget(dock):
+            return True
+        # A dock the saved layout has never seen: it goes where panels
+        # of its kind go.
+        window.addDockWidget(default_area, dock)
+        return False
 
     def _slot_splitter(self, descriptor):
         """The splitter a panel belongs in, if it belongs in one."""
@@ -276,16 +307,13 @@ class PanelHost:
             splitter.insertWidget(descriptor.slot.index, widget)
         else:
             dock = QDockWidget(descriptor.title, self.window)
-            dock.setObjectName(
-                descriptor.object_name
-                or "panel.{}".format(descriptor.id)
-            )
+            dock.setObjectName(self._dock_name(descriptor))
             dock.setAttribute(Qt.WA_DeleteOnClose, True)
             dock.setWidget(widget)
             dock.destroyed.connect(
                 partial(self._container_destroyed, descriptor.id)
             )
-            self.window.addDockWidget(Qt.RightDockWidgetArea, dock)
+            self._place_dock(dock)
             instance.container = dock
             dock.show()
         instance.action = self._toggle_action(descriptor, widget)
@@ -320,9 +348,12 @@ class PanelHost:
         instance = self._detach(panel_id, keep=True)
         widget = instance.widget
         dock = QDockWidget(self.window.tr(descriptor.title), self.window)
-        dock.setObjectName(
-            "panel.floating.{}".format(descriptor.id)
-        )
+        # The same name it has when docked. A panel is one thing whether
+        # it is floating or not, and Qt records floating state against
+        # the name -- two names would mean a panel left floating came
+        # back docked, having saved its geometry under a name nothing
+        # would look for again.
+        dock.setObjectName(self._dock_name(descriptor))
         dock.setWidget(widget)
         dock.setFloating(True)
         instance.container = dock

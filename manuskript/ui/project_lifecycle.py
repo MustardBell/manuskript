@@ -133,6 +133,9 @@ class ProjectLifecycleView:
         if self.window.pluginUi is not None:
             self.window.pluginUi.project_opened()
         self.window.switchToProject()
+        # The window's own arrangement is current again, so anything
+        # remembered from the last close is stale.
+        self.window.windowState.forget_captured_layout()
         # Only now is there a project for extra windows to show; a
         # workspace window without one is just a welcome screen.
         self.window.restoreWorkspaceWindows()
@@ -192,9 +195,10 @@ class ProjectLifecycleView:
         dialog.open()
 
     def prepare_close(self):
-        # Before anything is torn down: this window's own documents are
-        # only knowable while it still has them open.
-        self.window.windowState.capture_documents()
+        # Before anything is torn down: this window's documents and the
+        # arrangement of its panels are only knowable while it still
+        # has them.
+        self.window.windowState.capture_layout()
         if self.window.pluginUi is not None:
             self.window.pluginUi.prepare_project_close()
         # Structure history belongs to one project. Undoing a deletion from

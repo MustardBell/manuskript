@@ -7,7 +7,7 @@ message, not the window.
 """
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QLabel, QMainWindow
+from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow
 
 from manuskript.panels import (
     PanelContext,
@@ -101,4 +101,61 @@ def test_close_forgets_the_instance():
     host.close("core.notes")
 
     assert host.instance("core.notes") is None
+    window.close()
+
+
+def test_a_dock_is_restored_by_name_before_being_placed():
+    """Panels are built when asked for, long after the window applied
+    its saved layout, and QMainWindow.restoreState can only place docks
+    that existed when it ran. So a later dock asks to be restored by
+    name -- and it has to ask before being added to an area, because
+    adding it first commits it there and makes the restore do nothing
+    while still reporting success.
+    """
+    window = QMainWindow()
+    window.setCentralWidget(QLabel("body"))
+    # A layout in which this panel sat on the left.
+    seed = QDockWidget("Notes", window)
+    seed.setObjectName("panel.vendor.notes")
+    seed.setWidget(QLabel("n"))
+    window.addDockWidget(Qt.LeftDockWidgetArea, seed)
+    saved = window.saveState()
+    seed.setParent(None)
+
+    later = QMainWindow()
+    later.setCentralWidget(QLabel("body"))
+    later.restoreState(saved)
+    registry = PanelRegistry()
+    registry.register(PanelDescriptor(
+        id="vendor.notes",
+        title="Notes",
+        widget_factory=label_factory,
+    ))
+    host = PanelHost(later, registry)
+
+    instance = host.open("vendor.notes", PanelContext())
+
+    assert later.dockWidgetArea(instance.container) == (
+        Qt.LeftDockWidgetArea
+    )
+    later.close()
+    window.close()
+
+
+def test_a_dock_the_layout_never_saw_goes_to_its_default_area():
+    window = QMainWindow()
+    window.setCentralWidget(QLabel("body"))
+    registry = PanelRegistry()
+    registry.register(PanelDescriptor(
+        id="vendor.fresh",
+        title="Fresh",
+        widget_factory=label_factory,
+    ))
+    host = PanelHost(window, registry)
+
+    instance = host.open("vendor.fresh", PanelContext())
+
+    assert window.dockWidgetArea(instance.container) == (
+        Qt.RightDockWidgetArea
+    )
     window.close()

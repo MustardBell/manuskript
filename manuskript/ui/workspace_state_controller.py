@@ -45,6 +45,9 @@ class WorkspaceStateController:
         #: Read at construction and applied when a project opens, since
         #: there are no documents to reopen until there is a project.
         self._documents = None
+        #: Layout captured while a project was still open, for the parts
+        #: of it that closing a project makes unknowable.
+        self._remembered = {}
 
     @property
     def project_docks(self):
@@ -105,12 +108,21 @@ class WorkspaceStateController:
         window = self.window
         if window.stack.currentIndex() == 1:
             self._remember_project_docks()
+        remembered = self._remembered
         self.store.save(
             WorkspaceWindowState(
                 geometry=window.saveGeometry(),
-                window_state=window.saveState(),
+                # Geometry is still true once a project closes; the dock
+                # layout is not, because closing a project closes the
+                # panels that were in it. So the arrangement recorded is
+                # the one captured while they were still there.
+                window_state=remembered.get(
+                    "window_state", window.saveState(),
+                ),
                 splitters=self._splitter_state(),
-                panels=self._panel_visibility(),
+                panels=remembered.get(
+                    "panels", self._panel_visibility(),
+                ),
                 panel_state=self._panel_state(),
                 docks=dict(self._dock_visibility),
                 documents=self._open_documents(),
@@ -144,6 +156,28 @@ class WorkspaceStateController:
         if editor is not None and self.window.stack.currentIndex() == 1:
             self._documents = editor.tabSplitter.openIndexes()
         return self._documents
+
+    def capture_layout(self):
+        """Remember the arrangement while every panel is still in it.
+
+        Closing a project closes the panels that belonged to it, and
+        QMainWindow.saveState only records the docks that exist when it
+        runs -- so a layout saved after the close has forgotten exactly
+        the panels whose places were worth keeping.
+        """
+        self.capture_documents()
+        if self.window.stack.currentIndex() != 1:
+            return
+        self._remembered["window_state"] = self.window.saveState()
+        self._remembered["panels"] = self._panel_visibility()
+
+    def forget_captured_layout(self):
+        """Take the live arrangement as the truth again.
+
+        Once a project is open the window's own state is current, so a
+        remembered one from the last close would be stale.
+        """
+        self._remembered.clear()
 
     def restore_documents(self):
         """Reopen this window's own documents, if it recorded any.
