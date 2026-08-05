@@ -27,6 +27,7 @@ from manuskript.ui.plugins.export_adapter import (
     create_plugin_exporters,
 )
 from manuskript.ui.plugins.import_adapter import PluginImporterAdapter
+from manuskript.media_types import BBCODE, MARKDOWN
 
 
 def test_plugin_export_adapter_builds_immutable_project_snapshot(
@@ -116,16 +117,17 @@ def test_plugin_converter_is_a_compile_target_not_a_text_workbench(
     class MarkdownSource(basicFormat):
         name = "Markdown"
         implemented = True
-        format_id = "markdown"
+        media_type = MARKDOWN
+        in_memory = True
 
         def settingsWidget(self):
             return SourceSettings()
 
         def pageRenderTarget(self):
-            return "markdown"
+            return MARKDOWN
 
         def pageOutputFormat(self):
-            return "markdown"
+            return MARKDOWN
 
         def artifact(self, _settings):
             captured["page_route"] = getattr(
@@ -160,8 +162,8 @@ def test_plugin_converter_is_a_compile_target_not_a_text_workbench(
             extensions=(".bbcode",),
         ),
         Converter,
-        source_formats=("markdown",),
-        target_formats=("bbcode",),
+        source_formats=(MARKDOWN,),
+        target_formats=(BBCODE,),
     )
     registry = PluginRegistry()
     registrar = registry.registrar("example.plugin")
@@ -188,15 +190,15 @@ def test_plugin_converter_is_a_compile_target_not_a_text_workbench(
     compile_format = groups[0].exportTo[0]
     assert isinstance(compile_format, PluginConversionExportFormat)
     assert compile_format.name == "BBCode"
-    assert compile_format.format_id == "bbcode"
+    assert compile_format.media_type == BBCODE
 
     artifact = compile_format.artifact(compile_format.settingsWidget())
 
     assert artifact.content == "[b]Compiled manuscript[/b]"
     assert captured == {
         "content": "Compiled manuscript",
-        "source": "markdown",
-        "target": "bbcode",
-        "page_route": "bbcode:markdown",
+        "source": MARKDOWN,
+        "target": BBCODE,
+        "page_route": "text/x-bbcode|text/markdown",
     }
     assert not hasattr(source, "_page_renderer_route_override")

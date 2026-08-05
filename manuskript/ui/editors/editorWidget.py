@@ -8,6 +8,16 @@ from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
 from manuskript.commands import DocumentCommand
 from manuskript.functions import AUC
 from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
+from manuskript.ui.editors.editorOverlayButton import (
+    OVERLAY_HEIGHT,
+    OVERLAY_MARGIN,
+)
+from manuskript.ui.editors.editorTextHistory import (
+    EditorTextHistory,
+)
+from manuskript.ui.editors.historyToolButtons import (
+    HistoryToolButton,
+)
 from manuskript.ui.editors.markdownModeToolButton import (
     MarkdownModeToolButton,
 )
@@ -83,7 +93,12 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.markdownPresentation,
             self,
         )
-        self.markdownModeButton.resize(38, 28)
+        self.markdownModeButton.resize(38, OVERLAY_HEIGHT)
+        self.textHistory = EditorTextHistory(self, parent=self)
+        self.undoButton = HistoryToolButton(self.textHistory, False, self)
+        self.redoButton = HistoryToolButton(self.textHistory, True, self)
+        for button in (self.undoButton, self.redoButton):
+            button.resize(32, OVERLAY_HEIGHT)
         self.pageType = None
         markup_profiles = (
             self.editor_context.text_editor.markup_profiles
@@ -102,7 +117,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             else None
         )
         if self.markupProfileButton is not None:
-            self.markupProfileButton.resize(38, 28)
+            self.markupProfileButton.resize(38, OVERLAY_HEIGHT)
             self.markupProfile.changed.connect(
                 self._markupProfileChanged
             )
@@ -126,6 +141,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.txtRedacText.setPageTypeState(self.pageType)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
         self.currentIndex = QModelIndex()
@@ -183,6 +200,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtEditScrollBar.setGeometry(r)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
 
@@ -191,7 +210,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def _positionMarkdownModeButton(self):
         self.markdownModeButton.move(
             max(0, self.width() - self.markdownModeButton.width() - 12),
-            4,
+            OVERLAY_MARGIN,
         )
         if self.markupProfileButton is not None:
             self.markupProfileButton.move(
@@ -201,8 +220,33 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                     - self.markupProfileButton.width()
                     - 4,
                 ),
-                4,
+                OVERLAY_MARGIN,
             )
+        self.undoButton.move(12, OVERLAY_MARGIN)
+        self.redoButton.move(
+            self.undoButton.x() + self.undoButton.width() + 4,
+            OVERLAY_MARGIN,
+        )
+        self._reserveOverlaySpace()
+
+    def _reserveOverlaySpace(self):
+        """Keep the document clear of the buttons floating over it.
+
+        The buttons are children of this widget rather than of a toolbar,
+        so without a reserved strip the first line of the scene scrolls
+        underneath them. The strip goes on the layout holding the whole
+        stack rather than on individual editors: switching to Reading or
+        to a page wizard swaps in a sibling view, and margins applied per
+        editor would vanish with it.
+        """
+        # isVisibleTo, not isVisible: the latter is false while the window
+        # is still hidden, which would drop the strip during construction.
+        reserved = (
+            OVERLAY_MARGIN * 2 + OVERLAY_HEIGHT
+            if self.markdownModeButton.isVisibleTo(self)
+            else 0
+        )
+        self.verticalLayout_2.setContentsMargins(0, reserved, 0, 0)
 
     def _markupProfileChanged(self):
         self._refreshPresentationModes()
@@ -265,6 +309,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def _updateMarkdownModeButtonVisibility(self):
         visible = self.stack.currentIndex() in (0, 1)
         self.markdownModeButton.setVisible(visible)
+        for button in (self.undoButton, self.redoButton):
+            button.setVisible(visible)
         if self.markupProfileButton is not None:
             service = self.markupProfile.service
             has_profiles = bool(
@@ -273,6 +319,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.markupProfileButton.setVisible(
                 visible and has_profiles
             )
+        self._reserveOverlaySpace()
 
     def setCorkSizeFactor(self, v):
         self.corkView.itemDelegate().setCorkSizeFactor(v)
@@ -518,6 +565,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.updateStatusBar()
         self._updateMarkdownModeButtonVisibility()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
 

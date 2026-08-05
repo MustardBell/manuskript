@@ -8,13 +8,23 @@ from enum import Enum
 from pathlib import Path
 
 from manuskript.plugins.api import PLUGIN_API_VERSION
+from manuskript.plugins.capabilities import grant
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
     PluginLoadError,
     PluginManifestError,
+    PluginRegistrationError,
+)
+from manuskript.media_types import (
+    PROMISES,
+    MediaTypeError,
+    core_registry,
 )
 from manuskript.plugins.manifest import PluginManifest
-from manuskript.plugins.registry import PluginRegistry
+from manuskript.plugins.registry import (
+    PluginRegistry,
+    contribution_media_types,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -24,6 +34,8 @@ class PluginStatus(str, Enum):
     DISABLED = "disabled"
     LOADED = "loaded"
     INCOMPATIBLE = "incompatible"
+    #: Sound plugin, but it asked for a service core does not provide.
+    UNSATISFIED = "unsatisfied"
     FAILED = "failed"
 
 
@@ -52,11 +64,15 @@ class PluginRuntime:
         preferences,
         registry=None,
         api_version=PLUGIN_API_VERSION,
+        media_types=None,
     ):
         self.roots = tuple(Path(root).resolve() for root in roots)
         self.preferences = preferences
         self.registry = registry or PluginRegistry()
         self.api_version = api_version
+        self.mediaTypes = (
+            media_types if media_types is not None else core_registry()
+        )
         self.records = {}
         self.discovery_issues = []
 
@@ -132,7 +148,43 @@ class PluginRuntime:
 
         self.records = discovered
         self.discovery_issues = issues
+        self._declare_media_types(discovered.values())
         return tuple(self.records.values())
+
+    def _declare_media_types(self, records):
+        """Put every discovered plugin's vocabulary into the registry.
+
+        Declaring happens at discovery, not at load, and for disabled
+        plugins too. Load order is arbitrary, so a format registered while
+        running would exist or not depending on which plugin came first;
+        read from the manifest it is there for everyone. It also means the
+        inspector can show who has an interest in a format without anyone's
+        code having run.
+        """
+        for record in records:
+            manifest = record.manifest
+            for media_type in manifest.media_types:
+                try:
+                    self.mediaTypes.declare(media_type, manifest.id)
+                except MediaTypeError as error:
+                    LOGGER.warning(
+                        "Plugin %s declared media type %s that cannot be "
+                        "used: %s",
+                        manifest.id,
+                        media_type.id,
+                        error,
+                    )
+            for kind in PROMISES:
+                for name in getattr(manifest, kind, ()):
+                    try:
+                        self.mediaTypes.promise(name, kind, manifest.id)
+                    except MediaTypeError as error:
+                        LOGGER.warning(
+                            "Plugin %s promise about %s ignored: %s",
+                            manifest.id,
+                            name,
+                            error,
+                        )
 
     def load_enabled(self):
         if not self.records:
@@ -177,7 +229,24 @@ class PluginRuntime:
             record.error = str(error)
             return record
 
-        registrar = self.registry.registrar(plugin_id)
+        # Negotiate before anything of the plugin's runs. A plugin whose
+        # requirements core cannot meet is refused, not half-started.
+        capabilities, missing = grant(manifest.requires)
+        if missing:
+            record.status = PluginStatus.UNSATISFIED
+            record.error = (
+                "Plugin {} requires {} which this Manuskript does not "
+                "provide.".format(
+                    manifest.id,
+                    ", ".join(missing),
+                )
+            )
+            return record
+
+        registrar = self.registry.registrar(
+            plugin_id,
+            capabilities=capabilities,
+        )
         module_prefix = self._module_prefix(manifest)
         try:
             entry = self._load_entry_point(
@@ -185,6 +254,7 @@ class PluginRuntime:
                 module_prefix,
             )
             handle = entry(registrar)
+            self._require_promised(manifest, registrar.contributions)
             self.registry.install(
                 plugin_id,
                 registrar.contributions,
@@ -209,6 +279,33 @@ class PluginRuntime:
         record.status = PluginStatus.LOADED
         record.error = ""
         return record
+
+    @staticmethod
+    def _require_promised(manifest, contributions):
+        """Contributions may only work with formats the manifest promised.
+
+        The manifest says what a plugin does with a format; the code has to
+        agree. Registration is atomic, so one contribution naming an
+        unpromised format installs none of them rather than leaving the
+        plugin half-present.
+        """
+        promised = set(manifest.promised_media_types)
+        for record in contributions:
+            named = contribution_media_types(
+                record.kind,
+                record.contribution,
+            )
+            unpromised = sorted(named - promised)
+            if unpromised:
+                raise PluginRegistrationError(
+                    "{} {} works with {}, which plugin {} did not promise "
+                    "to produce, consume or transform.".format(
+                        record.kind.value,
+                        record.id,
+                        ", ".join(unpromised),
+                        manifest.id,
+                    )
+                )
 
     def _load_entry_point(self, manifest, module_prefix):
         package = types.ModuleType(module_prefix)

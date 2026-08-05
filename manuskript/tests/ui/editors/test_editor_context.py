@@ -204,6 +204,30 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
             window.hide()
 
 
+def test_workspace_width_override_preserves_editor_preference(MWEmptyProject):
+    window = MWEmptyProject
+    old_max_width = window.settingsManager.textEditor["maxWidth"]
+    window.settingsManager.textEditor["maxWidth"] = 640
+    item = outlineItem(title="Comparable page", _type="md")
+    window.mdlOutline.appendItem(item)
+    index = window.mdlOutline.indexFromItem(item)
+    try:
+        window.mainEditor.setCurrentModelIndex(index, newTab=True)
+        host = window.mainEditor.currentEditor().markdownEditorHost
+        host.sourceEditor.loadFontSettings()
+
+        host.setMaximumWidthOverride(480)
+        assert host.maximumWidth() == 480
+        assert host.effectiveMaximumWidth == 480
+
+        host.clearMaximumWidthOverride()
+        assert host.maximumWidth() == 640
+        assert host.effectiveMaximumWidth == 640
+    finally:
+        window.mainEditor.closeAllTabs()
+        window.settingsManager.textEditor["maxWidth"] = old_max_width
+
+
 def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
     window = MWEmptyProject
     first_item = outlineItem(title="First")
@@ -323,3 +347,66 @@ def test_markdown_mode_is_independent_between_split_leaves(
     window.mainEditor.closeAllTabs()
     if not window_was_visible:
         window.hide()
+
+
+def test_mode_button_always_renders_an_icon(MWEmptyProject):
+    """The icon is the whole control: a null one is an invisible target."""
+    window = MWEmptyProject
+    item = outlineItem(window.mdlOutline, title="Iconned", _type="md")
+    window.mdlOutline.appendItem(item)
+    window.mainEditor.setCurrentModelIndex(
+        window.mdlOutline.indexFromItem(item), newTab=True
+    )
+    editor = window.mainEditor.currentEditor()
+
+    try:
+        for mode in MarkdownPresentationMode:
+            if mode not in editor.markdownPresentation.allowed_modes:
+                continue
+            editor.markdownPresentation.set_mode(mode)
+            qApp.processEvents()
+            assert not editor.markdownModeButton.icon().isNull(), mode
+            assert editor.markdownModeButton.toolTip()
+        assert not editor.markupProfileButton.icon().isNull()
+    finally:
+        window.mainEditor.closeAllTabs()
+
+
+def test_overlay_buttons_do_not_sit_on_top_of_the_text(MWEmptyProject):
+    """Reserved strip keeps the first line clear of the floating buttons."""
+    window = MWEmptyProject
+    item = outlineItem(window.mdlOutline, title="Spaced", _type="md")
+    window.mdlOutline.appendItem(item)
+    window.mainEditor.setCurrentModelIndex(
+        window.mdlOutline.indexFromItem(item), newTab=True
+    )
+    editor = window.mainEditor.currentEditor()
+
+    def reserved_top():
+        # Read the margin itself: layouts do not activate while the test
+        # window is unrealized, so mapped geometry would lag behind.
+        return editor.verticalLayout_2.getContentsMargins()[1]
+
+    try:
+        qApp.processEvents()
+        button = editor.markdownModeButton
+        assert button.isVisibleTo(editor)
+        needed = button.y() + button.height()
+
+        # Reading and the page wizard are sibling views swapped into the
+        # same stack, so the strip has to survive every mode, not just the
+        # source editor the buttons were first measured against.
+        for mode in MarkdownPresentationMode:
+            if mode not in editor.markdownPresentation.allowed_modes:
+                continue
+            editor.markdownPresentation.set_mode(mode)
+            qApp.processEvents()
+            assert reserved_top() >= needed, mode
+
+        # A view without the buttons must not keep the empty strip.
+        editor.stack.setCurrentIndex(3)
+        editor._updateMarkdownModeButtonVisibility()
+
+        assert reserved_top() == 0
+    finally:
+        window.mainEditor.closeAllTabs()

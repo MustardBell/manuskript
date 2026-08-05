@@ -56,7 +56,10 @@ echo "### Creating tarball folder structure"
 echo_do eval "mkdir -p $Dest/$AppName-$AppVersion/{usr/share/applications,usr/bin/}"
 
 echo "### Copying manuskript content"
+PluginFilter=$(mktemp)
+python3 "$Root/util/plugin_packaging.py" --rsync-filter "$PluginFilter"
 echo_do eval "rsync -a --exclude=.git \
+    --filter='merge $PluginFilter' \
     --include='*.msk' \
     --exclude=.github \
     --exclude-from='$Root/.gitignore' \
@@ -64,8 +67,11 @@ echo_do eval "rsync -a --exclude=.git \
     --exclude=dist \
     --exclude=snap \
     --exclude=package \
+    --exclude='manuskript/plugins/*/tests' \
+    --exclude='manuskript/plugins/*/__pycache__' \
     --exclude={.codeclimate.yml,.gitignore,.travis.yml} \
     $ScriptPath/../  $Dest/$AppName-$AppVersion/usr/share/manuskript"
+rm "$PluginFilter"
 # Note:  Files manuskript and manuskript.desktop are same as in Debian
 echo_do eval "cp $ScriptPath/create_deb/manuskript $Dest/$AppName-$AppVersion/usr/bin/manuskript"
 echo_do eval "chmod 0755 $Dest/$AppName-$AppVersion/usr/bin/manuskript"

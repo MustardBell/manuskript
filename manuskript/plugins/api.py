@@ -6,6 +6,7 @@ from pathlib import PurePosixPath
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
+from manuskript.media_types import MARKDOWN
 
 
 PLUGIN_API_VERSION = 1
@@ -73,6 +74,37 @@ class ProjectSnapshot:
 
 
 @dataclass(frozen=True)
+class WorkspaceDocument:
+    """Portable description of one editable outline document."""
+
+    id: str
+    title: str
+    kind: str
+    text: str = ""
+    compile: bool = True
+    parent_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EditorWorkspaceContext:
+    """Project-scoped capabilities supplied to an editor workspace.
+
+    The service objects deliberately use capability-based interfaces. Plugins
+    receive only their project-file namespace, a guarded outline gateway, and
+    an editor factory instead of the main window or raw project models.
+    """
+
+    plugin_id: str
+    project_file: str
+    selected_item_ids: tuple[str, ...]
+    files: Any
+    outline: Any
+    editors: Any
+    show_status: Callable[..., None]
+    close_workspace: Callable[[], None]
+
+
+@dataclass(frozen=True)
 class ConversionArtifact:
     content: Union[str, bytes]
     suggested_name: str = "converted.txt"
@@ -89,7 +121,7 @@ class RenderedDocument:
 @dataclass(frozen=True)
 class PageExportDocument:
     content: str
-    source_format: str = "markdown"
+    source_format: str = MARKDOWN
 
 
 @dataclass(frozen=True)
@@ -185,9 +217,143 @@ class ProjectPanelContribution:
 
 
 @dataclass(frozen=True)
+class IndexCardStyleContribution:
+    """Draw cork board index cards in a style of the plugin's own design.
+
+    ``style_factory`` takes no arguments and must return an
+    ``IndexCardStyle``. The base class owns the drawing sequence shared by
+    every card; a style supplies only geometry and the parts that make it
+    look like itself, so styles stay small and cannot skip a phase.
+    """
+
+    descriptor: ExtensionDescriptor
+    style_factory: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class PluginSettingsContribution:
+    """Render plugin-owned settings in the plugin manager's details pane.
+
+    The details pane shows application-owned identity above (name, version,
+    author, location) and this widget below. Manuskript never draws its own
+    controls in that lower region: whatever appears there belongs to the
+    selected plugin, so nothing one plugin configures can surface under
+    another.
+
+    ``widget_factory`` receives ``(PluginSettingsContext, parent)`` and must
+    return a QWidget. The Qt type is checked by the UI host so the stable
+    registration contract remains importable without Qt.
+    """
+
+    descriptor: ExtensionDescriptor
+    widget_factory: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class PluginSettingsContext:
+    """Capabilities offered to one plugin's settings panel.
+
+    Like EditorWorkspaceContext, the services are capability interfaces
+    scoped to the plugin rather than the registry or main window.
+
+    ``capability`` is the same negotiation as ``api.capability`` during
+    registration, moved to where a widget can actually be built: plugins
+    register before there is a main window, so a UI service cannot be handed
+    over then. It refuses any name the manifest did not declare, so core
+    stops pushing services at panels that never asked for one.
+    """
+
+    plugin_id: str
+    option_store: Any
+    edit_options: Callable[..., None]
+    show_status: Callable[..., None]
+    capability: Callable[[str], Any]
+
+
+@dataclass(frozen=True)
+class EditorWorkspaceContribution:
+    """Add a project-scoped workspace to Manuskript's editor area.
+
+    ``workspace_factory`` receives ``(EditorWorkspaceContext, parent)`` and
+    must return a QWidget. The Qt type is checked by the UI host so the stable
+    registration contract remains importable without Qt.
+    """
+
+    descriptor: ExtensionDescriptor
+    workspace_factory: Callable[..., Any]
+    action_label: str = ""
+    shortcut: str = ""
+    minimum_selection: int = 0
+    maximum_selection: Optional[int] = None
+
+    def __post_init__(self):
+        minimum = int(self.minimum_selection)
+        maximum = (
+            None
+            if self.maximum_selection is None
+            else int(self.maximum_selection)
+        )
+        if minimum < 0:
+            raise ValueError(
+                "Workspace minimum_selection cannot be negative."
+            )
+        if maximum is not None and maximum < minimum:
+            raise ValueError(
+                "Workspace maximum_selection cannot be smaller than its "
+                "minimum_selection."
+            )
+        if not callable(self.workspace_factory):
+            raise ValueError(
+                "Editor workspaces require a callable workspace_factory."
+            )
+        object.__setattr__(self, "minimum_selection", minimum)
+        object.__setattr__(self, "maximum_selection", maximum)
+        object.__setattr__(
+            self,
+            "action_label",
+            str(self.action_label or self.descriptor.name),
+        )
+
+
+@dataclass(frozen=True)
+class ContentSignature:
+    """A pattern core matches so a plugin need not read foreign documents.
+
+    A page type has to be recognised before any property marks an item as
+    belonging to it, and only the plugin knows its own format. Declaring the
+    format instead of inspecting the text resolves that: the plugin remains
+    the authority on what its pages look like, while core does the matching
+    and the plugin is never handed a document it does not own.
+
+    All declared parts must match. Patterns are regular expressions applied
+    with MULTILINE, against text normalised to newline endings.
+    """
+
+    starts_with: str = ""
+    ends_with: str = ""
+    contains: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "contains",
+            tuple(str(value) for value in self.contains),
+        )
+        if not any((self.starts_with, self.ends_with, self.contains)):
+            raise ValueError(
+                "A content signature must declare at least one pattern."
+            )
+
+
+@dataclass(frozen=True)
 class PageTypeContribution:
     descriptor: ExtensionDescriptor
     property_label: str
+    #: Declarative recognition. Preferred: core matches it, so the plugin
+    #: never receives the text of a document that is not its own.
+    signature: Optional[ContentSignature] = None
+    #: Escape hatch for formats a signature cannot express. Receives a
+    #: bounded window of the document, not the whole of it.
     detector: Optional[Callable[[str], bool]] = None
     parser_factory: Optional[Callable[[], Any]] = None
     renderer_factory: Optional[Callable[[], Any]] = None
@@ -238,6 +404,36 @@ class PageRendererContribution:
             )
 
 
+@dataclass(frozen=True)
+class TransformContribution:
+    """Middleware over whatever produces a format.
+
+    A transform takes content in one media type and returns it in the same
+    one: a table-of-contents injector, a link rewriter, a house-style pass.
+    It converts nothing, which is why it is not a converter, and it does not
+    produce the format either -- it waits for something that does and adds
+    to the result.
+
+    Transforms stack. Several may apply to one media type and they run in
+    priority order, highest first, between the producer and the output.
+    """
+
+    descriptor: ExtensionDescriptor
+    media_type: str
+    engine_factory: Callable[[], Any]
+    options: tuple[OptionField, ...] = ()
+    options_view_factory: Optional[Callable[..., Any]] = None
+    priority: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(self, "media_type", str(self.media_type).strip())
+        object.__setattr__(self, "options", tuple(self.options))
+        if not self.media_type:
+            raise ValueError(
+                "Transforms must name the media type they take and return."
+            )
+
+
 class MarkupMode(str, Enum):
     AUGMENT = "augment"
     REPLACE = "replace"
@@ -270,8 +466,12 @@ Contribution = Union[
     ImportContribution,
     ConversionContribution,
     ProjectPanelContribution,
+    PluginSettingsContribution,
+    IndexCardStyleContribution,
+    EditorWorkspaceContribution,
     PageTypeContribution,
     PageRendererContribution,
+    TransformContribution,
     MarkupContribution,
 ]
 

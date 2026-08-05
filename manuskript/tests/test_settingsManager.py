@@ -133,7 +133,7 @@ class TestSettingsManager(unittest.TestCase):
 
         self.assertEqual(
             self.settings.revisions["backend"],
-            "internal",
+            "git",
         )
         self.assertFalse(
             self.settings.revisions["git"]["autoCommit"]

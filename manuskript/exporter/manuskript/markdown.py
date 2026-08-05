@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import QGroupBox, qApp, QVBoxLayout, QCheckBox
 
 from manuskript.exporter.manuskript.plainText import plainText
 from manuskript.functions import safeTranslate
+from manuskript.media_types import MARKDOWN
 from manuskript.ui.highlighters import MMDHighlighter
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
 
@@ -17,8 +18,7 @@ class markdown(plainText):
     exportFilter = "Markdown files (*.md);; Any files (*)"
     exportDefaultSuffix = ".md"
     icon = "text-x-markdown"
-    format_id = "markdown"
-    artifact_media_type = "text/markdown"
+    media_type = MARKDOWN
 
     def settingsWidget(self):
         w = markdownSettings(self, self.context)

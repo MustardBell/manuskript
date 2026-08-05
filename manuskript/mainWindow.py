@@ -19,6 +19,13 @@ from manuskript.controllers.view_configuration_controller import (
     ViewConfigurationController,
 )
 from manuskript.controllers.world_controller import WorldController
+from manuskript.media_types import core_registry
+from manuskript.services.media_type_preferences import (
+    MediaTypePreferences,
+)
+from manuskript.ui.tools.media_type_inspector import (
+    MediaTypeInspector,
+)
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -65,6 +72,10 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.plugins.controller import PluginUiController
+from PyQt5.QtWidgets import QUndoStack
+from manuskript.ui.plugins.index_card_styles import (
+    IndexCardStyleService,
+)
 from manuskript.ui.welcome_context import welcome_context_for
 
 # Spellcheck support
@@ -100,6 +111,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         application_preferences=None,
         plugin_runtime=None,
         plugin_option_store=None,
+        media_types=None,
+        media_type_preferences=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -157,15 +170,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
         self.pluginRuntime = plugin_runtime
         self.pluginOptionStore = plugin_option_store
+        self.mediaTypes = (
+            media_types if media_types is not None else core_registry()
+        )
+        self.mediaTypePreferences = (
+            media_type_preferences
+            if media_type_preferences is not None
+            else MediaTypePreferences()
+        )
+        # Structure edits are undoable per project; the stack is
+        # cleared whenever a different project is opened.
+        self.undoStack = QUndoStack(self)
+        self.cardStyles = IndexCardStyleService(
+            plugin_runtime.registry if plugin_runtime is not None else None,
+            report_error=self.statusPresenter.show,
+            parent=self,
+        )
         self.pluginUi = (
             PluginUiController(
                 self,
                 plugin_runtime,
                 plugin_option_store,
+                media_types=self.mediaTypes,
             )
             if plugin_runtime is not None
             else None
         )
+        self.buildDeveloperMenu()
         self.projectLifecycleView = ProjectLifecycleView(self)
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
@@ -924,6 +955,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             theme_repository=self.themeRepository,
             theme_preview_renderer=self.themePreviewRenderer,
             application_preferences=self.applicationPreferences,
+            card_styles=self.cardStyles,
         )
         self.sw.hide()
         self.sw.setWindowModality(Qt.ApplicationModal)
@@ -950,6 +982,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.td = TargetsDialog(self)
         self.td.show()
         self.centerChildWindow(self.td)
+
+    def buildDeveloperMenu(self):
+        """Tools that inspect Manuskript rather than the manuscript.
+
+        Added here rather than in mainWindow.ui, following the Plugins menu:
+        a submenu built in code needs no generated file regenerated, and
+        this one exists whether or not any plugin is loaded.
+        """
+        self.menuTools.addSeparator()
+        self.menuDeveloper = self.menuTools.addMenu(self.tr("Developer"))
+        self.menuDeveloper.setObjectName("menuDeveloper")
+        self.actMediaTypes = QAction(self.tr("Media types…"), self)
+        self.actMediaTypes.setObjectName("actMediaTypes")
+        self.actMediaTypes.setStatusTip(self.tr(
+            "Inspect export formats, and declare ones Manuskript does "
+            "not know"
+        ))
+        self.actMediaTypes.triggered.connect(self.mediaTypeInspector)
+        self.menuDeveloper.addAction(self.actMediaTypes)
+
+    def mediaTypeInspector(self):
+        self.mediaTypeWindow = MediaTypeInspector(
+            self.mediaTypes,
+            self.mediaTypePreferences,
+            parent=self,
+        )
+        self.mediaTypeWindow.show()
+        self.centerChildWindow(self.mediaTypeWindow)
 
     ###############################################################################
     # VIEW MENU

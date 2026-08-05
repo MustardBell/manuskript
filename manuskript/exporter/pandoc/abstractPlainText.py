@@ -7,11 +7,25 @@ from PyQt5.QtGui import QTextCharFormat, QFont
 from PyQt5.QtWidgets import qApp, QVBoxLayout, QCheckBox, QWidget, QHBoxLayout, QLabel, QSpinBox, QComboBox
 
 from manuskript.exporter.manuskript.markdown import markdown, markdownSettings
+from manuskript.media_types import BBCODE, HTML, LATEX, MARKDOWN, RST
 from manuskript.ui.collapsibleGroupBox2 import collapsibleGroupBox2
 from manuskript.functions import safeTranslate
 
 import logging
 LOGGER = logging.getLogger(__name__)
+
+
+#: Pandoc names its own writers, and a raw block has to be labelled with one
+#: of those names rather than with a media type. This is the boundary where
+#: the shared vocabulary is translated into pandoc's, and the only place
+#: pandoc's spelling of a format belongs.
+PANDOC_WRITERS = {
+    HTML: "html",
+    LATEX: "latex",
+    RST: "rst",
+    BBCODE: "bbcode",
+    MARKDOWN: "markdown",
+}
 
 
 class abstractPlainText(markdown):
@@ -22,19 +36,14 @@ class abstractPlainText(markdown):
     icon = "SUBCLASSME"
     exportFilter = "SUBCLASSME"
     exportDefaultSuffix = ".SUBCLASSME"
-    # Pandoc output is process-backed and may be binary. It is not an
-    # in-memory conversion source unless a concrete format opts in.
-    format_id = None
-    # Pandoc consumes the combined manuscript as Markdown, but its raw
-    # blocks can safely carry exact fragments for textual target formats.
-    page_render_targets = {
-        "html": "html",
-        "epub": "html",
-        "latex": "latex",
-        "pdf": "latex",
-        "rst": "rst",
-        "bbcode": "bbcode",
-    }
+    # Pandoc output is process-backed and may be binary, so it cannot feed a
+    # converter the way an in-memory format can.
+    in_memory = False
+    media_type = ""
+    # Pandoc consumes the combined manuscript as Markdown, so that is what
+    # pages are composed in unless a concrete format names something its raw
+    # blocks can carry exactly.
+    representation_media_type = MARKDOWN
 
     def __init__(self, exporter):
         super().__init__(exporter.context)
@@ -64,12 +73,17 @@ class abstractPlainText(markdown):
         return markdown.output(self, settingsWidget)
 
     def pageRenderTarget(self):
-        return self.page_render_targets.get(self.toFormat, "markdown")
+        return self.representation_media_type or MARKDOWN
 
     def pageOutputFormat(self):
-        return self.toFormat
+        return self.media_type
 
     def processRenderedPageText(self, content, target_format, settings):
+        writer = PANDOC_WRITERS.get(target_format)
+        if not writer:
+            # No raw block can carry a format pandoc cannot name, so the
+            # fragment goes in as ordinary source rather than as a lie.
+            return content.rstrip("\n") + "\n"
         fence = "`" * max(
             3,
             max(
@@ -80,9 +94,9 @@ class abstractPlainText(markdown):
                 default=3,
             ),
         )
-        return "\n{fence}{{={target}}}\n{content}\n{fence}\n".format(
+        return "\n{fence}{{={writer}}}\n{content}\n{fence}\n".format(
             fence=fence,
-            target=target_format,
+            writer=writer,
             content=content.rstrip("\n"),
         )
 

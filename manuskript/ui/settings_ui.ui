@@ -548,6 +548,26 @@
         </layout>
        </item>
        <item>
+        <widget class="QLabel" name="lblRevisionStatus">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnInitGitRepository">
+         <property name="text">
+          <string>Create a Git repository here…</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="grpGitRevisionOptions">
          <property name="title">
           <string>Git revisions</string>
@@ -1813,28 +1833,29 @@
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_19">
               <item>
-               <widget class="QRadioButton" name="rdoCorkOldStyle">
+               <widget class="QComboBox" name="cmbCorkStyle">
                 <property name="font">
                  <font>
                   <bold>false</bold>
                  </font>
                 </property>
-                <property name="text">
-                 <string>Old st&amp;yle</string>
+                <property name="toolTip">
+                 <string>Index card styles provided by Manuskript and by plugins.</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QRadioButton" name="rdoCorkNewStyle">
-                <property name="font">
-                 <font>
-                  <bold>false</bold>
-                 </font>
+               <spacer name="verticalSpacer_cork_style">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
                 </property>
-                <property name="text">
-                 <string>&amp;New style</string>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>0</height>
+                 </size>
                 </property>
-               </widget>
+               </spacer>
               </item>
              </layout>
             </widget>

@@ -1,6 +1,17 @@
+import os
+import stat
 import zipfile
 
+import pytest
+
 from manuskript.load_save.project_files import Version1ProjectFiles
+
+# chmod on Windows only honours the read-only bit, so a POSIX mode cannot
+# be set or read back there. The behaviour under test is POSIX-specific;
+# what matters on Windows is that it stays a harmless no-op, covered below.
+posix_only = pytest.mark.skipif(
+    os.name != "posix", reason="POSIX file modes"
+)
 
 
 def test_directory_project_files_round_trip_text_and_binary(tmp_path):
@@ -133,3 +144,84 @@ def test_stale_cache_cannot_remove_paths_outside_project_root(
 
     assert not result.succeeded
     assert protected.read_text(encoding="utf-8") == "keep"
+
+
+@posix_only
+def test_permissions_survive_a_file_being_removed_and_written_again(
+        tmp_path):
+    """An undone deletion must not silently reset a file's mode.
+
+    Manuskript rewrites the whole project on save, so a restored item is a
+    brand new file. Left alone it lands with the default umask, which turns
+    one undo into a pile of spurious mode changes in a versioned project.
+    """
+    project = tmp_path / "story.msk"
+    cache = {}
+    access = Version1ProjectFiles()
+    scene = ("outline/chapter/scene.md", "Once upon a time")
+    access.write(
+        str(project), zipped=False, files=[scene], moves=[], cache=cache)
+
+    on_disk = tmp_path / "story" / "outline" / "chapter" / "scene.md"
+    os.chmod(on_disk, 0o755)
+    assert stat.S_IMODE(on_disk.stat().st_mode) == 0o755
+
+    # Delete it the way removing an outline item does.
+    access.write(
+        str(project), zipped=False, files=[], moves=[], cache=cache)
+    assert not on_disk.exists()
+
+    # Undo puts the item back; the next save writes the file again.
+    access.write(
+        str(project), zipped=False, files=[scene], moves=[], cache=cache)
+
+    assert on_disk.exists()
+    assert on_disk.read_text(encoding="utf-8") == scene[1]
+    assert stat.S_IMODE(on_disk.stat().st_mode) == 0o755
+
+
+@posix_only
+def test_rewriting_an_existing_file_keeps_its_permissions(tmp_path):
+    project = tmp_path / "story.msk"
+    cache = {}
+    access = Version1ProjectFiles()
+    access.write(
+        str(project), zipped=False,
+        files=[("infos.txt", "before")], moves=[], cache=cache)
+    on_disk = tmp_path / "story" / "infos.txt"
+    os.chmod(on_disk, 0o600)
+
+    access.write(
+        str(project), zipped=False,
+        files=[("infos.txt", "after")], moves=[], cache=cache)
+
+    assert on_disk.read_text(encoding="utf-8") == "after"
+    assert stat.S_IMODE(on_disk.stat().st_mode) == 0o600
+
+
+def test_a_removed_file_is_restored_intact_on_every_platform(tmp_path):
+    """The delete-then-restore round trip itself, without POSIX modes.
+
+    Windows cannot express an executable bit, so preserving permissions is
+    a no-op there. Restoring the file at all must still work, and must not
+    raise from the permission handling.
+    """
+    project = tmp_path / "story.msk"
+    cache = {}
+    access = Version1ProjectFiles()
+    scene = ("outline/chapter/scene.md", "Once upon a time")
+
+    access.write(
+        str(project), zipped=False, files=[scene], moves=[], cache=cache)
+    on_disk = tmp_path / "story" / "outline" / "chapter" / "scene.md"
+    assert on_disk.exists()
+
+    access.write(
+        str(project), zipped=False, files=[], moves=[], cache=cache)
+    assert not on_disk.exists()
+
+    result = access.write(
+        str(project), zipped=False, files=[scene], moves=[], cache=cache)
+
+    assert result.succeeded
+    assert on_disk.read_text(encoding="utf-8") == scene[1]

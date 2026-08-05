@@ -129,7 +129,8 @@ class PluginExportFormat(ArtifactExportFormat):
         )
         self.contribution = contribution
         self.option_store = option_store
-        self.format_id = contribution.output_format
+        self.media_type = contribution.output_format
+        self.in_memory = True
         self.file_extensions = descriptor.extensions
 
     def settingsWidget(self):
@@ -216,8 +217,9 @@ class PluginConversionExportFormat(ArtifactExportFormat):
         )
         self.contribution = contribution
         self.source_format = source_format
-        self.source_format_id = source_format.format_id
-        self.format_id = target_format
+        self.source_media_type = source_format.media_type
+        self.media_type = target_format
+        self.in_memory = True
         self.target_format = target_format
         self.option_store = option_store
         self.file_extensions = (
@@ -286,7 +288,7 @@ class PluginConversionExportFormat(ArtifactExportFormat):
         return run_conversion(
             self.contribution,
             source.content,
-            self.source_format_id,
+            self.source_media_type,
             self.target_format,
             values,
         )
@@ -308,7 +310,8 @@ def _artifact_sources(exporters):
         output_format
         for exporter in exporters
         for output_format in exporter.exportTo
-        if getattr(output_format, "format_id", None)
+        if getattr(output_format, "media_type", "")
+        and getattr(output_format, "in_memory", False)
         and callable(getattr(output_format, "artifact", None))
     ]
 
@@ -340,7 +343,7 @@ def create_plugin_exporters(
         sources = [
             producer
             for producer in producers
-            if producer.format_id in contribution.source_formats
+            if producer.media_type in contribution.source_formats
         ]
         route_count = len(sources) * len(contribution.target_formats)
         for source in sources:

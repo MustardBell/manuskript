@@ -15,5 +15,7 @@ class OutlineViewContext:
     color_resolver: OutlineColorResolver
     open_index: Callable
     open_indexes: Callable
+    card_styles: Optional[object] = None
+    undo_stack: Optional[object] = None
     selection_changed: Optional[Callable] = None
     show_status: Optional[Callable] = None

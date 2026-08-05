@@ -25,6 +25,8 @@ def test_git_history_opened_from_modal_settings_is_interactive(
     from PyQt5.QtTest import QTest
     from PyQt5.QtWidgets import QDialogButtonBox, qApp
 
+    from manuskript.services.git_revisions import GitAvailability
+
     window = MWSampleProject
     window.settingsWindow()
     settings = window.sw
@@ -32,7 +34,15 @@ def test_git_history_opened_from_modal_settings_is_interactive(
     settings.cmbRevisionBackend.setCurrentIndex(
         settings.cmbRevisionBackend.findData("git")
     )
+    # The fixture copies the project to a temporary directory that is not a
+    # Git worktree. This test is about the dialog being interactive while
+    # settings are modal, not about repository discovery.
+    settings.gitAvailability = lambda: GitAvailability(
+        git_installed=True, repository_root="/somewhere"
+    )
+    settings.updateRevisionBackendUi()
 
+    assert settings.btnManageGitRevisions.isEnabled()
     settings.btnManageGitRevisions.click()
     QTest.qWait(50)
 
@@ -146,7 +156,7 @@ def test_general(MWSampleProject):
     # Can't test because of the dialog
     # assert SW.setCorkColor() == None
     SW.sldTreeIconSize.setValue(SW.sldTreeIconSize.value() + 1)
-    SW.rdoCorkNewStyle.toggled.emit(True)
+    SW.cmbCorkStyle.setCurrentIndex(SW.cmbCorkStyle.count() - 1)
     SW.cmbCorkImage.currentIndexChanged.emit(0)
     SW.cmbCorkImage.currentIndexChanged.emit(1)
     # Test editor: same problem as above

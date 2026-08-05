@@ -15,6 +15,11 @@ from manuskript.functions import appPath, resetTranslation
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
+from manuskript import preferences_migrations
+from manuskript.media_types import core_registry
+from manuskript.services.media_type_preferences import (
+    MediaTypePreferences,
+)
 from manuskript.plugins.runtime import PluginRuntime
 from manuskript.services.plugin_options import PluginOptionStore
 from manuskript.services.plugin_preferences import PluginPreferences
@@ -175,11 +180,23 @@ def prepare(arguments, tests=False):
     settings_manager.applyTooltipStyle()
 
     plugin_settings = QSettings()
+    # Before anything reads a routing choice, so nothing downstream has to
+    # know how preferences used to be spelled.
+    preferences_migrations.upgrade(plugin_settings)
+    # One registry, built in the order the layers arrive: core's formats,
+    # then every discovered plugin's, then the user's own on top. The
+    # runtime has to be given it rather than making its own, or plugin
+    # declarations would land somewhere the rest of the application cannot
+    # see.
+    media_types = core_registry()
     plugin_runtime = PluginRuntime(
         [appPath("manuskript/plugins")],
         PluginPreferences(plugin_settings),
+        media_types=media_types,
     )
     plugin_runtime.discover()
+    media_type_preferences = MediaTypePreferences(plugin_settings)
+    media_type_preferences.apply(media_types)
     plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
 
@@ -200,6 +217,8 @@ def prepare(arguments, tests=False):
         application_preferences=preferences,
         plugin_runtime=plugin_runtime,
         plugin_option_store=plugin_option_store,
+        media_types=media_types,
+        media_type_preferences=media_type_preferences,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary

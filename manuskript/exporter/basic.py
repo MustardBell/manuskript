@@ -100,6 +100,17 @@ class basicFormat:
     description = ""
     implemented = False
     InvalidBecause = ""
+    #: What this format emits, named in the shared vocabulary. Empty means
+    #: the format does not say, and nothing can route to it.
+    media_type = ""
+    #: The textual media type individual pages are composed in on the way to
+    #: this destination. ePub is assembled from HTML, DocX from Markdown.
+    #: Empty means the format composes pages in whatever it emits.
+    representation_media_type = ""
+    #: Whether output is produced in memory, and so can feed a converter.
+    #: Process-backed formats set this False: they may be binary, and they
+    #: are reached by running a tool rather than by returning a string.
+    in_memory = False
     requires = {
         "Settings": False,
         "Preview": False,

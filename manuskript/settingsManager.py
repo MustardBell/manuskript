@@ -6,6 +6,11 @@ from PyQt5.QtWidgets import QToolTip, qApp
 
 # Import default settings
 from manuskript import settings as default_settings
+from manuskript.settings_migrations import (
+    SETTINGS_VERSION,
+    VERSION_KEY,
+    upgrade,
+)
 from manuskript.ui.tooltip_style import accessible_tooltip_palette
 
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +35,7 @@ class SettingsManager:
         "autoSaveNoChangesDelay",
         "outlineViewColumns",
         "corkBackground",
-        "corkStyle",
+        "indexCardStyle",
         "fullScreenTheme",
         "defaultTextType",
         "textEditor",
@@ -64,6 +69,9 @@ class SettingsManager:
         ``filename`` and ``protocol`` are retained for load/save compatibility.
         """
         allSettings = {name: getattr(self, name) for name in self._setting_names}
+        # Version is file metadata rather than a setting, so it is not in
+        # _setting_names and is not exposed as an attribute.
+        allSettings[VERSION_KEY] = SETTINGS_VERSION
         return json.dumps(json.loads(json.dumps(allSettings)), indent=4, sort_keys=True)
 
     def _load_basic_settings(self, allSettings):
@@ -89,7 +97,9 @@ class SettingsManager:
         self.autoSaveNoChangesDelay = allSettings.get("autoSaveNoChangesDelay", self.autoSaveNoChangesDelay)
         self.outlineViewColumns = allSettings.get("outlineViewColumns", self.outlineViewColumns)
         self.corkBackground = allSettings.get("corkBackground", self.corkBackground)
-        self.corkStyle = allSettings.get("corkStyle", self.corkStyle)
+        self.indexCardStyle = allSettings.get(
+            "indexCardStyle", self.indexCardStyle
+        )
         self.fullScreenTheme = allSettings.get("fullScreenTheme", self.fullScreenTheme)
         self.defaultTextType = allSettings.get("defaultTextType", self.defaultTextType)
         self.frequencyAnalyzer = allSettings.get("frequencyAnalyzer", self.frequencyAnalyzer)
@@ -161,7 +171,7 @@ class SettingsManager:
             LOGGER.error("Cannot load settings from empty string.")
             return
 
-        allSettings = json.loads(string)
+        allSettings = upgrade(json.loads(string))
         self._load_basic_settings(allSettings)
         self._load_text_editor_settings(allSettings)
         self._load_revisions_settings(allSettings)

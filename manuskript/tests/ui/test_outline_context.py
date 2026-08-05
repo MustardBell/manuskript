@@ -10,7 +10,7 @@ from manuskript.ui.views.outline_context import OutlineViewContext
 def make_outline_context():
     settings = MagicMock(name="settings")
     settings.corkSizeFactor = 100
-    settings.corkStyle = "new"
+    settings.indexCardStyle = "manuskript.card.plain"
     settings.corkBackground = {
         "image": "",
         "color": "#ffffff",

@@ -13,6 +13,10 @@ from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
 from manuskript.domain.revisions import RevisionBackendKind
+from manuskript.services.git_revisions import (
+    GitCommandRunner,
+    inspect_git_availability,
+)
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
@@ -28,6 +32,9 @@ from manuskript.functions import (
 from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.tabSplitter import tabSplitter
 from manuskript.ui.editors.themes import ThemePreviewRenderer
+from manuskript.ui.plugins.index_card_styles import (
+    IndexCardStyleService,
+)
 from manuskript.ui.settings_ui import Ui_Settings
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.textEditView import textEditView
@@ -43,6 +50,7 @@ class settingsWindow(QWidget, Ui_Settings):
         theme_repository=None,
         theme_preview_renderer=None,
         application_preferences=None,
+        card_styles=None,
     ):
         QWidget.__init__(self)
         self.setupUi(self)
@@ -62,6 +70,11 @@ class settingsWindow(QWidget, Ui_Settings):
             application_preferences
             if application_preferences is not None
             else ApplicationPreferences()
+        )
+        self.cardStyles = (
+            card_styles
+            if card_styles is not None
+            else IndexCardStyleService()
         )
 
         # UI
@@ -174,17 +187,17 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkRevisionsKeep.setChecked(opt["keep"])
         self.cmbRevisionBackend.clear()
         self.cmbRevisionBackend.addItem(
-            self.tr("Internal snapshots (legacy, unstable)"),
-            RevisionBackendKind.INTERNAL.value,
-        )
-        self.cmbRevisionBackend.addItem(
             self.tr("Git project history"),
             RevisionBackendKind.GIT.value,
+        )
+        self.cmbRevisionBackend.addItem(
+            self.tr("Internal snapshots (legacy, unstable)"),
+            RevisionBackendKind.INTERNAL.value,
         )
         backend_index = self.cmbRevisionBackend.findData(
             opt.get(
                 "backend",
-                RevisionBackendKind.INTERNAL.value,
+                RevisionBackendKind.GIT.value,
             )
         )
         self.cmbRevisionBackend.setCurrentIndex(
@@ -218,6 +231,9 @@ class settingsWindow(QWidget, Ui_Settings):
             signal.connect(self.revisionsSettingsChanged)
         self.btnManageGitRevisions.clicked.connect(
             lambda _checked=False: self.mw.showGitRevisions(self)
+        )
+        self.btnInitGitRepository.clicked.connect(
+            lambda _checked=False: self.initGitRepository()
         )
         self.updateRevisionBackendUi()
 
@@ -260,10 +276,8 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkCountSpaces.setChecked(self.settings.countSpaces);
         self.chkCountSpaces.stateChanged.connect(self.countSpacesChanged)
 
-        self.rdoCorkOldStyle.setChecked(self.settings.corkStyle == "old")
-        self.rdoCorkNewStyle.setChecked(self.settings.corkStyle == "new")
-        self.rdoCorkNewStyle.toggled.connect(self.setCorkStyle)
-        self.rdoCorkOldStyle.toggled.connect(self.setCorkStyle)
+        self.populateCorkStyles()
+        self.cmbCorkStyle.currentIndexChanged.connect(self.setCorkStyle)
 
         self.populatesCmbBackgrounds(self.cmbCorkImage)
         self.setCorkImageDefault()
@@ -470,23 +484,100 @@ class settingsWindow(QWidget, Ui_Settings):
         opt["rules"][None] = 60 * 60 * 24 * 7 / self.spnRevisionsEternity.value()
         self.updateRevisionBackendUi()
 
+    def gitAvailability(self):
+        return inspect_git_availability(self.mw.currentProject)
+
     def updateRevisionBackendUi(self):
         enabled = self.chkRevisionsKeep.isChecked()
         backend = self.cmbRevisionBackend.currentData()
         internal = backend == RevisionBackendKind.INTERNAL.value
         git = backend == RevisionBackendKind.GIT.value
+        availability = self.gitAvailability()
 
+        # Turning revisions off and falling back to the legacy backend must
+        # stay reachable even when Git cannot be used at all, or the writer
+        # is stuck with a setting they cannot change.
+        self.chkRevisionsKeep.setEnabled(True)
         self.cmbRevisionBackend.setEnabled(enabled)
+
         self.chkRevisionRemove.setVisible(internal)
         self.chkRevisionRemove.setEnabled(enabled and internal)
         self.label_revisionDeprecation.setVisible(internal)
+
         self.grpGitRevisionOptions.setVisible(git)
-        self.grpGitRevisionOptions.setEnabled(enabled and git)
-        self.btnManageGitRevisions.setEnabled(
-            enabled
-            and git
-            and bool(self.mw.currentProject)
+        # Git may be selected without being usable. The options are shown so
+        # the choice is not hidden, but nothing pretends to be configurable.
+        self.grpGitRevisionOptions.setEnabled(
+            enabled and git and availability.git_installed
         )
+        self.btnManageGitRevisions.setEnabled(
+            enabled and git and availability.usable
+        )
+        self.btnInitGitRepository.setVisible(
+            git and availability.needs_repository
+        )
+        self.btnInitGitRepository.setEnabled(
+            enabled and bool(self.mw.currentProject)
+        )
+        self.lblRevisionStatus.setVisible(git and not availability.usable)
+        self.lblRevisionStatus.setText(
+            self.revisionStatusMessage(availability)
+        )
+
+    def revisionStatusMessage(self, availability):
+        if not availability.git_installed:
+            return self.tr(
+                "Git is not installed, so Git history cannot record "
+                "anything. Install Git, or turn revisions off, or switch "
+                "to the legacy internal snapshots."
+            )
+        if availability.needs_repository:
+            if not self.mw.currentProject:
+                return self.tr(
+                    "Open a project to see whether it is kept in a Git "
+                    "repository."
+                )
+            return self.tr(
+                "This project is not inside a Git repository, so no "
+                "history is being recorded. Create one to start keeping "
+                "revisions."
+            )
+        return ""
+
+    def initGitRepository(self):
+        """Offer to put the project under Git so revisions start working."""
+        project = self.mw.currentProject
+        if not project:
+            return
+        directory = os.path.dirname(os.path.abspath(project)) or os.curdir
+        confirmed = QMessageBox.question(
+            self,
+            self.tr("Create a Git repository?"),
+            self.tr(
+                "<p>Manuskript will run <code>git init</code> in:</p>"
+                "<p><code>{}</code></p>"
+                "<p>Nothing is committed and no existing file is changed. "
+                "You can remove the repository later by deleting its "
+                "<code>.git</code> directory.</p>"
+            ).format(directory),
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if confirmed != QMessageBox.Yes:
+            return
+        runner = GitCommandRunner()
+        if not runner.available:
+            self.updateRevisionBackendUi()
+            return
+        result = runner.execute(("-C", directory, "init"))
+        if result.return_code:
+            QMessageBox.warning(
+                self,
+                self.tr("Could not create the repository"),
+                result.stderr.decode("utf-8", errors="replace").strip()
+                or self.tr("git init failed."),
+            )
+        self.updateRevisionBackendUi()
 
     ####################################################################################################
     #                                           VIEWS                                                  #
@@ -579,8 +670,28 @@ class settingsWindow(QWidget, Ui_Settings):
             # Update Cork view
             self.mw.mainEditor.updateCorkBackground()
 
+    def populateCorkStyles(self):
+        """List built-in and plugin card styles without firing a save."""
+        previous = self.cmbCorkStyle.blockSignals(True)
+        try:
+            self.cmbCorkStyle.clear()
+            for style_id, name in self.cardStyles.styles():
+                self.cmbCorkStyle.addItem(name, style_id)
+            index = self.cmbCorkStyle.findData(
+                self.settings.indexCardStyle)
+            if index < 0:
+                # The project names a style whose plugin is gone.
+                index = self.cmbCorkStyle.findData(
+                    self.cardStyles.DEFAULT_ID)
+            self.cmbCorkStyle.setCurrentIndex(max(0, index))
+        finally:
+            self.cmbCorkStyle.blockSignals(previous)
+
     def setCorkStyle(self):
-        self.settings.corkStyle = "new" if self.rdoCorkNewStyle.isChecked() else "old"
+        style_id = self.cmbCorkStyle.currentData()
+        if not style_id:
+            return
+        self.settings.indexCardStyle = style_id
         self.mw.mainEditor.updateCorkView()
 
     def updateCorkColor(self):

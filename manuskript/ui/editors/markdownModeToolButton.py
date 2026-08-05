@@ -1,13 +1,15 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QAction, QActionGroup, QMenu, QToolButton
+from PyQt5.QtWidgets import QAction, QActionGroup, QMenu, QStyle
 
+from manuskript.ui.editors.editorOverlayButton import (
+    EditorOverlayToolButton,
+    overlay_icon,
+)
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
 
 
-class MarkdownModeToolButton(QToolButton):
+class MarkdownModeToolButton(EditorOverlayToolButton):
     """Leaf-local mode control whose icon describes the click target."""
 
     _MODE_LABELS = {
@@ -17,6 +19,22 @@ class MarkdownModeToolButton(QToolButton):
         MarkdownPresentationMode.READING: "Reading",
     }
 
+    # NumixMsk ships none of the obvious freedesktop names for these,
+    # so each entry ends in a Qt standard pixmap that always resolves.
+    _READING_ICON = (
+        ("view-text", "view-preview", "document-preview", "text-html"),
+        QStyle.SP_FileDialogContentsView,
+    )
+    _EDIT_ICON = (
+        ("document-edit", "gtk-edit", "accessories-text-editor"),
+        QStyle.SP_FileDialogDetailedView,
+    )
+    _SOURCE_ICON = (
+        ("code-context", "text-x-markdown", "text-x-script",
+         "text-plain"),
+        QStyle.SP_FileIcon,
+    )
+
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self._state = state
@@ -24,9 +42,7 @@ class MarkdownModeToolButton(QToolButton):
         self._actions = {}
 
         self.setObjectName("markdownModeToolButton")
-        self.setAutoRaise(True)
-        self.setFocusPolicy(Qt.NoFocus)
-        self.setPopupMode(QToolButton.MenuButtonPopup)
+        self.setPopupMode(self.MenuButtonPopup)
 
         menu = QMenu(self)
         action_group = QActionGroup(self)
@@ -77,26 +93,17 @@ class MarkdownModeToolButton(QToolButton):
         ):
             self._lastEditableMode = mode
             target_mode = MarkdownPresentationMode.READING
-            icon = QIcon.fromTheme(
-                "view-preview",
-                QIcon.fromTheme("document-preview"),
-            )
+            icon = overlay_icon(*self._READING_ICON)
         elif mode is MarkdownPresentationMode.READING:
             target_mode = self._lastEditableMode
-            icon = QIcon.fromTheme(
-                "document-edit",
-                QIcon.fromTheme("accessories-text-editor"),
-            )
+            icon = overlay_icon(*self._EDIT_ICON)
         else:
             target_mode = (
                 MarkdownPresentationMode.SOURCE
                 if mode is MarkdownPresentationMode.FORMATTED_SOURCE
                 else MarkdownPresentationMode.FORMATTED_SOURCE
             )
-            icon = QIcon.fromTheme(
-                "code-context",
-                QIcon.fromTheme("accessories-text-editor"),
-            )
+            icon = overlay_icon(*self._SOURCE_ICON)
 
         self.setIcon(icon)
         self.setToolTip(

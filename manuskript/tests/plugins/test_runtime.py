@@ -10,17 +10,20 @@ def create_plugin(
         root,
         plugin_id="example.plugin",
         api_version=1,
-        source=None):
+        source=None,
+        manifest=None):
     plugin_root = root / plugin_id
     plugin_root.mkdir()
+    declared = {
+        "id": plugin_id,
+        "name": "Test plugin",
+        "version": "1.0",
+        "api_version": api_version,
+        "entry_point": "plugin:register",
+    }
+    declared.update(manifest or {})
     (plugin_root / "plugin.json").write_text(
-        json.dumps({
-            "id": plugin_id,
-            "name": "Test plugin",
-            "version": "1.0",
-            "api_version": api_version,
-            "entry_point": "plugin:register",
-        }),
+        json.dumps(declared),
         encoding="utf-8",
     )
     (plugin_root / "plugin.py").write_text(

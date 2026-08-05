@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 from PyQt5.QtCore import Qt, QSignalMapper, QSize
-from PyQt5.QtGui import QIcon, QCursor
+from PyQt5.QtGui import QIcon, QCursor, QKeySequence
 from PyQt5.QtWidgets import QAbstractItemView, qApp, QMenu, QAction, \
                             QListWidget, QWidgetAction, QListWidgetItem, \
                             QLineEdit, QInputDialog, QMessageBox, QCheckBox
@@ -10,6 +10,9 @@ from manuskript.enums import Outline
 from manuskript.functions import toInt, customIcons, safeTranslate
 from manuskript.models import outlineItem
 from manuskript.ui.tools.splitDialog import open_split_dialog
+from manuskript.commands.outline_commands import (
+    RemoveOutlineItemsCommand,
+)
 
 
 class outlineBasics(QAbstractItemView):
@@ -18,6 +21,7 @@ class outlineBasics(QAbstractItemView):
         self.menuCustomIcons = None
         self.outline_context = None
         self.settings = None
+        self._undoActions = ()
         self.show_status = (
             lambda message, duration=5000, importance=1: None
         )
@@ -40,6 +44,33 @@ class outlineBasics(QAbstractItemView):
             if context is not None and context.show_status is not None
             else lambda message, duration=5000, importance=1: None
         )
+        self._installUndoShortcuts()
+
+    def _installUndoShortcuts(self):
+        """Give this view its own Ctrl+Z for structure edits.
+
+        Scoped to the widget rather than the window on purpose: the text
+        editors handle Ctrl+Z themselves in keyPressEvent, and a
+        window-level shortcut is dispatched first, which would take undo
+        away from whoever is actually typing.
+        """
+        for action in getattr(self, "_undoActions", ()):
+            self.removeAction(action)
+        self._undoActions = ()
+        stack = self.undoStack()
+        if stack is None:
+            return
+        undo = QAction(safeTranslate(qApp, "outlineBasics", "Undo"), self)
+        undo.setShortcut(QKeySequence.Undo)
+        undo.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+        undo.triggered.connect(stack.undo)
+        redo = QAction(safeTranslate(qApp, "outlineBasics", "Redo"), self)
+        redo.setShortcut(QKeySequence.Redo)
+        redo.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+        redo.triggered.connect(stack.redo)
+        self.addAction(undo)
+        self.addAction(redo)
+        self._undoActions = (undo, redo)
 
     def bind_project_model(self, model, context):
         """Attach one complete project context before exposing its indexes."""
@@ -414,7 +445,32 @@ class outlineBasics(QAbstractItemView):
             if chk.isChecked():
                 self.settings.dontShowDeleteWarning = True
 
-        self.model().removeIndexes(self.getSelection())
+        self.removeSelection()
+
+    def removeSelection(self):
+        """Delete the selection, through the undo stack when there is one."""
+        selection = self.getSelection()
+        if not selection:
+            return
+        stack = self.undoStack()
+        if stack is None:
+            # No project context, e.g. an import preview: delete outright.
+            self.model().removeIndexes(selection)
+            return
+        command = RemoveOutlineItemsCommand(self.model(), selection)
+        if command.isEmpty():
+            return
+        stack.push(command)
+        self.show_status(
+            safeTranslate(
+                qApp, "outlineBasics", "{} — press Ctrl+Z to undo."
+            ).format(command.text())
+        )
+
+    def undoStack(self):
+        if self.outline_context is None:
+            return None
+        return self.outline_context.undo_stack
 
     def duplicate(self):
         """

@@ -13,7 +13,8 @@ class RevisionBackendKind(str, Enum):
         try:
             return cls(value)
         except (TypeError, ValueError):
-            return cls.INTERNAL
+            # Git is the supported backend; internal snapshots are legacy.
+            return cls.GIT
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class RevisionConfiguration:
             backend=RevisionBackendKind.from_value(
                 settings.get(
                     "backend",
-                    RevisionBackendKind.INTERNAL.value,
+                    RevisionBackendKind.GIT.value,
                 )
             ),
             auto_commit=bool(

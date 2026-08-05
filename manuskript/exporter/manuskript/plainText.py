@@ -9,6 +9,7 @@ from manuskript.domain.exporting import ExportArtifact
 from manuskript.exporter.basic import basicFormat
 from manuskript.exporter.page_routes import page_renderer_route_id
 from manuskript.functions import getSaveFileNameWithSuffix, safeTranslate
+from manuskript.media_types import MARKDOWN
 from manuskript.models import outlineItem
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
 import logging
@@ -24,8 +25,8 @@ class plainText(basicFormat):
         "Preview": True,
     }
     icon = "text-plain"
-    format_id = "plain"
-    artifact_media_type = "text/plain"
+    media_type = "text/plain"
+    in_memory = True
 
     # Default settings used in self.getExportFilename. For easy subclassing when exporting plaintext.
     exportVarName = "lastPlainText"
@@ -84,7 +85,7 @@ class plainText(basicFormat):
             content=self.output(settingsWidget),
             suggested_name=(stem or "manuskript")
             + self.exportDefaultSuffix,
-            media_type=self.artifact_media_type,
+            media_type=self.media_type,
         )
 
     def getExportFilename(self, settingsWidget, varName=None, filter=None):
@@ -248,7 +249,7 @@ class plainText(basicFormat):
             source=source,
             route_id=self.pageRendererRoute(),
         )
-        if document.source_format == "markdown":
+        if document.source_format == MARKDOWN:
             return self.processText(document.content, settings)
         if document.source_format == target_format:
             return self.processRenderedPageText(
@@ -262,12 +263,16 @@ class plainText(basicFormat):
         )
 
     def pageRenderTarget(self):
-        """Format in which this exporter composes individual pages."""
-        return self.format_id or "markdown"
+        """Media type in which this exporter composes individual pages."""
+        return (
+            self.representation_media_type
+            or self.media_type
+            or MARKDOWN
+        )
 
     def pageOutputFormat(self):
-        """User-facing destination used to persist renderer routing."""
-        return self.format_id or self.pageRenderTarget()
+        """The destination media type routing choices are saved against."""
+        return self.media_type or self.pageRenderTarget()
 
     def pageRendererRoute(self):
         override = getattr(self, "_page_renderer_route_override", None)

@@ -6,6 +6,7 @@ from PyQt5.QtCore import QUrl
 from manuskript.exporter.manuskript import HTML as MskHTML
 from manuskript.exporter.pandoc.abstractPlainText import abstractPlainText
 from manuskript.functions import safeTranslate
+from manuskript.media_types import HTML as HTML_MEDIA_TYPE
 
 import os
 
@@ -17,6 +18,8 @@ class HTML(abstractPlainText):
 
     exportVarName = "lastPandocHTML"
     toFormat = "html"
+    media_type = HTML_MEDIA_TYPE
+    representation_media_type = HTML_MEDIA_TYPE
     exportFilter = "HTML files (*.html);; Any files (*)"
     exportDefaultSuffix = ".html"
     requires = {

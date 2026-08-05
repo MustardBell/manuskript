@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import qApp
 
 from manuskript.exporter.pandoc.abstractOutput import abstractOutput
 from manuskript.functions import safeTranslate
+from manuskript.media_types import DOCX, EPUB, HTML, ODT
 
 
 class ePub(abstractOutput):
@@ -13,6 +14,8 @@ class ePub(abstractOutput):
 
     exportVarName = "lastPandocePub"
     toFormat = "epub"
+    media_type = EPUB
+    representation_media_type = HTML
     exportFilter = "ePub files (*.epub);; Any files (*)"
     exportDefaultSuffix = ".epub"
 
@@ -23,6 +26,7 @@ class OpenDocument(abstractOutput):
 
     exportVarName = "lastPandocODT"
     toFormat = "odt"
+    media_type = ODT
     icon = "application-vnd.oasis.opendocument.text"
     exportFilter = "OpenDocument files (*.odt);; Any files (*)"
     exportDefaultSuffix = ".odt"
@@ -34,6 +38,7 @@ class DocX(abstractOutput):
 
     exportVarName = "lastPandocDocX"
     toFormat = "docx"
+    media_type = DOCX
     icon = "application-vnd.openxmlformats-officedocument.wordprocessingml.document"
     exportFilter = "DocX files (*.docx);; Any files (*)"
     exportDefaultSuffix = ".docx"
