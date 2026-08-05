@@ -19,6 +19,7 @@ from manuskript.controllers.view_configuration_controller import (
     ViewConfigurationController,
 )
 from manuskript.controllers.world_controller import WorldController
+from manuskript.media_types import core_registry
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -104,6 +105,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         application_preferences=None,
         plugin_runtime=None,
         plugin_option_store=None,
+        media_types=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -161,6 +163,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
         self.pluginRuntime = plugin_runtime
         self.pluginOptionStore = plugin_option_store
+        self.mediaTypes = (
+            media_types if media_types is not None else core_registry()
+        )
         # Structure edits are undoable per project; the stack is
         # cleared whenever a different project is opened.
         self.undoStack = QUndoStack(self)
@@ -174,6 +179,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self,
                 plugin_runtime,
                 plugin_option_store,
+                media_types=self.mediaTypes,
             )
             if plugin_runtime is not None
             else None

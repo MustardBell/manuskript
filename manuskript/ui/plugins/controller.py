@@ -2,6 +2,7 @@ from functools import partial
 
 from PyQt5.QtWidgets import QAction
 
+from manuskript.media_types import core_registry
 from manuskript.plugins.api import PluginSettingsContext
 from manuskript.plugins.errors import PluginScopeError
 from manuskript.ui.plugins.manager import PluginManagerDialog
@@ -16,10 +17,13 @@ from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
 class PluginUiController:
     """Own application-level plugin UI and contribution refreshes."""
 
-    def __init__(self, window, runtime, option_store):
+    def __init__(self, window, runtime, option_store, media_types=None):
         self.window = window
         self.runtime = runtime
         self.option_store = option_store
+        self.mediaTypes = (
+            media_types if media_types is not None else core_registry()
+        )
         self.markupProfiles = MarkupProfileService(
             runtime.registry,
             report_error=window.statusPresenter.show,
@@ -28,6 +32,7 @@ class PluginUiController:
         self.pageTypes = PageTypeService(
             runtime.registry,
             option_store=option_store,
+            media_types=self.mediaTypes,
             report_error=window.statusPresenter.show,
             source_provider=self._page_source,
             parent=window,

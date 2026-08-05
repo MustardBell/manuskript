@@ -16,6 +16,10 @@ from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
 from manuskript import preferences_migrations
+from manuskript.media_types import core_registry
+from manuskript.services.media_type_preferences import (
+    MediaTypePreferences,
+)
 from manuskript.plugins.runtime import PluginRuntime
 from manuskript.services.plugin_options import PluginOptionStore
 from manuskript.services.plugin_preferences import PluginPreferences
@@ -186,6 +190,9 @@ def prepare(arguments, tests=False):
     plugin_runtime.discover()
     plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
+    media_types = MediaTypePreferences(plugin_settings).apply(
+        core_registry()
+    )
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
@@ -204,6 +211,7 @@ def prepare(arguments, tests=False):
         application_preferences=preferences,
         plugin_runtime=plugin_runtime,
         plugin_option_store=plugin_option_store,
+        media_types=media_types,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary

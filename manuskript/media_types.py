@@ -136,12 +136,21 @@ class MediaTypeRegistry:
     assignable the moment it is installed.
     """
 
-    def __init__(self):
+    def __init__(self, default_fallback=""):
         self._types = {}         # id -> MediaType, first namer wins
         self._declaredBy = {}    # id -> [origin], insertion-ordered
         self._promises = {}      # id -> {promise: [origin]}
         self._fallbacks = {}     # id -> id, assigned by the user
         self._overrides = {}     # id -> id, assigned by the user
+        # What stands in for a textual format that declared no base and
+        # whose owner assigned nothing. A default rather than a policy: it
+        # is one value, visible, and the user's assignment outranks it.
+        self._defaultFallback = str(default_fallback).strip()
+
+    @property
+    def default_fallback(self):
+        """The format that stands in when nothing more specific does."""
+        return self._defaultFallback
 
     # ------------------------------------------------------------ declaring
 
@@ -340,11 +349,24 @@ class MediaTypeRegistry:
     # ---------------------------------------------------------------- guards
 
     def _next_fallback(self, media_id):
+        """One step along the chain, most specific answer first.
+
+        The user's assignment beats the type's declared base, because a base
+        states what a format is a kind of and an assignment states what the
+        user wants instead. Both beat the registry default, which knows
+        nothing about the format beyond it being textual.
+        """
         assigned = self._fallbacks.get(media_id)
         if assigned:
             return assigned
         media_type = self._types.get(media_id)
-        return media_type.base if media_type is not None else ""
+        if media_type is None:
+            return ""
+        if media_type.base:
+            return media_type.base
+        if media_type.textual and media_id != self._defaultFallback:
+            return self._defaultFallback
+        return ""
 
     def _guard_base(self, media_type):
         if not media_type.base:
@@ -382,8 +404,14 @@ class MediaTypeRegistry:
 
 
 def core_registry():
-    """A registry holding everything Manuskript itself declares."""
-    registry = MediaTypeRegistry()
+    """A registry holding everything Manuskript itself declares.
+
+    Markdown is the default stand-in because every pipeline accepts it: it
+    is what the manuscript is written in and what every exporter can take.
+    That used to be spelled as a literal inside the renderer search, where
+    nobody could see or change it.
+    """
+    registry = MediaTypeRegistry(default_fallback=MARKDOWN)
     for media_type in CORE_MEDIA_TYPES:
         registry.declare(media_type, CORE)
     return registry

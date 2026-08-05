@@ -8,7 +8,11 @@ from manuskript.plugins.execution import (
     run_page_format_renderer,
     run_page_parser,
 )
-from manuskript.media_types import MARKDOWN
+from manuskript.media_types import (
+    MARKDOWN,
+    MediaTypeError,
+    core_registry,
+)
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -50,10 +54,13 @@ class PageTypeService(QObject):
 
     def __init__(
             self, registry, option_store=None, report_error=None,
-            source_provider=None, parent=None):
+            source_provider=None, media_types=None, parent=None):
         super().__init__(parent)
         self.registry = registry
         self.option_store = option_store
+        self.mediaTypes = (
+            media_types if media_types is not None else core_registry()
+        )
         self._report_error = report_error or (
             lambda _message, _duration=5000, _importance=2: None
         )
@@ -168,13 +175,25 @@ class PageTypeService(QObject):
         page_type = self.active_for(item)
         if page_type is None or page_type.parser_factory is None:
             return PageExportDocument(source, MARKDOWN)
+        resolved = self.resolve_renderer(
+            page_type.descriptor.id,
+            target_format,
+            route_id=route_id,
+        )
+        if resolved is None:
+            # Unassigned: nothing can render this page type into anything
+            # this destination accepts. The source goes in as it stands
+            # rather than the export failing outright.
+            LOGGER.warning(
+                "No renderer produces %s for page type %s; including the "
+                "page source unrendered.",
+                target_format,
+                page_type.descriptor.id,
+            )
+            return PageExportDocument(source, MARKDOWN)
+        renderer, render_format = resolved
         try:
             model = run_page_parser(page_type, source)
-            renderer, render_format = self.resolve_renderer(
-                page_type.descriptor.id,
-                target_format,
-                route_id=route_id,
-            )
             options = (
                 self.option_store.load(
                     renderer.descriptor.id,
@@ -193,34 +212,64 @@ class PageTypeService(QObject):
             self.report_error(page_type, error)
             raise
 
+    def fallback_chain(self, target_format):
+        """This media type, then everything that may stand in for it.
+
+        Corrupted stored choices can describe a loop. That is worth
+        reporting, not worth refusing to export over, so the exact type is
+        used alone.
+        """
+        try:
+            return self.mediaTypes.fallback_chain(target_format)
+        except MediaTypeError as error:
+            LOGGER.warning(
+                "Ignoring media type fallbacks for %s: %s",
+                target_format,
+                error,
+            )
+            return (target_format,)
+
     def renderers_for(self, page_type_id, target_format):
-        exact = [
+        """Renderers able to produce this page type, best match first.
+
+        An exact match ranks above anything standing in for the format, and
+        each step of the fallback chain above the next. Which renderer that
+        is has nothing to do with which plugin provides it: a second plugin
+        offering the same format becomes selectable by being installed.
+        """
+        owned = [
             renderer
             for renderer in self.registry.page_renderers
             if renderer.page_type_id == page_type_id
-            and target_format in renderer.target_formats
         ]
-        fallback = [
-            renderer
-            for renderer in self.registry.page_renderers
-            if renderer.page_type_id == page_type_id
-            and MARKDOWN in renderer.target_formats
-            and renderer not in exact
-        ]
-        key = lambda renderer: (
-            -renderer.priority,
-            renderer.descriptor.id,
-        )
-        return tuple(sorted(exact, key=key) + sorted(fallback, key=key))
+        ranked = []
+        for media_type in self.fallback_chain(target_format):
+            matches = sorted(
+                (
+                    renderer
+                    for renderer in owned
+                    if media_type in renderer.target_formats
+                    and renderer not in ranked
+                ),
+                key=lambda renderer: (
+                    -renderer.priority,
+                    renderer.descriptor.id,
+                ),
+            )
+            ranked.extend(matches)
+        return tuple(ranked)
 
     def resolve_renderer(
             self, page_type_id, target_format, route_id=None):
+        """The renderer an export would use, or None when there is none.
+
+        Nothing producing a format is a legal state, not an error. A plugin
+        may promise to consume a format nothing provides yet, and the answer
+        is that the route is unassigned.
+        """
         candidates = self.renderers_for(page_type_id, target_format)
         if not candidates:
-            raise RuntimeError(
-                "No renderer is available for page type {} as {} or "
-                "Markdown.".format(page_type_id, target_format)
-            )
+            return None
         selected = self.selected_renderer_id(
             page_type_id,
             route_id or target_format,
@@ -230,10 +279,13 @@ class PageTypeService(QObject):
             for candidate in candidates
             if candidate.descriptor.id == selected
         ), candidates[0])
-        render_format = (
-            target_format
-            if target_format in renderer.target_formats
-            else MARKDOWN
+        render_format = next(
+            (
+                media_type
+                for media_type in self.fallback_chain(target_format)
+                if media_type in renderer.target_formats
+            ),
+            target_format,
         )
         return renderer, render_format
 
