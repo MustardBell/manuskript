@@ -168,13 +168,49 @@ the plugin is disabled.
 
 ## Services (`requires` + `api.capability`)
 
-| name | you receive |
-|---|---|
-| `markup.bbcode` | a `BBCodeConverter` |
+| name | you receive | when |
+|---|---|---|
+| `markup.bbcode` | a `BBCodeConverter` | at registration |
+| `ui.export_routing` | an `ExportRoutingService` | in your settings panel |
+| `media.registry` | a read-only vocabulary view | in your settings panel |
 
 `api.capability(name)` raises `PluginScopeError` for anything you did not
 declare, even a name core has. The surface you touch is the intersection of
 what core publishes and what your manifest advertises.
+
+Some services arrive later than others. A UI service needs a running
+application and a plugin to be scoped to, and neither exists while plugins
+are loading, so you take those from `PluginSettingsContext.capability`
+inside your panel factory rather than from `api.capability` during
+registration. `requires` still gates them: a name core does not have leaves
+you **Unsatisfied** before your code runs either way.
+
+### `ui.export_routing`
+
+```python
+def build_settings_panel(context, parent=None):
+    routing = context.capability("ui.export_routing")
+    return routing.panel(
+        "vendor.my-page", parent=parent,
+        intro="Render my pages as…",
+    )
+```
+
+Core owns this widget, so its faults are fixed once for everyone, and core
+never places it: the details pane is yours. Asking for a page type you did
+not register raises `PluginScopeError`.
+
+Each row is one export destination, in one of three states:
+
+| state | row |
+|---|---|
+| renderers produce the format exactly | a plain choice |
+| only renderers producing a stand-in | the choice names what really comes out |
+| nothing at all | *Unassigned*, inert, tooltip naming what was searched |
+
+Every choice includes **Automatic**, which is what an unchosen route reads
+as and what selecting it restores. A route you have not decided never
+displays a renderer as though you had picked it.
 
 ### `markup.bbcode`
 
@@ -263,9 +299,10 @@ The `context` objects (`PluginSettingsContext`, `EditorWorkspaceContext`) are
 capability-scoped by design: you receive your own file namespace, a guarded
 outline gateway, an editor factory — never the main window or raw models.
 
-`PluginSettingsContext.page_routing` exposes only the page types **you**
-registered and raises `PluginScopeError` for anyone else's, so the scoping is
-enforced by the host rather than trusted to you.
+`PluginSettingsContext.capability` is how a panel reaches a UI service, and
+what it hands back is scoped to you: routing exposes only the page types
+**you** registered and raises `PluginScopeError` for anyone else's. The
+scoping is enforced by the host rather than trusted to you.
 
 ---
 

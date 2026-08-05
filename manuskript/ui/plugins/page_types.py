@@ -307,6 +307,11 @@ class PageTypeService(QObject):
             page_type_id,
             representation_format,
         )
+        if not renderer_id:
+            # Choosing nothing is a choice: it hands the route back to
+            # whichever renderer currently ranks highest.
+            self._forget_renderer(page_type_id, route_id)
+            return
         if renderer_id not in {
             renderer.descriptor.id for renderer in candidates
         }:
@@ -322,6 +327,16 @@ class PageTypeService(QObject):
         key = self.SELECTION_PREFIX + page_type_id
         values = self.option_store.load_values(key)
         values[route_id] = renderer_id
+        self.option_store.save(key, values)
+        self.contributionsChanged.emit()
+
+    def _forget_renderer(self, page_type_id, route_id):
+        if self.option_store is None:
+            return
+        key = self.SELECTION_PREFIX + page_type_id
+        values = self.option_store.load_values(key)
+        if values.pop(route_id, None) is None:
+            return
         self.option_store.save(key, values)
         self.contributionsChanged.emit()
 

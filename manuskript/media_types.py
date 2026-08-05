@@ -355,6 +355,10 @@ class MediaTypeRegistry:
         states what a format is a kind of and an assignment states what the
         user wants instead. Both beat the registry default, which knows
         nothing about the format beyond it being textual.
+
+        A format declared but not yet named gets no stand-in at all. Nobody
+        has said what it is, so assuming text would put Markdown into a file
+        that may not be text.
         """
         assigned = self._fallbacks.get(media_id)
         if assigned:
@@ -364,7 +368,11 @@ class MediaTypeRegistry:
             return ""
         if media_type.base:
             return media_type.base
-        if media_type.textual and media_id != self._defaultFallback:
+        if (
+            media_type.named
+            and media_type.textual
+            and media_id != self._defaultFallback
+        ):
             return self._defaultFallback
         return ""
 
@@ -401,6 +409,43 @@ class MediaTypeRegistry:
                 if what == "overrides"
                 else self._next_fallback(walker)
             )
+
+
+class MediaTypeView:
+    """Read-only access to the vocabulary, for plugins that ask.
+
+    A plugin declares formats in its manifest, where the declaration is
+    visible and versioned with the plugin. It does not declare them at
+    runtime, and it does not choose fallbacks or overrides for anyone --
+    those are the user's. So what a plugin gets is a reader.
+    """
+
+    def __init__(self, registry):
+        self._registry = registry
+
+    def known(self):
+        return self._registry.known()
+
+    def is_known(self, media_id):
+        return self._registry.is_known(media_id)
+
+    def get(self, media_id):
+        return self._registry.get(media_id)
+
+    def label(self, media_id):
+        return self._registry.label(media_id)
+
+    def declared_by(self, media_id):
+        return self._registry.declared_by(media_id)
+
+    def promises(self, media_id):
+        return self._registry.promises(media_id)
+
+    def fallback_chain(self, media_id):
+        return self._registry.fallback_chain(media_id)
+
+    def resolve(self, media_id):
+        return self._registry.resolve(media_id)
 
 
 def core_registry():

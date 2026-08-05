@@ -16,11 +16,30 @@ class PageRoutingGateway:
 
     def __init__(
             self, plugin_id, registry, page_types,
-            export_routes_provider=None):
+            export_routes_provider=None, edit_options=None,
+            show_status=None):
         self.plugin_id = plugin_id
         self._registry = registry
         self._pageTypes = page_types
         self._routesProvider = export_routes_provider
+        self.edit_options = edit_options or (
+            lambda _renderer, _parent=None: None
+        )
+        self.show_status = show_status or (
+            lambda _message, _duration=5000, _importance=2: None
+        )
+
+    def fallback_chain(self, media_type):
+        """What a format resolves to, for explaining a stand-in choice."""
+        return self._pageTypes.fallback_chain(media_type)
+
+    def label_for(self, media_type):
+        """A displayable name for a media type."""
+        return self._pageTypes.mediaTypes.label(media_type)
+
+    def require_owned(self, page_type_id):
+        """Public form of the ownership check, for building panels."""
+        self._require_owned(page_type_id)
 
     @property
     def page_types(self):

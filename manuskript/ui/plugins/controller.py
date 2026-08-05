@@ -2,7 +2,11 @@ from functools import partial
 
 from PyQt5.QtWidgets import QAction
 
-from manuskript.media_types import core_registry
+from manuskript.media_types import MediaTypeView, core_registry
+from manuskript.plugins.capabilities import (
+    CAPABILITY_MEDIA_REGISTRY,
+    CAPABILITY_UI_EXPORT_ROUTING,
+)
 from manuskript.plugins.api import PluginSettingsContext
 from manuskript.plugins.errors import PluginScopeError
 from manuskript.ui.plugins.manager import PluginManagerDialog
@@ -10,6 +14,7 @@ from manuskript.ui.plugins.options import PluginOptionsDialog
 from manuskript.ui.plugins.markup_profiles import MarkupProfileService
 from manuskript.ui.plugins.page_routing import PageRoutingGateway
 from manuskript.ui.plugins.page_types import PageTypeService
+from manuskript.ui.plugins.routing_panel import ExportRoutingService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
 from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
 
@@ -101,19 +106,62 @@ class PluginUiController:
         self.manager.activateWindow()
 
     def _settings_context(self, plugin_id):
-        """Capabilities a plugin may use to configure itself."""
+        """Capabilities a plugin may use to configure itself.
+
+        Nothing UI-shaped is built here. A panel that never asks for
+        routing does not get a routing gateway, which is the difference
+        between core offering a service and core imposing one.
+        """
         return PluginSettingsContext(
             plugin_id=plugin_id,
-            page_routing=PageRoutingGateway(
+            option_store=self.option_store,
+            edit_options=partial(self._edit_options, plugin_id),
+            show_status=self.window.statusPresenter.show,
+            capability=partial(self._settings_capability, plugin_id),
+        )
+
+    def _settings_capability(self, plugin_id, name):
+        """Hand over a deferred service, if this plugin declared it.
+
+        Same negotiation as during registration, enforced the same way:
+        a name the manifest does not list is refused even when core has it.
+        """
+        record = self.runtime.records.get(plugin_id)
+        declared = record.manifest.requires if record is not None else ()
+        if name not in declared:
+            raise PluginScopeError(
+                "Plugin {} did not declare capability {!r} in its "
+                "manifest.".format(plugin_id, name)
+            )
+        builder = self._DEFERRED.get(name)
+        if builder is None:
+            raise PluginScopeError(
+                "Capability {!r} is not available to a settings panel."
+                .format(name)
+            )
+        return builder(self, plugin_id)
+
+    def _export_routing(self, plugin_id):
+        return ExportRoutingService(
+            PageRoutingGateway(
                 plugin_id,
                 self.runtime.registry,
                 self.pageTypes,
                 export_routes_provider=self._export_routes,
-            ),
-            option_store=self.option_store,
-            edit_options=partial(self._edit_options, plugin_id),
-            show_status=self.window.statusPresenter.show,
+                edit_options=partial(self._edit_options, plugin_id),
+                show_status=self.window.statusPresenter.show,
+            )
         )
+
+    def _media_registry(self, _plugin_id):
+        return MediaTypeView(self.mediaTypes)
+
+    #: Services the UI host builds, because they need a running
+    #: application and a plugin to be scoped to.
+    _DEFERRED = {
+        CAPABILITY_UI_EXPORT_ROUTING: _export_routing,
+        CAPABILITY_MEDIA_REGISTRY: _media_registry,
+    }
 
     def _edit_options(self, plugin_id, contribution, parent=None):
         """Open the standard options editor for a plugin's own work."""

@@ -255,16 +255,19 @@ class PluginSettingsContext:
 
     Like EditorWorkspaceContext, the services are capability interfaces
     scoped to the plugin rather than the registry or main window.
-    ``page_routing`` only exposes page types this plugin registered and
-    rejects attempts to route anything else, so the scoping is enforced by
-    the host instead of trusted to the panel.
+
+    ``capability`` is the same negotiation as ``api.capability`` during
+    registration, moved to where a widget can actually be built: plugins
+    register before there is a main window, so a UI service cannot be handed
+    over then. It refuses any name the manifest did not declare, so core
+    stops pushing services at panels that never asked for one.
     """
 
     plugin_id: str
-    page_routing: Any
     option_store: Any
     edit_options: Callable[..., None]
     show_status: Callable[..., None]
+    capability: Callable[[str], Any]
 
 
 @dataclass(frozen=True)

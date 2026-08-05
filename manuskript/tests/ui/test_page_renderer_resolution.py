@@ -246,6 +246,19 @@ def test_nothing_stands_in_for_a_binary_destination():
     )
 
 
+def test_a_format_declared_but_not_yet_named_gets_no_stand_in():
+    registry = core_registry()
+    # Bare interest: somebody knows the name, nobody has said what it is.
+    registry.declare(FB2, "vendor.reader")
+
+    assert registry.fallback_chain(FB2) == (FB2,)
+
+    registry.declare(MediaType(FB2, "FictionBook 2"), "vendor.fb2")
+
+    # Named as textual, so now Markdown may stand in for it.
+    assert registry.fallback_chain(FB2) == (FB2, MARKDOWN)
+
+
 def test_a_registry_with_no_default_leaves_formats_alone():
     registry = MediaTypeRegistry()
     registry.declare(MediaType(HTML, "HTML"), "core")
