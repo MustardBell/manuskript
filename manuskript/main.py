@@ -20,6 +20,7 @@ from manuskript.media_types import core_registry
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
 )
+from manuskript.panels import PanelRegistry
 from manuskript.plugins.runtime import PluginRuntime
 from manuskript.services.plugin_options import PluginOptionStore
 from manuskript.services.plugin_preferences import PluginPreferences
@@ -199,6 +200,9 @@ def prepare(arguments, tests=False):
     media_type_preferences.apply(media_types)
     plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
+    # Every panel a window can show, core's and plugins' alike, in one
+    # application-scope list. Windows build their own copies from it.
+    panel_registry = PanelRegistry()
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
@@ -219,6 +223,7 @@ def prepare(arguments, tests=False):
         plugin_option_store=plugin_option_store,
         media_types=media_types,
         media_type_preferences=media_type_preferences,
+        panel_registry=panel_registry,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary

@@ -20,6 +20,7 @@ from manuskript.controllers.view_configuration_controller import (
 )
 from manuskript.controllers.world_controller import WorldController
 from manuskript.media_types import core_registry
+from manuskript.panels import PanelRegistry
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
 )
@@ -113,6 +114,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         plugin_option_store=None,
         media_types=None,
         media_type_preferences=None,
+        panel_registry=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -177,6 +179,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             media_type_preferences
             if media_type_preferences is not None
             else MediaTypePreferences()
+        )
+        # Application scope: every window reads the same panel list. A
+        # window without one gets an empty registry of its own, which is
+        # a working application with no optional panels.
+        self.panelRegistry = (
+            panel_registry if panel_registry is not None
+            else PanelRegistry()
         )
         # Structure edits are undoable per project; the stack is
         # cleared whenever a different project is opened.
