@@ -203,6 +203,102 @@ def test_a_failing_deactivate_never_masks_the_install_error(tmp_path):
     assert "cleanup exploded" not in record.error
 
 
+ACTIVATING_SOURCE = (
+    "from pathlib import Path\n"
+    "from manuskript.plugins import ("
+    "ExportContribution, ExtensionDescriptor)\n"
+    "class Handle:\n"
+    "    def activate(self, context):\n"
+    "        converter = context.capability('markup.bbcode')\n"
+    "        Path(__file__).with_name('activated').write_text(\n"
+    "            '{}:{}'.format(\n"
+    "                context.plugin_id, type(converter).__name__))\n"
+    "    def deactivate(self):\n"
+    "        Path(__file__).with_name('deactivated').touch()\n"
+    "def register(api):\n"
+    "    api.register_exporter(ExportContribution(\n"
+    "        ExtensionDescriptor('example.export', 'Example'), object))\n"
+    "    return Handle()\n"
+)
+
+
+def test_activate_runs_with_a_context_once_install_succeeded(tmp_path):
+    """Side effects belong in activate, so activate has to come with the
+    plugin's identity and its granted capabilities, and only ever run for
+    a plugin that is installed and staying.
+    """
+    create_plugin(
+        tmp_path,
+        source=ACTIVATING_SOURCE,
+        manifest={"requires": ["markup.bbcode"]},
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.LOADED
+    sentinel = tmp_path / "example.plugin" / "activated"
+    assert sentinel.read_text() == "example.plugin:BBCodeConverter"
+
+
+def test_activate_never_runs_when_install_is_refused(tmp_path):
+    """A refused plugin was never in; only deactivate may run, to undo
+    whatever the entry point should not have done.
+    """
+    create_plugin(
+        tmp_path,
+        source=FAILING_INSTALL_SOURCE.format(
+            extra=(
+                "    def activate(self, context):\n"
+                "        Path(__file__).with_name('activated').touch()\n"
+            ),
+        ),
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    plugin_root = tmp_path / "example.plugin"
+    assert not (plugin_root / "activated").exists()
+    assert (plugin_root / "deactivated").exists()
+
+
+def test_a_failing_activate_unwinds_the_whole_load(tmp_path):
+    """Activation is part of the load: if it raises, the plugin must end
+    up exactly as refused as an install conflict would leave it.
+    """
+    create_plugin(
+        tmp_path,
+        source=ACTIVATING_SOURCE.replace(
+            "        converter = context.capability('markup.bbcode')\n",
+            "        raise RuntimeError('activation exploded')\n",
+        ),
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.FAILED
+    assert "activation exploded" in record.error
+    assert record.handle is None
+    assert runtime.registry.exporters == ()
+    assert (tmp_path / "example.plugin" / "deactivated").exists()
+
+
 def test_plugin_package_supports_relative_imports(tmp_path):
     plugin_root = create_plugin(
         tmp_path,

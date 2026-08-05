@@ -57,6 +57,20 @@ class ExtensionDescriptor:
 
 
 @dataclass(frozen=True)
+class PluginActivationContext:
+    """What a handle's ``activate`` receives, once install has succeeded.
+
+    The entry point stages contributions and can still be refused, so it
+    must not leave side effects behind. Anything that connects signals,
+    starts timers or touches the world belongs in ``activate``, which only
+    runs for a plugin that is installed and staying.
+    """
+
+    plugin_id: str
+    capability: Callable[[str], Any]
+
+
+@dataclass(frozen=True)
 class OutlineSnapshot:
     id: str
     title: str

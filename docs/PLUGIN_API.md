@@ -158,8 +158,18 @@ def register(api):
 Nothing you register takes effect until every contribution validates.
 Registration is atomic: one rejected contribution installs none of them.
 
-Returning an object with a `deactivate()` method gets that method called when
-the plugin is disabled.
+Returning an object from your entry point gives the plugin a lifecycle.
+Both methods are optional, and returning nothing stays valid:
+
+- `activate(context)` runs once install has succeeded. Side effects —
+  connecting signals, starting timers, touching the world — belong here,
+  not in the entry point, which can still be refused after it runs. The
+  context carries `plugin_id` and the same `capability(name)` accessor
+  the registrar has. An activate that raises unwinds the whole load and
+  the plugin reports **Failed**.
+- `deactivate()` runs when the plugin is disabled or unloaded, and also
+  when a load fails after the entry point already ran — so it must be
+  safe to call whether or not `activate` ever happened.
 
 ### What you may register
 

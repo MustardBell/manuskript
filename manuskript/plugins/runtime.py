@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from manuskript.plugins.api import PLUGIN_API_VERSION
+from manuskript.plugins.api import (
+    PLUGIN_API_VERSION,
+    PluginActivationContext,
+)
 from manuskript.plugins.capabilities import grant
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
@@ -260,6 +263,7 @@ class PluginRuntime:
                 plugin_id,
                 registrar.contributions,
             )
+            self._activate_handle(plugin_id, handle, registrar)
         except Exception as error:
             # The entry point already ran and may have connected signals or
             # started timers. Whatever it started has to be told to stop,
@@ -348,6 +352,21 @@ class PluginRuntime:
         self._remove_modules(record.module_prefix)
         record.handle = None
         record.module_prefix = ""
+
+    @staticmethod
+    def _activate_handle(plugin_id, handle, registrar):
+        """Run the handle's side effects, now that refusal is behind us.
+
+        An activate that raises unwinds the whole load: the plugin is
+        deactivated, uninstalled and reported FAILED, exactly as if the
+        install itself had been refused.
+        """
+        if handle is None or not hasattr(handle, "activate"):
+            return
+        handle.activate(PluginActivationContext(
+            plugin_id=plugin_id,
+            capability=registrar.capability,
+        ))
 
     @staticmethod
     def _deactivate_handle(plugin_id, handle):
