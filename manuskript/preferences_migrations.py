@@ -18,10 +18,6 @@ appear. Everything downstream of :func:`upgrade` sees current-shape data.
 import json
 import logging
 
-from manuskript.exporter.page_routes import (
-    ROUTE_SEPARATOR,
-    page_renderer_route_id,
-)
 from manuskript.media_types import (
     BBCODE,
     DOCX,
@@ -94,10 +90,29 @@ def _v0_to_v1(settings):
     return settings
 
 
+def _route_syntax():
+    """How route identifiers are spelled, imported only when needed.
+
+    ``manuskript.exporter.page_routes`` looks harmless, but importing it
+    executes the exporter package, which reaches Qt exporter settings
+    widgets and from there ``manuskript.ui.style``. That module snapshots
+    ``qApp.palette()`` at import time, so pulling it in from a module
+    ``main`` imports would freeze the palette before the application style
+    is chosen, and every derived colour in the interface would be wrong.
+    """
+    from manuskript.exporter.page_routes import (
+        ROUTE_SEPARATOR,
+        page_renderer_route_id,
+    )
+
+    return ROUTE_SEPARATOR, page_renderer_route_id
+
+
 def _migrate_route(route):
     """One stored route identifier, in whatever shape it was written."""
+    separator, page_renderer_route_id = _route_syntax()
     route = str(route)
-    if ROUTE_SEPARATOR in route:
+    if separator in route:
         # Already a pair of media types.
         return route
     if LEGACY_SEPARATOR in route:
