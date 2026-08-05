@@ -41,6 +41,24 @@ def host_editor(editor, width=480, height=360):
     return host
 
 
+def wait_until(condition, timeout=2000):
+    """Wait for a condition rather than for a fixed number of ms.
+
+    A keystroke delivered to a widget is processed through the event
+    loop, and how long that takes depends on what else the machine is
+    doing. A fixed wait passes on an idle machine and fails on a busy
+    one, which is a race in the test rather than a fault in the editor.
+    """
+    waited = 0
+    while waited < timeout:
+        qApp.processEvents()
+        if condition():
+            return True
+        QTest.qWait(10)
+        waited += 10
+    return condition()
+
+
 def format_at(editor, position):
     block = editor.document().findBlock(position)
     position_in_block = position - block.position()
@@ -531,12 +549,16 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
         qApp.processEvents()
         assert host.currentWidget() is editor
         QTest.keyClicks(editor, "x")
-        QTest.qWait(50)
+        wait_until(
+            lambda: editor.toPlainText() == "**first**\nsecondx"
+        )
 
         assert editor.toPlainText() == "**first**\nsecondx"
 
         editor.undo()
-        qApp.processEvents()
+        wait_until(
+            lambda: editor.toPlainText() == "**first**\nsecond"
+        )
 
         assert editor.toPlainText() == "**first**\nsecond"
     finally:

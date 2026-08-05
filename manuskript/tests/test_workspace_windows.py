@@ -10,7 +10,7 @@ from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtWidgets import QPlainTextEdit
 
 from manuskript.panels import PanelContext, PanelDescriptor
-from manuskript.panels.core import METADATA, PROJECT_TREE
+from manuskript.panels.core import METADATA, PROJECT_TREE, STORYLINE
 from manuskript.services.workspace_state import WorkspaceStateStore
 
 
@@ -93,12 +93,16 @@ def test_each_window_has_its_own_panels(MWEmptyProject):
         assert mine.widget is not theirs.widget
         assert mine.action is not theirs.action
 
+        was_visible = not mine.widget.isHidden()
         other.panelHost.set_visible(METADATA, True)
         window.panelHost.set_visible(METADATA, False)
 
         assert not theirs.widget.isHidden()
         assert mine.widget.isHidden()
     finally:
+        # The window is shared with every later test, so its panels are
+        # left as they were found.
+        window.panelHost.set_visible(METADATA, was_visible)
         other.close()
 
 
@@ -442,3 +446,146 @@ def test_the_move_menu_says_when_there_is_nowhere_to_move(
     assert len(entries) == 1
     assert "No other window" in entries[0].text()
     assert not entries[0].isEnabled()
+
+
+# ------------------------------------------------- tearing a panel off
+
+def test_a_torn_off_panel_floats_free_of_the_layout(MWEmptyProject):
+    """A floating dock, keeping the same widget: the panel leaves the
+    splitter without being rebuilt.
+    """
+    window = MWEmptyProject
+    original = window.panelHost.instance(METADATA).widget
+    try:
+        floated = window.togglePanelFloating(METADATA)
+
+        assert floated.widget is original
+        assert floated.container is not None
+        assert floated.container.isFloating()
+        assert METADATA in window.panelHost.floating()
+        assert window.splitterRedacH.indexOf(original) == -1
+    finally:
+        window.togglePanelFloating(METADATA)
+
+
+def test_a_floating_panel_is_not_a_workspace_window(MWEmptyProject):
+    """So it can neither keep a project open nor answer for the last
+    close -- which a real second window would.
+    """
+    window = MWEmptyProject
+    try:
+        floated = window.togglePanelFloating(METADATA)
+
+        assert floated.container not in (
+            window.windowRegistry.workspace_windows
+        )
+        assert window.windowRegistry.is_last(window)
+        assert len(window.windowRegistry.workspace_windows) == 1
+    finally:
+        window.togglePanelFloating(METADATA)
+
+
+def test_redocking_returns_the_panel_to_its_slot(MWEmptyProject):
+    """Its descriptor says where it belongs, so it goes back there
+    rather than wherever it happened to come from.
+    """
+    window = MWEmptyProject
+    original = window.panelHost.instance(METADATA).widget
+    window.togglePanelFloating(METADATA)
+
+    redocked = window.togglePanelFloating(METADATA)
+
+    assert redocked.widget is original
+    assert window.panelHost.floating() == ()
+    assert window.splitterRedacH.indexOf(original) == 2
+    assert redocked.container is None
+
+
+def test_a_torn_off_panel_keeps_its_model_bindings(MWEmptyProject):
+    """The binding is to the project's models, which belong to the
+    runtime -- so floating the panel cannot break it.
+    """
+    window = MWEmptyProject
+    panel = window.panelHost.instance(METADATA).widget
+    before = panel.properties.txtTitle._model
+    assert before is window.mdlOutline
+    try:
+        window.togglePanelFloating(METADATA)
+
+        assert panel.properties.txtTitle._model is before
+        assert panel.properties.txtGoal._model is window.mdlOutline
+    finally:
+        window.togglePanelFloating(METADATA)
+
+
+def test_a_torn_off_panel_is_still_toggled_from_the_toolbar(
+        MWEmptyProject):
+    window = MWEmptyProject
+    try:
+        floated = window.togglePanelFloating(METADATA)
+
+        assert METADATA in window.toolbar._panelToggles
+        floated.action.setChecked(False)
+        assert floated.container.isHidden()
+        floated.action.setChecked(True)
+        assert not floated.container.isHidden()
+    finally:
+        window.togglePanelFloating(METADATA)
+
+
+def test_the_float_menu_marks_what_is_already_floating(MWEmptyProject):
+    window = MWEmptyProject
+    try:
+        window.togglePanelFloating(METADATA)
+
+        window.buildPanelFloatMenu()
+
+        # By panel id, not by the text on the entry: the interface is
+        # translated, and this test should not depend on the locale.
+        checked = {
+            action.data(): action.isChecked()
+            for action in window.menuFloatPanel.actions()
+        }
+        assert checked[METADATA] is True
+        assert checked[STORYLINE] is False
+    finally:
+        window.togglePanelFloating(METADATA)
+
+
+def test_tearing_off_twice_is_not_two_floats(MWEmptyProject):
+    window = MWEmptyProject
+    try:
+        first = window.panelHost.tear_off(METADATA)
+        again = window.panelHost.tear_off(METADATA)
+
+        assert again is first
+        assert window.panelHost.floating() == (METADATA,)
+    finally:
+        window.panelHost.redock(METADATA)
+
+
+def test_redocking_does_not_steal_space_from_the_editor(MWEmptyProject):
+    """Taking a widget out of a splitter lets Qt hand its space to the
+    others, and putting it back takes space from whichever neighbour Qt
+    picks. That collapsed the editor beside the metadata panel.
+    """
+    window = MWEmptyProject
+    # A hidden splitter child has no width, so the panel has to be
+    # showing for its share to be the thing under test.
+    was_visible = not window.panelHost.instance(METADATA).widget.isHidden()
+    window.panelHost.set_visible(METADATA, True)
+    splitter = window.splitterRedacH
+    before = splitter.sizes()
+    assert len(before) == 3
+
+    window.togglePanelFloating(METADATA)
+    assert len(splitter.sizes()) == 2
+    window.togglePanelFloating(METADATA)
+
+    # Exactly the arrangement it had, rather than whatever Qt would
+    # redistribute -- the returning panel took its space from the editor
+    # beside it and was itself left with none.
+    assert splitter.sizes() == before
+    assert splitter.sizes()[2] > 0
+
+    window.panelHost.set_visible(METADATA, was_visible)

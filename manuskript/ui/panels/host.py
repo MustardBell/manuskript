@@ -38,6 +38,11 @@ class PanelInstance:
     container: Optional[QWidget] = None
     action: Optional[Any] = None
     host: Optional["PanelHost"] = None
+    #: The splitter's sizes while this panel was in it. Taking a widget
+    #: out of a splitter lets Qt hand its space to the others, and
+    #: putting it back takes that space from wherever Qt chooses -- so
+    #: the arrangement is remembered and restored rather than recomputed.
+    slot_sizes: Optional[list] = None
 
 
 class PanelHost:
@@ -151,6 +156,27 @@ class PanelHost:
         dock.show()
         return instance
 
+    def _slot_splitter(self, descriptor):
+        """The splitter a panel belongs in, if it belongs in one."""
+        if descriptor.placement != SPLITTER_SLOT or descriptor.slot is None:
+            return None
+        return self.window.findChild(
+            QSplitter, descriptor.slot.splitter,
+        )
+
+    @staticmethod
+    def _restore_slot_sizes(splitter, instance):
+        """Give the splitter back the arrangement it had.
+
+        Without this, a panel that leaves and returns takes its space
+        from whichever neighbour Qt picks -- which is how re-docking the
+        metadata panel collapsed the editor beside it.
+        """
+        sizes = instance.slot_sizes
+        instance.slot_sizes = None
+        if sizes and len(sizes) == splitter.count():
+            splitter.setSizes(sizes)
+
     def _toggle_action(self, descriptor, widget):
         """The one action controlling a panel's visibility.
 
@@ -198,11 +224,18 @@ class PanelHost:
         widget = instance.widget
         widget.hide()
         if instance.action is not None:
-            # Stop driving this widget. The action belongs to the window
-            # and goes with it; an adopting host makes its own.
-            instance.action.toggled.disconnect(widget.setVisible)
+            # Stop driving whatever it was driving -- the widget in a
+            # slot, the dock when floating. The action belongs to the
+            # window and goes with it; an adopting host makes its own.
+            try:
+                instance.action.toggled.disconnect()
+            except TypeError:
+                pass
             instance.action.setEnabled(False)
             instance.action = None
+        splitter = self._slot_splitter(instance.descriptor)
+        if splitter is not None and splitter.indexOf(widget) >= 0:
+            instance.slot_sizes = splitter.sizes()
         container = instance.container
         instance.container = None
         if container is not None:
@@ -233,9 +266,7 @@ class PanelHost:
             )
         widget = instance.widget
         if descriptor.placement == SPLITTER_SLOT:
-            splitter = self.window.findChild(
-                QSplitter, descriptor.slot.splitter,
-            )
+            splitter = self._slot_splitter(descriptor)
             if splitter is None:
                 raise LookupError(
                     "This window has no splitter named {!r}.".format(
@@ -264,7 +295,62 @@ class PanelHost:
         # widget as well would only be a second way to say so, and every
         # extra show is a chance to take focus from somewhere.
         instance.action.setChecked(True)
+        # Only once it is visible. A hidden child of a splitter has no
+        # width, so restoring the arrangement before this would hand the
+        # returning panel nothing and leave the rest as Qt left them.
+        splitter = self._slot_splitter(descriptor)
+        if splitter is not None:
+            self._restore_slot_sizes(splitter, instance)
         return instance
+
+    def tear_off(self, panel_id):
+        """Float a panel free of the layout, still owned by this window.
+
+        A floating dock, not a window of its own: it never registers as
+        a workspace, so it cannot keep a project open or answer for the
+        last close. A splitter panel leaves its slot to do this, and
+        re-docking puts it back.
+        """
+        instance = self._instances.get(panel_id)
+        if instance is None:
+            return None
+        if instance.container is not None and instance.container.isFloating():
+            return instance
+        descriptor = instance.descriptor
+        instance = self._detach(panel_id, keep=True)
+        widget = instance.widget
+        dock = QDockWidget(self.window.tr(descriptor.title), self.window)
+        dock.setObjectName(
+            "panel.floating.{}".format(descriptor.id)
+        )
+        dock.setWidget(widget)
+        dock.setFloating(True)
+        instance.container = dock
+        instance.action = self._toggle_action(descriptor, dock)
+        instance.host = self
+        self._instances[descriptor.id] = instance
+        widget.show()
+        instance.action.setChecked(True)
+        return instance
+
+    def redock(self, panel_id):
+        """Put a torn-off panel back where its descriptor says it goes."""
+        instance = self._instances.get(panel_id)
+        if instance is None:
+            return None
+        if instance.container is None or not instance.container.isFloating():
+            return instance
+        released = self.release(panel_id)
+        return self.adopt(released)
+
+    def floating(self):
+        """Every panel of this window currently floating free."""
+        return tuple(
+            panel_id
+            for panel_id, instance in self._instances.items()
+            if instance.container is not None
+            and instance.container.isFloating()
+        )
 
     def set_visible(self, panel_id, visible=True):
         """Toggle a panel through its own action, wherever it is shown.

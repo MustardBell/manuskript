@@ -403,6 +403,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         anchor = before[0] if before else None
         self.menuView.insertAction(anchor, self.actNewWindow)
 
+        self.menuFloatPanel = QMenu(self.tr("&Float Panel"), self)
+        self.menuFloatPanel.setObjectName("menuFloatPanel")
+        self.menuFloatPanel.aboutToShow.connect(self.buildPanelFloatMenu)
+        self.menuView.insertMenu(anchor, self.menuFloatPanel)
+
         self.menuMovePanel = QMenu(self.tr("Move &Panel To"), self)
         self.menuMovePanel.setObjectName("menuMovePanel")
         self.menuMovePanel.aboutToShow.connect(self.buildPanelMoveMenu)
@@ -435,6 +440,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         return adopted
 
+    def togglePanelFloating(self, panel_id):
+        """Float a docked panel, or put a floating one back."""
+        instance = self.panelHost.instance(panel_id)
+        if instance is None:
+            return None
+        if panel_id in self.panelHost.floating():
+            moved = self.panelHost.redock(panel_id)
+        else:
+            moved = self.panelHost.tear_off(panel_id)
+        if moved is not None:
+            self.toolbar.removePanelToggle(panel_id)
+            self.toolbar.addPanelToggle(
+                moved.action,
+                moved.widget,
+                moved.descriptor.group,
+                panel_id=panel_id,
+            )
+        return moved
+
+    def buildPanelFloatMenu(self):
+        """Offer each panel of this window a float or a re-dock."""
+        self.menuFloatPanel.clear()
+        floating = set(self.panelHost.floating())
+        for panel_id, instance in sorted(
+            self.panelHost.instances.items()
+        ):
+            action = self.menuFloatPanel.addAction(
+                self.tr(instance.descriptor.title)
+            )
+            # Carries which panel it acts on, so nothing has to read it
+            # back off a translated label.
+            action.setData(panel_id)
+            action.setCheckable(True)
+            action.setChecked(panel_id in floating)
+            action.triggered.connect(
+                partial(self.togglePanelFloating, panel_id)
+            )
+        if not self.panelHost.instances:
+            action = self.menuFloatPanel.addAction(
+                self.tr("No panel in this window")
+            )
+            action.setEnabled(False)
+
     def buildPanelMoveMenu(self):
         """Offer each of this window's panels to each other window.
 
@@ -466,9 +514,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             submenu = self.menuMovePanel.addMenu(
                 self.tr(instance.descriptor.title)
             )
+            submenu.menuAction().setData(panel_id)
             offered += 1
             for window in targets:
                 action = submenu.addAction(window.windowTitle())
+                action.setData(panel_id)
                 action.triggered.connect(
                     partial(self.movePanelTo, panel_id, window)
                 )
