@@ -117,3 +117,51 @@ def test_raw_plugin_data_remains_editable_without_plugin():
         == "new raw text"
     )
     assert changes == [True]
+
+
+def test_two_hosts_declare_one_panel_and_open_their_own():
+    """Every window has a host, and every host describes the same
+    contributions. Declaring per window refused the second window
+    outright, which is what opening a second workspace window did.
+    """
+    from manuskript.panels import PanelRegistry
+    from manuskript.ui.panels import PanelHost
+
+    registry = PanelRegistry()
+    runtime = panel_runtime(
+        lambda _context, parent: QPlainTextEdit(parent)
+    )
+    first_window = PanelTestWindow()
+    second_window = PanelTestWindow()
+    first = ProjectPanelHost(
+        first_window, runtime,
+        panel_registry=registry,
+        panel_host=PanelHost(first_window, registry),
+    )
+    second = ProjectPanelHost(
+        second_window, runtime,
+        panel_registry=registry,
+        panel_host=PanelHost(second_window, registry),
+    )
+
+    # Declared once, application scope: what exists, not who shows it.
+    assert [entry.id for entry in registry.descriptors()] == [
+        "plugin.example.notes.example.notes.panel",
+    ]
+
+    mine = first.open_panel("example.notes.panel")
+    theirs = second.open_panel("example.notes.panel")
+
+    assert mine is not None and theirs is not None
+    assert mine is not theirs
+    assert mine.widget().window() is first_window
+    assert theirs.widget().window() is second_window
+    assert mine.objectName() == theirs.objectName()
+
+    # A contribution leaving is noticed by both, and undeclared once.
+    runtime.registry.remove_plugin("example.notes")
+    first.refresh()
+    second.refresh()
+
+    assert registry.descriptors() == ()
+    assert first.docks == {} and second.docks == {}

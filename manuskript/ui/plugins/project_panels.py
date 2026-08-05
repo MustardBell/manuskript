@@ -115,6 +115,12 @@ class ProjectPanelHost:
     def _declare(self, contribution_id, record):
         """One contribution becomes one panel the whole application sees.
 
+        The declaration is application scope -- what exists -- while the
+        widgets are per window. Every window has one of these hosts and
+        every one of them describes the same contributions, so the first
+        to arrive declares and the rest find it declared; declaring
+        again would refuse the second window outright.
+
         The dock keeps its historic objectName so saved window layouts
         keep recognising it; only the panel id is new vocabulary.
         """
@@ -122,22 +128,36 @@ class ProjectPanelHost:
             record.plugin_id,
             contribution_id,
         )
-        self.panelRegistry.register(PanelDescriptor(
-            id=panel_id,
-            title=record.contribution.descriptor.name,
-            placement=DOCK,
-            requires_project=True,
-            object_name="pluginProjectPanel.{}".format(contribution_id),
-            widget_factory=partial(self._build_widget, contribution_id),
-        ))
+        if panel_id not in self.panelRegistry:
+            self.panelRegistry.register(PanelDescriptor(
+                id=panel_id,
+                title=record.contribution.descriptor.name,
+                placement=DOCK,
+                requires_project=True,
+                object_name="pluginProjectPanel.{}".format(
+                    contribution_id
+                ),
+                # Builds against the window in the context it is given,
+                # not against the host that happened to declare it, so
+                # every window's copy is its own.
+                widget_factory=partial(
+                    self._build_widget, contribution_id,
+                ),
+            ))
         self._panelIds[contribution_id] = panel_id
         self._owners[contribution_id] = record.plugin_id
 
     def _forget(self, contribution_id):
+        """Drop a contribution that has left the runtime.
+
+        Every window's host notices the same departure, so the panel is
+        undeclared once and the others simply find it gone.
+        """
         panel_id = self._panelIds.pop(contribution_id)
         self._owners.pop(contribution_id, None)
         self.panels.close(panel_id)
-        self.panelRegistry.deregister(panel_id)
+        if panel_id in self.panelRegistry:
+            self.panelRegistry.deregister(panel_id)
 
     def _build_widget(self, contribution_id, context, parent):
         """Build the plugin's widget with its own context, looked up
