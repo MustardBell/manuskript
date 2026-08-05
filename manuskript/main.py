@@ -15,6 +15,7 @@ from manuskript.functions import appPath, resetTranslation
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
+from manuskript import preferences_migrations
 from manuskript.plugins.runtime import PluginRuntime
 from manuskript.services.plugin_options import PluginOptionStore
 from manuskript.services.plugin_preferences import PluginPreferences
@@ -175,6 +176,9 @@ def prepare(arguments, tests=False):
     settings_manager.applyTooltipStyle()
 
     plugin_settings = QSettings()
+    # Before anything reads a routing choice, so nothing downstream has to
+    # know how preferences used to be spelled.
+    preferences_migrations.upgrade(plugin_settings)
     plugin_runtime = PluginRuntime(
         [appPath("manuskript/plugins")],
         PluginPreferences(plugin_settings),

@@ -243,12 +243,7 @@ class PageTypeService(QObject):
         values = self.option_store.load_values(
             self.SELECTION_PREFIX + page_type_id
         )
-        selected = values.get(target_format, "")
-        if not selected and ":" in target_format:
-            # Renderer routes used the representation itself before
-            # exporters began publishing stable destination routes.
-            selected = values.get(target_format.rsplit(":", 1)[-1], "")
-        return str(selected)
+        return str(values.get(target_format, ""))
 
     def select_renderer(
             self, page_type_id, route_id, renderer_id,
