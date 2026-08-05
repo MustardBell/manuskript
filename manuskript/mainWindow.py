@@ -232,6 +232,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else None
         )
         self.buildDeveloperMenu()
+        self.buildWorkspaceMenu()
         self.projectLifecycleView = ProjectLifecycleView(self)
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
@@ -361,6 +362,70 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.projectRuntime.detach(self.projectLifecycleView)
         self.windowRegistry.unregister(self)
         super().closeEvent(event)
+
+    def buildWorkspaceMenu(self):
+        """Offer another window onto the same project.
+
+        Built in code rather than in the Designer file: the action does
+        nothing a window owns, and regenerating the whole .ui to add one
+        menu entry buys nothing.
+        """
+        self.actNewWindow = QAction(self.tr("&New Window"), self)
+        self.actNewWindow.setObjectName("actNewWindow")
+        self.actNewWindow.setStatusTip(
+            self.tr("Open another window onto this project")
+        )
+        self.actNewWindow.triggered.connect(self.openWorkspaceWindow)
+        before = self.menuView.actions()
+        self.menuView.insertAction(
+            before[0] if before else None,
+            self.actNewWindow,
+        )
+        self.menuView.insertSeparator(
+            before[0] if before else None
+        )
+
+    def openWorkspaceWindow(self):
+        """Another view of this project, sharing everything it owns.
+
+        The new window is handed the same project runtime, panel
+        registry and plugin runtime, so it edits the one project rather
+        than a copy of it, and it joins a project already open instead
+        of going through the welcome screen.
+        """
+        window = MainWindow(
+            self.settingsManager,
+            application_preferences=self.applicationPreferences,
+            plugin_runtime=self.pluginRuntime,
+            plugin_option_store=self.pluginOptionStore,
+            media_types=self.mediaTypes,
+            media_type_preferences=self.mediaTypePreferences,
+            panel_registry=self.panelRegistry,
+            project_runtime=self.projectRuntime,
+            window_registry=self.windowRegistry,
+        )
+        window.adoptOpenProject()
+        window.show()
+        return window
+
+    def adoptOpenProject(self):
+        """Show the project this window's runtime already has open.
+
+        A first window reaches a project by loading one; a later window
+        finds it already loaded and only has to catch its own widgets
+        up -- models installed, signals connected, saved view settings
+        applied.
+        """
+        runtime = self.projectRuntime
+        if not runtime.isOpen:
+            return False
+        view = self.projectLifecycleView
+        view.install_models(runtime.models)
+        view.sync_to_state(True)
+        view.connect_project()
+        view.apply_loaded_settings()
+        view.project_opened()
+        return True
 
     def quitApplication(self):
         """Close every workspace window, the primary last.
