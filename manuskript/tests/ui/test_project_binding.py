@@ -6,12 +6,19 @@ from manuskript.ui.project_binding import ProjectBinding
 
 
 def make_binding():
-    binding = ProjectBinding(MagicMock())
+    # The context binding is built at bind time, from the factory, since
+    # there are no models to bind until a project is open. A test says
+    # what that factory hands back rather than assigning afterwards.
+    contexts = MagicMock()
+    binding = ProjectBinding(
+        MagicMock(),
+        contexts_factory=lambda: contexts,
+    )
     binding.flat_data = MagicMock()
     binding.features = MagicMock()
-    binding.contexts = MagicMock()
     binding.outline_selection = MagicMock()
     binding.debug_views = MagicMock()
+    binding.expectedContexts = contexts
     return binding
 
 
@@ -19,8 +26,14 @@ def test_project_binding_owns_complete_binding_lifecycle():
     binding = make_binding()
     reference_service = MagicMock()
     text_editor_context = MagicMock()
-    binding.contexts.reference_service = reference_service
-    binding.contexts.text_editor_context = text_editor_context
+    contexts = binding.expectedContexts
+    contexts.reference_service = reference_service
+    contexts.text_editor_context = text_editor_context
+
+    # Before binding there is no context binding at all, and asking is
+    # answered rather than raising.
+    assert binding.reference_service is None
+    assert binding.text_editor_context is None
 
     binding.bind()
 
@@ -60,7 +73,9 @@ def test_project_binding_rejects_double_binding():
 
 def test_project_binding_rolls_back_a_failed_context_install():
     binding = make_binding()
-    binding.contexts.bind.side_effect = RuntimeError("broken context")
+    binding.expectedContexts.bind.side_effect = RuntimeError(
+        "broken context"
+    )
     binding.connections.disconnect_all = MagicMock()
 
     with pytest.raises(RuntimeError, match="broken context"):

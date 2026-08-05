@@ -1,24 +1,21 @@
 from manuskript.models.references import ReferenceModels, ReferenceService
 from manuskript.ui.editors.editor_context import EditorContext
-from manuskript.ui.reference_navigation import reference_navigation_for
-from manuskript.ui.search_context import (
-    SearchContext,
-    SearchResultViewAdapter,
-)
-from manuskript.ui.views.MDEditCompleter import MDEditCompleter
+from manuskript.ui.search_context import SearchContext
 from manuskript.ui.views.outline_colors import OutlineColorResolver
 from manuskript.ui.views.outline_context import OutlineViewContext
-from manuskript.ui.views.textEditView import textEditView
-from manuskript.ui.views.text_editor_context import (
-    text_editor_context_for,
-)
 
 
 class ProjectContextBinding:
-    """Install and release cross-feature contexts for one project."""
+    """Install and release cross-feature contexts for one project.
 
-    def __init__(self, window):
-        self.window = window
+    Takes the views it binds rather than a window to find them in. With
+    one window "the outline tree" and "the editor" were unambiguous; with
+    two, every such phrase is a question, and the answers belong to
+    whoever assembled the view set.
+    """
+
+    def __init__(self, views):
+        self.views = views
         self.reference_service = None
         self.text_editor_context = None
 
@@ -28,123 +25,108 @@ class ProjectContextBinding:
                 "Project contexts must be released before rebinding."
             )
 
-        window = self.window
+        views = self.views
+        models = views.models
         self.reference_service = ReferenceService(
             ReferenceModels(
-                outline=window.mdlOutline,
-                characters=window.mdlCharacter,
-                plots=window.mdlPlots,
-                world=window.mdlWorld,
-                statuses=window.mdlStatus,
-                labels=window.mdlLabels,
+                outline=models.outline,
+                characters=models.characters,
+                plots=models.plots,
+                world=models.world,
+                statuses=models.statuses,
+                labels=models.labels,
             ),
-            reference_navigation_for(window),
+            views.navigation,
         )
-        self.text_editor_context = text_editor_context_for(
-            window,
-            window.settingsManager,
-        )
-        for editor in window.findChildren(textEditView):
-            editor.set_text_editor_context(
-                self.text_editor_context
-            )
+        self.text_editor_context = views.text_editor_context()
+        for editor in views.text_editors():
+            editor.set_text_editor_context(self.text_editor_context)
 
         outline_views = OutlineViewContext(
-            character_model=window.mdlCharacter,
-            label_model=window.mdlLabels,
-            status_model=window.mdlStatus,
-            settings=window.settingsManager,
+            character_model=models.characters,
+            label_model=models.labels,
+            status_model=models.statuses,
+            settings=views.settings,
             color_resolver=OutlineColorResolver(
-                window.mdlCharacter,
-                window.mdlLabels,
+                models.characters,
+                models.labels,
             ),
-            card_styles=getattr(window, "cardStyles", None),
-            undo_stack=getattr(window, "undoStack", None),
-            open_index=window.openIndex,
-            open_indexes=window.openIndexes,
-            selection_changed=window.redacMetadata.selectionChanged,
-            show_status=window.statusPresenter.show,
+            card_styles=views.card_styles,
+            undo_stack=views.undo_stack,
+            open_index=views.open_index,
+            open_indexes=views.open_indexes,
+            selection_changed=views.selection_changed,
+            show_status=views.show_status,
         )
         editor_context = EditorContext(
-            outline_model=window.mdlOutline,
-            outline_tree=window.treeRedacOutline,
+            outline_model=models.outline,
+            outline_tree=views.outline_trees[0],
             outline_views=outline_views,
             text_editor=self.text_editor_context,
         )
-        window.treeRedacOutline.bind_project_model(
-            window.mdlOutline,
-            outline_views,
-        )
-        window.treeOutlineOutline.bind_project_model(
-            window.mdlOutline,
-            outline_views,
-        )
-        window.mainEditor.set_context(editor_context)
+        for tree in views.outline_trees:
+            tree.bind_project_model(models.outline, outline_views)
+        views.document_area.set_context(editor_context)
 
-        window.redacMetadata.setModels(
-            window.mdlOutline,
-            window.mdlCharacter,
-            window.mdlLabels,
-            window.mdlStatus,
-            page_types=(
-                window.pluginUi.pageTypes
-                if window.pluginUi is not None
-                else None
-            ),
+        views.metadata_panel.setModels(
+            models.outline,
+            models.characters,
+            models.labels,
+            models.statuses,
+            page_types=views.page_types(),
         )
-        window.outlineItemEditor.setModels(
-            window.mdlOutline,
-            window.mdlCharacter,
-            window.mdlLabels,
-            window.mdlStatus,
+        views.item_editor.setModels(
+            models.outline,
+            models.characters,
+            models.labels,
+            models.statuses,
         )
-        window.storylineView.setModels(
-            window.mdlOutline,
-            window.mdlCharacter,
-            window.mdlPlots,
+        views.storyline.setModels(
+            models.outline,
+            models.characters,
+            models.plots,
             self.reference_service,
             connect=connect,
         )
 
-        window.cheatSheet.setModels(
-            window.mdlOutline,
-            window.mdlCharacter,
-            window.mdlPlots,
-            window.mdlWorld,
+        views.cheat_sheet.setModels(
+            models.outline,
+            models.characters,
+            models.plots,
+            models.world,
             self.reference_service,
             connect=connect,
         )
-        completion_data = lambda: window.cheatSheet.data
-        for editor in window.findChildren(MDEditCompleter):
+        completion_data = lambda: views.cheat_sheet.data
+        for editor in views.completers():
             editor.setReferenceService(
                 self.reference_service,
                 completion_data,
             )
-        window.widget.setContext(
+        views.search_view.setContext(
             SearchContext.from_models(
-                outline=window.mdlOutline,
-                characters=window.mdlCharacter,
-                flat_data=window.mdlFlatData,
-                world=window.mdlWorld,
-                plots=window.mdlPlots,
-                result_views=SearchResultViewAdapter(
-                    window,
-                    self.reference_service,
+                outline=models.outline,
+                characters=models.characters,
+                flat_data=models.flat_data,
+                world=models.world,
+                plots=models.plots,
+                result_views=views.result_views(
+                    self.reference_service
                 ),
             )
         )
 
     def unbind(self):
-        window = self.window
-        window.treeRedacOutline.unbind_project_model()
-        window.treeOutlineOutline.unbind_project_model()
-        window.mainEditor.clear_context()
-        for editor in window.findChildren(textEditView):
+        views = self.views
+        for tree in views.outline_trees:
+            tree.unbind_project_model()
+        views.document_area.clear_context()
+        for editor in views.text_editors():
             editor.set_text_editor_context(None)
-        for editor in window.findChildren(MDEditCompleter):
+        for editor in views.completers():
             editor.setReferenceService(None)
-        window.widget.clearContext()
-        window.cheatSheet.clearModels()
-        window.storylineView.clearModels()
+        views.search_view.clearContext()
+        views.cheat_sheet.clearModels()
+        views.storyline.clearModels()
         self.text_editor_context = None
         self.reference_service = None
