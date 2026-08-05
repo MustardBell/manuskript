@@ -77,8 +77,11 @@ def test_lifecycle_view_captures_project_state_before_cleanup():
     view.capture_project_state()
     view.prepare_close()
 
-    assert window.settingsManager.lastTab == 6
-    assert window.settingsManager.openIndexes == open_indexes
+    # Captured onto the runtime's settings: they belong to the project,
+    # not to whichever window happened to be closing.
+    settings = window.projectRuntime.settingsManager
+    assert settings.lastTab == 6
+    assert settings.openIndexes == open_indexes
     window.mainEditor.close.assert_called_once_with()
     window.mainEditor.closeAllTabs.assert_called_once_with()
     window.pluginUi.prepare_project_close.assert_called_once_with()

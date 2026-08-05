@@ -15,11 +15,17 @@ class ProjectLifecycleView:
 
     @property
     def settings(self):
-        return self.window.settingsManager
+        return self.window.projectRuntime.settingsManager
 
     @property
     def model_parent(self):
-        return self.window
+        """The runtime's model parent, never the window.
+
+        Qt deletes children with their parent, and a window closing is
+        not the project ending -- models parented to a window would go
+        with the first one to close.
+        """
+        return self.window.projectRuntime.modelParent
 
     def translate(self, text):
         return self.window.tr(text)

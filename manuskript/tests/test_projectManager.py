@@ -18,6 +18,9 @@ class TestProjectManager(unittest.TestCase):
         settings_manager = SettingsManager()
         with patch.object(settings_manager, "apply_loaded_settings_effects"):
             settings_manager.reset_to_defaults()
+        # The project's own things live on the runtime now; the window
+        # only points at them.
+        self.window.projectRuntime.settingsManager = settings_manager
         self.window.settingsManager = settings_manager
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
@@ -227,9 +230,12 @@ class TestProjectManager(unittest.TestCase):
 
         self.assertIs(result, models)
         self.assertIs(self.project_manager.models, models)
+        # Parented to the runtime, not the window: Qt deletes children
+        # with their parent, and a window closing is not the project
+        # ending.
         factory.create.assert_called_once_with(
-            self.window,
-            self.window.settingsManager,
+            self.window.projectRuntime.modelParent,
+            self.window.projectRuntime.settingsManager,
         )
         models.install_on.assert_called_once_with(self.window)
 

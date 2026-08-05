@@ -23,7 +23,10 @@ class TestProjectManagerAutosave(unittest.TestCase):
         )
 
     def _load_project(self, auto_save=True, after_change=True):
-        settings = self.window.settingsManager
+        # Project settings belong to the runtime; the window's attribute
+        # is only a pointer at the same object.
+        settings = self.window.projectRuntime.settingsManager
+        self.window.settingsManager = settings
         settings.autoSave = auto_save
         settings.autoSaveDelay = 15
         settings.autoSaveNoChanges = after_change
@@ -41,7 +44,7 @@ class TestProjectManagerAutosave(unittest.TestCase):
         ), patch.object(
             self.project_manager, "loadEmptyDatas"
         ), patch.object(
-            self.window.settingsManager, "reset_to_defaults"
+            settings, "reset_to_defaults"
         ):
             return self.project_manager.loadProject(
                 "dummy_project.msk"

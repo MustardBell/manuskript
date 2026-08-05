@@ -213,6 +213,18 @@ def prepare(arguments, tests=False):
         f.setPointSize(preferences.font_size)
         app.setFont(f)
 
+    # The project layer, composed before any window: a window is one
+    # view of a project, not its owner. Imported here rather than at
+    # module scope because the project models reach Qt widgets and from
+    # there manuskript.ui.style, which snapshots the palette at import.
+    from manuskript.services.project_runtime import ProjectRuntime
+    from manuskript.services.project_history import ProjectHistory
+
+    project_runtime = ProjectRuntime(
+        settings_manager=settings_manager,
+        project_history=ProjectHistory(),
+    )
+
     # Main window
     from manuskript.mainWindow import MainWindow
 
@@ -224,6 +236,7 @@ def prepare(arguments, tests=False):
         media_types=media_types,
         media_type_preferences=media_type_preferences,
         panel_registry=panel_registry,
+        project_runtime=project_runtime,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary

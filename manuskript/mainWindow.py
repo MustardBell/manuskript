@@ -25,6 +25,7 @@ from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.ui.panels.core import core_panel_factories
+from manuskript.services.project_runtime import ProjectRuntime
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
 )
@@ -39,16 +40,11 @@ from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
 from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
-from manuskript.projectManager import ProjectManager
 from manuskript.services.external_process import ExternalProcessRunner
-from manuskript.services.revision_coordinator import (
-    ProjectRevisionCoordinator,
-)
 from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
-from manuskript.services.project_history import ProjectHistory
 from manuskript.services.theme_repository import ThemeRepository
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
@@ -77,7 +73,6 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.plugins.controller import PluginUiController
-from PyQt5.QtWidgets import QUndoStack
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
 )
@@ -119,6 +114,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         media_types=None,
         media_type_preferences=None,
         panel_registry=None,
+        project_runtime=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -142,7 +138,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             MainNavigationView(self)
         )
         self.history = self.navigationController.history
-        self.settingsManager = settings_manager
+        # The project layer. A window is one view of it, so it may be
+        # handed one that already exists; a window given none composes
+        # its own, which is a single-window application.
+        self.projectRuntime = (
+            project_runtime
+            if project_runtime is not None
+            else ProjectRuntime(settings_manager=settings_manager)
+        )
+        # Aliases onto the runtime for everything that still reaches
+        # these by attribute. They retire as callers learn to ask the
+        # runtime; what they name has moved, not what it does.
+        self.settingsManager = self.projectRuntime.settingsManager
+        self.undoStack = self.projectRuntime.undoStack
+        self.revisionCoordinator = self.projectRuntime.revisionCoordinator
         self.applicationPreferences = (
             application_preferences
             if application_preferences is not None
@@ -197,9 +206,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if media_type_preferences is not None
             else MediaTypePreferences()
         )
-        # Structure edits are undoable per project; the stack is
-        # cleared whenever a different project is opened.
-        self.undoStack = QUndoStack(self)
         self.cardStyles = IndexCardStyleService(
             plugin_runtime.registry if plugin_runtime is not None else None,
             report_error=self.statusPresenter.show,
@@ -219,16 +225,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.projectLifecycleView = ProjectLifecycleView(self)
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
-        self.projectHistory = ProjectHistory()
-        self.revisionCoordinator = ProjectRevisionCoordinator()
         self.themeRepository = ThemeRepository()
         self.themePreviewRenderer = ThemePreviewRenderer()
-        self.projectManager = ProjectManager(
+        # The runtime builds the manager around the view side this
+        # window supplies, rather than the window building one for
+        # itself: the project is the runtime's, the view is the
+        # window's.
+        self.projectManager = self.projectRuntime.attach(
             self.projectLifecycleView,
             status_reporter=self.statusPresenter.show,
-            last_project_store=self.projectHistory,
-            revision_coordinator=self.revisionCoordinator,
         )
+        self.projectHistory = self.projectManager.last_project_store
         self.welcome.set_context(
             welcome_context_for(
                 self,

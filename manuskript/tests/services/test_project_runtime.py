@@ -1,0 +1,96 @@
+"""The project layer, independent of any window showing it.
+
+A project outlives its windows. These tests pin the ownership that makes
+that possible: models parented to the runtime rather than a window, one
+undo history shared by every view, and a manager the runtime builds
+around whatever view side it is given.
+"""
+
+from unittest.mock import MagicMock
+
+from PyQt5.QtCore import QObject
+
+from manuskript.services.project_runtime import ProjectRuntime
+
+
+def test_models_are_parented_to_the_runtime_not_a_window():
+    """Qt deletes children with their parent, and a window closing is
+    not the project ending -- so the model parent has to be the
+    runtime's, and it has to survive being asked for twice.
+    """
+    runtime = ProjectRuntime()
+
+    parent = runtime.modelParent
+
+    assert isinstance(parent, QObject)
+    assert parent.parent() is runtime
+    assert runtime.modelParent is parent
+
+
+def test_one_undo_history_is_shared_by_every_view():
+    runtime = ProjectRuntime()
+
+    assert runtime.undoStack is not None
+    assert runtime.undoStack.parent() is runtime
+
+
+def test_attach_builds_the_manager_around_the_given_view_side():
+    """The runtime is composed before any window exists, so the manager
+    can only be built once a window offers its view side.
+    """
+    history = MagicMock()
+    runtime = ProjectRuntime(project_history=history)
+    assert runtime.projectManager is None
+
+    views = MagicMock()
+    reporter = MagicMock()
+    manager = runtime.attach(views, status_reporter=reporter)
+
+    assert runtime.projectManager is manager
+    assert runtime.views is views
+    assert manager.ui is views
+    assert manager.last_project_store is history
+    assert manager.revision_coordinator is runtime.revisionCoordinator
+
+
+def test_project_facts_read_through_to_the_manager():
+    runtime = ProjectRuntime()
+
+    # Before any manager exists, asking is answered rather than raising:
+    # a runtime with no project open is a legal state.
+    assert runtime.session is None
+    assert runtime.models is None
+    assert runtime.currentProject is None
+    assert runtime.isOpen is False
+
+    runtime.attach(MagicMock(), status_reporter=MagicMock())
+    runtime.projectManager.session.open("book.msk")
+
+    assert runtime.currentProject == "book.msk"
+    assert runtime.isOpen is True
+    assert runtime.session is runtime.projectManager.session
+
+
+def test_a_window_shares_the_runtime_it_is_given(MWEmptyProject):
+    """The window's attributes point at the runtime's objects rather
+    than copies, so a second window pointed at the same runtime edits
+    the same project.
+    """
+    window = MWEmptyProject
+    runtime = window.projectRuntime
+
+    assert window.settingsManager is runtime.settingsManager
+    assert window.undoStack is runtime.undoStack
+    assert window.projectManager is runtime.projectManager
+    assert window.revisionCoordinator is runtime.revisionCoordinator
+    assert (
+        window.projectManager.ui.model_parent is runtime.modelParent
+    )
+    # QObject.parent explicitly: an item model's own parent() takes an
+    # index and answers about the tree, not about ownership.
+    assert (
+        QObject.parent(window.mdlOutline) is runtime.modelParent
+    )
+    assert (
+        QObject.parent(window.mdlCharacter) is runtime.modelParent
+    )
