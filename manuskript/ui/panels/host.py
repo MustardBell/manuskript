@@ -168,6 +168,104 @@ class PanelHost:
         widget.setVisible(descriptor.default_visible)
         return action
 
+    def release(self, panel_id):
+        """Detach a living panel, leaving it whole.
+
+        The widget keeps its state and its model connections -- those
+        bind to the project runtime, not to a window, which is why a
+        move costs a reparent rather than a rebuild. Only the couplings
+        that are this window's are undone: the toggle action, and the
+        mount it was sitting in.
+        """
+        return self._detach(panel_id, keep=True)
+
+    def _detach(self, panel_id, keep):
+        """Take a panel off this window, leaving its widget owned once.
+
+        ``keep`` decides who owns the widget afterwards. Parked on the
+        window when another host is about to adopt it; handed to Python
+        when nobody is, so it is freed exactly when the last reference
+        to it goes.
+
+        Either way the widget leaves the container first. A dock with
+        WA_DeleteOnClose deletes its child, and a surviving Python
+        wrapper over a deleted widget crashes the interpreter later --
+        during a garbage collection, with no stack that names this code.
+        """
+        instance = self._instances.pop(panel_id, None)
+        if instance is None:
+            return None
+        widget = instance.widget
+        widget.hide()
+        if instance.action is not None:
+            # Stop driving this widget. The action belongs to the window
+            # and goes with it; an adopting host makes its own.
+            instance.action.toggled.disconnect(widget.setVisible)
+            instance.action.setEnabled(False)
+            instance.action = None
+        container = instance.container
+        instance.container = None
+        if container is not None:
+            container.setWidget(None)
+        widget.setParent(self.window if keep else None)
+        widget.hide()
+        if container is not None:
+            # Emptied and out of the layout, then left to die with the
+            # window that owns it. Scheduling deletion instead would
+            # leave it pending until an event loop runs, which in a
+            # test there may never be.
+            self.window.removeDockWidget(container)
+        instance.host = None
+        return instance
+
+    def adopt(self, instance):
+        """Take in a panel another host released.
+
+        Mounted by its descriptor's placement, as though this window had
+        built it, and given a fresh toggle of its own.
+        """
+        descriptor = instance.descriptor
+        if descriptor.id in self._instances:
+            raise ValueError(
+                "This window already shows panel {}.".format(
+                    descriptor.id
+                )
+            )
+        widget = instance.widget
+        if descriptor.placement == SPLITTER_SLOT:
+            splitter = self.window.findChild(
+                QSplitter, descriptor.slot.splitter,
+            )
+            if splitter is None:
+                raise LookupError(
+                    "This window has no splitter named {!r}.".format(
+                        descriptor.slot.splitter
+                    )
+                )
+            splitter.insertWidget(descriptor.slot.index, widget)
+        else:
+            dock = QDockWidget(descriptor.title, self.window)
+            dock.setObjectName(
+                descriptor.object_name
+                or "panel.{}".format(descriptor.id)
+            )
+            dock.setAttribute(Qt.WA_DeleteOnClose, True)
+            dock.setWidget(widget)
+            dock.destroyed.connect(
+                partial(self._container_destroyed, descriptor.id)
+            )
+            self.window.addDockWidget(Qt.RightDockWidgetArea, dock)
+            instance.container = dock
+            dock.show()
+        instance.action = self._toggle_action(descriptor, widget)
+        instance.host = self
+        self._instances[descriptor.id] = instance
+        # Through the action, which is what makes it visible: showing the
+        # widget as well would only be a second way to say so, and every
+        # extra show is a chance to take focus from somewhere.
+        instance.action.setChecked(True)
+        return instance
+
     def set_visible(self, panel_id, visible=True):
         """Toggle a panel through its own action, wherever it is shown.
 
@@ -179,9 +277,8 @@ class PanelHost:
             instance.action.setChecked(visible)
 
     def close(self, panel_id):
-        instance = self._instances.pop(panel_id, None)
-        if instance is not None and instance.container is not None:
-            instance.container.close()
+        """Put a panel away. Its widget goes when nothing holds it."""
+        self._detach(panel_id, keep=False)
 
     def close_all(self):
         for panel_id in tuple(self._instances):

@@ -6,8 +6,10 @@ closing is not the project's closing. Each window keeps its own
 selection, its own open documents and its own panels.
 """
 
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings, Qt
+from PyQt5.QtWidgets import QPlainTextEdit
 
+from manuskript.panels import PanelContext, PanelDescriptor
 from manuskript.panels.core import METADATA, PROJECT_TREE
 from manuskript.services.workspace_state import WorkspaceStateStore
 
@@ -247,3 +249,196 @@ def test_the_open_windows_are_what_a_quit_records(
             del session
     finally:
         other.close()
+
+
+# --------------------------------------------- moving a panel between them
+
+NOTES = "test.movable.notes"
+
+
+class movable_panel:
+    """A dock panel that only one window holds.
+
+    Every window builds its own core panels, so those can never move
+    into a window that already has one -- tearing them off is the move
+    that makes sense for them. A plugin-style dock opened in one window
+    is the case a move is for.
+    """
+
+    def __init__(self, window):
+        self.window = window
+        self.instance = None
+
+    def __enter__(self):
+        self.window.panelRegistry.register(PanelDescriptor(
+            id=NOTES,
+            title="Movable notes",
+            widget_factory=lambda context, parent: QPlainTextEdit(parent),
+        ))
+        self.instance = self.window.panelHost.open(
+            NOTES, PanelContext(window=self.window),
+        )
+        self.window.toolbar.addPanelToggle(
+            self.instance.action,
+            self.instance.widget,
+            None,
+            panel_id=NOTES,
+        )
+        return self.instance
+
+    def __exit__(self, *_exception):
+        for window in self.window.windowRegistry.workspace_windows:
+            window.panelHost.close(NOTES)
+            window.toolbar.removePanelToggle(NOTES)
+        self.window.panelRegistry.deregister(NOTES)
+        return False
+
+
+def test_a_moved_panel_is_the_same_widget_in_the_other_window(
+        MWEmptyProject):
+    """Ownership transfer, not a rebuild: the widget itself crosses, so
+    nothing it was showing is lost.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window) as panel:
+            panel.widget.setPlainText("half-written note")
+            original = panel.widget
+
+            moved = window.movePanelTo(NOTES, other)
+
+            assert moved.widget is original
+            assert moved.widget.toPlainText() == "half-written note"
+            assert moved.host is other.panelHost
+            assert other.panelHost.instance(NOTES) is moved
+            assert window.panelHost.instance(NOTES) is None
+    finally:
+        other.close()
+
+
+def test_a_moved_panel_is_mounted_in_its_new_window(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window):
+            moved = window.movePanelTo(NOTES, other)
+
+            assert moved.container is not None
+            assert other.dockWidgetArea(moved.container) == (
+                Qt.RightDockWidgetArea
+            )
+            assert moved.widget.window() is other
+    finally:
+        other.close()
+
+
+def test_a_moved_panel_is_toggled_from_its_new_window(MWEmptyProject):
+    """Its old action died with the window it belonged to; the adopting
+    host gives it one of its own.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window) as panel:
+            old_action = panel.action
+
+            moved = window.movePanelTo(NOTES, other)
+
+            assert moved.action is not old_action
+            assert moved.action.parent() is other
+
+            moved.action.setChecked(False)
+            assert moved.widget.isHidden()
+            moved.action.setChecked(True)
+            assert not moved.widget.isHidden()
+    finally:
+        other.close()
+
+
+def test_the_toolbar_button_travels_with_the_panel(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window):
+            assert NOTES in window.toolbar._panelToggles
+
+            window.movePanelTo(NOTES, other)
+
+            assert NOTES not in window.toolbar._panelToggles
+            assert NOTES in other.toolbar._panelToggles
+    finally:
+        other.close()
+
+
+def test_a_refused_move_leaves_the_panel_where_it_was(MWEmptyProject):
+    """Releasing before the target could refuse would leave the panel
+    belonging to nobody -- so the target is asked first.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        instance = window.panelHost.instance(METADATA)
+
+        assert window.movePanelTo(METADATA, other) is None
+
+        assert window.panelHost.instance(METADATA) is instance
+        assert instance.widget is not None
+        assert instance.action is not None
+    finally:
+        other.close()
+
+
+def test_moving_a_panel_to_its_own_window_changes_nothing(
+        MWEmptyProject):
+    window = MWEmptyProject
+    instance = window.panelHost.instance(METADATA)
+
+    assert window.movePanelTo(METADATA, window) is instance
+    assert window.panelHost.instance(METADATA) is instance
+
+
+def test_the_move_menu_offers_only_panels_that_can_move(MWEmptyProject):
+    """Core panels exist in every window, so they have nowhere to go."""
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window):
+            window.buildPanelMoveMenu()
+
+            titles = [
+                action.menu().title()
+                for action in window.menuMovePanel.actions()
+                if action.menu() is not None
+            ]
+            assert titles == ["Movable notes"]
+            targets = window.menuMovePanel.actions()[0].menu()
+            assert len(targets.actions()) == 1
+    finally:
+        other.close()
+
+
+def test_the_move_menu_says_when_nothing_can_move(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        window.buildPanelMoveMenu()
+
+        entries = window.menuMovePanel.actions()
+        assert len(entries) == 1
+        assert "No panel can move" in entries[0].text()
+        assert not entries[0].isEnabled()
+    finally:
+        other.close()
+
+
+def test_the_move_menu_says_when_there_is_nowhere_to_move(
+        MWEmptyProject):
+    window = MWEmptyProject
+
+    window.buildPanelMoveMenu()
+
+    entries = window.menuMovePanel.actions()
+    assert len(entries) == 1
+    assert "No other window" in entries[0].text()
+    assert not entries[0].isEnabled()

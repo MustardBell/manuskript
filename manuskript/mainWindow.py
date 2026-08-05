@@ -4,6 +4,8 @@ import importlib
 import os
 import re
 
+from functools import partial
+
 from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
                           QRegExp, QUrl, QSize, QModelIndex)
@@ -398,13 +400,85 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.actNewWindow.triggered.connect(self.openWorkspaceWindow)
         before = self.menuView.actions()
-        self.menuView.insertAction(
-            before[0] if before else None,
-            self.actNewWindow,
+        anchor = before[0] if before else None
+        self.menuView.insertAction(anchor, self.actNewWindow)
+
+        self.menuMovePanel = QMenu(self.tr("Move &Panel To"), self)
+        self.menuMovePanel.setObjectName("menuMovePanel")
+        self.menuMovePanel.aboutToShow.connect(self.buildPanelMoveMenu)
+        self.menuView.insertMenu(anchor, self.menuMovePanel)
+        self.menuView.insertSeparator(anchor)
+
+    def movePanelTo(self, panel_id, target):
+        """Hand one of this window's panels to another window.
+
+        The panel changes owner: the same widget, still bound to the
+        same project models, mounted in the target and toggled from
+        there. Nothing is rebuilt, so nothing it was showing is lost.
+        """
+        if target is self:
+            return self.panelHost.instance(panel_id)
+        if target.panelHost.instance(panel_id) is not None:
+            # Checked before releasing: a refused adoption after a
+            # release would leave the panel belonging to nobody.
+            return None
+        instance = self.panelHost.release(panel_id)
+        if instance is None:
+            return None
+        adopted = target.panelHost.adopt(instance)
+        self.toolbar.removePanelToggle(panel_id)
+        target.toolbar.addPanelToggle(
+            adopted.action,
+            adopted.widget,
+            adopted.descriptor.group,
+            panel_id=panel_id,
         )
-        self.menuView.insertSeparator(
-            before[0] if before else None
-        )
+        return adopted
+
+    def buildPanelMoveMenu(self):
+        """Offer each of this window's panels to each other window.
+
+        Rebuilt when shown rather than kept current: which windows exist
+        changes underneath it, and a stale entry would move a panel into
+        a window that has gone.
+        """
+        self.menuMovePanel.clear()
+        others = [
+            window
+            for window in self.windowRegistry.workspace_windows
+            if window is not self
+        ]
+        offered = 0
+        for panel_id, instance in sorted(
+            self.panelHost.instances.items()
+        ):
+            # Only windows that do not already show this panel can take
+            # it. Every window builds its own core panels, so those have
+            # nowhere to go -- tearing one off is the move that makes
+            # sense for them.
+            targets = [
+                window
+                for window in others
+                if window.panelHost.instance(panel_id) is None
+            ]
+            if not targets:
+                continue
+            submenu = self.menuMovePanel.addMenu(
+                self.tr(instance.descriptor.title)
+            )
+            offered += 1
+            for window in targets:
+                action = submenu.addAction(window.windowTitle())
+                action.triggered.connect(
+                    partial(self.movePanelTo, panel_id, window)
+                )
+        if not offered:
+            action = self.menuMovePanel.addAction(
+                self.tr("No panel can move to another window")
+                if others
+                else self.tr("No other window open")
+            )
+            action.setEnabled(False)
 
     def nextWorkspaceId(self):
         """An identifier no open window is already filing state under.
@@ -923,6 +997,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 instance.action,
                 instance.widget,
                 instance.descriptor.group,
+                panel_id=panel_id,
             )
 
         style.styleMainWindow(self)
