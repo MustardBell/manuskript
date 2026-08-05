@@ -29,6 +29,7 @@ from manuskript.plugins.api import (
     RenderedDocument,
     WorkspaceDocument,
 )
+from manuskript.converters.markdownToBBCode import MarkupRule
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.plugins.runtime import PluginRuntime
 
@@ -48,6 +49,7 @@ __all__ = [
     "ImportResult",
     "MarkupContribution",
     "MarkupMode",
+    "MarkupRule",
     "OptionField",
     "OptionKind",
     "OutlineSnapshot",
