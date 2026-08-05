@@ -127,6 +127,19 @@ Your contributions must stay inside your promises. A renderer, converter or
 transform naming a format you did not promise to produce, consume or
 transform rejects registration — atomically, so nothing installs.
 
+### What the user may change under you
+
+`Tools ▸ Developer ▸ Media types…` lists every format, who declared it, and
+what each declarer promised. From there a user may **declare** a format you
+have never heard of, choose what **stands in** for one nothing produces, and
+**override** an identifier — remapping it, for a plugin that named its output
+wrongly.
+
+An override is why declaring an interest is worth doing. Before it is applied
+the user is shown who declared that format, so your plugin is named as
+affected rather than silently broken; the plugin manager then shows a count
+against you for as long as the override stands.
+
 ---
 
 ## Registering

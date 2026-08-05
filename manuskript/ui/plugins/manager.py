@@ -29,11 +29,16 @@ class PluginManagerDialog(QDialog):
 
     def __init__(
             self, runtime, parent=None, option_store=None,
-            settings_context_provider=None):
+            settings_context_provider=None, media_types=None):
         super().__init__(parent)
         self.runtime = runtime
         self.option_store = option_store
         self.settingsContextProvider = settings_context_provider
+        self.mediaTypes = (
+            media_types
+            if media_types is not None
+            else getattr(runtime, "mediaTypes", None)
+        )
         self.pluginPanels = {}
         self.setWindowTitle(self.tr("Manage Plugins"))
         self.resize(960, 700)
@@ -287,6 +292,15 @@ class PluginManagerDialog(QDialog):
                 html.escape(str(manifest.root))
             )
         )
+        overridden = self._overridden_media_types(manifest)
+        if overridden:
+            # Findable outside the developer tool on purpose: somebody who
+            # remaps a format in March cannot otherwise explain a broken
+            # export in July.
+            metadata.append(self.tr(
+                "<b>{} media type(s) this plugin declares are overridden: "
+                "{}</b>"
+            ).format(len(overridden), html.escape(", ".join(overridden))))
         self.metadataLabel.setText("<br>".join(metadata))
         self.errorLabel.setText(
             (
@@ -389,6 +403,16 @@ class PluginManagerDialog(QDialog):
                     for issue in issues
                 ),
             )
+        )
+
+    def _overridden_media_types(self, manifest):
+        """Formats this plugin declared that the user has remapped."""
+        if self.mediaTypes is None:
+            return ()
+        return tuple(
+            media_id
+            for media_id in manifest.declared_media_type_ids
+            if self.mediaTypes.override(media_id)
         )
 
     def _status_text(self, status):

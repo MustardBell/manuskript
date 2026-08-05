@@ -96,6 +96,7 @@ class PluginUiController:
                 self.window,
                 option_store=self.option_store,
                 settings_context_provider=self._settings_context,
+                media_types=self.mediaTypes,
             )
             self.manager.finished.connect(self._manager_closed)
             self.manager.pluginsChanged.connect(

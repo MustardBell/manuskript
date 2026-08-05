@@ -183,16 +183,22 @@ def prepare(arguments, tests=False):
     # Before anything reads a routing choice, so nothing downstream has to
     # know how preferences used to be spelled.
     preferences_migrations.upgrade(plugin_settings)
+    # One registry, built in the order the layers arrive: core's formats,
+    # then every discovered plugin's, then the user's own on top. The
+    # runtime has to be given it rather than making its own, or plugin
+    # declarations would land somewhere the rest of the application cannot
+    # see.
+    media_types = core_registry()
     plugin_runtime = PluginRuntime(
         [appPath("manuskript/plugins")],
         PluginPreferences(plugin_settings),
+        media_types=media_types,
     )
     plugin_runtime.discover()
+    media_type_preferences = MediaTypePreferences(plugin_settings)
+    media_type_preferences.apply(media_types)
     plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
-    media_types = MediaTypePreferences(plugin_settings).apply(
-        core_registry()
-    )
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
@@ -212,6 +218,7 @@ def prepare(arguments, tests=False):
         plugin_runtime=plugin_runtime,
         plugin_option_store=plugin_option_store,
         media_types=media_types,
+        media_type_preferences=media_type_preferences,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary

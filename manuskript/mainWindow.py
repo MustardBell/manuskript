@@ -20,6 +20,12 @@ from manuskript.controllers.view_configuration_controller import (
 )
 from manuskript.controllers.world_controller import WorldController
 from manuskript.media_types import core_registry
+from manuskript.services.media_type_preferences import (
+    MediaTypePreferences,
+)
+from manuskript.ui.tools.media_type_inspector import (
+    MediaTypeInspector,
+)
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -106,6 +112,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         plugin_runtime=None,
         plugin_option_store=None,
         media_types=None,
+        media_type_preferences=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -166,6 +173,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.mediaTypes = (
             media_types if media_types is not None else core_registry()
         )
+        self.mediaTypePreferences = (
+            media_type_preferences
+            if media_type_preferences is not None
+            else MediaTypePreferences()
+        )
         # Structure edits are undoable per project; the stack is
         # cleared whenever a different project is opened.
         self.undoStack = QUndoStack(self)
@@ -184,6 +196,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if plugin_runtime is not None
             else None
         )
+        self.buildDeveloperMenu()
         self.projectLifecycleView = ProjectLifecycleView(self)
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
@@ -969,6 +982,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.td = TargetsDialog(self)
         self.td.show()
         self.centerChildWindow(self.td)
+
+    def buildDeveloperMenu(self):
+        """Tools that inspect Manuskript rather than the manuscript.
+
+        Added here rather than in mainWindow.ui, following the Plugins menu:
+        a submenu built in code needs no generated file regenerated, and
+        this one exists whether or not any plugin is loaded.
+        """
+        self.menuTools.addSeparator()
+        self.menuDeveloper = self.menuTools.addMenu(self.tr("Developer"))
+        self.menuDeveloper.setObjectName("menuDeveloper")
+        self.actMediaTypes = QAction(self.tr("Media types…"), self)
+        self.actMediaTypes.setObjectName("actMediaTypes")
+        self.actMediaTypes.setStatusTip(self.tr(
+            "Inspect export formats, and declare ones Manuskript does "
+            "not know"
+        ))
+        self.actMediaTypes.triggered.connect(self.mediaTypeInspector)
+        self.menuDeveloper.addAction(self.actMediaTypes)
+
+    def mediaTypeInspector(self):
+        self.mediaTypeWindow = MediaTypeInspector(
+            self.mediaTypes,
+            self.mediaTypePreferences,
+            parent=self,
+        )
+        self.mediaTypeWindow.show()
+        self.centerChildWindow(self.mediaTypeWindow)
 
     ###############################################################################
     # VIEW MENU
