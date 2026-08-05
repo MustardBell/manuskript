@@ -8,6 +8,7 @@ from manuskript.plugins.execution import (
     run_page_format_renderer,
     run_page_parser,
 )
+from manuskript.media_types import MARKDOWN
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -166,7 +167,7 @@ class PageTypeService(QObject):
         source = item.text() if source is None else source
         page_type = self.active_for(item)
         if page_type is None or page_type.parser_factory is None:
-            return PageExportDocument(source, "markdown")
+            return PageExportDocument(source, MARKDOWN)
         try:
             model = run_page_parser(page_type, source)
             renderer, render_format = self.resolve_renderer(
@@ -203,7 +204,7 @@ class PageTypeService(QObject):
             renderer
             for renderer in self.registry.page_renderers
             if renderer.page_type_id == page_type_id
-            and "markdown" in renderer.target_formats
+            and MARKDOWN in renderer.target_formats
             and renderer not in exact
         ]
         key = lambda renderer: (
@@ -232,7 +233,7 @@ class PageTypeService(QObject):
         render_format = (
             target_format
             if target_format in renderer.target_formats
-            else "markdown"
+            else MARKDOWN
         )
         return renderer, render_format
 

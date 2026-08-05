@@ -17,6 +17,7 @@ from manuskript.plugins.api import (
 )
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.services.plugin_options import InMemoryPluginOptionStore
+from manuskript.media_types import BBCODE, MARKDOWN
 
 busy_cursor_module = importlib.import_module(
     "manuskript.ui.busy_cursor"
@@ -74,7 +75,7 @@ def test_exporter_factory_always_exposes_native_bbcode():
 
     assert bbcode is not None
     assert bbcode.isValid()
-    assert bbcode.format_id == "bbcode"
+    assert bbcode.media_type == BBCODE
 
 
 def test_page_renderer_routes_come_from_usable_export_formats():
@@ -83,10 +84,10 @@ def test_page_renderer_routes_come_from_usable_export_formats():
     routes = page_renderer_routes(exporters[:1])
 
     assert {route.id for route in routes} == {
-        "plain:plain",
-        "markdown:markdown",
-        "bbcode:bbcode",
-        "html:html",
+        "text/plain|text/plain",
+        "text/markdown|text/markdown",
+        "text/x-bbcode|text/x-bbcode",
+        "text/html|text/html",
     }
     assert "OPML" not in {route.label for route in routes}
 
@@ -103,8 +104,8 @@ def test_exporter_factory_exposes_plugin_converters_as_compile_formats():
         ConversionContribution(
             ExtensionDescriptor("example.bbcode", "Plugin BBCode"),
             Converter,
-            source_formats=("markdown",),
-            target_formats=("bbcode",),
+            source_formats=(MARKDOWN,),
+            target_formats=(BBCODE,),
         )
     )
     registry.install("example.converter", registrar.contributions)
@@ -119,12 +120,12 @@ def test_exporter_factory_exposes_plugin_converters_as_compile_formats():
     plugin_format = exporters[-1].getFormatByName("Plugin BBCode")
     assert plugin_format is not None
     assert plugin_format.source_format.name == "Markdown"
-    assert plugin_format.source_format_id == "markdown"
-    assert plugin_format.format_id == "bbcode"
+    assert plugin_format.source_media_type == MARKDOWN
+    assert plugin_format.media_type == BBCODE
     plugin_route = next(
         route
         for route in page_renderer_routes(exporters)
-        if route.id == "bbcode:markdown"
+        if route.id == "text/x-bbcode|text/markdown"
     )
     assert plugin_route.label == "Plugin BBCode"
     assert plugin_route.exporter_name == "example.converter"

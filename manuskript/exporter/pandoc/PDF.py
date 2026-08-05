@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import qApp
 
 from manuskript.exporter.pandoc.abstractOutput import abstractOutput
 from manuskript.functions import tempFile, safeTranslate
+from manuskript.media_types import LATEX, PDF
 from manuskript.ui.views.PDFViewer import PDFViewer
 
 
@@ -22,6 +23,8 @@ class PDF(abstractOutput):
 
     exportVarName = "lastPandocPDF"
     toFormat = "pdf"
+    media_type = PDF
+    representation_media_type = LATEX
     exportFilter = "PDF files (*.pdf);; Any files (*)"
     exportDefaultSuffix = ".pdf"
     requires = {

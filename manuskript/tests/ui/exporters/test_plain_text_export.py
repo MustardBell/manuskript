@@ -12,6 +12,12 @@ from manuskript.exporter.pandoc.outputFormats import DocX, ePub
 from manuskript.exporter.pandoc.plainText import latex as PandocLatex
 from manuskript.models import outlineItem, outlineModel
 from manuskript.plugins import PageExportDocument
+from manuskript.media_types import (
+    DOCX as DOCX_MEDIA_TYPE,
+    HTML,
+    LATEX,
+    MARKDOWN,
+)
 from manuskript.ui.exporters.manuskript.plainTextSettings import (
     exporterSettings,
 )
@@ -196,10 +202,10 @@ def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
                 self, item, target_format, source=None,
                 route_id=None):
             self.targets.append((target_format, route_id))
-            if target_format == "markdown":
+            if target_format == MARKDOWN:
                 return PageExportDocument(
                     "semantic **Markdown**",
-                    "markdown",
+                    MARKDOWN,
                 )
             return PageExportDocument(
                 "<custom-{}>```</custom-{}>".format(
@@ -224,15 +230,15 @@ def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
     docx = DocX(exporter).processItemText(item, settings)
 
     assert "````{=html}" in html
-    assert "<custom-html>```</custom-html>" in html
+    assert "<custom-text/html>```</custom-text/html>" in html
     assert "````{=latex}" in latex
     assert "````{=latex}" in pdf
     assert "````{=html}" in epub
     assert docx == "semantic **Markdown**\n"
     assert page_types.targets == [
-        ("html", "html:html"),
-        ("latex", "latex:latex"),
-        ("latex", "pdf:latex"),
-        ("html", "epub:html"),
-        ("markdown", "docx:markdown"),
+        (HTML, "text/html|text/html"),
+        (LATEX, "application/x-latex|application/x-latex"),
+        (LATEX, "application/pdf|application/x-latex"),
+        (HTML, "application/epub+zip|text/html"),
+        (MARKDOWN, DOCX_MEDIA_TYPE + "|text/markdown"),
     ]

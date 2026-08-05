@@ -4,6 +4,13 @@ from PyQt5.QtWidgets import qApp
 
 from manuskript.exporter.pandoc.abstractPlainText import abstractPlainText
 from manuskript.functions import safeTranslate
+from manuskript.media_types import (
+    BBCODE,
+    LATEX,
+    MARKDOWN,
+    OPML,
+    RST,
+)
 
 
 class markdown(abstractPlainText):
@@ -14,6 +21,7 @@ class markdown(abstractPlainText):
 
     exportVarName = "lastPandocMarkdown"
     toFormat = "markdown"
+    media_type = MARKDOWN
     exportFilter = "Markdown files (*.md);; Any files (*)"
     exportDefaultSuffix = ".md"
 
@@ -24,6 +32,8 @@ class reST(abstractPlainText):
 
     exportVarName = "lastPandocreST"
     toFormat = "rst"
+    media_type = RST
+    representation_media_type = RST
     icon = "text-plain"
     exportFilter = "reST files (*.rst);; Any files (*)"
     exportDefaultSuffix = ".rst"
@@ -36,6 +46,8 @@ class latex(abstractPlainText):
 
     exportVarName = "lastPandocLatex"
     toFormat = "latex"
+    media_type = LATEX
+    representation_media_type = LATEX
     icon = "text-x-tex"
     exportFilter = "Tex files (*.tex);; Any files (*)"
     exportDefaultSuffix = ".tex"
@@ -49,6 +61,7 @@ class OPML(abstractPlainText):
 
     exportVarName = "lastPandocOPML"
     toFormat = "opml"
+    media_type = OPML
     icon = "text-x-opml+xml"
     exportFilter = "OPML files (*.opml);; Any files (*)"
     exportDefaultSuffix = ".opml"
@@ -69,6 +82,8 @@ class BBCode(abstractPlainText):
 
     exportVarName = "lastPandocBBCode"
     toFormat = "bbcode"
+    media_type = BBCODE
+    representation_media_type = BBCODE
     icon = "text-plain"
     exportFilter = "BBCode files (*.bbcode *.txt);; Any files (*)"
     exportDefaultSuffix = ".bbcode"

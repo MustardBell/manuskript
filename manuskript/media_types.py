@@ -91,33 +91,40 @@ class MediaType:
         return bool(self.label)
 
 
+PLAIN = "text/plain"
+MARKDOWN = "text/markdown"
+HTML = "text/html"
+#: BBCode has no registered IANA type, and calling it text/plain -- as the
+#: BBCode exporter did -- collides with actual plain text once media types
+#: become the routing key. This is the one identifier Manuskript mints.
+BBCODE = "text/x-bbcode"
+LATEX = "application/x-latex"
+RST = "text/x-rst"
+OPML = "text/x-opml+xml"
+EPUB = "application/epub+zip"
+ODT = "application/vnd.oasis.opendocument.text"
+DOCX = (
+    "application/vnd.openxmlformats-officedocument"
+    ".wordprocessingml.document"
+)
+PDF = "application/pdf"
+
+
 #: Every format Manuskript itself knows how to name.
 CORE_MEDIA_TYPES = (
-    MediaType("text/plain", "Plain text"),
-    MediaType("text/markdown", "Markdown"),
-    MediaType("text/html", "HTML"),
-    # BBCode has no registered IANA type, and calling it text/plain -- as the
-    # BBCode exporter does today -- collides with actual plain text. This is
-    # the one identifier Manuskript mints.
-    MediaType("text/x-bbcode", "BBCode"),
-    MediaType("application/x-latex", "LaTeX"),
-    MediaType("text/x-rst", "reStructuredText"),
+    MediaType(PLAIN, "Plain text"),
+    MediaType(MARKDOWN, "Markdown"),
+    MediaType(HTML, "HTML"),
+    MediaType(BBCODE, "BBCode"),
+    MediaType(LATEX, "LaTeX"),
+    MediaType(RST, "reStructuredText"),
     # Destinations. Reached through a textual representation, never embedded
     # in one, which is what textual=False records.
-    MediaType("text/x-opml+xml", "OPML", textual=False),
-    MediaType("application/epub+zip", "ePub", textual=False),
-    MediaType(
-        "application/vnd.oasis.opendocument.text",
-        "OpenDocument",
-        textual=False,
-    ),
-    MediaType(
-        "application/vnd.openxmlformats-officedocument"
-        ".wordprocessingml.document",
-        "DocX",
-        textual=False,
-    ),
-    MediaType("application/pdf", "PDF", textual=False),
+    MediaType(OPML, "OPML", textual=False),
+    MediaType(EPUB, "ePub", textual=False),
+    MediaType(ODT, "OpenDocument", textual=False),
+    MediaType(DOCX, "DocX", textual=False),
+    MediaType(PDF, "PDF", textual=False),
 )
 
 

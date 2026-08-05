@@ -1,9 +1,18 @@
 from dataclasses import dataclass
 
 
+#: Media type identifiers contain colons, so routes join on something else.
+ROUTE_SEPARATOR = "|"
+
+
 @dataclass(frozen=True)
 class PageRendererRoute:
-    """An available Compile target that consumes rendered page fragments."""
+    """An available Compile target that consumes rendered page fragments.
+
+    ``output_format`` is what the destination emits; ``representation_format``
+    is the textual media type pages are composed in on the way there. For
+    ePub those differ: the file is an archive, the pages are HTML.
+    """
 
     id: str
     label: str
@@ -13,7 +22,11 @@ class PageRendererRoute:
 
 
 def page_renderer_route_id(output_format, representation_format):
-    return "{}:{}".format(output_format, representation_format)
+    return "{}{}{}".format(
+        output_format,
+        ROUTE_SEPARATOR,
+        representation_format,
+    )
 
 
 def page_renderer_routes(exporters):

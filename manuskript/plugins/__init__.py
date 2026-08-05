@@ -30,11 +30,37 @@ from manuskript.plugins.api import (
     WorkspaceDocument,
 )
 from manuskript.converters.markdownToBBCode import MarkupRule
+from manuskript.media_types import (
+    BBCODE,
+    DOCX,
+    EPUB,
+    HTML,
+    LATEX,
+    MARKDOWN,
+    ODT,
+    OPML,
+    PDF,
+    PLAIN,
+    RST,
+    MediaType,
+)
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.plugins.runtime import PluginRuntime
 
 __all__ = [
     "PLUGIN_API_VERSION",
+    "BBCODE",
+    "DOCX",
+    "EPUB",
+    "HTML",
+    "LATEX",
+    "MARKDOWN",
+    "MediaType",
+    "ODT",
+    "OPML",
+    "PDF",
+    "PLAIN",
+    "RST",
     "ConversionContribution",
     "ContentSignature",
     "ConversionArtifact",

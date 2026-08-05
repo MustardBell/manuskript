@@ -6,6 +6,7 @@ from pathlib import PurePosixPath
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
+from manuskript.media_types import MARKDOWN
 
 
 PLUGIN_API_VERSION = 1
@@ -120,7 +121,7 @@ class RenderedDocument:
 @dataclass(frozen=True)
 class PageExportDocument:
     content: str
-    source_format: str = "markdown"
+    source_format: str = MARKDOWN
 
 
 @dataclass(frozen=True)

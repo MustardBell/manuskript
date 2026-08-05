@@ -11,6 +11,7 @@ from manuskript.plugins import (
 )
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.services.plugin_options import InMemoryPluginOptionStore
+from manuskript.media_types import BBCODE, HTML, MARKDOWN
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -45,7 +46,7 @@ def make_service(activation_warning=None, source_provider=None):
         ),
         page_type_id="example.structured",
         renderer_factory=Renderer,
-        target_formats=("bbcode", "markdown"),
+        target_formats=(BBCODE, MARKDOWN),
     )
     registry = PluginRegistry()
     registrar = registry.registrar("example.plugin")
@@ -159,8 +160,8 @@ def test_active_page_type_owns_reading_live_and_export_behavior():
         MarkdownPresentationMode.LIVE_PREVIEW,
         MarkdownPresentationMode.READING,
     )
-    assert service.export_document(item, "bbcode") == (
-        PageExportDocument("STRUCTURED:ordinary source", "bbcode")
+    assert service.export_document(item, BBCODE) == (
+        PageExportDocument("STRUCTURED:ordinary source", BBCODE)
     )
 
 
@@ -170,11 +171,11 @@ def test_page_renderer_uses_fallback_until_an_exact_route_is_selected():
     item.setData(Outline.text, "ordinary source")
     service.set_enabled(item, contribution, True)
 
-    fallback = service.export_document(item, "html")
+    fallback = service.export_document(item, HTML)
 
     assert fallback == PageExportDocument(
         "STRUCTURED:ordinary source",
-        "markdown",
+        MARKDOWN,
     )
 
     class HtmlRenderer:
@@ -194,7 +195,7 @@ def test_page_renderer_uses_fallback_until_an_exact_route_is_selected():
         ),
         page_type_id="example.structured",
         renderer_factory=HtmlRenderer,
-        target_formats=("html",),
+        target_formats=(HTML,),
         options=(OptionField("style", "Style", default="classic"),),
     )
     registrar = service.registry.registrar("another.plugin")
@@ -208,12 +209,12 @@ def test_page_renderer_uses_fallback_until_an_exact_route_is_selected():
         "example.structured",
         "html:html",
         "another.structured-html",
-        representation_format="html",
+        representation_format=HTML,
     )
 
     rendered = service.export_document(
         item,
-        "html",
+        HTML,
         route_id="html:html",
     )
 
@@ -223,5 +224,5 @@ def test_page_renderer_uses_fallback_until_an_exact_route_is_selected():
     ) == "another.structured-html"
     assert rendered == PageExportDocument(
         '<section data-style="custom">STRUCTURED:ordinary source</section>',
-        "html",
+        HTML,
     )
