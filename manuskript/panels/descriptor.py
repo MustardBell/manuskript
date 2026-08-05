@@ -38,16 +38,16 @@ class PanelDescriptor:
     merely attached to its host. That is a state to migrate away from,
     not to design against.
 
-    ``group`` names the main tab whose toolbar offers the toggle, for
-    panels that only make sense beside one view. Dock panels leave it
-    empty and are offered everywhere.
+    ``group`` identifies the main tab whose toolbar offers the toggle,
+    for panels that only make sense beside one view. Dock panels leave
+    it None and are offered everywhere.
     """
 
     id: str
     title: str
     placement: str = DOCK
     slot: Optional[SplitterSlot] = None
-    group: str = ""
+    group: Optional[Any] = None
     default_visible: bool = True
     requires_project: bool = False
     #: The Qt objectName for the panel's container. Saved window layouts

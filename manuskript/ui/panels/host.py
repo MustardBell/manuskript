@@ -12,7 +12,7 @@ from functools import partial
 from typing import Any, Optional
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDockWidget, QMessageBox, QWidget
+from PyQt5.QtWidgets import QAction, QDockWidget, QMessageBox, QWidget
 
 from manuskript.panels import DOCK, PanelDescriptor
 
@@ -113,6 +113,42 @@ class PanelHost:
         self._instances[descriptor.id] = instance
         dock.show()
         return instance
+
+    def attach_existing(self, panel_id, widget):
+        """Adopt a widget the window already built. Transitional.
+
+        The panel gets its toggle action and its instance, but the
+        widget stays wherever the Designer file put it. Factories
+        replace this path one panel at a time; nothing new should
+        use it.
+        """
+        descriptor = self.registry.descriptor(panel_id)
+        action = QAction(
+            self.window.tr(descriptor.title),
+            self.window,
+        )
+        action.setCheckable(True)
+        action.setChecked(descriptor.default_visible)
+        action.toggled.connect(widget.setVisible)
+        widget.setVisible(descriptor.default_visible)
+        instance = PanelInstance(
+            descriptor=descriptor,
+            widget=widget,
+            action=action,
+            host=self,
+        )
+        self._instances[panel_id] = instance
+        return instance
+
+    def set_visible(self, panel_id, visible=True):
+        """Toggle a panel through its own action, wherever it is shown.
+
+        Going through the action keeps every button that mirrors it in
+        agreement, which poking the widget directly would not.
+        """
+        instance = self._instances.get(panel_id)
+        if instance is not None and instance.action is not None:
+            instance.action.setChecked(visible)
 
     def close(self, panel_id):
         instance = self._instances.pop(panel_id, None)

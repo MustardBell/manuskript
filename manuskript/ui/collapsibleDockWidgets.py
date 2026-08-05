@@ -63,6 +63,10 @@ class collapsibleDockWidgets(QToolBar):
         """
         Adds a custom widget to the toolbar.
 
+        Kept for widgets that own nothing but their toggle. Panels have
+        their action made by the panel host; use `addPanelToggle` for
+        those so every button mirrors the one action.
+
         `text` is the name that will displayed on the button to switch visibility.
         `widget` is the widget to control from the toolbar.
         `group` is an integer (or any hashable) if the current widget should not
@@ -85,6 +89,18 @@ class collapsibleDockWidgets(QToolBar):
         #b.setChecked(widget.isVisible())
         a2 = self.addWidget(b)
         self.otherWidgets.append((b, a2, widget, group))
+
+    def addPanelToggle(self, action, widget, group=None):
+        """Show a panel's own toggle action as a vertical button.
+
+        The action already controls the widget's visibility; the button
+        only mirrors it, so toggling from anywhere keeps every view of
+        the panel's state in agreement.
+        """
+        b = verticalButton(self)
+        b.setDefaultAction(action)
+        entry = self.addWidget(b)
+        self.otherWidgets.append((b, entry, widget, group))
 
         # def eventFilter(self, widget, event):
         # if event.type() in [QEvent.Show, QEvent.Hide]:

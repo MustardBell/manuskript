@@ -21,6 +21,8 @@ from manuskript.controllers.view_configuration_controller import (
 from manuskript.controllers.world_controller import WorldController
 from manuskript.media_types import core_registry
 from manuskript.panels import PanelRegistry
+from manuskript.panels import core as core_panels
+from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
@@ -165,6 +167,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.windowState.restore()
 
+        # Application scope: every window reads the same panel list. A
+        # window without one gets an empty registry of its own, which is
+        # a working application with no optional panels.
+        self.panelRegistry = (
+            panel_registry if panel_registry is not None
+            else PanelRegistry()
+        )
+        # Window scope: this window's own copies of whatever the shared
+        # registry describes.
+        self.panelHost = PanelHost(self, self.panelRegistry)
+
         # UI
         self.setupMoreUi()
         self.statusLabel = statusLabel(parent=self)
@@ -181,16 +194,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if media_type_preferences is not None
             else MediaTypePreferences()
         )
-        # Application scope: every window reads the same panel list. A
-        # window without one gets an empty registry of its own, which is
-        # a working application with no optional panels.
-        self.panelRegistry = (
-            panel_registry if panel_registry is not None
-            else PanelRegistry()
-        )
-        # Window scope: this window's own copies of whatever the shared
-        # registry describes.
-        self.panelHost = PanelHost(self, self.panelRegistry)
         # Structure edits are undoable per project; the stack is
         # cleared whenever a different project is opened.
         self.undoStack = QUndoStack(self)
@@ -733,12 +736,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.gitRevisionDialog = None
 
-        # Tool bar on the right
+        # Tool bar on the right. The four workspace panels are declared
+        # once in the shared registry and attached per window; their
+        # toggles come from the panel host so that anything showing a
+        # panel and anything watching it agree on one action.
         self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
-        self.toolbar.addCustomWidget(self.tr("Book summary"), self.grpPlotSummary, self.TabPlots, False)
-        self.toolbar.addCustomWidget(self.tr("Project tree"), self.treeRedacWidget, self.TabRedac, True)
-        self.toolbar.addCustomWidget(self.tr("Metadata"), self.redacMetadata, self.TabRedac, False)
-        self.toolbar.addCustomWidget(self.tr("Story line"), self.storylineView, self.TabRedac, False)
+        register_core_panels(self.panelRegistry, self.TabPlots, self.TabRedac)
+        for panel_id, widget in (
+            (core_panels.BOOK_SUMMARY, self.grpPlotSummary),
+            (core_panels.PROJECT_TREE, self.treeRedacWidget),
+            (core_panels.METADATA, self.redacMetadata),
+            (core_panels.STORYLINE, self.storylineView),
+        ):
+            instance = self.panelHost.attach_existing(panel_id, widget)
+            self.toolbar.addPanelToggle(
+                instance.action,
+                widget,
+                instance.descriptor.group,
+            )
         self.windowState.restore_toolbar(self.toolbar)
 
         # Hides navigation dock title bar

@@ -192,7 +192,9 @@ class SearchResultViewAdapter:
         name, widget_type, is_metadata = targets[result.column()]
         if is_metadata:
             metadata = self.window.findChild(metadataView, "redacMetadata")
-            self.window.toolbar.switchActionByWidget(metadata)
+            # Through the panel's own action, so the toolbar button that
+            # mirrors it stays in agreement.
+            self.window.panelHost.set_visible("core.metadata")
             return metadata.findChild(widget_type, name)
         editor = self.window.mainEditor.currentEditor()
         return editor.findChild(widget_type, name)

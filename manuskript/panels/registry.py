@@ -42,6 +42,9 @@ class PanelRegistry:
         del self._descriptors[panel_id]
         self._notify()
 
+    def __contains__(self, panel_id):
+        return panel_id in self._descriptors
+
     def descriptor(self, panel_id):
         try:
             return self._descriptors[panel_id]
