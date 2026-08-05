@@ -86,15 +86,55 @@ class ExportRoutingPanel(QWidget):
                 )
                 self._build_option_buttons()
                 return
+            settled = {}
             for route in routes:
+                renderer = self._settled_renderer(route)
+                if renderer is not None:
+                    # One renderer and no pin: there is no decision here,
+                    # so it is summarised rather than given a row that
+                    # looks like a choice.
+                    settled.setdefault(
+                        renderer.descriptor.id, (renderer, []),
+                    )[1].append(route)
+                    continue
                 self.form.addRow(
                     self.tr(route.label),
                     self._field_for(route),
                 )
-            self.noticeLabel.setText("")
+            self.noticeLabel.setText(self._settled_summary(settled))
             self._build_option_buttons()
         finally:
             self._syncing = False
+
+    def _settled_renderer(self, route):
+        """The only renderer for a destination, when that is the whole story.
+
+        Returns None when the row is worth showing: several renderers to
+        pick between, an existing pin to be able to undo, or none at all.
+        """
+        candidates = self.routing.candidates(
+            self.pageTypeId,
+            route.representation_format,
+        )
+        if len(candidates) != 1:
+            return None
+        if self.routing.selected(self.pageTypeId, route.id):
+            return None
+        return candidates[0]
+
+    def _settled_summary(self, settled):
+        """One line per renderer that needs no choosing, listing where.
+
+        Ten rows repeating one renderer's name told the reader there were
+        ten decisions. There were none.
+        """
+        return "\n".join(
+            self.tr("{}: {}").format(
+                renderer.descriptor.name,
+                ", ".join(self.tr(route.label) for route in routes),
+            )
+            for renderer, routes in settled.values()
+        )
 
     def _field_for(self, route):
         candidates = self.routing.candidates(
@@ -124,21 +164,37 @@ class ExportRoutingPanel(QWidget):
         return label
 
     def _choice_field(self, route, candidates):
+        """The renderers for one destination, best first.
+
+        With several candidates there is a real decision -- follow priority,
+        or pin one -- so Automatic leads and names what it resolves to.
+
+        With one candidate there is no decision to offer: pinning the only
+        renderer available does exactly what following priority does. So the
+        row states what will be produced and nothing is repeated. Install a
+        second renderer and the choice appears.
+        """
         combo = QComboBox(self)
-        # An explicit first entry, so an unchosen route never displays a
-        # renderer as though somebody had picked it.
-        combo.addItem(
-            self.tr("Automatic — {}").format(
-                self._describe(route, candidates[0]),
-            ),
-            AUTOMATIC,
-        )
-        for renderer in candidates:
-            combo.addItem(
-                self._describe(route, renderer),
-                renderer.descriptor.id,
-            )
         saved = self.routing.selected(self.pageTypeId, route.id)
+        # A pin that already exists stays offered even when it is the only
+        # renderer, or there would be no way left to clear it.
+        if len(candidates) > 1 or saved:
+            combo.addItem(
+                self.tr("Automatic — {}").format(
+                    candidates[0].descriptor.name,
+                ),
+                AUTOMATIC,
+            )
+            for renderer in candidates:
+                combo.addItem(
+                    self._describe(route, renderer),
+                    renderer.descriptor.id,
+                )
+        else:
+            combo.addItem(
+                self._describe(route, candidates[0]),
+                AUTOMATIC,
+            )
         index = combo.findData(saved) if saved else 0
         combo.setCurrentIndex(index if index >= 0 else 0)
         combo.currentIndexChanged.connect(
@@ -149,7 +205,12 @@ class ExportRoutingPanel(QWidget):
 
     def _describe(self, route, renderer):
         """A renderer's name, saying what it really produces if not the
-        format asked for, and whose it is if not this plugin's."""
+        format asked for, and whose it is if not this plugin's.
+
+        The Automatic entry deliberately does not use this: stacking "as
+        Markdown" onto "Automatic — " produced three clauses and two
+        dashes for what is one fact about one renderer.
+        """
         label = renderer.descriptor.name
         wanted = route.representation_format
         if wanted not in renderer.target_formats:

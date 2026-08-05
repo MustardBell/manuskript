@@ -112,27 +112,64 @@ def items(combo):
 
 # ------------------------------------------------- state 1: exact choices
 
-def test_an_exact_renderer_is_offered_plainly():
+def test_a_destination_with_one_renderer_gets_no_row():
     gateway = build((BBCODE_ROUTE,), renderer("vendor.bb", [BBCODE]))
 
     subject = panel(gateway)
-    combo = subject._combos[BBCODE_ROUTE.id]
 
-    assert "vendor.bb" in items(combo)
-    assert " — as " not in "".join(items(combo))
+    # Nothing to pick, so nothing that looks pickable. The earlier version
+    # gave every destination a dropdown, and with one renderer that meant
+    # listing "Automatic - vendor.bb" above "vendor.bb".
+    assert subject._combos == {}
+    assert subject.form.rowCount() == 0
+    assert subject.noticeLabel.text() == "vendor.bb: BBCode"
 
 
-def test_an_unchosen_route_reads_as_automatic():
-    gateway = build((BBCODE_ROUTE,), renderer("vendor.bb", [BBCODE]))
+def test_destinations_settled_by_one_renderer_are_listed_together():
+    gateway = build(
+        (BBCODE_ROUTE, PLAIN_ROUTE),
+        renderer("vendor.md", [MARKDOWN]),
+    )
+
+    subject = panel(gateway)
+
+    # One line naming the renderer once, rather than a row per destination
+    # repeating it. Ten rows of one name implied ten decisions.
+    assert subject._combos == {}
+    assert subject.noticeLabel.text() == "vendor.md: BBCode, Plain text"
+
+
+def test_a_choice_between_renderers_leads_with_automatic():
+    gateway = build(
+        (BBCODE_ROUTE,),
+        renderer("vendor.bb", [BBCODE], priority=9),
+        renderer("vendor.other", [BBCODE]),
+    )
 
     combo = panel(gateway)._combos[BBCODE_ROUTE.id]
 
-    # The bug this replaces: the old panel selected index 0 and displayed
-    # a renderer as though somebody had picked it, then apologised in a
-    # footnote for the ones it had invented.
+    # Now there is a decision, so Automatic leads and says what it
+    # resolves to -- and never displays a renderer as though somebody had
+    # picked it, which is what the old panel did.
+    assert items(combo) == [
+        "Automatic — vendor.bb", "vendor.bb", "vendor.other",
+    ]
     assert combo.currentData() == AUTOMATIC
-    assert combo.currentText().startswith("Automatic")
-    assert "vendor.bb" in combo.currentText()
+
+
+def test_automatic_never_carries_the_stand_in_note():
+    gateway = build(
+        (BBCODE_ROUTE,),
+        renderer("vendor.md", [MARKDOWN], priority=9),
+        renderer("vendor.other", [MARKDOWN]),
+    )
+
+    combo = panel(gateway)._combos[BBCODE_ROUTE.id]
+
+    # "Automatic — vendor.md — as Markdown" was three clauses and two
+    # dashes for one fact about one renderer.
+    assert combo.itemText(0) == "Automatic — vendor.md"
+    assert "as Markdown" in combo.itemText(1)
 
 
 def test_a_saved_choice_is_shown_as_chosen():
@@ -153,7 +190,7 @@ def test_a_saved_choice_is_shown_as_chosen():
     assert combo.currentData() == "vendor.other"
 
 
-def test_choosing_automatic_forgets_the_saved_choice():
+def test_a_pin_stays_clearable_even_as_the_only_renderer():
     store = InMemoryPluginOptionStore()
     gateway = build(
         (BBCODE_ROUTE,),
@@ -166,6 +203,11 @@ def test_choosing_automatic_forgets_the_saved_choice():
     )
     subject = panel(gateway)
     combo = subject._combos[BBCODE_ROUTE.id]
+
+    # A sole renderer is normally shown alone, but an existing pin has to
+    # stay offered or there would be no way left to undo it.
+    assert combo.findData(AUTOMATIC) >= 0
+    assert combo.currentData() == "vendor.bb"
 
     combo.setCurrentIndex(combo.findData(AUTOMATIC))
 
@@ -192,24 +234,21 @@ def test_another_plugins_renderer_is_attributed():
 
 # --------------------------------------------- state 2: only a stand-in
 
-def test_a_stand_in_choice_says_what_actually_comes_out():
-    gateway = build((BBCODE_ROUTE,), renderer("vendor.md", [MARKDOWN]))
+def test_a_stand_in_is_explained_where_it_is_a_choice():
+    gateway = build(
+        (BBCODE_ROUTE,),
+        renderer("vendor.bb", [BBCODE], priority=9),
+        renderer("vendor.md", [MARKDOWN]),
+    )
 
     labels = items(panel(gateway)._combos[BBCODE_ROUTE.id])
 
-    # Not "(compatible fallback)" on every row: the format produced is
-    # named, once, where the choice is made.
+    # Here the two options really differ in what comes out, so the one
+    # that cannot make BBCode says so. This is the only place that note
+    # earns its keep -- on a settled destination it described a
+    # distinction with no consequence.
+    assert "vendor.bb" in labels
     assert any("as Markdown" in label for label in labels)
-
-
-def test_an_exact_route_is_not_annotated():
-    gateway = build((PLAIN_ROUTE,), renderer("vendor.md", [MARKDOWN]))
-
-    labels = items(panel(gateway)._combos[PLAIN_ROUTE.id])
-
-    # The plain-text route composes pages as Markdown, so this renderer is
-    # exact for it and needs no explanation.
-    assert not any(" — as " in label for label in labels)
 
 
 # --------------------------------------------------- state 3: unassigned
