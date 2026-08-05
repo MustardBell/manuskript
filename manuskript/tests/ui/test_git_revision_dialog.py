@@ -90,11 +90,15 @@ def test_dialog_tags_selected_commit_as_milestone():
     dialog.close()
 
 
-def test_dialog_restore_uses_owner_mediated_coordinator():
+def test_dialog_asks_the_project_manager_to_restore():
+    """Restoring replaces the project's models, which is the manager's
+    own business -- the dialog asks it, not the coordinator, so nothing
+    reaches through the coordinator into the project.
+    """
     dialog, manager, _settings, coordinator, _backend = (
         make_dialog()
     )
-    coordinator.restore.return_value = True
+    manager.restoreRevision.return_value = True
 
     with patch(
         "manuskript.ui.git_revision_dialog.QMessageBox.warning",
@@ -102,8 +106,24 @@ def test_dialog_restore_uses_owner_mediated_coordinator():
     ):
         dialog._restore()
 
-    coordinator.restore.assert_called_once_with(
-        manager,
-        "a" * 40,
+    manager.restoreRevision.assert_called_once_with("a" * 40)
+    coordinator.restore.assert_not_called()
+    dialog.close()
+
+
+def test_dialog_asks_the_project_manager_to_commit():
+    dialog, manager, _settings, coordinator, _backend = (
+        make_dialog()
     )
+    manager.commitRevision.return_value = "b" * 40
+
+    with patch(
+        "manuskript.ui.git_revision_dialog.QInputDialog"
+        ".getMultiLineText",
+        return_value=("Chapter complete", True),
+    ):
+        dialog._commit()
+
+    manager.commitRevision.assert_called_once_with("Chapter complete")
+    coordinator.manual_commit.assert_not_called()
     dialog.close()

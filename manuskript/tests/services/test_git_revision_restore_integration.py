@@ -93,8 +93,7 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
         == "Changed raw plugin content"
     )
 
-    restored = MWNoProject.revisionCoordinator.restore(
-        MWNoProject.projectManager,
+    restored = MWNoProject.projectManager.restoreRevision(
         initial_commit,
     )
 

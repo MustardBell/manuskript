@@ -14,6 +14,7 @@ from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_persistence import (
     ProjectPersistenceContext,
 )
+from manuskript.services.git_revisions import GitRevisionError
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.services.revision_coordinator import (
     ProjectRevisionCoordinator,
@@ -267,6 +268,32 @@ class ProjectManager:
         )
         self.ui.install_models(self.models)
         return self.models
+
+    def restoreRevision(self, revision):
+        """Restore one Git revision through the normal save path.
+
+        The manager orchestrates its own restore; the coordinator only
+        supplies the validated snapshot. That way nothing outside this
+        class ever reaches through it to its models or settings.
+        """
+        loaded = self.revision_coordinator.load_snapshot(
+            self.currentProject,
+            revision,
+            self.ui.settings,
+            parent=self.ui.model_parent,
+        )
+        return self.restoreRevisionSnapshot(loaded)
+
+    def commitRevision(self, message):
+        """Save the project, then record it as a Git commit."""
+        self.ui.flush_pending_edits()
+        if not self.saveDatas(record_revision=False):
+            raise GitRevisionError(
+                "The project could not be saved before committing."
+            )
+        return self.revision_coordinator.git_backend(
+            self.currentProject
+        ).commit(message)
 
     def restoreRevisionSnapshot(self, snapshot):
         """Replace the project through validated models, never Git checkout."""
