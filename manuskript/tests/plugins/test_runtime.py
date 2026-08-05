@@ -132,6 +132,77 @@ def test_failed_registration_leaves_no_partial_contributions(tmp_path):
     assert runtime.registry.exporters == ()
 
 
+FAILING_INSTALL_SOURCE = (
+    # The entry point succeeds and returns a handle, then install refuses
+    # the plugin: the transform names a media type the manifest never
+    # promised. That failure happens after plugin code already ran.
+    "from pathlib import Path\n"
+    "from manuskript.plugins import ("
+    "ExtensionDescriptor, TransformContribution)\n"
+    "class Handle:\n"
+    "    def deactivate(self):\n"
+    "        Path(__file__).with_name('deactivated').touch()\n"
+    "{extra}"
+    "def register(api):\n"
+    "    api.register_transform(TransformContribution(\n"
+    "        ExtensionDescriptor('example.transform', 'Example'),\n"
+    "        media_type='text/x-unpromised',\n"
+    "        engine_factory=object,\n"
+    "    ))\n"
+    "    return Handle()\n"
+)
+
+
+def test_install_failure_deactivates_what_the_entry_point_started(
+        tmp_path):
+    """The entry point may have connected signals or started timers by the
+    time install refuses the plugin, so its handle must get the same
+    deactivate call an unload would give it.
+    """
+    create_plugin(tmp_path, source=FAILING_INSTALL_SOURCE.format(extra=""))
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.FAILED
+    assert "text/x-unpromised" in record.error
+    assert (tmp_path / "example.plugin" / "deactivated").exists()
+    assert runtime.registry.transforms == ()
+
+
+def test_a_failing_deactivate_never_masks_the_install_error(tmp_path):
+    """Cleanup is a courtesy to the plugin; the reported failure stays the
+    one that refused it.
+    """
+    create_plugin(
+        tmp_path,
+        source=FAILING_INSTALL_SOURCE.format(
+            extra=(
+                "class BrokenHandle:\n"
+                "    def deactivate(self):\n"
+                "        raise RuntimeError('cleanup exploded')\n"
+            ),
+        ).replace("return Handle()", "return BrokenHandle()"),
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.FAILED
+    assert "text/x-unpromised" in record.error
+    assert "cleanup exploded" not in record.error
+
+
 def test_plugin_package_supports_relative_imports(tmp_path):
     plugin_root = create_plugin(
         tmp_path,

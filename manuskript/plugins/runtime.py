@@ -248,6 +248,7 @@ class PluginRuntime:
             capabilities=capabilities,
         )
         module_prefix = self._module_prefix(manifest)
+        handle = None
         try:
             entry = self._load_entry_point(
                 manifest,
@@ -260,6 +261,10 @@ class PluginRuntime:
                 registrar.contributions,
             )
         except Exception as error:
+            # The entry point already ran and may have connected signals or
+            # started timers. Whatever it started has to be told to stop,
+            # and while its modules are still importable.
+            self._deactivate_handle(plugin_id, handle)
             self.registry.remove_plugin(plugin_id)
             self._remove_modules(module_prefix)
             failure = PluginLoadError(
@@ -339,18 +344,24 @@ class PluginRuntime:
     def _deactivate_record(self, record):
         plugin_id = record.manifest.id
         self.registry.remove_plugin(plugin_id)
-        handle = record.handle
-        if handle is not None and hasattr(handle, "deactivate"):
-            try:
-                handle.deactivate()
-            except Exception:
-                LOGGER.exception(
-                    "Plugin %s failed while deactivating.",
-                    plugin_id,
-                )
+        self._deactivate_handle(plugin_id, record.handle)
         self._remove_modules(record.module_prefix)
         record.handle = None
         record.module_prefix = ""
+
+    @staticmethod
+    def _deactivate_handle(plugin_id, handle):
+        """Let a handle undo its side effects, and never let that call
+        mask whatever brought us here."""
+        if handle is None or not hasattr(handle, "deactivate"):
+            return
+        try:
+            handle.deactivate()
+        except Exception:
+            LOGGER.exception(
+                "Plugin %s failed while deactivating.",
+                plugin_id,
+            )
 
     @staticmethod
     def _module_prefix(manifest):
