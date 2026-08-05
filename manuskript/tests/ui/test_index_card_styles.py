@@ -10,8 +10,8 @@ from manuskript.services.plugin_preferences import (
 )
 from manuskript.tests.plugins.test_runtime import create_plugin
 from manuskript.ui.plugins.index_card_styles import IndexCardStyleService
+from manuskript.plugins.ui import IndexCardStyle
 from manuskript.ui.views.cards import (
-    IndexCardStyle,
     PlainCardStyle,
     RuledCardStyle,
 )
@@ -25,7 +25,7 @@ from PyQt5.QtCore import QSize
 
 from manuskript.plugins import (
     ExtensionDescriptor, IndexCardStyleContribution)
-from manuskript.ui.views.cards import IndexCardStyle
+from manuskript.plugins.ui import IndexCardStyle
 
 
 class PolaroidStyle(IndexCardStyle):
