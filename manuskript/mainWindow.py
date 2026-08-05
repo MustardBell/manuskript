@@ -134,6 +134,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._defaultCursorFlashTime = 1000 # Overridden at startup with system
                                             # value. In manuskript.main.
         self._autoLoadProject = None  # Used to load a command line project
+        self._restoredWorkspaceWindows = False
         self.sessionStartWordCount = 0  # Used to track session targets
         self._previousSelectionEmpty = True
         self.documentCommands = DocumentCommandRouter(
@@ -371,6 +372,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not self.projectManager.closeProject():
                 event.ignore()
                 return
+            if not self.windowRegistry.quitting:
+                # Closed one at a time rather than quit: the windows
+                # still open are the session to come back to.
+                self.windowState.store.set_open_windows(
+                    self.openWorkspaceIds()
+                )
         self.closeToolWindows()
         self.windowState.save()
         self.projectRuntime.detach(self.projectLifecycleView)
@@ -414,7 +421,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             index += 1
         return "window-{}".format(index)
 
-    def openWorkspaceWindow(self):
+    def openWorkspaceWindow(self, window_id=None):
         """Another view of this project, sharing everything it owns.
 
         The new window is handed the same project runtime, panel
@@ -432,7 +439,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             panel_registry=self.panelRegistry,
             project_runtime=self.projectRuntime,
             window_registry=self.windowRegistry,
-            window_id=self.nextWorkspaceId(),
+            window_id=window_id or self.nextWorkspaceId(),
         )
         window.adoptOpenProject()
         window.show()
@@ -463,7 +470,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Returns whether the application is actually going: a cancelled
         save prompt aborts the quit and leaves the windows standing.
         """
-        return self.windowRegistry.close_all()
+        session = self.openWorkspaceIds()
+        if not self.windowRegistry.close_all():
+            return False
+        # Only once the quit succeeded, or a cancelled prompt would
+        # record a session that never ended.
+        self.windowState.store.set_open_windows(session)
+        return True
+
+    def openWorkspaceIds(self):
+        return [
+            getattr(window, "windowId", WORKSPACE_PRIMARY)
+            for window in self.windowRegistry.workspace_windows
+        ]
+
+    def restoreWorkspaceWindows(self):
+        """Reopen the windows the last session left open.
+
+        Tied to a project opening rather than to launch, because a
+        workspace window with no project is only a welcome screen. Runs
+        once, from the window the project was opened in.
+        """
+        if self._restoredWorkspaceWindows:
+            return ()
+        if self.windowId != WORKSPACE_PRIMARY:
+            return ()
+        self._restoredWorkspaceWindows = True
+        reopened = []
+        for window_id in self.windowState.store.open_windows():
+            if window_id in self.openWorkspaceIds():
+                continue
+            reopened.append(self.openWorkspaceWindow(window_id))
+        return tuple(reopened)
 
     def closeToolWindows(self):
         """Close the tool windows this window opened.

@@ -34,6 +34,9 @@ class WindowRegistry:
         self._active = None
         self._focus_source = focus_source
         self._watching_focus = False
+        #: True while close_all is working through the windows, so the
+        #: last one to go does not record a session of just itself.
+        self.quitting = False
 
     def register(self, window):
         if window not in self._windows:
@@ -109,13 +112,19 @@ class WindowRegistry:
         asked, and it has to be asked once. A window refusing to close
         (the person cancelled) aborts the rest.
         """
-        for window in reversed(self.workspace_windows[1:]):
-            if not self._close(window):
+        self.quitting = True
+        try:
+            for window in reversed(self.workspace_windows[1:]):
+                if not self._close(window):
+                    return False
+            primary = (
+                self.workspace_windows[0] if self._windows else None
+            )
+            if primary is not None and not self._close(primary):
                 return False
-        primary = self.workspace_windows[0] if self._windows else None
-        if primary is not None and not self._close(primary):
-            return False
-        return True
+            return True
+        finally:
+            self.quitting = False
 
     @staticmethod
     def _close(window):

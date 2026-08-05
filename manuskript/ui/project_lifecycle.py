@@ -127,6 +127,9 @@ class ProjectLifecycleView:
         if self.window.pluginUi is not None:
             self.window.pluginUi.project_opened()
         self.window.switchToProject()
+        # Only now is there a project for extra windows to show; a
+        # workspace window without one is just a welcome screen.
+        self.window.restoreWorkspaceWindows()
 
     def confirm_unsaved_changes(self):
         message = QMessageBox(

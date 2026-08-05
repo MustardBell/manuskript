@@ -14,6 +14,16 @@ QApplication([])
 # Create app and mainWindow
 from manuskript import main
 arguments = main.process_commandline([])
+
+# The test settings persist between runs, so a session recorded by an
+# earlier run would have the first project-open reopen its windows here.
+# Cleared before the window exists, when nothing has read it yet.
+from PyQt5.QtCore import QSettings
+
+QSettings(
+    "manuskript_tests", "manuskript_tests",
+).remove("workspace/openWindows")
+
 app, MW = main.prepare(arguments, tests=True)
 
 # METHOD 2

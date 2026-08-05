@@ -6,7 +6,10 @@ closing is not the project's closing. Each window keeps its own
 selection, its own open documents and its own panels.
 """
 
+from PyQt5.QtCore import QSettings
+
 from manuskript.panels.core import METADATA, PROJECT_TREE
+from manuskript.services.workspace_state import WorkspaceStateStore
 
 
 def test_a_second_window_edits_the_same_project(MWEmptyProject):
@@ -124,5 +127,123 @@ def test_the_active_window_follows_focus(MWEmptyProject):
         assert registry.active is other
         registry.activate(window)
         assert registry.active is window
+    finally:
+        other.close()
+
+
+# ------------------------------------------------- reopening a session
+
+class isolated_session:
+    """Give one window a private layout store.
+
+    The main window is shared across the suite, so a test that records a
+    session in the real store would have every later project-open reopen
+    windows -- which is exactly what happened.
+    """
+
+    def __init__(self, window, tmp_path, open_windows=()):
+        self.window = window
+        self.path = str(tmp_path / "session.ini")
+        self.open_windows = list(open_windows)
+        self.previous = None
+        self.opened = []
+
+    def __enter__(self):
+        controller = self.window.windowState
+        self.previous = controller.store
+        controller.store = WorkspaceStateStore(
+            QSettings(self.path, QSettings.IniFormat)
+        )
+        controller.store.set_open_windows(self.open_windows)
+        self.window._restoredWorkspaceWindows = False
+        return self
+
+    def restore(self):
+        self.opened = list(self.window.restoreWorkspaceWindows())
+        return self.opened
+
+    def __exit__(self, *_exception):
+        for entry in self.opened:
+            entry.close()
+        self.window.windowState.store = self.previous
+        self.window._restoredWorkspaceWindows = True
+        return False
+
+
+def test_a_recorded_session_reopens_its_extra_windows(
+        MWEmptyProject, tmp_path):
+    """Opening a project brings back the windows the last session had,
+    because a workspace window with no project is only a welcome screen.
+    """
+    window = MWEmptyProject
+    with isolated_session(
+        window, tmp_path, ["main", "window-restored"],
+    ) as session:
+        reopened = session.restore()
+
+        assert [entry.windowId for entry in reopened] == [
+            "window-restored",
+        ]
+        assert reopened[0].projectRuntime is window.projectRuntime
+        assert reopened[0].currentProject == window.currentProject
+
+
+def test_a_session_is_restored_once_per_window(
+        MWEmptyProject, tmp_path):
+    """project_opened fires whenever a project opens; reopening windows
+    every time would multiply them.
+    """
+    window = MWEmptyProject
+    with isolated_session(
+        window, tmp_path, ["main", "window-restored"],
+    ) as session:
+        assert len(session.restore()) == 1
+        assert window.restoreWorkspaceWindows() == ()
+
+
+def test_a_window_already_open_is_not_opened_twice(
+        MWEmptyProject, tmp_path):
+    window = MWEmptyProject
+    with isolated_session(window, tmp_path, ["main"]) as session:
+        assert session.restore() == []
+        assert window.openWorkspaceIds().count("main") == 1
+
+
+def test_only_the_primary_window_restores_a_session(
+        MWEmptyProject, tmp_path):
+    """Otherwise each reopened window would reopen the session again."""
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with isolated_session(
+            other, tmp_path, ["main", "window-unwanted"],
+        ) as session:
+            assert session.restore() == []
+    finally:
+        other.close()
+
+
+def test_no_recorded_session_reopens_nothing(MWEmptyProject, tmp_path):
+    window = MWEmptyProject
+    with isolated_session(window, tmp_path, []) as session:
+        assert session.restore() == []
+
+
+def test_the_open_windows_are_what_a_quit_records(
+        MWEmptyProject, tmp_path):
+    """So the next launch comes back to the same set."""
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with isolated_session(window, tmp_path) as session:
+            ids = window.openWorkspaceIds()
+            assert other.windowId in ids
+
+            window.windowState.store.set_open_windows(ids)
+
+            assert set(
+                window.windowState.store.open_windows()
+            ) == set(ids)
+            del session
     finally:
         other.close()

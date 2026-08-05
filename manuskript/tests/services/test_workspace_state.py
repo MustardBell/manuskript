@@ -144,3 +144,65 @@ def test_as_bool_reads_what_qsettings_meant():
         assert as_bool(value) is False, value
     for value in ("true", "True", "1", "yes", 1, True):
         assert as_bool(value) is True, value
+
+
+# ----------------------------------------------------- session windows
+
+def test_the_session_records_which_windows_were_open(tmp_path):
+    subject, _settings = store(tmp_path)
+
+    subject.set_open_windows([PRIMARY, "window-2"])
+
+    assert subject.open_windows() == (PRIMARY, "window-2")
+
+
+def test_no_recorded_session_is_empty_rather_than_a_guess(tmp_path):
+    """A first launch has no session. Assuming one window would be a
+    guess; the caller already has its own window.
+    """
+    subject, _settings = store(tmp_path)
+
+    assert subject.open_windows() == ()
+
+
+def test_a_single_recorded_window_survives_an_ini_round_trip(tmp_path):
+    """QSettings collapses a one-item list to a bare string, which
+    would otherwise come back as a list of its characters.
+    """
+    subject, settings = store(tmp_path)
+    subject.set_open_windows([PRIMARY])
+    settings.sync()
+
+    reopened = WorkspaceStateStore(
+        QSettings(settings.fileName(), QSettings.IniFormat)
+    )
+
+    assert reopened.open_windows() == (PRIMARY,)
+
+
+def test_layout_for_windows_the_session_dropped_is_forgotten(tmp_path):
+    """Otherwise every window ever opened leaves a stanza behind that
+    nothing will read again.
+    """
+    subject, _settings = store(tmp_path)
+    subject.save(WorkspaceWindowState(geometry=b"one"), PRIMARY)
+    subject.save(WorkspaceWindowState(geometry=b"two"), "window-2")
+    subject.save(WorkspaceWindowState(geometry=b"three"), "window-3")
+
+    subject.set_open_windows([PRIMARY, "window-2"])
+
+    assert subject.window_ids() == (PRIMARY, "window-2")
+    assert subject.load(PRIMARY).geometry == b"one"
+    assert subject.load("window-2").geometry == b"two"
+
+
+def test_the_primary_window_keeps_its_layout_regardless(tmp_path):
+    """It is always the window that opens next, so its layout is never
+    the one to discard.
+    """
+    subject, _settings = store(tmp_path)
+    subject.save(WorkspaceWindowState(geometry=b"main"), PRIMARY)
+
+    subject.set_open_windows(["window-2"])
+
+    assert subject.load(PRIMARY).geometry == b"main"

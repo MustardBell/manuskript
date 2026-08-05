@@ -102,6 +102,49 @@ class WorkspaceStateStore:
         self._settings.remove(self._window_root(window_id))
         self._settings.sync()
 
+    # ------------------------------------------------- session windows
+
+    def open_windows(self):
+        """The windows a previous session had open, primary first.
+
+        Saved layout is not the same question: a window can have a
+        remembered size without having been open at the end.
+        """
+        key = "{}/openWindows".format(ROOT)
+        stored = (
+            self._settings.value(key)
+            if self._settings.contains(key)
+            else None
+        )
+        if stored is None:
+            return ()
+        if isinstance(stored, str):
+            stored = [stored] if stored else []
+        found = [str(entry) for entry in stored if str(entry)]
+        found.sort(key=lambda name: (name != PRIMARY, name))
+        return tuple(found)
+
+    def set_open_windows(self, window_ids):
+        window_ids = [str(entry) for entry in window_ids]
+        self._settings.setValue(
+            "{}/openWindows".format(ROOT),
+            window_ids,
+        )
+        self.forget_windows_except(window_ids)
+        self._settings.sync()
+
+    def forget_windows_except(self, window_ids):
+        """Drop layout for windows the session did not end with.
+
+        Otherwise every window ever opened accumulates a stanza that
+        nothing will read again, and the primary's is never among the
+        casualties.
+        """
+        keep = set(window_ids) | {PRIMARY}
+        for window_id in self.window_ids():
+            if window_id not in keep:
+                self._settings.remove(self._window_root(window_id))
+
     # ----------------------------------------------------------- pieces
 
     def _value(self, window_id, name):
