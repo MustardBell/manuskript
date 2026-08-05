@@ -867,8 +867,6 @@ class Ui_MainWindow(object):
         self.verticalLayout_30.addLayout(self.horizontalLayout_31)
         self.mainEditor = mainEditor(self.splitterRedacH)
         self.mainEditor.setObjectName("mainEditor")
-        self.redacMetadata = metadataView(self.splitterRedacH)
-        self.redacMetadata.setObjectName("redacMetadata")
         self.verticalLayout_15.addWidget(self.splitterRedacV)
         self.tabMain.addTab(self.lytTabRedac, "")
         self.lytTabDebug = QtWidgets.QWidget()
@@ -1631,7 +1629,6 @@ from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 from manuskript.ui.views.basicItemView import basicItemView
 from manuskript.ui.views.characterTreeView import characterTreeView
 from manuskript.ui.views.lineEditView import lineEditView
-from manuskript.ui.views.metadataView import metadataView
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.plotTreeView import plotTreeView
 from manuskript.ui.views.sldImportance import sldImportance

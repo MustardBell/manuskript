@@ -93,6 +93,25 @@ def test_storyline_is_built_by_its_factory(MWEmptyProject):
     assert window.panelHost.instance(STORYLINE).widget is view
 
 
+def test_metadata_is_built_by_its_factory_and_state_round_trips(
+        MWEmptyProject):
+    """Window state saves the metadata collapse states by attribute, so
+    the factory-built panel must sit in the old slot, under the old
+    objectName, serving the old saveState protocol.
+    """
+    window = MWEmptyProject
+    view = window.redacMetadata
+
+    assert window.splitterRedacH.indexOf(view) == 2
+    assert view.objectName() == "redacMetadata"
+    assert window.panelHost.instance(METADATA).widget is view
+
+    state = view.saveState()
+    view.restoreState(state)
+    assert view.saveState() == state
+    assert view.revisions is not None
+
+
 def test_declaring_core_panels_twice_is_harmless():
     """The registry outlives any window, so the second window finds the
     panels already declared and must not trip over them.

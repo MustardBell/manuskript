@@ -166,8 +166,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.projectBinding = ProjectBinding(self)
         self.windowState = MainWindowStateController(self)
 
-        self.windowState.restore()
-
         # Application scope: every window reads the same panel list. A
         # window without one gets an empty registry of its own, which is
         # a working application with no optional panels.
@@ -179,8 +177,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # registry describes.
         self.panelHost = PanelHost(self, self.panelRegistry)
 
-        # UI
+        # UI. Panels are built before saved state is applied: a splitter
+        # can only take back its saved sizes once every widget it is
+        # meant to split exists.
         self.setupMoreUi()
+        self.windowState.restore()
+        self.windowState.restore_toolbar(self.toolbar)
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
@@ -774,7 +776,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 instance.widget,
                 instance.descriptor.group,
             )
-        self.windowState.restore_toolbar(self.toolbar)
 
         # Hides navigation dock title bar
         self.dckNavigation.setTitleBarWidget(QWidget(None))

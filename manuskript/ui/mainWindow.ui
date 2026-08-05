@@ -1815,7 +1815,6 @@
                 </layout>
                </widget>
                <widget class="mainEditor" name="mainEditor" native="true"/>
-               <widget class="metadataView" name="redacMetadata" native="true"/>
               </widget>
              </widget>
             </item>
