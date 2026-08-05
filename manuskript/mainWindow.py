@@ -26,6 +26,7 @@ from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.ui.panels.core import core_panel_factories
 from manuskript.services.project_runtime import ProjectRuntime
+from manuskript.services.window_registry import WindowRegistry
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
 )
@@ -115,6 +116,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         media_type_preferences=None,
         panel_registry=None,
         project_runtime=None,
+        window_registry=None,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -152,6 +154,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsManager = self.projectRuntime.settingsManager
         self.undoStack = self.projectRuntime.undoStack
         self.revisionCoordinator = self.projectRuntime.revisionCoordinator
+        # Which windows are workspaces. Registering makes this one count
+        # towards "the last window", and towards where commands go.
+        self.windowRegistry = (
+            window_registry
+            if window_registry is not None
+            else WindowRegistry()
+        )
+        self.windowRegistry.register(self)
         self.applicationPreferences = (
             application_preferences
             if application_preferences is not None
@@ -336,19 +346,42 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.stack.setCurrentIndex(1)
 
     def closeEvent(self, event):
-        """Close the application only after the project closes safely."""
-        if not self.projectManager.closeProject():
-            event.ignore()
-            return
-        self.closeAuxiliaryWindows()
+        """Close this window, and the project only with the last one.
+
+        A workspace window is one view of a project. Closing it puts
+        that view away; the project goes when its last window does, and
+        that is the only close that may ask about unsaved changes.
+        """
+        if self.windowRegistry.is_last(self):
+            if not self.projectManager.closeProject():
+                event.ignore()
+                return
+        self.closeToolWindows()
         self.windowState.save()
+        self.projectRuntime.detach(self.projectLifecycleView)
+        self.windowRegistry.unregister(self)
         super().closeEvent(event)
 
-    def closeAuxiliaryWindows(self):
-        """Close every application window other than the main window."""
-        for window in QApplication.topLevelWidgets():
-            if window is not self:
+    def quitApplication(self):
+        """Close every workspace window, the primary last.
+
+        Returns whether the application is actually going: a cancelled
+        save prompt aborts the quit and leaves the windows standing.
+        """
+        return self.windowRegistry.close_all()
+
+    def closeToolWindows(self):
+        """Close the tool windows this window opened.
+
+        Only this window's own: another workspace's targets dialog is
+        not ours to shut, which is what walking every top-level widget
+        used to do.
+        """
+        for window in (self.td, self.fw, self.gitRevisionDialog):
+            if window is not None:
                 window.close()
+        if self.pluginUi is not None:
+            self.pluginUi.projectPanels.close_all()
 
     ###############################################################################
     # GENERAL / UI STUFF

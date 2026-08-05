@@ -24,7 +24,7 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         binding_module,
         "QActionGroup",
         return_value=action_group,
-    ), patch.object(binding_module, "qApp", MagicMock()):
+    ):
         binding = MainWindowActionBinding(window)
         binding.bind()
 
@@ -78,7 +78,7 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
         binding_module,
         "QActionGroup",
         return_value=MagicMock(),
-    ), patch.object(binding_module, "qApp", MagicMock()) as application:
+    ):
         MainWindowActionBinding(window).bind()
 
     window.txtPersosFilter.textChanged.connect.assert_called_once()
@@ -87,9 +87,11 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
     window.tabMain.currentChanged.connect.assert_any_call(
         window.toolbar.setCurrentGroup
     )
-    application.focusChanged.connect.assert_called_once_with(
-        window.focusChanged
-    )
+    # Focus is application-wide, so the window registry watches it once
+    # for the application and forwards to whichever workspace gained it.
+    # Connecting here, per window, had every window react to every other
+    # window's focus changes.
+    window.windowRegistry.watch_focus.assert_called_once_with()
 
 
 def test_main_window_action_binding_rejects_duplicate_install():
@@ -99,7 +101,7 @@ def test_main_window_action_binding_rejects_duplicate_install():
         binding_module,
         "QActionGroup",
         return_value=MagicMock(),
-    ), patch.object(binding_module, "qApp", MagicMock()):
+    ):
         binding = MainWindowActionBinding(window)
         binding.bind()
         with pytest.raises(RuntimeError, match="only be bound once"):

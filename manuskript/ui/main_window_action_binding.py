@@ -1,6 +1,6 @@
 from functools import partial
 
-from PyQt5.QtWidgets import QActionGroup, qApp
+from PyQt5.QtWidgets import QActionGroup
 
 from manuskript import functions as F
 from manuskript.commands import DocumentCommand
@@ -47,7 +47,8 @@ class MainWindowActionBinding:
                 window.actCloseProject,
                 window.projectManager.closeProject,
             ),
-            (window.actQuit, window.close),
+            # Quit means every workspace window, not just this one.
+            (window.actQuit, window.quitApplication),
         ]:
             action.triggered.connect(slot)
 
@@ -262,4 +263,8 @@ class MainWindowActionBinding:
             window.toolbar.setCurrentGroup
         )
         window.tabMain.currentChanged.connect(window.tabMainChanged)
-        qApp.focusChanged.connect(window.focusChanged)
+        # Focus is application-wide, so the window registry follows it
+        # once and forwards to whichever workspace gained it. Connecting
+        # per window would have every window react to every other
+        # window's focus changes.
+        window.windowRegistry.watch_focus()

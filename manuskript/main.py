@@ -219,11 +219,14 @@ def prepare(arguments, tests=False):
     # there manuskript.ui.style, which snapshots the palette at import.
     from manuskript.services.project_runtime import ProjectRuntime
     from manuskript.services.project_history import ProjectHistory
+    from manuskript.services.window_registry import WindowRegistry
 
     project_runtime = ProjectRuntime(
         settings_manager=settings_manager,
         project_history=ProjectHistory(),
     )
+    # Which windows are workspaces, so closing one is not closing all.
+    window_registry = WindowRegistry()
 
     # Main window
     from manuskript.mainWindow import MainWindow
@@ -237,6 +240,7 @@ def prepare(arguments, tests=False):
         media_type_preferences=media_type_preferences,
         panel_registry=panel_registry,
         project_runtime=project_runtime,
+        window_registry=window_registry,
     )
     # We store the system default cursor flash time to be able to restore it
     # later if necessary
@@ -311,7 +315,9 @@ def sigint_handler(sig, MW):
     def handler(*args):
         # Log before winding down to preserve order of cause and effect.
         LOGGER.info(f'{sig} received. Quitting...')
-        MW.close()
+        # Every workspace window, so a second one does not keep the
+        # application alive after an interrupt.
+        MW.quitApplication()
         print(f'{sig} received, quit.')
 
     return handler

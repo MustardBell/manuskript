@@ -1,0 +1,124 @@
+"""Which windows are workspaces, and what closing one of them means.
+
+Closing used to mean closing everything: the window walked every
+top-level widget and shut it, because there was only ever one real
+window and everything else was a dialog of it. With several workspace
+windows that is wrong twice over -- it would take the other workspaces
+down, and it decided "auxiliary" by elimination rather than by anything
+a window actually declared.
+
+Only workspace windows register here. Tool windows, floating panels and
+dialogs never do, and that absence is exactly how the last workspace
+window is recognised: closing it closes the project, closing any other
+does not.
+"""
+
+import logging
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+class WindowRegistry:
+    """The application's workspace windows, in the order they opened."""
+
+    def __init__(self, focus_source=None):
+        """``focus_source`` is whatever publishes focus changes.
+
+        Injected rather than reached for so that watching focus can be
+        exercised without standing in for the running application: a
+        test that replaces ``qApp`` leaves the real one unconnected and
+        every later binding wrong.
+        """
+        self._windows = []
+        self._active = None
+        self._focus_source = focus_source
+        self._watching_focus = False
+
+    def register(self, window):
+        if window not in self._windows:
+            self._windows.append(window)
+        if self._active is None:
+            self._active = window
+        return window
+
+    def unregister(self, window):
+        if window in self._windows:
+            self._windows.remove(window)
+        if self._active is window:
+            self._active = self._windows[0] if self._windows else None
+
+    @property
+    def workspace_windows(self):
+        return tuple(self._windows)
+
+    def is_last(self, window):
+        """Whether this window is the only workspace left.
+
+        A window that never registered answers True: it is not part of a
+        set, so closing it is the whole of whatever it belongs to.
+        """
+        if window not in self._windows:
+            return True
+        return len(self._windows) == 1
+
+    @property
+    def active(self):
+        """The workspace window commands are routed to."""
+        return self._active
+
+    def activate(self, window):
+        if window in self._windows:
+            self._active = window
+
+    def watch_focus(self):
+        """Follow application-wide focus, once for the application.
+
+        Idempotent, because every window asks: connecting per window
+        would have each of them react to every other window's focus
+        changes.
+        """
+        if self._watching_focus:
+            return
+        source = self._focus_source
+        if source is None:
+            from PyQt5.QtWidgets import qApp
+
+            source = qApp
+        source.focusChanged.connect(self.focus_changed)
+        self._watching_focus = True
+
+    def focus_changed(self, old, new):
+        """Route a focus change to the workspace window that gained it."""
+        if new is None:
+            return
+        window = new.window() if hasattr(new, "window") else None
+        if window not in self._windows:
+            return
+        self._active = window
+        forward = getattr(window, "focusChanged", None)
+        if forward is not None:
+            forward(old, new)
+
+    def close_all(self):
+        """Quit: close every workspace, the primary last.
+
+        Order matters. The last workspace to close is the one that
+        closes the project, and that is where the save prompt appears --
+        so it has to be a window still standing when the question is
+        asked, and it has to be asked once. A window refusing to close
+        (the person cancelled) aborts the rest.
+        """
+        for window in reversed(self.workspace_windows[1:]):
+            if not self._close(window):
+                return False
+        primary = self.workspace_windows[0] if self._windows else None
+        if primary is not None and not self._close(primary):
+            return False
+        return True
+
+    @staticmethod
+    def _close(window):
+        """Close one window, reporting whether it agreed to go."""
+        window.close()
+        return not window.isVisible()
