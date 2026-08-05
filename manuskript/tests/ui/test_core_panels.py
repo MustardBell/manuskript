@@ -61,6 +61,26 @@ def test_set_visible_drives_the_shared_action(MWEmptyProject):
     instance.action.setChecked(was_checked)
 
 
+def test_book_summary_is_built_by_its_factory(MWEmptyProject):
+    """The panel no longer exists in the Designer file: the registry's
+    factory builds it, into the splitter slot the .ui always used, with
+    the objectNames saved layouts and callers rely on.
+    """
+    window = MWEmptyProject
+    panel = window.grpPlotSummary
+
+    assert window.splitterPlot.indexOf(panel) == 2
+    assert panel.objectName() == "grpPlotSummary"
+    assert window.panelHost.instance(BOOK_SUMMARY).widget is panel
+
+    window.comboBox_2.setCurrentIndex(1)
+    assert window.stkPlotSummary.currentIndex() == 1
+    assert window.stkPlotSummary.currentWidget().findChild(
+        type(window.txtPlotSummaryPage), "txtPlotSummaryPage"
+    ) is window.txtPlotSummaryPage
+    window.comboBox_2.setCurrentIndex(0)
+
+
 def test_declaring_core_panels_twice_is_harmless():
     """The registry outlives any window, so the second window finds the
     panels already declared and must not trip over them.

@@ -12,9 +12,15 @@ from functools import partial
 from typing import Any, Optional
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QAction, QDockWidget, QMessageBox, QWidget
+from PyQt5.QtWidgets import (
+    QAction,
+    QDockWidget,
+    QMessageBox,
+    QSplitter,
+    QWidget,
+)
 
-from manuskript.panels import DOCK, PanelDescriptor
+from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
 
 
 @dataclass
@@ -64,12 +70,43 @@ class PanelHost:
                 existing.container.raise_()
             return existing
         descriptor = self.registry.descriptor(panel_id)
-        if descriptor.placement != DOCK:
-            raise NotImplementedError(
-                "Panel {} has placement {!r}, which this host cannot "
-                "mount yet.".format(panel_id, descriptor.placement)
-            )
+        if descriptor.placement == SPLITTER_SLOT:
+            return self._open_splitter(descriptor, context)
         return self._open_dock(descriptor, context)
+
+    def _open_splitter(self, descriptor, context):
+        """Build a panel into the splitter slot its descriptor names."""
+        window = self.window
+        slot = descriptor.slot
+        splitter = window.findChild(QSplitter, slot.splitter)
+        try:
+            if splitter is None:
+                raise LookupError(
+                    "This window has no splitter named {!r}.".format(
+                        slot.splitter
+                    )
+                )
+            widget = descriptor.widget_factory(context, splitter)
+            if not isinstance(widget, QWidget):
+                raise TypeError(
+                    "Panel factories must return QWidget instances."
+                )
+        except Exception as error:
+            QMessageBox.critical(
+                window,
+                window.tr("Panel failed"),
+                "{}\n\n{}".format(descriptor.title, error),
+            )
+            return None
+        splitter.insertWidget(slot.index, widget)
+        instance = PanelInstance(
+            descriptor=descriptor,
+            widget=widget,
+            action=self._toggle_action(descriptor, widget),
+            host=self,
+        )
+        self._instances[descriptor.id] = instance
+        return instance
 
     def _open_dock(self, descriptor, context):
         window = self.window
@@ -123,6 +160,22 @@ class PanelHost:
         use it.
         """
         descriptor = self.registry.descriptor(panel_id)
+        instance = PanelInstance(
+            descriptor=descriptor,
+            widget=widget,
+            action=self._toggle_action(descriptor, widget),
+            host=self,
+        )
+        self._instances[panel_id] = instance
+        return instance
+
+    def _toggle_action(self, descriptor, widget):
+        """The one action controlling a panel's visibility.
+
+        Everything that shows the panel -- toolbar buttons, menus, the
+        search jump -- mirrors this action, so no two of them can
+        disagree about what is on screen.
+        """
         action = QAction(
             self.window.tr(descriptor.title),
             self.window,
@@ -131,14 +184,7 @@ class PanelHost:
         action.setChecked(descriptor.default_visible)
         action.toggled.connect(widget.setVisible)
         widget.setVisible(descriptor.default_visible)
-        instance = PanelInstance(
-            descriptor=descriptor,
-            widget=widget,
-            action=action,
-            host=self,
-        )
-        self._instances[panel_id] = instance
-        return instance
+        return action
 
     def set_visible(self, panel_id, visible=True):
         """Toggle a panel through its own action, wherever it is shown.

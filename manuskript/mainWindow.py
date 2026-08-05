@@ -20,10 +20,11 @@ from manuskript.controllers.view_configuration_controller import (
 )
 from manuskript.controllers.world_controller import WorldController
 from manuskript.media_types import core_registry
-from manuskript.panels import PanelRegistry
+from manuskript.panels import PanelContext, PanelRegistry
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
+from manuskript.ui.panels.core import core_panel_factories
 from manuskript.services.media_type_preferences import (
     MediaTypePreferences,
 )
@@ -737,21 +738,40 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.gitRevisionDialog = None
 
         # Tool bar on the right. The four workspace panels are declared
-        # once in the shared registry and attached per window; their
-        # toggles come from the panel host so that anything showing a
-        # panel and anything watching it agree on one action.
+        # once in the shared registry and built or attached per window;
+        # their toggles come from the panel host so that anything
+        # showing a panel and anything watching it agree on one action.
         self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
-        register_core_panels(self.panelRegistry, self.TabPlots, self.TabRedac)
-        for panel_id, widget in (
-            (core_panels.BOOK_SUMMARY, self.grpPlotSummary),
-            (core_panels.PROJECT_TREE, self.treeRedacWidget),
-            (core_panels.METADATA, self.redacMetadata),
-            (core_panels.STORYLINE, self.storylineView),
+        register_core_panels(
+            self.panelRegistry,
+            self.TabPlots,
+            self.TabRedac,
+            factories=core_panel_factories(),
+        )
+        for panel_id, widget_name in (
+            (core_panels.BOOK_SUMMARY, "grpPlotSummary"),
+            (core_panels.PROJECT_TREE, "treeRedacWidget"),
+            (core_panels.METADATA, "redacMetadata"),
+            (core_panels.STORYLINE, "storylineView"),
         ):
-            instance = self.panelHost.attach_existing(panel_id, widget)
+            descriptor = self.panelRegistry.descriptor(panel_id)
+            if descriptor.widget_factory is not None:
+                instance = self.panelHost.open(
+                    panel_id,
+                    PanelContext(window=self),
+                )
+            else:
+                # Still declared in the Designer file; adopted until its
+                # factory exists.
+                instance = self.panelHost.attach_existing(
+                    panel_id,
+                    getattr(self, widget_name),
+                )
+            if instance is None:
+                continue
             self.toolbar.addPanelToggle(
                 instance.action,
-                widget,
+                instance.widget,
                 instance.descriptor.group,
             )
         self.windowState.restore_toolbar(self.toolbar)

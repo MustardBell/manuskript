@@ -19,13 +19,16 @@ METADATA = "core.metadata"
 STORYLINE = "core.storyline"
 
 
-def core_panel_descriptors(plots_group, redaction_group):
+def core_panel_descriptors(plots_group, redaction_group, factories=None):
     """The four workspace panels, grouped under their main tabs.
 
     Slot indexes mirror where the Designer file has always put the
     widgets, so a factory-built copy lands exactly where the .ui one
-    stood.
+    stood. ``factories`` maps panel ids to widget factories -- the Qt
+    half, supplied by the ui layer so this module stays importable
+    before a QApplication exists.
     """
+    factories = factories or {}
     return (
         PanelDescriptor(
             id=BOOK_SUMMARY,
@@ -34,6 +37,7 @@ def core_panel_descriptors(plots_group, redaction_group):
             slot=SplitterSlot("splitterPlot", 2),
             group=plots_group,
             default_visible=False,
+            widget_factory=factories.get(BOOK_SUMMARY),
         ),
         PanelDescriptor(
             id=PROJECT_TREE,
@@ -42,6 +46,7 @@ def core_panel_descriptors(plots_group, redaction_group):
             slot=SplitterSlot("splitterRedacH", 0),
             group=redaction_group,
             default_visible=True,
+            widget_factory=factories.get(PROJECT_TREE),
         ),
         PanelDescriptor(
             id=METADATA,
@@ -50,6 +55,7 @@ def core_panel_descriptors(plots_group, redaction_group):
             slot=SplitterSlot("splitterRedacH", 2),
             group=redaction_group,
             default_visible=False,
+            widget_factory=factories.get(METADATA),
         ),
         PanelDescriptor(
             id=STORYLINE,
@@ -58,17 +64,19 @@ def core_panel_descriptors(plots_group, redaction_group):
             slot=SplitterSlot("splitterRedacV", 1),
             group=redaction_group,
             default_visible=False,
+            widget_factory=factories.get(STORYLINE),
         ),
     )
 
 
-def register_core_panels(registry, plots_group, redaction_group):
+def register_core_panels(
+        registry, plots_group, redaction_group, factories=None):
     """Idempotent: the registry is application scope, windows are not.
 
     The first window declares the core panels; every later window finds
     them already there.
     """
     for descriptor in core_panel_descriptors(
-            plots_group, redaction_group):
+            plots_group, redaction_group, factories):
         if descriptor.id not in registry:
             registry.register(descriptor)

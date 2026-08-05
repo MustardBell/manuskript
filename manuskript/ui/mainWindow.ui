@@ -1319,66 +1319,6 @@
                 </layout>
                </widget>
               </widget>
-              <widget class="QGroupBox" name="grpPlotSummary">
-               <property name="title">
-                <string>Summary</string>
-               </property>
-               <layout class="QVBoxLayout" name="verticalLayout_18">
-                <item>
-                 <widget class="QComboBox" name="comboBox_2">
-                  <property name="currentIndex">
-                   <number>0</number>
-                  </property>
-                  <property name="frame">
-                   <bool>false</bool>
-                  </property>
-                  <item>
-                   <property name="text">
-                    <string>One paragraph</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>One page</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>Full</string>
-                   </property>
-                  </item>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QStackedWidget" name="stkPlotSummary">
-                  <property name="currentIndex">
-                   <number>0</number>
-                  </property>
-                  <widget class="QWidget" name="page">
-                   <layout class="QHBoxLayout" name="horizontalLayout_6">
-                    <item>
-                     <widget class="MDEditCompleter" name="txtPlotSummaryPara"/>
-                    </item>
-                   </layout>
-                  </widget>
-                  <widget class="QWidget" name="page_2">
-                   <layout class="QHBoxLayout" name="horizontalLayout_10">
-                    <item>
-                     <widget class="MDEditCompleter" name="txtPlotSummaryPage"/>
-                    </item>
-                   </layout>
-                  </widget>
-                  <widget class="QWidget" name="page_3">
-                   <layout class="QHBoxLayout" name="horizontalLayout_13">
-                    <item>
-                     <widget class="MDEditCompleter" name="txtPlotSummaryFull"/>
-                    </item>
-                   </layout>
-                  </widget>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
              </widget>
             </item>
            </layout>
@@ -3046,10 +2986,6 @@
   <tabstop>btnAddSubPlot</tabstop>
   <tabstop>btnRmSubPlot</tabstop>
   <tabstop>btnShowSubPlotSummary</tabstop>
-  <tabstop>comboBox_2</tabstop>
-  <tabstop>txtPlotSummaryPara</tabstop>
-  <tabstop>txtPlotSummaryPage</tabstop>
-  <tabstop>txtPlotSummaryFull</tabstop>
   <tabstop>treeWorld</tabstop>
   <tabstop>btnAddWorld</tabstop>
   <tabstop>btnRmWorld</tabstop>
@@ -3085,22 +3021,6 @@
  </tabstops>
  <resources/>
  <connections>
-  <connection>
-   <sender>comboBox_2</sender>
-   <signal>currentIndexChanged(int)</signal>
-   <receiver>stkPlotSummary</receiver>
-   <slot>setCurrentIndex(int)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>1033</x>
-     <y>126</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>868</x>
-     <y>232</y>
-    </hint>
-   </hints>
-  </connection>
   <connection>
    <sender>btnPlanShowDetails</sender>
    <signal>toggled(bool)</signal>
