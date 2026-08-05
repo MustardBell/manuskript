@@ -669,3 +669,38 @@ def test_the_welcome_screen_records_no_documents(MWEmptyProject):
         assert controller._open_documents() == [0, ["kept"], None]
     finally:
         window.stack.setCurrentIndex(was_index)
+
+
+# ----------------------------------------- plugin UI is window scope
+
+def test_each_window_owns_its_plugin_user_interface(MWEmptyProject):
+    """One per window, which is what it always was -- it owns that
+    window's Plugins menu, its panels and its dialogs.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        assert other.pluginUi is not window.pluginUi
+        assert other.pluginUi.menu is not window.pluginUi.menu
+        assert (
+            other.pluginUi.projectPanels
+            is not window.pluginUi.projectPanels
+        )
+    finally:
+        other.close()
+
+
+def test_application_scope_plugin_services_are_shared(MWEmptyProject):
+    """State every window reads must be one object. A window with its
+    own plugin runtime or option store would enable a plugin nobody
+    else could see, or save a routing choice nobody else would read.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        for name in window.pluginUi.SHARED_SERVICES:
+            assert getattr(other.pluginUi, name) is getattr(
+                window.pluginUi, name
+            ), name
+    finally:
+        other.close()

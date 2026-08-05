@@ -20,7 +20,27 @@ from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
 
 
 class PluginUiController:
-    """Own application-level plugin UI and contribution refreshes."""
+    """One window's plugin user interface.
+
+    Window scope, despite the name: there is one of these per workspace
+    window, and it owns that window's Plugins menu, its panels and
+    workspaces, and the dialogs it opens. It used to describe itself as
+    application-level, which was true only while there was one window.
+
+    What is genuinely application scope is passed in and shared by every
+    window -- the plugin runtime, the option store, the media type
+    registry -- and :func:`shared_services` says which, so that a later
+    change cannot quietly give one window its own copy of state the
+    others are reading.
+
+    The page type and markup profile services are deliberately per
+    window: each reports errors to its own status bar and reads the
+    document source from its own editor. They are views onto shared
+    data, not copies of it.
+    """
+
+    #: Attributes that must be the same object in every window.
+    SHARED_SERVICES = ("runtime", "option_store", "mediaTypes")
 
     def __init__(self, window, runtime, option_store, media_types=None):
         self.window = window
