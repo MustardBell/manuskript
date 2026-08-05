@@ -26,6 +26,8 @@ from manuskript.ui.views.character_panel import (
     CharacterModels,
     CharacterPanelView,
 )
+from manuskript.ui.views.plot_panel import PlotModels, PlotPanelView
+from manuskript.ui.views.world_panel import WorldModels, WorldPanelView
 from manuskript.media_types import core_registry
 from manuskript.panels import PanelContext, PanelRegistry
 from manuskript.panels import core as core_panels
@@ -166,8 +168,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.panelNavigation,
             self.panelDialogs,
         )
-        self.plotController = PlotController(self)
-        self.worldController = WorldController(self)
+        self.plotController = PlotController(
+            PlotModels(self.projectRuntime),
+            PlotPanelView.for_window(self),
+            self.panelNavigation,
+            self.panelDialogs,
+        )
+        self.worldController = WorldController(
+            WorldModels(self.projectRuntime),
+            WorldPanelView.for_window(self),
+            self.panelNavigation,
+            self.panelDialogs,
+        )
         self.navigationController = NavigationController(
             MainNavigationView(self)
         )
