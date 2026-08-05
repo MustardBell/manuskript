@@ -80,10 +80,16 @@ class ProjectLifecycleView:
 
     def apply_loaded_settings(self):
         settings = self.settings
-        if settings.openIndexes and settings.openIndexes != [""]:
-            self.window.mainEditor.tabSplitter.restoreOpenIndexes(
-                settings.openIndexes
-            )
+        # This window's own documents first: two windows on one project
+        # are two places to be reading, and both restoring the project's
+        # single list would make them the same place. A window with none
+        # recorded falls back to that list, which is what every window
+        # did before layouts were per window.
+        if not self.window.windowState.restore_documents():
+            if settings.openIndexes and settings.openIndexes != [""]:
+                self.window.mainEditor.tabSplitter.restoreOpenIndexes(
+                    settings.openIndexes
+                )
         self.window.generateViewMenu()
         self.window.mainEditor.sldCorkSizeFactor.setValue(
             settings.corkSizeFactor
@@ -186,6 +192,9 @@ class ProjectLifecycleView:
         dialog.open()
 
     def prepare_close(self):
+        # Before anything is torn down: this window's own documents are
+        # only knowable while it still has them open.
+        self.window.windowState.capture_documents()
         if self.window.pluginUi is not None:
             self.window.pluginUi.prepare_project_close()
         # Structure history belongs to one project. Undoing a deletion from

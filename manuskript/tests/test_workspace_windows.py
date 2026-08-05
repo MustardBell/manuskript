@@ -589,3 +589,83 @@ def test_redocking_does_not_steal_space_from_the_editor(MWEmptyProject):
     assert splitter.sizes()[2] > 0
 
     window.panelHost.set_visible(METADATA, was_visible)
+
+
+# ------------------------------------------- documents are per window
+
+def test_each_window_records_its_own_open_documents(
+        MWEmptyProject, tmp_path):
+    """Two windows on one project are two places to be reading, so the
+    project's single list of open documents is not enough to describe
+    them.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        mine = WorkspaceStateStore(
+            QSettings(str(tmp_path / "mine.ini"), QSettings.IniFormat)
+        )
+        theirs = WorkspaceStateStore(
+            QSettings(str(tmp_path / "theirs.ini"), QSettings.IniFormat)
+        )
+        window.windowState.store = mine
+        other.windowState.store = theirs
+
+        window.windowState.save()
+        other.windowState.save()
+
+        # Each recorded something of its own, rather than one list
+        # standing for both.
+        assert mine.load(window.windowId).documents is not None
+        assert theirs.load(other.windowId).documents is not None
+    finally:
+        other.close()
+
+
+def test_a_window_with_no_recorded_documents_uses_the_projects(
+        MWEmptyProject):
+    """Which is what every window did before layouts were per window,
+    so an existing project still opens where its author left it.
+    """
+    window = MWEmptyProject
+    controller = window.windowState
+    previous = controller._documents
+    try:
+        controller._documents = None
+
+        assert controller.restore_documents() is False
+    finally:
+        controller._documents = previous
+
+
+def test_a_window_that_recorded_nothing_open_opens_nothing(
+        MWEmptyProject):
+    """Having recorded an empty layout is a fact about that window, not
+    an absence of information -- so it is honoured rather than replaced
+    by the project's list.
+    """
+    window = MWEmptyProject
+    controller = window.windowState
+    previous = controller._documents
+    try:
+        controller._documents = [0, [], None]
+
+        assert controller.restore_documents() is True
+    finally:
+        controller._documents = previous
+
+
+def test_the_welcome_screen_records_no_documents(MWEmptyProject):
+    """Recording none while no project is open would tell the next
+    launch to open nothing, rather than to open what was there.
+    """
+    window = MWEmptyProject
+    controller = window.windowState
+    controller._documents = [0, ["kept"], None]
+    was_index = window.stack.currentIndex()
+    try:
+        window.stack.setCurrentIndex(0)
+
+        assert controller._open_documents() == [0, ["kept"], None]
+    finally:
+        window.stack.setCurrentIndex(was_index)

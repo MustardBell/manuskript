@@ -15,9 +15,15 @@ guessed at. :mod:`manuskript.preferences_migrations` moves the legacy
 keys into it, and legacy spelling appears nowhere else.
 """
 
+import json
+import logging
+
 from dataclasses import dataclass, field
 
 from PyQt5.QtCore import QSettings
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 #: Bump when the stored shape changes, and add a migration step.
@@ -44,6 +50,11 @@ class WorkspaceWindowState:
     panel_state: dict = field(default_factory=dict)
     #: Dock objectName -> whether it was showing.
     docks: dict = field(default_factory=dict)
+    #: Which documents this window had open, in its own split layout.
+    #: None means this window has never recorded any, which is not the
+    #: same as having recorded none -- the first tells us to fall back
+    #: to what the project remembers, the second to open nothing.
+    documents: object = None
 
 
 class WorkspaceStateStore:
@@ -82,6 +93,7 @@ class WorkspaceStateStore:
             panels=self._flags(window_id, "panels"),
             panel_state=self._group(window_id, "panelState"),
             docks=self._flags(window_id, "docks"),
+            documents=self._json(window_id, "documents"),
         )
 
     def save(self, state, window_id=PRIMARY):
@@ -95,6 +107,7 @@ class WorkspaceStateStore:
         self._write_group(window_id, "panels", state.panels)
         self._write_group(window_id, "panelState", state.panel_state)
         self._write_group(window_id, "docks", state.docks)
+        self._set_json(window_id, "documents", state.documents)
         self._settings.sync()
 
     def forget(self, window_id):
@@ -157,6 +170,32 @@ class WorkspaceStateStore:
 
     def _set(self, window_id, name, value):
         self._settings.setValue(self._key(window_id, name), value)
+
+    def _json(self, window_id, name):
+        """A stored structure, read back as itself.
+
+        Open documents are a nested, mixed-type structure -- a split
+        state, a list of ids, and possibly another of the same -- which
+        QSettings would flatten into unrecognisable strings. JSON keeps
+        the shape, and unreadable text is treated as nothing recorded
+        rather than allowed to raise on somebody's next launch.
+        """
+        stored = self._value(window_id, name)
+        if stored is None:
+            return None
+        try:
+            return json.loads(str(stored))
+        except (TypeError, ValueError):
+            LOGGER.warning(
+                "Ignoring unreadable %s for window %s.", name, window_id,
+            )
+            return None
+
+    def _set_json(self, window_id, name, value):
+        if value is None:
+            self._settings.remove(self._key(window_id, name))
+            return
+        self._set(window_id, name, json.dumps(value))
 
     def _group(self, window_id, name):
         self._settings.beginGroup(self._key(window_id, name))

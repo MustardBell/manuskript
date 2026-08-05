@@ -206,3 +206,58 @@ def test_the_primary_window_keeps_its_layout_regardless(tmp_path):
     subject.set_open_windows(["window-2"])
 
     assert subject.load(PRIMARY).geometry == b"main"
+
+
+# --------------------------------------------------- open documents
+
+def test_open_documents_keep_their_nested_shape(tmp_path):
+    """A split layout is a nested, mixed-type structure. QSettings would
+    flatten it into unrecognisable strings, so it is stored as JSON.
+    """
+    subject, settings = store(tmp_path)
+    documents = [1, ["scene-1", "scene-2"], [0, ["scene-3"], None]]
+
+    subject.save(WorkspaceWindowState(documents=documents), PRIMARY)
+    settings.sync()
+    reopened = WorkspaceStateStore(
+        QSettings(settings.fileName(), QSettings.IniFormat)
+    )
+
+    assert reopened.load(PRIMARY).documents == documents
+
+
+def test_two_windows_remember_different_documents(tmp_path):
+    """Two windows on one project are two places to be reading."""
+    subject, _settings = store(tmp_path)
+
+    subject.save(WorkspaceWindowState(documents=[0, ["a"], None]), PRIMARY)
+    subject.save(
+        WorkspaceWindowState(documents=[0, ["b"], None]), "window-2",
+    )
+
+    assert subject.load(PRIMARY).documents == [0, ["a"], None]
+    assert subject.load("window-2").documents == [0, ["b"], None]
+
+
+def test_never_recorded_documents_differ_from_recorded_none(tmp_path):
+    """None tells the caller to fall back to what the project
+    remembers; an empty list tells it to open nothing.
+    """
+    subject, _settings = store(tmp_path)
+    subject.save(WorkspaceWindowState(), PRIMARY)
+
+    assert subject.load(PRIMARY).documents is None
+
+    subject.save(WorkspaceWindowState(documents=[0, [], None]), PRIMARY)
+
+    assert subject.load(PRIMARY).documents == [0, [], None]
+
+
+def test_unreadable_documents_are_ignored_not_raised(tmp_path):
+    """Corrupted text must not stop somebody opening their project."""
+    subject, settings = store(tmp_path)
+    settings.setValue(
+        "workspace/windows/main/documents", "{not json",
+    )
+
+    assert subject.load(PRIMARY).documents is None

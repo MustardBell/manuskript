@@ -42,6 +42,9 @@ class WorkspaceStateController:
         )
         self._dock_visibility = {}
         self._dock_visibility_locked = True
+        #: Read at construction and applied when a project opens, since
+        #: there are no documents to reopen until there is a project.
+        self._documents = None
 
     @property
     def project_docks(self):
@@ -70,6 +73,7 @@ class WorkspaceStateController:
         )
         self._dock_visibility_locked = True
 
+        self._documents = state.documents
         self._restore_panel_state(state)
         for name, value in (state.splitters or {}).items():
             splitter = window.findChild(QSplitter, name)
@@ -109,9 +113,50 @@ class WorkspaceStateController:
                 panels=self._panel_visibility(),
                 panel_state=self._panel_state(),
                 docks=dict(self._dock_visibility),
+                documents=self._open_documents(),
             ),
             self.windowId,
         )
+
+    def _open_documents(self):
+        """Which documents this window has open, in its split layout.
+
+        Only while a project is open: the welcome screen has no
+        documents, and recording none then would tell the next launch to
+        open nothing rather than to open what was there.
+        """
+        if self.window.stack.currentIndex() != 1:
+            return self._documents
+        editor = getattr(self.window, "mainEditor", None)
+        if editor is None:
+            return self._documents
+        return editor.tabSplitter.openIndexes()
+
+    def capture_documents(self):
+        """Remember this window's documents while it still has them.
+
+        Called as the project starts closing, because by the time the
+        window's layout is saved the project is gone and the window is
+        showing the welcome screen -- which is how the last window to
+        close came to record nothing at all.
+        """
+        editor = getattr(self.window, "mainEditor", None)
+        if editor is not None and self.window.stack.currentIndex() == 1:
+            self._documents = editor.tabSplitter.openIndexes()
+        return self._documents
+
+    def restore_documents(self):
+        """Reopen this window's own documents, if it recorded any.
+
+        Returns whether it did. A window with nothing recorded -- a new
+        window, or one from before layouts were per window -- says so,
+        and the caller falls back to what the project remembers.
+        """
+        documents = self._documents
+        if not documents:
+            return False
+        self.window.mainEditor.tabSplitter.restoreOpenIndexes(documents)
+        return True
 
     def _splitter_state(self):
         state = {}
