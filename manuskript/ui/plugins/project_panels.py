@@ -18,6 +18,8 @@ from PyQt5.QtWidgets import (
 from manuskript.domain.plugin_data import PluginProjectContext
 from manuskript.panels import (
     DOCK,
+    PER_WINDOW,
+    PROJECT,
     PanelContext,
     PanelDescriptor,
     PanelRegistry,
@@ -133,7 +135,10 @@ class ProjectPanelHost:
                 id=panel_id,
                 title=record.contribution.descriptor.name,
                 placement=DOCK,
-                requires_project=True,
+                # Belongs to the project and closes with it; every
+                # window builds its own from this one description.
+                scope=PROJECT,
+                multiplicity=PER_WINDOW,
                 object_name="pluginProjectPanel.{}".format(
                     contribution_id
                 ),

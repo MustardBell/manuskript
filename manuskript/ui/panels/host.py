@@ -7,6 +7,8 @@ mounted -- which is what makes moving an instance to another window a
 change of host rather than a storm of signals.
 """
 
+import weakref
+
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional
@@ -21,6 +23,10 @@ from PyQt5.QtWidgets import (
 )
 
 from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
+
+
+class PanelScopeError(Exception):
+    """A panel was asked for in a way its declaration does not allow."""
 
 
 @dataclass
@@ -52,9 +58,21 @@ class PanelHost:
         self.window = window
         self.registry = registry
         self._instances = {}
+        PanelHost._hosts.add(self)
+
+    #: Every host alive, so a singleton panel can be found wherever it
+    #: is. Weakly held: a closed window must not be kept alive by this.
+    _hosts = weakref.WeakSet()
 
     def instance(self, panel_id):
         return self._instances.get(panel_id)
+
+    def _elsewhere(self, panel_id):
+        """The host in another window that already holds this panel."""
+        for host in tuple(self._hosts):
+            if host is not self and host.instance(panel_id) is not None:
+                return host
+        return None
 
     @property
     def instances(self):
@@ -75,6 +93,18 @@ class PanelHost:
                 existing.container.raise_()
             return existing
         descriptor = self.registry.descriptor(panel_id)
+        if not descriptor.per_window:
+            # A singleton exists once in the application. Building a
+            # second would give two windows two panels answering to one
+            # identifier, which is the mistake that made opening a
+            # second window fail before multiplicity was stated.
+            held = self._elsewhere(panel_id)
+            if held is not None:
+                raise PanelScopeError(
+                    "Panel {} exists once in the application and is "
+                    "already open in another window; move it rather "
+                    "than opening another.".format(panel_id)
+                )
         if descriptor.placement == SPLITTER_SLOT:
             return self._open_splitter(descriptor, context)
         return self._open_dock(descriptor, context)

@@ -128,3 +128,40 @@ def test_a_splitter_panel_must_say_which_slot():
             title="Metadata",
             placement="floating",
         )
+
+
+# ------------------------------------------------ scope and multiplicity
+
+def test_a_panel_says_what_it_belongs_to_and_how_many_there_may_be():
+    """Stated rather than inferred, because the alternative was every
+    host deciding for itself -- and two hosts deciding differently is
+    what made opening a second window fail outright.
+    """
+    from manuskript.panels import (
+        APPLICATION,
+        PER_WINDOW,
+        PROJECT,
+        SINGLETON,
+    )
+
+    default = PanelDescriptor(id="vendor.notes", title="Notes")
+    assert default.scope == APPLICATION
+    assert default.multiplicity == PER_WINDOW
+    assert default.requires_project is False
+    assert default.per_window is True
+
+    scoped = PanelDescriptor(
+        id="vendor.scoped",
+        title="Scoped",
+        scope=PROJECT,
+        multiplicity=SINGLETON,
+    )
+    assert scoped.requires_project is True
+    assert scoped.per_window is False
+
+
+def test_an_unknown_scope_or_multiplicity_is_refused():
+    with pytest.raises(ValueError, match="scope"):
+        PanelDescriptor(id="v.x", title="X", scope="document")
+    with pytest.raises(ValueError, match="multiplicity"):
+        PanelDescriptor(id="v.x", title="X", multiplicity="many")

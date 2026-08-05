@@ -159,3 +159,58 @@ def test_a_dock_the_layout_never_saw_goes_to_its_default_area():
         Qt.RightDockWidgetArea
     )
     window.close()
+
+
+def test_a_singleton_panel_is_refused_a_second_window():
+    """It exists once in the application, so a second window can only
+    be given the one that exists -- moved, not duplicated.
+    """
+    import pytest
+
+    from manuskript.panels import SINGLETON
+    from manuskript.ui.panels import PanelScopeError
+
+    registry = PanelRegistry()
+    registry.register(PanelDescriptor(
+        id="vendor.only-one",
+        title="Only one",
+        multiplicity=SINGLETON,
+        widget_factory=label_factory,
+    ))
+    first_window, second_window = QMainWindow(), QMainWindow()
+    first = PanelHost(first_window, registry)
+    second = PanelHost(second_window, registry)
+
+    assert first.open("vendor.only-one", PanelContext()) is not None
+
+    with pytest.raises(PanelScopeError, match="vendor.only-one"):
+        second.open("vendor.only-one", PanelContext())
+
+    # Released by the one that had it, it can be adopted by the other.
+    released = first.release("vendor.only-one")
+    assert second.adopt(released) is not None
+    assert second.instance("vendor.only-one") is not None
+
+    second_window.close()
+    first_window.close()
+
+
+def test_a_per_window_panel_is_built_once_per_window():
+    registry = PanelRegistry()
+    registry.register(PanelDescriptor(
+        id="vendor.each",
+        title="Each",
+        widget_factory=label_factory,
+    ))
+    first_window, second_window = QMainWindow(), QMainWindow()
+    first = PanelHost(first_window, registry)
+    second = PanelHost(second_window, registry)
+
+    mine = first.open("vendor.each", PanelContext())
+    theirs = second.open("vendor.each", PanelContext())
+
+    assert mine is not theirs
+    assert mine.widget is not theirs.widget
+
+    second_window.close()
+    first_window.close()
