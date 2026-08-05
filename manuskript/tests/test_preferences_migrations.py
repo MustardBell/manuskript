@@ -215,3 +215,137 @@ def test_unreadable_stored_values_do_not_stop_the_migration(settings):
 
     assert load(settings, SAMPLE) == {BBCODE + "|" + BBCODE: "sample.bbcode"}
     assert int(settings.value(VERSION_KEY)) == PREFERENCES_VERSION
+
+
+# ------------------------------------------------- window layout, v1 to v2
+
+def test_a_layout_arranged_over_years_survives_the_move(settings):
+    """One window's layout used to occupy eight fixed keys, which a
+    second window would write straight over. Everything found there is
+    filed under the primary window rather than discarded.
+    """
+    settings.setValue("geometry", b"saved-geometry")
+    settings.setValue("windowState", b"saved-docks")
+    settings.setValue("splitterRedacH", b"horizontal")
+    settings.setValue("splitterRedacV", b"vertical")
+    settings.setValue("metadataState", [True, False, True])
+    settings.setValue("revisionsState", [False, True])
+
+    upgrade(settings)
+
+    assert settings.value(
+        "workspace/windows/main/geometry"
+    ) == b"saved-geometry"
+    assert settings.value(
+        "workspace/windows/main/windowState"
+    ) == b"saved-docks"
+    assert settings.value(
+        "workspace/windows/main/splitters/splitterRedacH"
+    ) == b"horizontal"
+    assert settings.value(
+        "workspace/windows/main/splitters/splitterRedacV"
+    ) == b"vertical"
+    assert settings.value(
+        "workspace/windows/main/panelState/core.metadata"
+    ) is not None
+    assert settings.value(
+        "workspace/windows/main/panelState/core.metadata.revisions"
+    ) is not None
+    # The old spelling is gone, so nothing downstream can read it by
+    # accident and no second window can collide with it.
+    for legacy in (
+        "geometry", "windowState", "splitterRedacH", "splitterRedacV",
+        "metadataState", "revisionsState",
+    ):
+        assert not settings.contains(legacy), legacy
+
+
+def test_panel_visibility_stops_being_matched_by_button_text(settings):
+    """Visibility was stored as (group, title, shown) and matched back
+    by title, so renaming or translating a panel lost it. Titles are
+    read one last time here and turned into panel ids.
+    """
+    settings.setValue("toolbar", [
+        ("3", "Book summary", False),
+        ("6", "Project tree", True),
+        ("6", "&Metadata", False),
+        ("6", "Story line", True),
+    ])
+
+    upgrade(settings)
+
+    panels = "workspace/windows/main/panels"
+    assert settings.value("{}/core.book-summary".format(panels)) in (
+        False, "false",
+    )
+    assert settings.value("{}/core.project-tree".format(panels)) in (
+        True, "true",
+    )
+    assert settings.value("{}/core.metadata".format(panels)) in (
+        False, "false",
+    )
+    assert settings.value("{}/core.storyline".format(panels)) in (
+        True, "true",
+    )
+    assert not settings.contains("toolbar")
+
+
+def test_a_panel_this_manuskript_no_longer_has_is_dropped(settings):
+    """Nothing could show it, so keeping the row would preserve only a
+    name -- and an unrecognised title has no id to file it under.
+    """
+    settings.setValue("toolbar", [
+        ("6", "Project tree", True),
+        ("6", "Some removed panel", True),
+    ])
+
+    upgrade(settings)
+
+    panels = "workspace/windows/main/panels"
+    assert settings.contains("{}/core.project-tree".format(panels))
+    assert "removed" not in " ".join(settings.allKeys()).lower()
+
+
+def test_dock_visibility_becomes_one_entry_per_dock(settings):
+    settings.setValue("docks", json.dumps({
+        "dckNavigation": True,
+        "dckSearch": False,
+    }))
+
+    upgrade(settings)
+
+    docks = "workspace/windows/main/docks"
+    assert settings.value("{}/dckNavigation".format(docks)) in (
+        True, "true",
+    )
+    assert settings.value("{}/dckSearch".format(docks)) in (
+        False, "false",
+    )
+    assert not settings.contains("docks")
+
+
+def test_an_installation_with_no_layout_migrates_cleanly(settings):
+    """Nothing saved is not an error; a fresh installation simply has
+    no window state to move.
+    """
+    upgrade(settings)
+
+    assert int(settings.value(VERSION_KEY)) == PREFERENCES_VERSION
+    assert not settings.contains("workspace/windows/main/geometry")
+
+
+def test_a_layout_is_not_moved_twice(settings):
+    """Upgrading an already-upgraded installation must not overwrite
+    per-window state with whatever the legacy keys no longer hold.
+    """
+    settings.setValue("geometry", b"original")
+    upgrade(settings)
+    settings.setValue(
+        "workspace/windows/main/geometry", b"since-rearranged",
+    )
+
+    upgrade(settings)
+
+    assert settings.value(
+        "workspace/windows/main/geometry"
+    ) == b"since-rearranged"

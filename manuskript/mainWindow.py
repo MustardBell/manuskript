@@ -85,7 +85,12 @@ from manuskript.ui.view_configuration import (
     MainViewConfiguration,
     ViewSettingsMenuBuilder,
 )
-from manuskript.ui.window_state import MainWindowStateController
+from manuskript.services.workspace_state import (
+    PRIMARY as WORKSPACE_PRIMARY,
+)
+from manuskript.ui.workspace_state_controller import (
+    WorkspaceStateController,
+)
 from manuskript.functions import Spellchecker
 
 import logging
@@ -117,6 +122,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         panel_registry=None,
         project_runtime=None,
         window_registry=None,
+        window_id=WORKSPACE_PRIMARY,
     ):
         QMainWindow.__init__(self)
         self.setupUi(self)
@@ -183,7 +189,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.referenceService = None
         self.textEditorContext = None
         self.projectBinding = ProjectBinding(self)
-        self.windowState = MainWindowStateController(self)
+        # This window's layout, filed under this window. Two windows
+        # sharing one set of keys meant the second saved over the first.
+        self.windowId = window_id
+        self.windowState = WorkspaceStateController(
+            self,
+            window_id=window_id,
+        )
 
         # Application scope: every window reads the same panel list. A
         # window without one gets an empty registry of its own, which is
@@ -200,8 +212,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # can only take back its saved sizes once every widget it is
         # meant to split exists.
         self.setupMoreUi()
+        # After the panels exist: a splitter can only take back its
+        # saved sizes once every widget it splits is there, and panel
+        # visibility is restored by panel id through the host.
         self.windowState.restore()
-        self.windowState.restore_toolbar(self.toolbar)
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
@@ -385,6 +399,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             before[0] if before else None
         )
 
+    def nextWorkspaceId(self):
+        """An identifier no open window is already filing state under.
+
+        Stable per window rather than positional, so a window keeps its
+        own layout even when the windows before it have closed.
+        """
+        taken = {
+            getattr(window, "windowId", None)
+            for window in self.windowRegistry.workspace_windows
+        }
+        index = 2
+        while "window-{}".format(index) in taken:
+            index += 1
+        return "window-{}".format(index)
+
     def openWorkspaceWindow(self):
         """Another view of this project, sharing everything it owns.
 
@@ -403,6 +432,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             panel_registry=self.panelRegistry,
             project_runtime=self.projectRuntime,
             window_registry=self.windowRegistry,
+            window_id=self.nextWorkspaceId(),
         )
         window.adoptOpenProject()
         window.show()
