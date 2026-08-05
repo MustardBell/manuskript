@@ -112,6 +112,29 @@ def test_metadata_is_built_by_its_factory_and_state_round_trips(
     assert view.revisions is not None
 
 
+def test_project_tree_is_built_by_its_factory(MWEmptyProject):
+    """The tree is the most referenced widget of the four; the factory
+    has to land it in the first splitterRedacH slot with every alias
+    the action bindings and controllers reach for.
+    """
+    window = MWEmptyProject
+    panel = window.treeRedacWidget
+
+    assert window.splitterRedacH.indexOf(panel) == 0
+    assert window.splitterRedacH.indexOf(window.redacMetadata) == 2
+    assert panel.objectName() == "treeRedacWidget"
+    assert window.panelHost.instance(PROJECT_TREE).widget is panel
+
+    tree = window.treeRedacOutline
+    assert tree.parent() is panel
+    assert not tree.header().isVisible()
+    for name in ("btnRedacAddFolder", "btnRedacAddText",
+                 "btnRedacRemoveItem"):
+        button = getattr(window, name)
+        assert button.parent() is panel
+        assert button.isFlat()
+
+
 def test_declaring_core_panels_twice_is_harmless():
     """The registry outlives any window, so the second window finds the
     panels already declared and must not trip over them.

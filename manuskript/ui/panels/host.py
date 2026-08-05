@@ -151,24 +151,6 @@ class PanelHost:
         dock.show()
         return instance
 
-    def attach_existing(self, panel_id, widget):
-        """Adopt a widget the window already built. Transitional.
-
-        The panel gets its toggle action and its instance, but the
-        widget stays wherever the Designer file put it. Factories
-        replace this path one panel at a time; nothing new should
-        use it.
-        """
-        descriptor = self.registry.descriptor(panel_id)
-        instance = PanelInstance(
-            descriptor=descriptor,
-            widget=widget,
-            action=self._toggle_action(descriptor, widget),
-            host=self,
-        )
-        self._instances[panel_id] = instance
-        return instance
-
     def _toggle_action(self, descriptor, widget):
         """The one action controlling a panel's visibility.
 

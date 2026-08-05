@@ -722,6 +722,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def setupMoreUi(self):
 
+        # Tool bar on the right. The four workspace panels are declared
+        # once in the shared registry and built per window; their
+        # toggles come from the panel host so that anything showing a
+        # panel and anything watching it agree on one action. They are
+        # built first: window styling reaches into the project tree.
+        self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
+        register_core_panels(
+            self.panelRegistry,
+            self.TabPlots,
+            self.TabRedac,
+            factories=core_panel_factories(),
+        )
+        for panel_id in (
+            core_panels.BOOK_SUMMARY,
+            core_panels.PROJECT_TREE,
+            core_panels.METADATA,
+            core_panels.STORYLINE,
+        ):
+            instance = self.panelHost.open(
+                panel_id,
+                PanelContext(window=self),
+            )
+            if instance is None:
+                continue
+            self.toolbar.addPanelToggle(
+                instance.action,
+                instance.widget,
+                instance.descriptor.group,
+            )
+
         style.styleMainWindow(self)
 
         self.actGitRevisions = QAction(
@@ -738,44 +768,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actGitRevisions,
         )
         self.gitRevisionDialog = None
-
-        # Tool bar on the right. The four workspace panels are declared
-        # once in the shared registry and built or attached per window;
-        # their toggles come from the panel host so that anything
-        # showing a panel and anything watching it agree on one action.
-        self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
-        register_core_panels(
-            self.panelRegistry,
-            self.TabPlots,
-            self.TabRedac,
-            factories=core_panel_factories(),
-        )
-        for panel_id, widget_name in (
-            (core_panels.BOOK_SUMMARY, "grpPlotSummary"),
-            (core_panels.PROJECT_TREE, "treeRedacWidget"),
-            (core_panels.METADATA, "redacMetadata"),
-            (core_panels.STORYLINE, "storylineView"),
-        ):
-            descriptor = self.panelRegistry.descriptor(panel_id)
-            if descriptor.widget_factory is not None:
-                instance = self.panelHost.open(
-                    panel_id,
-                    PanelContext(window=self),
-                )
-            else:
-                # Still declared in the Designer file; adopted until its
-                # factory exists.
-                instance = self.panelHost.attach_existing(
-                    panel_id,
-                    getattr(self, widget_name),
-                )
-            if instance is None:
-                continue
-            self.toolbar.addPanelToggle(
-                instance.action,
-                instance.widget,
-                instance.descriptor.group,
-            )
 
         # Hides navigation dock title bar
         self.dckNavigation.setTitleBarWidget(QWidget(None))
