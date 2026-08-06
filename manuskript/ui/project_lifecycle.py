@@ -229,7 +229,20 @@ class ProjectLifecycleView:
         self.window.mainEditor.closeAllTabs()
 
     def flush_pending_edits(self):
-        """Submit every model-backed text editor before a revision action."""
+        """Write every unsubmitted edit into the models.
+
+        The project's buffers first, because they are where the text
+        actually is: a document open in another window has a buffer with
+        pending edits and no editor in this window to ask. Then this
+        window's own editors, which covers the ones holding private text
+        -- a character's notes, a multiple selection -- that no shared
+        buffer stands for.
+        """
+        buffers = getattr(
+            self.window.projectRuntime, "documentBuffers", None,
+        )
+        if buffers is not None:
+            buffers.flush()
         for editor in self.window.findChildren(textEditView):
             editor.submit()
 

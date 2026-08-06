@@ -290,7 +290,10 @@ class TestProjectManager(unittest.TestCase):
             self.project_manager.models,
             replacement_models,
         )
-        flush.assert_called_once_with()
+        # Once per save, from inside the save, rather than once here: the
+        # restore takes a snapshot of the project first and that snapshot
+        # has to include what was just typed.
+        self.assertEqual(flush.call_count, 2)
         prepare.assert_called_once_with()
         self.assertEqual(self.storage.save.call_count, 2)
         self.assertEqual(
@@ -377,3 +380,66 @@ class TestProjectManager(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSaveFlushesPendingText(unittest.TestCase):
+    """A save writes the models, so the models have to be current first.
+
+    An explicit flush existed before a Git commit and before restoring a
+    revision, but not before an ordinary save, an autosave, or the save a
+    project close performs -- and a text editor holds what was typed for
+    half a second before submitting it. Closing a secondary window does not
+    run the project close at all, so its unsubmitted text had nothing left
+    to write it out.
+    """
+
+    def setUp(self):
+        self.window = MagicMock()
+        settings_manager = SettingsManager()
+        with patch.object(settings_manager, "apply_loaded_settings_effects"):
+            settings_manager.reset_to_defaults()
+        self.window.projectRuntime.settingsManager = settings_manager
+        self.window.settingsManager = settings_manager
+        self.storage = MagicMock()
+        self.view = ProjectLifecycleView(self.window)
+        self.view.flush_pending_edits = MagicMock()
+        self.view.capture_project_state = MagicMock()
+        self.view.show_save_failures = MagicMock()
+        self.manager = ProjectManager(
+            self.view,
+            storage=self.storage,
+            autosave=MagicMock(),
+            last_project_store=MagicMock(),
+        )
+
+    def test_an_ordinary_save_flushes_first(self):
+        self.manager.session.open("project.msk")
+        self.storage.save.return_value = ProjectSaveResult()
+
+        self.assertTrue(self.manager.saveDatas())
+
+        self.view.flush_pending_edits.assert_called_once_with()
+
+    def test_the_flush_happens_before_anything_is_written(self):
+        """Flushing after the write would be no use at all."""
+        self.manager.session.open("project.msk")
+        self.storage.save.return_value = ProjectSaveResult()
+        order = []
+        self.view.flush_pending_edits.side_effect = (
+            lambda: order.append("flush")
+        )
+        self.storage.save.side_effect = (
+            lambda _context: order.append("save") or ProjectSaveResult()
+        )
+
+        self.manager.saveDatas()
+
+        self.assertEqual(order, ["flush", "save"])
+
+    def test_a_save_as_flushes_too(self):
+        self.manager.session.open("project.msk")
+        self.storage.save.return_value = ProjectSaveResult()
+
+        self.manager.saveDatas("renamed.msk")
+
+        self.view.flush_pending_edits.assert_called_once_with()

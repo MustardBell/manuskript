@@ -125,6 +125,9 @@ def test_commit_revision_saves_first_and_commits_the_saved_project():
     result = manager.commitRevision("Chapter complete")
 
     assert result == "b" * 40
-    manager.ui.flush_pending_edits.assert_called_once_with()
+    # Saving is what guarantees the pending text is written, so committing
+    # asks for a save rather than flushing on its own. It used to do both,
+    # which is why every other way of saving could forget.
+    manager.ui.flush_pending_edits.assert_not_called()
     manager.saveDatas.assert_called_once_with(record_revision=False)
     backend.commit.assert_called_once_with("Chapter complete")

@@ -194,6 +194,15 @@ class ProjectManager:
         In other words, it "saves as...".
         """
 
+        # What was typed in the last half second is part of the project.
+        # Editors hold their text and submit it into the models after a
+        # pause; the models are what gets written. A commit and a revision
+        # restore already asked for this, but an ordinary save, an autosave
+        # and a project close did not -- so a save could write the
+        # manuscript as it stood before the last few keystrokes, and on the
+        # close of the last window those keystrokes were simply gone.
+        self.ui.flush_pending_edits()
+
         previous_project = self.currentProject
         if projectName:
             try:
@@ -291,8 +300,12 @@ class ProjectManager:
         return self.restoreRevisionSnapshot(loaded)
 
     def commitRevision(self, message):
-        """Save the project, then record it as a Git commit."""
-        self.ui.flush_pending_edits()
+        """Save the project, then record it as a Git commit.
+
+        No flush of its own any more: saving does it, which is where the
+        guarantee belongs. This used to be one of the two places that
+        remembered, and every other way of saving forgot.
+        """
         if not self.saveDatas(record_revision=False):
             raise GitRevisionError(
                 "The project could not be saved before committing."
@@ -315,7 +328,8 @@ class ProjectManager:
             )
             return False
 
-        self.ui.flush_pending_edits()
+        # Saving flushes, so the pre-restore save below carries what was
+        # typed into the snapshot it takes first.
         if not self.saveDatas(
             revision_message="Before restoring revision {}".format(
                 snapshot.commit_id[:10]
