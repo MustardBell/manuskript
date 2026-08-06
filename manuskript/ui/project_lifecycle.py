@@ -80,16 +80,15 @@ class ProjectLifecycleView:
 
     def apply_loaded_settings(self):
         settings = self.settings
-        # This window's own documents first: two windows on one project
-        # are two places to be reading, and both restoring the project's
-        # single list would make them the same place. A window with none
-        # recorded falls back to that list, which is what every window
-        # did before layouts were per window.
-        if not self.window.windowState.restore_documents():
-            if settings.openIndexes and settings.openIndexes != [""]:
-                self.window.mainEditor.tabSplitter.restoreOpenIndexes(
-                    settings.openIndexes
-                )
+        # This window's own view of the project first -- which documents
+        # were open and which tab it was on. Two windows are two places
+        # to be working, and both taking the project's single answer
+        # would make them the same place. What this window never recorded
+        # falls back to the project's.
+        self.window.windowState.restore_view_state(
+            documents=settings.openIndexes,
+            main_tab=settings.lastTab,
+        )
         self.window.generateViewMenu()
         self.window.mainEditor.sldCorkSizeFactor.setValue(
             settings.corkSizeFactor
@@ -108,7 +107,6 @@ class ProjectLifecycleView:
             settings.folderView
         )
         self.window.mainEditor.tabSplitter.updateStyleSheet()
-        self.window.tabMain.setCurrentIndex(settings.lastTab)
         self.window.mainEditor.updateCorkBackground()
         if settings.viewMode == "simple":
             self.window.setViewModeSimple()
@@ -117,7 +115,11 @@ class ProjectLifecycleView:
 
     def project_opened(self):
         settings = self.settings
-        self.window.tabMain.currentChanged.emit(settings.lastTab)
+        # The tab this window actually landed on, which is its own where
+        # it recorded one and the project's otherwise.
+        self.window.tabMain.currentChanged.emit(
+            self.window.tabMain.currentIndex()
+        )
         word_count = self.window.mdlOutline.rootItem.data(
             Outline.wordCount
         )
@@ -195,9 +197,9 @@ class ProjectLifecycleView:
         dialog.open()
 
     def prepare_close(self):
-        # Before anything is torn down: this window's documents and the
-        # arrangement of its panels are only knowable while it still
-        # has them.
+        # Before anything is torn down: this window's view of the project
+        # and the arrangement of its panels are only knowable while it
+        # still has them.
         self.window.windowState.capture_layout()
         if self.window.pluginUi is not None:
             self.window.pluginUi.prepare_project_close()

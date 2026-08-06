@@ -46,9 +46,12 @@ class WorkspaceStateController:
         )
         self._dock_visibility = {}
         self._dock_visibility_locked = True
-        #: Read at construction and applied when a project opens, since
-        #: there are no documents to reopen until there is a project.
+        #: This window's own view of the project -- which documents were
+        #: open and which main tab it was on. Read at construction and
+        #: applied when a project opens, since neither means anything
+        #: until there is a project.
         self._documents = None
+        self._mainTab = None
         #: Layout captured while a project was still open, for the parts
         #: of it that closing a project makes unknowable.
         self._remembered = {}
@@ -81,6 +84,7 @@ class WorkspaceStateController:
         self._dock_visibility_locked = True
 
         self._documents = state.documents
+        self._mainTab = state.main_tab
         self._restore_panel_state(state)
         for name, value in (state.splitters or {}).items():
             splitter = window.findChild(QSplitter, name)
@@ -130,6 +134,7 @@ class WorkspaceStateController:
                 panel_state=self._panel_state(),
                 docks=dict(self._dock_visibility),
                 documents=self._open_documents(),
+                main_tab=self._current_main_tab(),
             ),
             self.windowId,
         )
@@ -148,18 +153,26 @@ class WorkspaceStateController:
             return self._documents
         return describe_area(editor.tabSplitter)
 
-    def capture_documents(self):
-        """Remember this window's documents while it still has them.
+    def _current_main_tab(self):
+        """Which main tab this window is on, while it has a project."""
+        if self.window.stack.currentIndex() != 1:
+            return self._mainTab
+        return self.window.tabMain.currentIndex()
+
+    def capture_view_state(self):
+        """Remember this window's view of the project while it has one.
 
         Called as the project starts closing, because by the time the
         window's layout is saved the project is gone and the window is
         showing the welcome screen -- which is how the last window to
         close came to record nothing at all.
         """
+        if self.window.stack.currentIndex() != 1:
+            return
         editor = getattr(self.window, "mainEditor", None)
-        if editor is not None and self.window.stack.currentIndex() == 1:
+        if editor is not None:
             self._documents = describe_area(editor.tabSplitter)
-        return self._documents
+        self._mainTab = self.window.tabMain.currentIndex()
 
     def capture_layout(self):
         """Remember the arrangement while every panel is still in it.
@@ -169,7 +182,7 @@ class WorkspaceStateController:
         runs -- so a layout saved after the close has forgotten exactly
         the panels whose places were worth keeping.
         """
-        self.capture_documents()
+        self.capture_view_state()
         if self.window.stack.currentIndex() != 1:
             return
         self._remembered["window_state"] = self.window.saveState()
@@ -183,20 +196,28 @@ class WorkspaceStateController:
         """
         self._remembered.clear()
 
-    def restore_documents(self):
-        """Reopen this window's own documents, if it recorded any.
+    def restore_view_state(self, documents=None, main_tab=None):
+        """Put this window back the way it left the project.
 
-        Returns whether it did. A window with nothing recorded -- a new
-        window, or one from before layouts were per window -- says so,
-        and the caller falls back to what the project remembers.
+        One path for both facts, because they are one thing: this
+        window's own view of the project. Whatever this window never
+        recorded falls back to what the project remembers, which is what
+        every window did before views were per window, and is what
+        somebody opening the file for the first time gets.
         """
-        documents = self._documents
-        if not documents:
-            return False
-        return restore_area(
-            self.window.mainEditor.tabSplitter,
-            documents,
-        )
+        recorded = self._documents
+        if recorded:
+            restore_area(
+                self.window.mainEditor.tabSplitter,
+                recorded,
+            )
+        elif documents and documents != [""]:
+            self.window.mainEditor.tabSplitter.restoreOpenIndexes(
+                documents
+            )
+        tab = self._mainTab if self._mainTab is not None else main_tab
+        if tab is not None:
+            self.window.tabMain.setCurrentIndex(int(tab))
 
     def _splitter_state(self):
         state = {}

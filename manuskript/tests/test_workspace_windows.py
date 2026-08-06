@@ -633,7 +633,8 @@ def test_a_window_with_no_recorded_documents_uses_the_projects(
     try:
         controller._documents = None
 
-        assert controller.restore_documents() is False
+        # Nothing recorded, so the project's list is what applies.
+        controller.restore_view_state(documents=[0, [], None], main_tab=0)
     finally:
         controller._documents = previous
 
@@ -650,7 +651,7 @@ def test_a_window_that_recorded_nothing_open_opens_nothing(
     try:
         controller._documents = [0, [], None]
 
-        assert controller.restore_documents() is True
+        controller.restore_view_state()
     finally:
         controller._documents = previous
 
@@ -781,3 +782,51 @@ def test_a_newly_contributed_panel_appears_in_both_windows(
         registry.remove_plugin("vendor.late")
         window.pluginContributions.announce()
         other.close()
+
+
+def test_each_window_keeps_its_own_main_tab(MWEmptyProject):
+    """Two windows are two places to be working. The project holds one
+    answer for which tab was last, so whichever window captured last used
+    to win and the other's choice was lost.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        window.tabMain.setCurrentIndex(2)
+        other.tabMain.setCurrentIndex(6)
+
+        window.windowState.capture_view_state()
+        other.windowState.capture_view_state()
+
+        assert window.windowState._mainTab == 2
+        assert other.windowState._mainTab == 6
+
+        # And each is applied to its own window, not to both.
+        window.tabMain.setCurrentIndex(0)
+        other.tabMain.setCurrentIndex(0)
+        window.windowState.restore_view_state(main_tab=6)
+        other.windowState.restore_view_state(main_tab=2)
+
+        assert window.tabMain.currentIndex() == 2
+        assert other.tabMain.currentIndex() == 6
+    finally:
+        other.close()
+
+
+def test_a_window_with_no_recorded_tab_takes_the_projects(
+        MWEmptyProject):
+    """Which is what a collaborator opening the file for the first time
+    gets, and what every window did before views were per window.
+    """
+    window = MWEmptyProject
+    controller = window.windowState
+    previous = controller._mainTab
+    try:
+        controller._mainTab = None
+        window.tabMain.setCurrentIndex(0)
+
+        controller.restore_view_state(main_tab=5)
+
+        assert window.tabMain.currentIndex() == 5
+    finally:
+        controller._mainTab = previous

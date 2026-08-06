@@ -50,11 +50,15 @@ class WorkspaceWindowState:
     panel_state: dict = field(default_factory=dict)
     #: Dock objectName -> whether it was showing.
     docks: dict = field(default_factory=dict)
+    # ---- this window's view of the project ----
+    # Both are None when this window has never recorded them, which is
+    # not the same as having recorded nothing: the first says to fall
+    # back to what the project remembers, the second is an answer.
+
     #: Which documents this window had open, in its own split layout.
-    #: None means this window has never recorded any, which is not the
-    #: same as having recorded none -- the first tells us to fall back
-    #: to what the project remembers, the second to open nothing.
     documents: object = None
+    #: Which main tab this window was on.
+    main_tab: object = None
 
 
 class WorkspaceStateStore:
@@ -94,6 +98,7 @@ class WorkspaceStateStore:
             panel_state=self._group(window_id, "panelState"),
             docks=self._flags(window_id, "docks"),
             documents=self._json(window_id, "documents"),
+            main_tab=self._int(window_id, "mainTab"),
         )
 
     def save(self, state, window_id=PRIMARY):
@@ -108,6 +113,7 @@ class WorkspaceStateStore:
         self._write_group(window_id, "panelState", state.panel_state)
         self._write_group(window_id, "docks", state.docks)
         self._set_json(window_id, "documents", state.documents)
+        self._set_optional(window_id, "mainTab", state.main_tab)
         self._settings.sync()
 
     def forget(self, window_id):
@@ -196,6 +202,25 @@ class WorkspaceStateStore:
             self._settings.remove(self._key(window_id, name))
             return
         self._set(window_id, name, json.dumps(value))
+
+    def _int(self, window_id, name):
+        """A stored whole number, or None when never recorded."""
+        stored = self._value(window_id, name)
+        if stored is None:
+            return None
+        try:
+            return int(stored)
+        except (TypeError, ValueError):
+            LOGGER.warning(
+                "Ignoring unreadable %s for window %s.", name, window_id,
+            )
+            return None
+
+    def _set_optional(self, window_id, name, value):
+        if value is None:
+            self._settings.remove(self._key(window_id, name))
+            return
+        self._set(window_id, name, value)
 
     def _group(self, window_id, name):
         self._settings.beginGroup(self._key(window_id, name))
