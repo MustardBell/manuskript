@@ -157,31 +157,6 @@ def is_comb(node):
     return isinstance(node.first, TabGroup) and is_comb(node.second)
 
 
-def to_legacy(node):
-    """This arrangement as an old triple, when it can be one.
-
-    Raises for a tree the old format cannot describe, rather than
-    quietly dropping half of somebody's layout.
-    """
-    if isinstance(node, TabGroup):
-        return [LEGACY_UNSPLIT, list(node.documents), None]
-    if not isinstance(node.first, TabGroup):
-        raise ValueError(
-            "This arrangement splits both sides, which the old format "
-            "cannot describe."
-        )
-    state = next(
-        value
-        for value, name in LEGACY_ORIENTATIONS.items()
-        if name == node.orientation
-    )
-    return [
-        state,
-        list(node.first.documents),
-        to_legacy(node.second),
-    ]
-
-
 # ------------------------------------------------------ serialisation
 
 def to_data(node):

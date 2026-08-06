@@ -18,7 +18,6 @@ from manuskript.domain.document_area import (
     from_legacy,
     is_comb,
     to_data,
-    to_legacy,
 )
 
 
@@ -101,35 +100,7 @@ def test_a_legacy_split_with_nothing_beside_it_was_no_split():
     assert from_legacy(None) == TabGroup()
 
 
-def test_a_comb_converts_back_to_the_old_format():
-    """So that a widget which still speaks the old shape can be driven
-    from the model during the change.
-    """
-    area = Split(
-        HORIZONTAL,
-        TabGroup(["a"]),
-        Split(VERTICAL, TabGroup(["b"]), TabGroup(["c"])),
-    )
 
-    assert to_legacy(area) == [
-        1, ["a"], [2, ["b"], [0, ["c"], None]],
-    ]
-    assert from_legacy(to_legacy(area)) == area
-
-
-def test_a_real_tree_refuses_to_become_the_old_format():
-    """Rather than quietly dropping half of somebody's layout."""
-    area = Split(
-        VERTICAL,
-        Split(HORIZONTAL, TabGroup(["a"]), TabGroup(["b"])),
-        TabGroup(["c"]),
-    )
-
-    with pytest.raises(ValueError, match="cannot describe"):
-        to_legacy(area)
-
-
-# ------------------------------------------------------ serialisation
 
 def test_any_arrangement_round_trips_through_stored_data():
     area = Split(
