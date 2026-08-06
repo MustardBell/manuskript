@@ -86,6 +86,10 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         self.mainEditor = mainEditor or parent
 
         self.secondTab = None
+        # The child holding this node's own side, once that side has been
+        # divided. While it is None this node owns ``self.tab`` directly;
+        # when it is set this node is a branch and its tab is empty.
+        self.firstTab = None
         self.splitState = 0
         self.focusTab = 1
         self.closeSplit()
@@ -103,8 +107,30 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         if context is not None and context.text_editor is not None:
             self.settings = context.text_editor.settings
             self.updateStyleSheet()
+        for child in self.children_areas():
+            child.set_context(context)
+
+    def children_areas(self):
+        """The areas nested directly inside this one, in order."""
+        return tuple(
+            child
+            for child in (self.firstTab, self.secondTab)
+            if child is not None
+        )
+
+    def leaves(self):
+        """Every area that holds documents, left to right, top to bottom.
+
+        A node that has divided its own side holds none itself; its
+        documents live in the child that took that side over.
+        """
+        if self.firstTab is not None:
+            found = list(self.firstTab.leaves())
+        else:
+            found = [self]
         if self.secondTab is not None:
-            self.secondTab.set_context(context)
+            found.extend(self.secondTab.leaves())
+        return found
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasFormat('application/xml'):
@@ -128,8 +154,8 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
     def updateStyleSheet(self):
         self.setStyleSheet(style.mainEditorTabSS(self.settings))
-        if self.secondTab:
-            self.secondTab.updateStyleSheet()
+        for child in self.children_areas():
+            child.updateStyleSheet()
 
     ###############################################################################
     # TABS
@@ -157,6 +183,81 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             self.secondTab.openIndexes() if self.secondTab else None,
         ]
         return r
+
+    def describe(self):
+        """This area's arrangement, as a document area node.
+
+        Says the shape rather than implying it: a divided own side is a
+        split whose first half is itself whatever that child is.
+        """
+        from manuskript.domain.document_area import (
+            HORIZONTAL,
+            VERTICAL,
+            Split,
+            TabGroup,
+        )
+
+        if self.firstTab is not None:
+            own = self.firstTab.describe()
+        else:
+            own = TabGroup(
+                documents=self.tabOpenIndexes(),
+                current=max(0, self.tab.currentIndex()),
+            )
+        if self.secondTab is None:
+            return own
+        return Split(
+            orientation=(
+                VERTICAL
+                if self.splitter.orientation() == Qt.Vertical
+                else HORIZONTAL
+            ),
+            first=own,
+            second=self.secondTab.describe(),
+            sizes=tuple(self.splitter.sizes()),
+        )
+
+    def restore(self, node):
+        """Put this area into an arrangement, dividing as it requires."""
+        from manuskript.domain.document_area import Split, VERTICAL
+
+        if isinstance(node, Split):
+            orientation = (
+                Qt.Vertical if node.orientation == VERTICAL
+                else Qt.Horizontal
+            )
+            if self.secondTab is None:
+                self.split(state=2 if orientation == Qt.Vertical else 1)
+            self.splitter.setOrientation(orientation)
+            self.splitState = 2 if orientation == Qt.Vertical else 1
+            if isinstance(node.first, Split):
+                # Both halves divided, which is the arrangement the comb
+                # could not hold.
+                self.nestOwnSide(orientation)
+                self.firstTab.restore(node.first)
+            else:
+                self._restoreGroup(node.first)
+            self.secondTab.restore(node.second)
+            if node.sizes and len(node.sizes) == self.splitter.count():
+                self.splitter.setSizes(list(node.sizes))
+            return
+        self._restoreGroup(node)
+
+    def _restoreGroup(self, group):
+        """Open one tab group's documents in this area's own tabs."""
+        if self.editor_context is None:
+            return
+        outline_model = self.editor_context.outline_model
+        target = (
+            self.firstTab.tab if self.firstTab is not None else self.tab
+        )
+        for document in group.documents:
+            index = outline_model.getIndexByID(document)
+            self.mainEditor.setCurrentModelIndex(
+                index,
+                newTab=True,
+                tabWidget=target,
+            )
 
     def restoreOpenIndexes(self, openIndexes):
 
@@ -222,6 +323,76 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         else:
             self.closeSplit()
 
+    def divideOwnSide(self, orientation=Qt.Horizontal):
+        """Divide this area's own half in two, which the comb could not do.
+
+        Splitting only ever added a neighbour, so the first half stayed a
+        bare tab group for ever. This divides that half itself: it moves
+        into a child of its own, and that child then gains a neighbour.
+        """
+        state = 2 if orientation == Qt.Vertical else 1
+        if self.secondTab is None:
+            # Nothing beside it yet, so this area *is* its own half and
+            # dividing it is an ordinary split.
+            self.split(state=state)
+            return self
+        child = self.nestOwnSide(orientation)
+        if child.secondTab is None:
+            child.split(state=state)
+        return child
+
+    def nestOwnSide(self, orientation=Qt.Horizontal):
+        """Move this area's own half into a child, without dividing it.
+
+        The structural half of dividing: afterwards this node holds no
+        documents and is free to have either half divided. Restoring a
+        stored arrangement uses this and then tells the child what shape
+        to take.
+
+        Only meaningful once something is beside it -- an area with no
+        neighbour has no "own half" distinct from itself.
+        """
+        if self.secondTab is None:
+            return None
+        if self.firstTab is not None:
+            return self.firstTab
+        child = tabSplitter(
+            mainEditor=self.mainEditor,
+            editor_context=self.editor_context,
+        )
+        child.setObjectName(self.objectName() + "/1")
+        child.splitter.setObjectName(self.splitter.objectName() + "/1")
+        # The documents move with the side they were on.
+        while self.tab.count():
+            widget = self.tab.widget(0)
+            title = self.tab.tabText(0)
+            self.tab.removeTab(0)
+            child.tab.addTab(widget, title)
+        self.tab.hide()
+        self.splitter.insertWidget(0, child)
+        self.splitter.setOrientation(orientation)
+        self.firstTab = child
+        self.splitter.setStretchFactor(0, 10)
+        self.splitter.setStretchFactor(1, 10)
+        return child
+
+    def collapseOwnSide(self):
+        """Undo nesting, taking the documents back into this area."""
+        child = self.firstTab
+        if child is None:
+            return
+        child.collapseOwnSide()
+        while child.tab.count():
+            widget = child.tab.widget(0)
+            title = child.tab.tabText(0)
+            child.tab.removeTab(0)
+            self.tab.addTab(widget, title)
+        self.firstTab = None
+        child.setParent(None)
+        qApp.focusChanged.disconnect(child.focusChanged)
+        child.deleteLater()
+        self.tab.show()
+
     def addSecondTab(self):
         self.secondTab = tabSplitter(
             mainEditor=self.mainEditor,
@@ -240,6 +411,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             self.mainEditor.setCurrentModelIndex(idx)
 
     def closeSplit(self):
+        self.collapseOwnSide()
         st = self.secondTab
         l = []
         while st:
@@ -274,7 +446,9 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
         oldFT = self.focusTab
         while new:
-            if new == self.tab:
+            if new == self.tab or new == self.firstTab:
+                # Its own half, whether it holds the tabs directly or
+                # has been divided into a child.
                 self.focusTab = 1
                 new = None
             elif new == self.secondTab:

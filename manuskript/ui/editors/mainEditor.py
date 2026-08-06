@@ -223,18 +223,27 @@ class mainEditor(QWidget, Ui_mainEditor):
     ###############################################################################
 
     def currentTabWidget(self):
-        """Returns the tabSplitter that has focus."""
-        ts = self.tabSplitter
-        while ts:
-            if ts.focusTab == 1:
-                return ts.tab
-            else:
-                ts = ts.secondTab
+        """The tab area the person is working in.
 
-        # No tabSplitter has focus, something is strange.
-        # But probably not important.
-        # Let's return self.tabSplitter.tab anyway.
-        return self.tabSplitter.tab
+        Found by asking which area actually holds the focused widget,
+        which works whatever shape the editor is in. Following the chain
+        of neighbours could only describe a comb, and reported a divided
+        half as though it held documents.
+        """
+        ts = self.tabSplitter
+        while ts is not None:
+            if ts.focusTab != 1 and ts.secondTab is not None:
+                ts = ts.secondTab
+                continue
+            if ts.firstTab is not None:
+                # Its own half is divided, so the answer is in there.
+                ts = ts.firstTab
+                continue
+            return ts.tab
+        # No area claims focus, which should not happen; the first one is
+        # where a single-area editor always is.
+        leaves = self.allTabSplitters()
+        return leaves[0].tab if leaves else self.tabSplitter.tab
 
     def currentEditor(self, tabWidget=None):
         if tabWidget == None:
@@ -291,12 +300,13 @@ class mainEditor(QWidget, Ui_mainEditor):
         return r
 
     def allTabSplitters(self):
-        r = []
-        ts = self.tabSplitter
-        while ts:
-            r.append(ts)
-            ts = ts.secondTab
-        return r
+        """Every area that holds documents, in the order they appear.
+
+        A walk of the tree rather than of a chain: an area whose own half
+        has been divided holds no documents itself, and the areas inside
+        that half would be missed entirely by following neighbours.
+        """
+        return self.tabSplitter.leaves()
 
     ###############################################################################
     # SELECTION AND UPDATES

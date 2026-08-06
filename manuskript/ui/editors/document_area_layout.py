@@ -39,7 +39,15 @@ def describe_area(splitter):
 
 
 def read_area(splitter):
-    """The arrangement this editor is in, as a model node."""
+    """The arrangement this editor is in, as a model node.
+
+    Asks the widget to describe itself where it can, since it is the
+    only thing that knows whether a side has been divided; falling back
+    to the old triple for anything that cannot.
+    """
+    describe = getattr(splitter, "describe", None)
+    if describe is not None:
+        return describe()
     legacy = splitter.openIndexes()
     if not legacy:
         return None
@@ -63,6 +71,11 @@ def restore_area(splitter, stored):
             "Ignoring an unreadable document arrangement.",
         )
         return False
+    restore = getattr(splitter, "restore", None)
+    if restore is not None:
+        restore(node)
+        return True
+    # A widget that only speaks the old shape gets the closest comb.
     splitter.restoreOpenIndexes(as_renderable(node))
     return True
 

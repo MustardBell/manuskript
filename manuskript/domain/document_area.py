@@ -52,8 +52,17 @@ class TabGroup:
     current: int = 0
 
     def __post_init__(self):
+        # An empty tab has no document, and an id read off one comes back
+        # as None. Keeping it would record a document called "None" and
+        # try to reopen it on the next launch.
         object.__setattr__(
-            self, "documents", tuple(str(one) for one in self.documents),
+            self,
+            "documents",
+            tuple(
+                str(one)
+                for one in self.documents
+                if one is not None and str(one) not in ("", "None")
+            ),
         )
 
     @property

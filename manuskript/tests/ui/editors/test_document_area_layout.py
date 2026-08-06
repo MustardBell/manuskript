@@ -24,8 +24,22 @@ from manuskript.ui.editors.document_area_layout import (
 )
 
 
-def test_an_arrangement_is_read_off_the_editor():
-    splitter = MagicMock()
+def legacy_widget():
+    """A widget that speaks only the old triple.
+
+    Named by what it can do, so the fallback path is exercised rather
+    than a mock answering every question.
+    """
+    return MagicMock(spec=["openIndexes", "restoreOpenIndexes"])
+
+
+def modelled_widget():
+    """A widget that describes and restores arrangements itself."""
+    return MagicMock(spec=["describe", "restore"])
+
+
+def test_an_arrangement_is_read_off_a_legacy_editor():
+    splitter = legacy_widget()
     splitter.openIndexes.return_value = [
         1, ["a"], [0, ["b"], None],
     ]
@@ -42,7 +56,7 @@ def test_nothing_to_describe_is_not_an_empty_arrangement():
     """The caller falls back to what the project remembers, rather than
     recording that nothing was open.
     """
-    splitter = MagicMock()
+    splitter = legacy_widget()
     splitter.openIndexes.return_value = None
 
     assert read_area(splitter) is None
@@ -50,8 +64,8 @@ def test_nothing_to_describe_is_not_an_empty_arrangement():
 
 
 def test_a_stored_arrangement_is_applied_in_the_old_shape():
-    """Which is the only shape the widget can currently draw."""
-    splitter = MagicMock()
+    """A widget that speaks only the old triple still gets its layout."""
+    splitter = legacy_widget()
     area = Split(HORIZONTAL, TabGroup(["a"]), TabGroup(["b"]))
 
     assert restore_area(splitter, to_data(area)) is True
@@ -62,7 +76,7 @@ def test_a_stored_arrangement_is_applied_in_the_old_shape():
 
 
 def test_an_arrangement_saved_by_an_older_manuskript_still_applies():
-    splitter = MagicMock()
+    splitter = legacy_widget()
 
     assert restore_area(splitter, [2, ["a"], [0, ["b"], None]]) is True
 
@@ -72,7 +86,7 @@ def test_an_arrangement_saved_by_an_older_manuskript_still_applies():
 
 
 def test_an_unreadable_arrangement_is_ignored_not_raised():
-    splitter = MagicMock()
+    splitter = legacy_widget()
 
     assert restore_area(splitter, {"nonsense": True}) is False
 
@@ -127,3 +141,34 @@ def test_a_comb_is_rendered_unchanged():
     assert as_renderable(area) == [
         1, ["a"], [2, ["b"], [0, ["c"], None]],
     ]
+
+
+def test_a_widget_that_speaks_the_model_is_asked_directly():
+    """It is the only thing that knows whether a side has been divided,
+    so it describes itself rather than being read through a shape that
+    cannot express that.
+    """
+    area = Split(
+        VERTICAL,
+        Split(HORIZONTAL, TabGroup(["a"]), TabGroup(["b"])),
+        TabGroup(["c"]),
+    )
+    splitter = modelled_widget()
+    splitter.describe.return_value = area
+
+    assert read_area(splitter) == area
+    assert describe_area(splitter) == to_data(area)
+
+
+def test_a_widget_that_speaks_the_model_restores_the_tree_itself():
+    """No flattening: the arrangement is handed over as it was stored."""
+    area = Split(
+        VERTICAL,
+        Split(HORIZONTAL, TabGroup(["a"]), TabGroup(["b"])),
+        TabGroup(["c"]),
+    )
+    splitter = modelled_widget()
+
+    assert restore_area(splitter, to_data(area)) is True
+
+    splitter.restore.assert_called_once_with(area)
