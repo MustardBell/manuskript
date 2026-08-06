@@ -27,6 +27,58 @@ from manuskript.panels import (
 from manuskript.ui.panels import PanelHost
 
 
+def project_panel_record(runtime, contribution_id):
+    """The live contribution record, looked up fresh each time.
+
+    Fresh so that a plugin reloaded in place serves its current code
+    rather than whatever was captured when the panel was declared.
+    """
+    return next(
+        (
+            value
+            for value in runtime.registry.records("project_panel")
+            if value.id == contribution_id
+        ),
+        None,
+    )
+
+
+def build_project_panel_widget(runtime, contribution_id, context, parent):
+    """Build one window's copy of a plugin project panel.
+
+    Deliberately a module-level function taking the application's plugin
+    runtime, not a method on a window's host. The panel descriptor lives
+    in the application-scope PanelRegistry, so anything its widget
+    factory closes over lives as long as the application: a bound method
+    here kept the first window's host -- and through it that window --
+    alive for the whole session, and every later window still built its
+    widget through the dead one's host.
+
+    Everything window-shaped comes from the context instead, which is
+    handed in per call by the host doing the building.
+    """
+    record = project_panel_record(runtime, contribution_id)
+    if record is None:
+        raise RuntimeError(
+            "Plugin panel {} is no longer registered.".format(
+                contribution_id
+            )
+        )
+    window = context.window
+    contribution = record.contribution
+    plugin_context = PluginProjectContext(
+        plugin_id=record.plugin_id,
+        project_file=window.currentProject,
+        files=window.projectRuntime.models.plugin_data.namespace(
+            record.plugin_id,
+            on_change=window.projectManager.startTimerNoChanges,
+        ),
+        default_file=contribution.default_file,
+        show_status=window.statusPresenter.show,
+    )
+    return contribution.widget_factory(plugin_context, parent)
+
+
 class ProjectPanelHost:
     """Offer project-scoped plugin panels: registry entries and a menu.
 
@@ -142,11 +194,14 @@ class ProjectPanelHost:
                 object_name="pluginProjectPanel.{}".format(
                     contribution_id
                 ),
-                # Builds against the window in the context it is given,
-                # not against the host that happened to declare it, so
-                # every window's copy is its own.
+                # Application scope, like the descriptor holding it: the
+                # plugin runtime and an id, never this host and never
+                # this window. Builds against whatever window the
+                # context names.
                 widget_factory=partial(
-                    self._build_widget, contribution_id,
+                    build_project_panel_widget,
+                    self.runtime,
+                    contribution_id,
                 ),
             ))
         self._panelIds[contribution_id] = panel_id
@@ -164,41 +219,8 @@ class ProjectPanelHost:
         if panel_id in self.panelRegistry:
             self.panelRegistry.deregister(panel_id)
 
-    def _build_widget(self, contribution_id, context, parent):
-        """Build the plugin's widget with its own context, looked up
-        fresh so a reloaded plugin serves its current code."""
-        record = self._record(contribution_id)
-        if record is None:
-            raise RuntimeError(
-                "Plugin panel {} is no longer registered.".format(
-                    contribution_id
-                )
-            )
-        window = context.window
-        contribution = record.contribution
-        plugin_context = PluginProjectContext(
-            plugin_id=record.plugin_id,
-            project_file=window.currentProject,
-            files=window.projectRuntime.models.plugin_data.namespace(
-                record.plugin_id,
-                on_change=window.projectManager.startTimerNoChanges,
-            ),
-            default_file=contribution.default_file,
-            show_status=window.statusPresenter.show,
-        )
-        return contribution.widget_factory(plugin_context, parent)
-
     def _record(self, contribution_id):
-        return next(
-            (
-                value
-                for value in self.runtime.registry.records(
-                    "project_panel"
-                )
-                if value.id == contribution_id
-            ),
-            None,
-        )
+        return project_panel_record(self.runtime, contribution_id)
 
     @property
     def docks(self):

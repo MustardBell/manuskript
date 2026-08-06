@@ -173,3 +173,77 @@ def test_two_hosts_declare_one_panel_and_open_their_own():
 
     assert registry.descriptors() == ()
     assert first.docks == {} and second.docks == {}
+
+
+def test_the_declaration_does_not_keep_the_declaring_window_alive():
+    """The reported defect: the descriptor's widget factory was a bound
+    method of the first window's host, and the registry is application
+    scope, so window one lived as long as the application and every
+    later window built its widget through a dead window's host.
+    """
+    import gc
+    import weakref
+
+    from manuskript.panels import PanelRegistry
+    from manuskript.ui.panels import PanelHost
+
+    registry = PanelRegistry()
+    runtime = panel_runtime(
+        lambda _context, parent: QPlainTextEdit(parent)
+    )
+    first_window = PanelTestWindow()
+    first = ProjectPanelHost(
+        first_window, runtime,
+        panel_registry=registry,
+        panel_host=PanelHost(first_window, registry),
+    )
+    assert "plugin.example.notes.example.notes.panel" in registry
+
+    watch_window = weakref.ref(first_window)
+    watch_host = weakref.ref(first)
+    del first, first_window
+    gc.collect()
+
+    # The declaration outlives the window that made it, as it must --
+    # but only the declaration.
+    assert "plugin.example.notes.example.notes.panel" in registry
+    assert watch_host() is None
+    assert watch_window() is None
+
+
+def test_a_second_window_builds_through_no_other_window():
+    """With the factory application-scoped, the window doing the building
+    is the only window involved -- the one named by the context.
+    """
+    from manuskript.panels import PanelRegistry
+    from manuskript.ui.panels import PanelHost
+
+    seen = []
+
+    def factory(context, parent):
+        seen.append(context.project_file)
+        return QPlainTextEdit(parent)
+
+    registry = PanelRegistry()
+    runtime = panel_runtime(factory)
+    first_window = PanelTestWindow()
+    first = ProjectPanelHost(
+        first_window, runtime,
+        panel_registry=registry,
+        panel_host=PanelHost(first_window, registry),
+    )
+    second_window = PanelTestWindow()
+    second_window.currentProject = "/project/second.msk"
+    second = ProjectPanelHost(
+        second_window, runtime,
+        panel_registry=registry,
+        panel_host=PanelHost(second_window, registry),
+    )
+
+    # The first host goes away entirely before the second one builds.
+    first.close_all()
+    del first
+
+    assert second.open_panel("example.notes.panel") is not None
+    assert seen == ["/project/second.msk"]
+    second.close_all()
