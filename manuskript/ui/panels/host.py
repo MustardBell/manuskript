@@ -210,6 +210,15 @@ class PanelHost:
         # area first commits it there and makes the restore silently do
         # nothing -- it still reports success, which is how this looked
         # like Qt ignoring us rather than us asking too late.
+        #
+        # This is also all that is needed for a panel whose plugin is
+        # temporarily away. QMainWindow.saveState keeps the entry for a
+        # dock it restored but never found, and keeps it across any
+        # number of further sessions, so the place is held without our
+        # help: measured over three saves with the dock absent, then
+        # restored to the same area when it came back. No placeholder
+        # dock scheme is required, and building one would put a widget
+        # on screen to solve a problem Qt has already solved.
         if window.restoreDockWidget(dock):
             return True
         # A dock the saved layout has never seen: it goes where panels

@@ -214,3 +214,53 @@ def test_a_per_window_panel_is_built_once_per_window():
 
     second_window.close()
     first_window.close()
+
+
+def test_a_place_is_kept_while_a_panel_is_away():
+    """A panel whose plugin is missing keeps its position, and keeps it
+    across further sessions without the plugin.
+
+    Qt does this itself: saveState keeps the entry for a dock it restored
+    but never found. Pinned because it was easy to assume otherwise, and
+    the assumption invites a placeholder-dock scheme that would put a
+    widget on screen to solve a problem that does not exist.
+    """
+    name = "panel.vendor.away"
+    registry = PanelRegistry()
+    registry.register(PanelDescriptor(
+        id="vendor.away",
+        title="Away",
+        object_name=name,
+        widget_factory=label_factory,
+    ))
+
+    # A session in which the panel exists, moved off its default area.
+    present = QMainWindow()
+    present.setCentralWidget(QLabel("body"))
+    instance = PanelHost(present, registry).open(
+        "vendor.away", PanelContext(),
+    )
+    present.addDockWidget(Qt.LeftDockWidgetArea, instance.container)
+    blob = present.saveState()
+
+    # Two sessions in which it cannot be built at all.
+    for _ in range(2):
+        absent = QMainWindow()
+        absent.setCentralWidget(QLabel("body"))
+        absent.restoreState(blob)
+        blob = absent.saveState()
+        absent.close()
+
+    # It comes back to where it was left.
+    returned = QMainWindow()
+    returned.setCentralWidget(QLabel("body"))
+    returned.restoreState(blob)
+    again = PanelHost(returned, registry).open(
+        "vendor.away", PanelContext(),
+    )
+
+    assert returned.dockWidgetArea(again.container) == (
+        Qt.LeftDockWidgetArea
+    )
+    returned.close()
+    present.close()
