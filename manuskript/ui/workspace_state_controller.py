@@ -8,6 +8,7 @@ other.
 
 from PyQt5.QtWidgets import QSplitter
 
+from manuskript.panels import SPLITTER_SLOT
 from manuskript.services.workspace_state import (
     PRIMARY,
     WorkspaceStateStore,
@@ -17,22 +18,6 @@ from manuskript.ui.editors.document_area_layout import (
     describe_area,
     restore_area,
 )
-
-
-#: Splitters whose sizes are worth remembering.
-SPLITTERS = ("splitterRedacH", "splitterRedacV")
-
-#: Panels that keep state of their own beyond being shown or hidden.
-PANEL_STATE = {
-    "core.metadata": (
-        lambda panel: panel.saveState(),
-        lambda panel, value: panel.restoreState(value),
-    ),
-    "core.metadata.revisions": (
-        lambda panel: panel.revisions.saveState(),
-        lambda panel, value: panel.revisions.restoreState(value),
-    ),
-}
 
 
 class WorkspaceStateController:
@@ -93,14 +78,12 @@ class WorkspaceStateController:
         self._restore_panel_visibility(state)
 
     def _restore_panel_state(self, state):
-        metadata = getattr(self.window, "redacMetadata", None)
-        if metadata is None:
-            return
-        for key, (_save, load) in PANEL_STATE.items():
-            value = (state.panel_state or {}).get(key)
+        stored = state.panel_state or {}
+        for remembered, widget in self._remembered_panel_state():
+            value = stored.get(remembered.key)
             if value is None:
                 continue
-            load(metadata, self._bool_list(value))
+            remembered.restore(widget, self._bool_list(value))
 
     def _restore_panel_visibility(self, state):
         host = getattr(self.window, "panelHost", None)
@@ -221,11 +204,29 @@ class WorkspaceStateController:
 
     def _splitter_state(self):
         state = {}
-        for name in SPLITTERS:
+        for name in self._splitter_names():
             splitter = self.window.findChild(QSplitter, name)
             if splitter is not None:
                 state[name] = splitter.saveState()
         return state
+
+    def _splitter_names(self):
+        """The splitters worth remembering: the ones panels sit in.
+
+        Asked of the panels rather than listed here. A pair of names was
+        hardcoded, so a panel put into a third splitter had its sizes
+        forgotten until somebody thought to come and add it -- and the
+        splitter holding the book summary was exactly that case.
+        """
+        registry = getattr(self.window, "panelRegistry", None)
+        if registry is None:
+            return ()
+        names = []
+        for descriptor in registry.descriptors(placement=SPLITTER_SLOT):
+            slot = descriptor.slot
+            if slot is not None and slot.splitter not in names:
+                names.append(slot.splitter)
+        return tuple(names)
 
     def _panel_visibility(self):
         host = getattr(self.window, "panelHost", None)
@@ -237,13 +238,25 @@ class WorkspaceStateController:
         }
 
     def _panel_state(self):
-        metadata = getattr(self.window, "redacMetadata", None)
-        if metadata is None:
-            return {}
         return {
-            key: save(metadata)
-            for key, (save, _load) in PANEL_STATE.items()
+            remembered.key: remembered.capture(widget)
+            for remembered, widget in self._remembered_panel_state()
         }
+
+    def _remembered_panel_state(self):
+        """Every panel in this window that remembers something, and what.
+
+        The panels say what they keep; this only asks. The list used to be
+        here, together with the widget methods to call and the widget to
+        call them on, which made adding a panel with state of its own a
+        change to this file and put one panel's internals in it.
+        """
+        host = getattr(self.window, "panelHost", None)
+        if host is None:
+            return
+        for instance in host.instances.values():
+            for remembered in instance.descriptor.state:
+                yield remembered, instance.widget
 
     # ----------------------------------------------- welcome screen
 

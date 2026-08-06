@@ -11,6 +11,7 @@ from manuskript.panels.descriptor import (
     PROJECT,
     SPLITTER_SLOT,
     PanelDescriptor,
+    PanelState,
     SplitterSlot,
 )
 
@@ -19,6 +20,28 @@ BOOK_SUMMARY = "core.book-summary"
 PROJECT_TREE = "core.project-tree"
 METADATA = "core.metadata"
 STORYLINE = "core.storyline"
+
+#: Where the metadata panel's revision list files its own arrangement.
+#: Its own key rather than part of the panel's, because that is how it
+#: has always been stored and saved layouts outlive this refactoring.
+METADATA_REVISIONS_STATE = "core.metadata.revisions"
+
+#: What the metadata panel remembers besides being shown: which of its
+#: group boxes were collapsed, and how its revision list was arranged.
+#: Said here, by the panel, rather than listed in the controller that
+#: saves the window -- which had to name this panel's internals to do it.
+METADATA_STATE = (
+    PanelState(
+        key=METADATA,
+        capture=lambda panel: panel.saveState(),
+        restore=lambda panel, value: panel.restoreState(value),
+    ),
+    PanelState(
+        key=METADATA_REVISIONS_STATE,
+        capture=lambda panel: panel.revisions.saveState(),
+        restore=lambda panel, value: panel.revisions.restoreState(value),
+    ),
+)
 
 
 def core_panel_descriptors(plots_group, redaction_group, factories=None):
@@ -64,6 +87,7 @@ def core_panel_descriptors(plots_group, redaction_group, factories=None):
             group=redaction_group,
             default_visible=False,
             widget_factory=factories.get(METADATA),
+            state=METADATA_STATE,
         ),
         PanelDescriptor(
             id=STORYLINE,

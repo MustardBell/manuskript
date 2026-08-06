@@ -12,6 +12,7 @@ from manuskript.panels.descriptor import (
     SINGLETON,
     SPLITTER_SLOT,
     PanelDescriptor,
+    PanelState,
     SplitterSlot,
 )
 from manuskript.panels.registry import (
@@ -31,6 +32,7 @@ __all__ = [
     "SPLITTER_SLOT",
     "PanelContext",
     "PanelDescriptor",
+    "PanelState",
     "PanelRegistry",
     "PanelRegistryError",
     "SplitterSlot",

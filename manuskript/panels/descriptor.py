@@ -8,7 +8,7 @@ rewiring signals.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple
 
 
 #: The panel sits inside a named splitter, at a fixed position.
@@ -59,6 +59,38 @@ class SplitterSlot:
 
 
 @dataclass(frozen=True)
+class PanelState:
+    """One thing a panel remembers between sessions, and how.
+
+    Beyond being shown or hidden, some panels have an arrangement of their
+    own -- which of the metadata panel's group boxes were collapsed, which
+    columns its revision list showed. The controller that saves a window's
+    layout used to hold that list itself, together with the widget methods
+    to call and the widget to call them on, so a new panel with state to
+    keep meant editing the central controller and naming that panel's
+    internals in it.
+
+    A panel says what it remembers instead. ``capture(widget)`` answers
+    with something a settings file can hold; ``restore(widget, value)``
+    takes it back. ``key`` is what that value is filed under and is part of
+    the stored format, so it outlives renamings of everything else.
+    """
+
+    key: str
+    capture: Callable[[Any], Any]
+    restore: Callable[[Any, Any], None]
+
+    def __post_init__(self):
+        if not self.key:
+            raise ValueError("Remembered panel state needs a key.")
+        if not callable(self.capture) or not callable(self.restore):
+            raise ValueError(
+                "Panel state {} needs both a capture and a restore."
+                .format(self.key)
+            )
+
+
+@dataclass(frozen=True)
 class PanelDescriptor:
     """One panel, by name, before any widget of it exists.
 
@@ -92,6 +124,9 @@ class PanelDescriptor:
     #: the panel id could not (plugin docks predate panel ids).
     object_name: str = ""
     widget_factory: Optional[Callable[..., Any]] = None
+    #: What this panel remembers between sessions, beyond whether it was
+    #: showing. Empty for the panels whose whole state is their visibility.
+    state: Tuple[PanelState, ...] = ()
 
     def __post_init__(self):
         if not self.id or "." not in self.id:
