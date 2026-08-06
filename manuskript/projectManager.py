@@ -34,8 +34,14 @@ class ProjectManager:
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
         self.models = None
-        self.status_reporter = status_reporter or (
-            lambda message, duration=5000, importance=1: None
+        # The view is asked to speak, rather than a window's presenter
+        # being handed over. Where the view is the registry of every
+        # window on the project, it resolves which one per call, so this
+        # never pins the window that happened to be first.
+        self.status_reporter = (
+            status_reporter
+            or getattr(lifecycle_view, "show_status", None)
+            or (lambda message, duration=5000, importance=1: None)
         )
         self.session = ProjectSession()
         self.modelConnections = SignalConnectionRegistry()

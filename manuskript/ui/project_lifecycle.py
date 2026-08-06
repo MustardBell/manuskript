@@ -30,6 +30,15 @@ class ProjectLifecycleView:
     def translate(self, text):
         return self.window.tr(text)
 
+    def show_status(self, message, duration=5000, importance=1):
+        """Put a remark in this window's own status bar.
+
+        Asked for by name rather than handed over as a bound method, so
+        the manager holds no reference to any one window's presenter and
+        a closed window cannot be reported into.
+        """
+        self.window.statusPresenter.show(message, duration, importance)
+
     def project_name(self):
         return self.window.projectName()
 

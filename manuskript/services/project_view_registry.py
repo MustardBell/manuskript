@@ -21,8 +21,13 @@ With one window registered this behaves exactly as that window did.
 class ProjectViewRegistry:
     """The project's views, addressable as one."""
 
-    def __init__(self, views=()):
+    def __init__(self, views=(), active_window_source=None):
         self._views = list(views)
+        # A callable, not a window registry: this is project scope and
+        # has no business knowing the type of thing that tracks windows.
+        # Absent one, the primary view answers, which is what a single
+        # window has always meant.
+        self._active_window_source = active_window_source
 
     def register(self, view):
         if view not in self._views:
@@ -45,6 +50,31 @@ class ProjectViewRegistry:
         until it goes away and the next one inherits the role.
         """
         return self._views[0] if self._views else None
+
+    @property
+    def speaking(self):
+        """The view that a remark about the project should appear in.
+
+        Resolved per call, never captured. Whichever window the person
+        is working in if that can be known, the primary otherwise -- a
+        save started with Ctrl+S in the second window has no business
+        reporting itself into the first one's status bar, and a bound
+        method taken at attach time would report into a window that has
+        since closed.
+        """
+        source = self._active_window_source
+        window = source() if source is not None else None
+        if window is not None:
+            for view in self._views:
+                if getattr(view, "window", None) is window:
+                    return view
+        return self.primary
+
+    def show_status(self, message, duration=5000, importance=1):
+        """Say something about the project where it is being worked on."""
+        view = self.speaking
+        if view is not None:
+            view.show_status(message, duration, importance)
 
     # ------------------------------------------- shared project state
     # Identical whichever view is asked, since all of them show the one

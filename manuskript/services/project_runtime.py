@@ -32,6 +32,7 @@ class ProjectRuntime(QObject):
         settings_manager=None,
         project_history=None,
         revision_coordinator=None,
+        active_window_source=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -54,22 +55,28 @@ class ProjectRuntime(QObject):
         )
         # Every window viewing this project, behind one view-shaped
         # object, so the manager keeps talking to a single "view".
-        self.views = ProjectViewRegistry()
+        self.views = ProjectViewRegistry(
+            active_window_source=active_window_source
+        )
         self.projectManager = None
         self._projectHistory = project_history
 
-    def attach(self, view, status_reporter=None):
+    def attach(self, view):
         """Register a window's view side, building the manager on the
         first one.
 
         The manager is deferred because the runtime is composed before
         any window exists; later windows join a project already running.
+
+        No status reporter is taken from the joining window. The manager
+        reports through the view registry, which picks a live window per
+        call -- a reporter captured here would be the first window's for
+        the life of the project, including after it closed.
         """
         self.views.register(view)
         if self.projectManager is None:
             self.projectManager = ProjectManager(
                 self.views,
-                status_reporter=status_reporter,
                 last_project_store=self._projectHistory,
                 revision_coordinator=self.revisionCoordinator,
             )

@@ -310,8 +310,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # itself: the project is the runtime's, the view is the
         # window's.
         self.projectManager = self.projectRuntime.attach(
-            self.projectLifecycleView,
-            status_reporter=self.statusPresenter.show,
+            self.projectLifecycleView
         )
         self.projectHistory = self.projectManager.last_project_store
         self.welcome.set_context(

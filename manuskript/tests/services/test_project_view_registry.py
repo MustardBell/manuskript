@@ -115,3 +115,58 @@ def test_registering_the_same_view_twice_does_not_double_it():
     assert registry.views == (view,)
     registry.project_opened()
     view.project_opened.assert_called_once_with()
+
+
+def test_a_remark_lands_in_the_window_being_worked_in():
+    """A save started in the second window reports there, not in the
+    first window's status bar.
+    """
+    first, second = MagicMock(), MagicMock()
+    registry = ProjectViewRegistry(
+        [first, second],
+        active_window_source=lambda: second.window,
+    )
+
+    registry.show_status("Saved.", 3000, 0)
+
+    second.show_status.assert_called_once_with("Saved.", 3000, 0)
+    first.show_status.assert_not_called()
+
+
+def test_a_remark_falls_back_to_the_primary_when_no_window_is_active():
+    first, second = MagicMock(), MagicMock()
+    registry = ProjectViewRegistry(
+        [first, second], active_window_source=lambda: None
+    )
+
+    registry.show_status("Saved.")
+
+    first.show_status.assert_called_once_with("Saved.", 5000, 1)
+    second.show_status.assert_not_called()
+
+
+def test_the_speaking_view_is_resolved_per_call_not_captured():
+    """The reported defect: the first window's presenter was taken once
+    and kept, so after that window closed the project still reported
+    into it.
+    """
+    first, second = MagicMock(), MagicMock()
+    active = [first.window]
+    registry = ProjectViewRegistry(
+        [first, second], active_window_source=lambda: active[0]
+    )
+
+    registry.show_status("one")
+    active[0] = second.window
+    registry.unregister(first)
+    registry.show_status("two")
+
+    first.show_status.assert_called_once_with("one", 5000, 1)
+    second.show_status.assert_called_once_with("two", 5000, 1)
+
+
+def test_a_remark_with_no_views_left_is_dropped_rather_than_raising():
+    """The last window can close while a save is still reporting."""
+    registry = ProjectViewRegistry([])
+
+    registry.show_status("Saved.")

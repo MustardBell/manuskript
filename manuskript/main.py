@@ -232,12 +232,16 @@ def prepare(arguments, tests=False):
     from manuskript.services.project_history import ProjectHistory
     from manuskript.services.window_registry import WindowRegistry
 
+    # Which windows are workspaces, so closing one is not closing all.
+    # Built first so the project layer can ask which window is in use
+    # without being given one.
+    window_registry = WindowRegistry()
+
     project_runtime = ProjectRuntime(
         settings_manager=settings_manager,
         project_history=ProjectHistory(),
+        active_window_source=window_registry.active,
     )
-    # Which windows are workspaces, so closing one is not closing all.
-    window_registry = WindowRegistry()
 
     # Main window
     from manuskript.mainWindow import MainWindow
