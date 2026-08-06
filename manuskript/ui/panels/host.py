@@ -8,7 +8,6 @@ change of host rather than a storm of signals.
 """
 
 import logging
-import weakref
 
 from dataclasses import dataclass
 from functools import partial
@@ -52,28 +51,22 @@ class PanelInstance:
 class PanelHost:
     """Build, track and close the panels of a single window."""
 
-    def __init__(self, window, registry):
+    def __init__(self, window, registry, directory):
         self.window = window
         self.registry = registry
+        # Where the application's other hosts are. Given rather than
+        # reached for: it used to be a class attribute every host added
+        # itself to, which is global state and is findable from anywhere
+        # that can import this class.
+        self.directory = directory
         self._instances = {}
         # One mount per way of fastening a panel, looked up by placement.
         # The host asks a mount to do it and never asks which kind it is.
         self._mounts = mounts_for(window)
-        PanelHost._hosts.add(self)
-
-    #: Every host alive, so a singleton panel can be found wherever it
-    #: is. Weakly held: a closed window must not be kept alive by this.
-    _hosts = weakref.WeakSet()
+        directory.add(self)
 
     def instance(self, panel_id):
         return self._instances.get(panel_id)
-
-    def _elsewhere(self, panel_id):
-        """The host in another window that already holds this panel."""
-        for host in tuple(self._hosts):
-            if host is not self and host.instance(panel_id) is not None:
-                return host
-        return None
 
     @property
     def instances(self):
@@ -99,7 +92,7 @@ class PanelHost:
             # second would give two windows two panels answering to one
             # identifier, which is the mistake that made opening a
             # second window fail before multiplicity was stated.
-            held = self._elsewhere(panel_id)
+            held = self.directory.holder(panel_id, besides=self)
             if held is not None:
                 raise PanelScopeError(
                     "Panel {} exists once in the application and is "

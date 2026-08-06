@@ -67,6 +67,7 @@ def test_the_field_names_are_the_fields():
         "media_types",
         "media_type_preferences",
         "panel_registry",
+        "panel_directory",
         "project_runtime",
         "window_registry",
     }

@@ -24,7 +24,6 @@ from manuskript.panels import (
     PanelDescriptor,
     PanelRegistry,
 )
-from manuskript.ui.panels import PanelHost
 
 
 def project_panel_record(runtime, contribution_id):
@@ -98,11 +97,13 @@ class ProjectPanelHost:
             if panel_registry is not None
             else getattr(window, "panelRegistry", None) or PanelRegistry()
         )
+        # The window's own host, never one of this class's making. Two
+        # hosts for one window would each hold half its panels, and each
+        # would look to the other like another window's -- so a panel
+        # declared to exist once would be refused to the window that
+        # already had it.
         self.panels = (
-            panel_host
-            if panel_host is not None
-            else getattr(window, "panelHost", None)
-            or PanelHost(window, self.panelRegistry)
+            panel_host if panel_host is not None else window.panelHost
         )
         self.actions = {}
         self._panelIds = {}

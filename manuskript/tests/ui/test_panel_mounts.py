@@ -27,7 +27,7 @@ from manuskript.panels import (
     SplitterSlot,
 )
 from manuskript.ui.panels import host as host_module
-from manuskript.ui.panels import PanelHost
+from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
 from manuskript.ui.panels.mounts import (
     DockMount,
     SplitterMount,
@@ -45,7 +45,9 @@ def a_host(descriptor):
     window.setCentralWidget(QLabel("body"))
     registry = PanelRegistry()
     registry.register(descriptor)
-    return PanelHost(window, registry), window
+    return PanelHost(
+        window, registry, PanelInstanceDirectory(),
+    ), window
 
 
 # ------------------------------------------------------------ the mounts

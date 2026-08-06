@@ -214,6 +214,14 @@ def prepare(arguments, tests=False):
     # Every panel a window can show, core's and plugins' alike, in one
     # application-scope list. Windows build their own copies from it.
     panel_registry = PanelRegistry()
+    # And where the copies are. A panel declared to exist once in the
+    # application has to be findable in whichever window has it, so one
+    # directory is shared by every window's host. Imported here rather
+    # than at module scope: it reaches Qt widgets, and through them the
+    # palette snapshot that must not be taken before a style is chosen.
+    from manuskript.ui.panels import PanelInstanceDirectory
+
+    panel_directory = PanelInstanceDirectory()
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
@@ -260,6 +268,7 @@ def prepare(arguments, tests=False):
         media_types=media_types,
         media_type_preferences=media_type_preferences,
         panel_registry=panel_registry,
+        panel_directory=panel_directory,
         project_runtime=project_runtime,
         window_registry=window_registry,
     )

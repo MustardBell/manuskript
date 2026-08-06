@@ -218,8 +218,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Application scope: every window reads the same panel list.
         self.panelRegistry = services.panel_registry
         # Window scope: this window's own copies of whatever the shared
-        # registry describes.
-        self.panelHost = PanelHost(self, self.panelRegistry)
+        # registry describes, findable from the other windows through the
+        # application's one directory.
+        self.panelDirectory = services.panel_directory
+        self.panelHost = PanelHost(
+            self,
+            self.panelRegistry,
+            self.panelDirectory,
+        )
 
         # UI. Panels are built before saved state is applied: a splitter
         # can only take back its saved sizes once every widget it is

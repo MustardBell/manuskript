@@ -45,6 +45,9 @@ class WorkspaceWindowServices:
     media_type_preferences: object
     #: Every panel a window can show. Windows build their own copies.
     panel_registry: object
+    #: Where the open panels are, so a panel that exists once in the
+    #: application can be found in whichever window has it.
+    panel_directory: object
     #: The open project, shared by every window viewing it.
     project_runtime: object
     #: Which windows are workspaces, and where commands go.
