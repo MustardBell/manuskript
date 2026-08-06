@@ -201,3 +201,41 @@ def test_working_area_follows_a_split_into_the_new_half(MWEmptyProject):
         assert current in [leaf.tab for leaf in editor.secondTab.leaves()]
     finally:
         editor.closeSplit()
+
+
+def test_each_area_comes_back_on_the_tab_that_was_in_front(MWEmptyProject):
+    """A group records which of its tabs was current, and restoring has
+    to honour it in every quadrant.
+
+    Opening documents leaves the last one current, so an area whose
+    person was reading its first tab came back showing its last. The
+    shape survived a round trip and the reading position did not.
+    """
+    window = MWEmptyProject
+    editor = area(window)
+    try:
+        opened = documents(window, 6)
+        stored = to_data(Split(
+            "vertical",
+            Split(
+                "horizontal",
+                # Three tabs, second one in front.
+                TabGroup(opened[:3], current=1),
+                TabGroup([opened[3]], current=0),
+            ),
+            # Two tabs, first one in front -- the case that opening
+            # documents gets wrong on its own.
+            TabGroup(opened[4:], current=0),
+        ))
+
+        assert restore_area(editor, stored) is True
+
+        described = editor.describe()
+        groups = described.groups()
+        assert [group.current for group in groups] == [1, 0, 0]
+        # And the tab in front is the document that was in front, not
+        # merely an index that happens to match.
+        assert groups[0].documents[groups[0].current] == opened[1]
+        assert groups[2].documents[groups[2].current] == opened[4]
+    finally:
+        editor.closeSplit()

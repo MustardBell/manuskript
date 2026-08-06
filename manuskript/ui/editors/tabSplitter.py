@@ -244,7 +244,14 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         self._restoreGroup(node)
 
     def _restoreGroup(self, group):
-        """Open one tab group's documents in this area's own tabs."""
+        """Open one tab group's documents in this area's own tabs, on the
+        tab that was in front.
+
+        Opening documents leaves the last one current, so without the
+        final step every area came back showing whichever document was
+        opened last rather than the one being read. The group records
+        ``current`` for exactly this, and nothing was reading it.
+        """
         if self.editor_context is None:
             return
         outline_model = self.editor_context.outline_model
@@ -258,6 +265,8 @@ class tabSplitter(QWidget, Ui_tabSplitter):
                 newTab=True,
                 tabWidget=target,
             )
+        if 0 <= group.current < target.count():
+            target.setCurrentIndex(group.current)
 
     def restoreOpenIndexes(self, openIndexes):
 
