@@ -7,6 +7,7 @@ from manuskript.domain.persistence import (
 )
 from manuskript.domain.project import CloseDecision, ProjectState
 from manuskript.projectManager import ProjectManager
+from manuskript.services.project_view_registry import ProjectViewRegistry
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 
@@ -471,6 +472,64 @@ LIFECYCLE_VIEW_METHODS = [
     "show_load_failures",
     "capture_project_state",
 ]
+
+
+class TestTheProjectFlushesItsOwnTextBuffers(unittest.TestCase):
+    """The shared buffers are the project's, so the project flushes them.
+
+    One document open in three windows is one buffer holding its text, but
+    the flush ran per window and each window flushed all of the project's
+    buffers -- the same work once per window. Worse, it was work only a
+    window could ask for: a save while no window was registered wrote the
+    models as they stood, with the pending text still sitting in buffers
+    nothing had asked.
+    """
+
+    def setUp(self):
+        self.storage = MagicMock()
+        self.storage.save.return_value = ProjectSaveResult()
+        self.buffers = MagicMock()
+
+    def _manager(self, views):
+        manager = ProjectManager(
+            ProjectViewRegistry(views),
+            MagicMock(),
+            MagicMock(),
+            storage=self.storage,
+            model_factory=MagicMock(),
+            autosave=MagicMock(),
+            last_project_store=MagicMock(),
+            revision_coordinator=MagicMock(),
+            document_buffers=self.buffers,
+        )
+        manager.session.open("book.msk")
+        return manager
+
+    def test_two_windows_flush_the_shared_buffers_once_between_them(self):
+        first, second = MagicMock(), MagicMock()
+
+        self._manager([first, second]).saveDatas()
+
+        self.buffers.flush.assert_called_once_with()
+        # Each window is still asked for the text only it holds.
+        first.flush_pending_edits.assert_called_once_with()
+        second.flush_pending_edits.assert_called_once_with()
+
+    def test_a_save_with_no_window_registered_still_writes_the_text(self):
+        self._manager([]).saveDatas()
+
+        self.buffers.flush.assert_called_once_with()
+
+    def test_the_buffers_are_flushed_before_anything_is_written(self):
+        order = []
+        self.buffers.flush.side_effect = lambda: order.append("flush")
+        self.storage.save.side_effect = (
+            lambda _context: order.append("save") or ProjectSaveResult()
+        )
+
+        self._manager([MagicMock()]).saveDatas()
+
+        self.assertEqual(order, ["flush", "save"])
 
 
 class TestTheProjectIsNotReadThroughAWindow(unittest.TestCase):

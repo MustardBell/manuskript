@@ -46,10 +46,15 @@ class ProjectManager:
     def __init__(
             self, lifecycle_view, settings, model_parent, storage=None,
             status_reporter=None, model_factory=None, autosave=None,
-            last_project_store=None, revision_coordinator=None):
+            last_project_store=None, revision_coordinator=None,
+            document_buffers=None):
         self.ui = lifecycle_view
         self.settings = settings
         self.model_parent = model_parent
+        # Absent means a project with no live text on screen at all: a
+        # manager driven from a test or a script. Not a fallback to
+        # anything -- there is nowhere else the buffers could be found.
+        self.document_buffers = document_buffers
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
         self.models = None
@@ -244,7 +249,7 @@ class ProjectManager:
         # and a project close did not -- so a save could write the
         # manuscript as it stood before the last few keystrokes, and on the
         # close of the last window those keystrokes were simply gone.
-        self.ui.flush_pending_edits()
+        self.flushPendingEdits()
 
         previous_project = self.currentProject
         if projectName:
@@ -318,6 +323,24 @@ class ProjectManager:
                 ).format(str(error)),
                 importance=2,
             )
+
+    def flushPendingEdits(self):
+        """Write every unsubmitted edit into the models.
+
+        The project's own text buffers first, and here rather than in each
+        window. One document open in three windows is one buffer, so the
+        windows were each flushing all of them -- the same work three
+        times, and answerable to none of them: a save with no window
+        registered flushed nothing at all, though the text was still
+        sitting in the project's buffers waiting to be written.
+
+        Then the windows, for the text no shared buffer stands for: a
+        character's notes, a multiple selection. That part is theirs
+        because those editors are.
+        """
+        if self.document_buffers is not None:
+            self.document_buffers.flush()
+        self.ui.flush_pending_edits()
 
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(

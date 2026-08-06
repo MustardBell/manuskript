@@ -213,20 +213,14 @@ class ProjectLifecycleView:
         self.window.mainEditor.closeAllTabs()
 
     def flush_pending_edits(self):
-        """Write every unsubmitted edit into the models.
+        """Write out this window's own unsubmitted text.
 
-        The project's buffers first, because they are where the text
-        actually is: a document open in another window has a buffer with
-        pending edits and no editor in this window to ask. Then this
-        window's own editors, which covers the ones holding private text
-        -- a character's notes, a multiple selection -- that no shared
-        buffer stands for.
+        Only this window's editors. The shared buffers, where the text of
+        a document open in two windows lives, belong to the project and
+        are flushed by it -- once, whatever the window count. What is left
+        here is the text no shared buffer stands for: a character's notes,
+        a multiple selection, anything an editor holds privately.
         """
-        buffers = getattr(
-            self.window.projectRuntime, "documentBuffers", None,
-        )
-        if buffers is not None:
-            buffers.flush()
         for editor in self.window.findChildren(textEditView):
             editor.submit()
 

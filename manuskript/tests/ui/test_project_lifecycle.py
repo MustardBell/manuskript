@@ -99,6 +99,10 @@ def test_lifecycle_view_flushes_every_model_backed_text_editor():
     window.findChildren.assert_called_once_with(textEditView)
     first.submit.assert_called_once_with()
     second.submit.assert_called_once_with()
+    # Not the project's shared buffers: those are one per document however
+    # many windows show it, and the project flushes them itself. A window
+    # doing it too would repeat the whole flush per window.
+    window.projectRuntime.documentBuffers.flush.assert_not_called()
 
 
 def test_close_then_open_rebinds_outline_models_without_stale_delegates(

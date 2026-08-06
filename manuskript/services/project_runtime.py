@@ -92,6 +92,7 @@ class ProjectRuntime(QObject):
                 self.views,
                 self.settingsManager,
                 self.modelParent,
+                document_buffers=self.documentBuffers,
                 last_project_store=self._projectHistory,
                 revision_coordinator=self.revisionCoordinator,
             )
