@@ -961,3 +961,41 @@ def test_a_window_that_is_not_the_last_records_its_plugin_docks(
     finally:
         registry.remove_plugin("vendor.docked")
         window.pluginContributions.announce()
+
+
+def test_a_cancelled_quit_leaves_both_real_windows_open(MWEmptyProject):
+    """The case the previous cancel test could not reach.
+
+    That test had the second window refuse to close, so the code never got
+    as far as the primary. The real scenario is the other way round: the
+    second window closes perfectly well, and then the person cancels the
+    save prompt -- which used to leave them with one window gone and the
+    application still running.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    manager = window.projectManager
+    settled = []
+    try:
+        manager.session.mark_dirty()
+        # Standing in for the person pressing Cancel.
+        manager.settleBeforeClosing = lambda: (
+            settled.append(True) or False
+        )
+
+        assert window.windowRegistry.close_all() is False
+
+        assert settled == [True]
+        # Still registered, both of them: the cancelled quit closed
+        # nothing. Registry membership rather than isVisible, because the
+        # shared test window is never actually shown.
+        assert set(window.windowRegistry.workspace_windows) == {
+            window, other,
+        }
+        assert manager.session.is_open
+        assert other.projectLifecycleView in (
+            window.projectRuntime.views.views
+        )
+    finally:
+        del manager.settleBeforeClosing
+        other.close()

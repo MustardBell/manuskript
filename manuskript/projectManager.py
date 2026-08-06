@@ -54,6 +54,9 @@ class ProjectManager:
         self.revision_coordinator = (
             revision_coordinator or ProjectRevisionCoordinator()
         )
+        #: Set when a quit has already asked about unsaved changes, so the
+        #: close that follows does not ask again.
+        self._closeSettled = False
 
     @property
     def currentProject(self):
@@ -137,17 +140,38 @@ class ProjectManager:
         return True
 
 
+    def settleBeforeClosing(self):
+        """Deal with unsaved changes without closing anything yet.
+
+        Answers whether closing may go ahead. Separate from closeProject so
+        that quitting can ask before any window has gone: the question used
+        to be asked by whichever window turned out to be the last one
+        standing, which meant the others were already shut by the time the
+        person saw it and pressed Cancel.
+
+        Records that it has been settled, so the close that follows does
+        not ask a second time. Discarding leaves the project dirty, and
+        without the record the next pass would take that as a fresh reason
+        to ask.
+        """
+        if not self.session.is_open:
+            return True
+        if self.ui.settings.saveOnQuit:
+            settled = self.saveDatas()
+        else:
+            settled = self.handleUnsavedChanges()
+        self._closeSettled = bool(settled)
+        return settled
+
     def closeProject(self):
 
         if not self.session.is_open:
             return True
 
-        # Make sure data is saved.
-        if self.ui.settings.saveOnQuit:
-            if not self.saveDatas():
-                return False
-        elif not self.handleUnsavedChanges():
+        # Make sure data is saved, unless a quit already settled it.
+        if not self._closeSettled and not self.settleBeforeClosing():
             return False  # user cancelled action
+        self._closeSettled = False
 
         # Close open tabs in editor
         self.ui.prepare_close()

@@ -104,27 +104,47 @@ class WindowRegistry:
             forward(old, new)
 
     def close_all(self):
-        """Quit: close every workspace, the primary last.
+        """Quit: settle the project first, then close every workspace.
 
-        Order matters. The last workspace to close is the one that
-        closes the project, and that is where the save prompt appears --
-        so it has to be a window still standing when the question is
-        asked, and it has to be asked once. A window refusing to close
-        (the person cancelled) aborts the rest.
+        Two phases, and the order is the whole point. Asking about unsaved
+        changes used to fall to whichever window turned out to be the last
+        one standing -- so by the time the person saw the prompt the other
+        windows had already gone, and pressing Cancel left them shut with
+        the application still running. Cancelling a quit has to leave
+        everything exactly as it was.
+
+        So the question is asked once, up front, while every window is
+        still open. Only once it is settled does anything close, and the
+        closes that follow do not ask again.
         """
         self.quitting = True
         try:
-            for window in reversed(self.workspace_windows[1:]):
+            windows = self.workspace_windows
+            primary = windows[0] if windows else None
+            if primary is not None and not self._settle(primary):
+                return False
+            for window in reversed(windows[1:]):
                 if not self._close(window):
                     return False
-            primary = (
-                self.workspace_windows[0] if self._windows else None
-            )
             if primary is not None and not self._close(primary):
                 return False
             return True
         finally:
             self.quitting = False
+
+    @staticmethod
+    def _settle(window):
+        """Ask the project about unsaved changes, closing nothing.
+
+        Through the window because the project is reached that way, not
+        because it belongs to the window -- one project, so asking any
+        one of its windows asks the project.
+        """
+        manager = getattr(window, "projectManager", None)
+        settle = getattr(manager, "settleBeforeClosing", None)
+        if settle is None:
+            return True
+        return bool(settle())
 
     @staticmethod
     def _close(window):

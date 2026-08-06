@@ -144,3 +144,83 @@ def test_close_all_reports_success_when_every_window_goes():
 
 def test_close_all_on_an_empty_registry_succeeds():
     assert WindowRegistry().close_all() is True
+
+
+def test_cancelling_a_quit_leaves_every_window_open():
+    """The reported defect. The save prompt used to come from whichever
+    window turned out to be last, so the others were already shut when the
+    person pressed Cancel -- a cancelled quit that had closed most of the
+    application.
+    """
+    registry = WindowRegistry()
+    windows = []
+    for _ in range(3):
+        window = MagicMock()
+        window.isVisible.return_value = True
+        registry.register(window)
+        windows.append(window)
+    # The project refuses: the person cancelled.
+    windows[0].projectManager.settleBeforeClosing.return_value = False
+
+    assert registry.close_all() is False
+
+    for window in windows:
+        window.close.assert_not_called()
+    assert registry.workspace_windows == tuple(windows)
+
+
+def test_a_quit_asks_about_unsaved_changes_once():
+    """Three windows are three views of one project, so there is one
+    question. It used to be asked by the last window to close, which is why
+    the others had to be gone before it could be asked at all.
+    """
+    registry = WindowRegistry()
+    windows = []
+    for _ in range(3):
+        window = MagicMock()
+        window.isVisible.return_value = False
+        registry.register(window)
+        windows.append(window)
+    windows[0].projectManager.settleBeforeClosing.return_value = True
+
+    assert registry.close_all() is True
+
+    windows[0].projectManager.settleBeforeClosing.assert_called_once_with()
+    for window in windows[1:]:
+        window.projectManager.settleBeforeClosing.assert_not_called()
+    for window in windows:
+        window.close.assert_called_once_with()
+
+
+def test_the_project_is_settled_before_any_window_is_closed():
+    """Settling after a close would be the defect with extra steps."""
+    registry = WindowRegistry()
+    order = []
+    windows = []
+    for number in range(2):
+        window = MagicMock()
+        window.isVisible.return_value = False
+        window.close.side_effect = (
+            lambda number=number: order.append("close%d" % number)
+        )
+        registry.register(window)
+        windows.append(window)
+    windows[0].projectManager.settleBeforeClosing.side_effect = (
+        lambda: order.append("settle") or True
+    )
+
+    assert registry.close_all() is True
+
+    assert order[0] == "settle"
+    assert order[1:] == ["close1", "close0"]
+
+
+def test_a_quit_with_no_project_manager_still_closes():
+    """A window that never opened a project has nothing to settle."""
+    registry = WindowRegistry()
+    window = MagicMock(spec=["close", "isVisible"])
+    window.isVisible.return_value = False
+    registry.register(window)
+
+    assert registry.close_all() is True
+    window.close.assert_called_once_with()
