@@ -13,6 +13,10 @@ from manuskript.services.workspace_state import (
     WorkspaceStateStore,
     WorkspaceWindowState,
 )
+from manuskript.ui.editors.document_area_layout import (
+    describe_area,
+    restore_area,
+)
 
 
 #: Splitters whose sizes are worth remembering.
@@ -142,7 +146,7 @@ class WorkspaceStateController:
         editor = getattr(self.window, "mainEditor", None)
         if editor is None:
             return self._documents
-        return editor.tabSplitter.openIndexes()
+        return describe_area(editor.tabSplitter)
 
     def capture_documents(self):
         """Remember this window's documents while it still has them.
@@ -154,7 +158,7 @@ class WorkspaceStateController:
         """
         editor = getattr(self.window, "mainEditor", None)
         if editor is not None and self.window.stack.currentIndex() == 1:
-            self._documents = editor.tabSplitter.openIndexes()
+            self._documents = describe_area(editor.tabSplitter)
         return self._documents
 
     def capture_layout(self):
@@ -189,8 +193,10 @@ class WorkspaceStateController:
         documents = self._documents
         if not documents:
             return False
-        self.window.mainEditor.tabSplitter.restoreOpenIndexes(documents)
-        return True
+        return restore_area(
+            self.window.mainEditor.tabSplitter,
+            documents,
+        )
 
     def _splitter_state(self):
         state = {}
