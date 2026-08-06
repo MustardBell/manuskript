@@ -28,20 +28,11 @@ from manuskript.ui.views.character_panel import (
 )
 from manuskript.ui.views.plot_panel import PlotModels, PlotPanelView
 from manuskript.ui.views.world_panel import WorldModels, WorldPanelView
-from manuskript.media_types import core_registry
-from manuskript.panels import PanelContext, PanelRegistry
+from manuskript.panels import PanelContext
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.ui.panels.core import core_panel_factories
-from manuskript.services.plugin_contributions import (
-    PluginContributionService,
-)
-from manuskript.services.project_runtime import ProjectRuntime
-from manuskript.services.window_registry import WindowRegistry
-from manuskript.services.media_type_preferences import (
-    MediaTypePreferences,
-)
 from manuskript.ui.tools.media_type_inspector import (
     MediaTypeInspector,
 )
@@ -55,9 +46,6 @@ from manuskript.models.worldModel import worldModel
 from manuskript.exporter.context import ExportContext
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
-from manuskript.services.application_preferences import (
-    ApplicationPreferences,
-)
 from manuskript.services.theme_repository import ThemeRepository
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
@@ -123,22 +111,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     SHOW_DEBUG_TAB = False
 
-    def __init__(
-        self,
-        settings_manager,
-        application_preferences=None,
-        plugin_runtime=None,
-        plugin_option_store=None,
-        plugin_contributions=None,
-        media_types=None,
-        media_type_preferences=None,
-        panel_registry=None,
-        project_runtime=None,
-        window_registry=None,
-        window_id=WORKSPACE_PRIMARY,
-    ):
+    def __init__(self, services, window_id=WORKSPACE_PRIMARY):
+        """One view of an application composed elsewhere.
+
+        Everything application- or project-scope arrives in ``services``,
+        whole. A window builds none of it and cannot: it used to take the
+        same things as ten optional arguments and compose a fallback for
+        each one it was not given, so a window handed nothing quietly
+        became a second application -- its own panel registry, its own
+        preferences, its own project -- while looking like a view of the
+        first. Opening a second window meant re-listing all ten at the
+        other call site, which is where such a thing would actually
+        happen.
+
+        ``window_id`` stays a separate argument because it is the one
+        thing that is this window's own: it names where this window's
+        layout is filed.
+        """
         QMainWindow.__init__(self)
         self.setupUi(self)
+        #: Kept whole so another window can be opened from this one
+        #: without naming the services one at a time.
+        self.services = services
 
         # Var
         self._lastFocus = None
@@ -153,14 +147,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
         )
-        # The project layer. A window is one view of it, so it may be
-        # handed one that already exists; a window given none composes
-        # its own, which is a single-window application.
-        self.projectRuntime = (
-            project_runtime
-            if project_runtime is not None
-            else ProjectRuntime(settings_manager=settings_manager)
-        )
+        # The project layer. A window is one view of it and never its
+        # owner, so this is always something it was handed.
+        self.projectRuntime = services.project_runtime
         # Panel controllers are given the panel they drive and the two
         # services every panel needs, rather than a window that can
         # answer anything.
@@ -199,17 +188,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.revisionCoordinator = self.projectRuntime.revisionCoordinator
         # Which windows are workspaces. Registering makes this one count
         # towards "the last window", and towards where commands go.
-        self.windowRegistry = (
-            window_registry
-            if window_registry is not None
-            else WindowRegistry()
-        )
+        self.windowRegistry = services.window_registry
         self.windowRegistry.register(self)
-        self.applicationPreferences = (
-            application_preferences
-            if application_preferences is not None
-            else ApplicationPreferences()
-        )
+        self.applicationPreferences = services.application_preferences
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
         )
@@ -234,13 +215,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             window_id=window_id,
         )
 
-        # Application scope: every window reads the same panel list. A
-        # window without one gets an empty registry of its own, which is
-        # a working application with no optional panels.
-        self.panelRegistry = (
-            panel_registry if panel_registry is not None
-            else PanelRegistry()
-        )
+        # Application scope: every window reads the same panel list.
+        self.panelRegistry = services.panel_registry
         # Window scope: this window's own copies of whatever the shared
         # registry describes.
         self.panelHost = PanelHost(self, self.panelRegistry)
@@ -257,42 +233,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
         self.statusPresenter = StatusPresenter(self, self.statusLabel)
-        self.pluginRuntime = plugin_runtime
-        self.pluginOptionStore = plugin_option_store
-        self.mediaTypes = (
-            media_types if media_types is not None else core_registry()
-        )
-        self.mediaTypePreferences = (
-            media_type_preferences
-            if media_type_preferences is not None
-            else MediaTypePreferences()
-        )
+        self.pluginRuntime = services.plugin_runtime
+        self.pluginOptionStore = services.plugin_option_store
+        self.mediaTypes = services.media_types
+        self.mediaTypePreferences = services.media_type_preferences
         self.cardStyles = IndexCardStyleService(
-            plugin_runtime.registry if plugin_runtime is not None else None,
+            self.pluginRuntime.registry
+            if self.pluginRuntime is not None
+            else None,
             report_error=self.statusPresenter.show,
             parent=self,
         )
         # Application scope: what plugins contribute, and the one
-        # announcement that it changed. A window composes its own only
-        # when it was given none, which is a single-window application.
-        self.pluginContributions = (
-            plugin_contributions
-            if plugin_contributions is not None
-            else (
-                PluginContributionService(
-                    plugin_runtime,
-                    option_store=plugin_option_store,
-                    media_types=self.mediaTypes,
-                )
-                if plugin_runtime is not None
-                else None
-            )
-        )
+        # announcement that it changed. None where plugins are not
+        # running, which is an application with no plugin interface --
+        # not a reason for this window to invent one.
+        self.pluginContributions = services.plugin_contributions
         self.pluginUi = (
             PluginUiController(
                 self,
                 self.pluginContributions,
-                option_store=plugin_option_store,
+                option_store=self.pluginOptionStore,
                 media_types=self.mediaTypes,
             )
             if self.pluginContributions is not None
@@ -606,22 +567,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def openWorkspaceWindow(self, window_id=None):
         """Another view of this project, sharing everything it owns.
 
-        The new window is handed the same project runtime, panel
-        registry and plugin runtime, so it edits the one project rather
-        than a copy of it, and it joins a project already open instead
-        of going through the welcome screen.
+        The same services object, passed on whole rather than unpacked and
+        re-listed. Every application-scope thing the new window sees is
+        therefore the same instance this one sees -- one project, one panel
+        list, one set of plugins -- and a service added later cannot arrive
+        in the first window and be forgotten here.
+
+        It joins a project already open instead of going through the
+        welcome screen.
         """
         window = MainWindow(
-            self.settingsManager,
-            application_preferences=self.applicationPreferences,
-            plugin_runtime=self.pluginRuntime,
-            plugin_option_store=self.pluginOptionStore,
-            plugin_contributions=self.pluginContributions,
-            media_types=self.mediaTypes,
-            media_type_preferences=self.mediaTypePreferences,
-            panel_registry=self.panelRegistry,
-            project_runtime=self.projectRuntime,
-            window_registry=self.windowRegistry,
+            self.services,
             window_id=window_id or self.nextWorkspaceId(),
         )
         window.adoptOpenProject()

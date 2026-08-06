@@ -9,9 +9,67 @@ selection, its own open documents and its own panels.
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtWidgets import QPlainTextEdit
 
+import inspect
+
 from manuskript.panels import PanelContext, PanelDescriptor
 from manuskript.panels.core import METADATA, PROJECT_TREE, STORYLINE
 from manuskript.services.workspace_state import WorkspaceStateStore
+from manuskript.services.workspace_window_services import (
+    WorkspaceWindowServices,
+)
+
+
+def test_a_window_is_given_its_services_rather_than_composing_them():
+    """What a workspace window takes is the services object and its own id.
+
+    It used to take ten separate optional services and build a fallback
+    for every one it was not given, so a window handed nothing composed a
+    second application -- its own panel registry, its own preferences, its
+    own project -- and still looked like a view of the first. Nothing
+    raised; the two windows simply were not looking at the same thing.
+    """
+    from manuskript.mainWindow import MainWindow
+
+    parameters = list(
+        inspect.signature(MainWindow.__init__).parameters
+    )
+
+    assert parameters == ["self", "services", "window_id"]
+
+
+def test_a_second_window_shares_every_application_scope_service(
+        MWEmptyProject):
+    """Derived from the services themselves, so one added later is covered
+    here without anyone remembering to add it.
+
+    The failure this guards is silent: re-listing the services at the
+    second construction site and missing one gave that window a fallback
+    of its own instead of an error.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        assert other.services is window.services
+        for name in WorkspaceWindowServices.field_names():
+            shared = getattr(window.services, name)
+            assert getattr(other.services, name) is shared
+    finally:
+        other.close()
+
+
+def test_a_second_window_has_its_own_id_and_nothing_else_of_its_own(
+        MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        assert other.windowId != window.windowId
+        assert other.panelRegistry is window.panelRegistry
+        assert other.windowRegistry is window.windowRegistry
+        assert other.applicationPreferences is window.applicationPreferences
+        assert other.mediaTypes is window.mediaTypes
+        assert other.pluginContributions is window.pluginContributions
+    finally:
+        other.close()
 
 
 def test_a_second_window_edits_the_same_project(MWEmptyProject):

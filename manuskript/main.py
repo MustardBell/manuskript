@@ -243,11 +243,16 @@ def prepare(arguments, tests=False):
         active_window_source=window_registry.active,
     )
 
-    # Main window
-    from manuskript.mainWindow import MainWindow
+    # Everything composed above, gathered into the one thing a window is
+    # given. This is the composition root and the only one: a window that
+    # had to be handed each service separately could compose a fallback
+    # for anything it was missed, and then be a second application
+    # wearing the shape of a view onto the first.
+    from manuskript.services.workspace_window_services import (
+        WorkspaceWindowServices,
+    )
 
-    MW = MainWindow(
-        settings_manager,
+    window_services = WorkspaceWindowServices(
         application_preferences=preferences,
         plugin_runtime=plugin_runtime,
         plugin_option_store=plugin_option_store,
@@ -258,6 +263,11 @@ def prepare(arguments, tests=False):
         project_runtime=project_runtime,
         window_registry=window_registry,
     )
+
+    # Main window
+    from manuskript.mainWindow import MainWindow
+
+    MW = MainWindow(window_services)
     # We store the system default cursor flash time to be able to restore it
     # later if necessary
     MW._defaultCursorFlashTime = qApp.cursorFlashTime()
