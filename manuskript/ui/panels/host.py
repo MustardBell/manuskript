@@ -1,25 +1,34 @@
-"""One window's panels, built from the shared registry.
+"""One window's panels: which of them it has, and where they are.
 
-Each workspace window owns one host. The host builds a panel's widget
-from its descriptor, wraps it in whatever its placement calls for, and
-keeps the living instance. It is the only code that knows how a panel is
-mounted -- which is what makes moving an instance to another window a
-change of host rather than a storm of signals.
+Each workspace window owns one host. It builds a panel's widget from its
+descriptor, keeps the living instance, and hands the instance on when the
+panel moves to another window -- which is what makes a move a change of
+owner rather than a storm of signals.
+
+What it no longer does itself, and each is one collaborator:
+
+* :mod:`mounts` fastens a panel into the window, one class per way.
+* :mod:`visibility` owns the toggle that shows and hides it, wherever it
+  turned out to be mounted.
+* :mod:`failures` says so when a panel could not be built.
+* :mod:`directory` is where the application's other hosts are, so a panel
+  that exists once can be found in whichever window has it.
+
+What is left here is ownership: the instances, and the four moves a panel
+can make -- opening, being released to another window, being torn off,
+coming back.
 """
-
-import logging
 
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional
 
-from PyQt5.QtWidgets import QAction, QWidget
+from PyQt5.QtWidgets import QWidget
 
 from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
+from manuskript.ui.panels.failures import PanelFailureReporter
 from manuskript.ui.panels.mounts import mounts_for
-
-
-LOGGER = logging.getLogger(__name__)
+from manuskript.ui.panels.visibility import PanelVisibility
 
 
 class PanelScopeError(Exception):
@@ -63,6 +72,11 @@ class PanelHost:
         # One mount per way of fastening a panel, looked up by placement.
         # The host asks a mount to do it and never asks which kind it is.
         self._mounts = mounts_for(window)
+        # What shows and hides a mounted panel, whichever thing it
+        # turns out to be sitting in.
+        self.visibility = PanelVisibility(window)
+        # Where a panel that could not be built is reported.
+        self.failures = PanelFailureReporter(window)
         directory.add(self)
 
     def instance(self, panel_id):
@@ -143,7 +157,7 @@ class PanelHost:
         except Exception as error:
             if mount is not None:
                 mount.discard(container)
-            self._report_failure(descriptor, error, context)
+            self.failures.report(descriptor, error, context)
             return None
 
         instance = PanelInstance(
@@ -156,7 +170,7 @@ class PanelHost:
         # Every mounted panel gets a toggle, dock or slot, so set_visible
         # can reach it and so putting it away puts away whatever it is
         # actually sitting in.
-        self._mount_action(instance)
+        self.visibility.bind(instance)
         self._instances[descriptor.id] = instance
         if container is not None:
             container.show()
@@ -169,33 +183,6 @@ class PanelHost:
             container.destroyed.connect(
                 partial(self._container_destroyed, instance.descriptor.id)
             )
-
-    def _report_failure(self, descriptor, error, context=None):
-        """Say a panel could not be built, without blocking on it.
-
-        This used to raise a modal dialog. A modal turns any factory
-        fault into something that waits for a person, which in a test
-        run is a hang rather than a failure -- the suite stopped at the
-        same point twice and I mistook it for two runs competing.
-
-        Told, not asked: the status bar carries it where the window has
-        one, and the log always does, so a broken panel costs the person
-        a line rather than their attention.
-        """
-        message = self.window.tr(
-            "The {} panel could not be opened: {}"
-        ).format(descriptor.title, error)
-        LOGGER.warning(
-            "Panel %s failed to build: %s", descriptor.id, error,
-        )
-        show_status = getattr(context, "show_status", None)
-        if show_status is None:
-            presenter = getattr(self.window, "statusPresenter", None)
-            show_status = (
-                presenter.show if presenter is not None else None
-            )
-        if show_status is not None:
-            show_status(message, 8000, 2)
 
     def _slot_splitter(self, descriptor):
         """The splitter a panel belongs in, if it belongs in one."""
@@ -213,63 +200,6 @@ class PanelHost:
         instance.slot_sizes = None
         if sizes and len(sizes) == splitter.count():
             splitter.setSizes(sizes)
-
-    @staticmethod
-    def _shown_thing(instance):
-        """What showing or hiding this panel means where it now sits.
-
-        The dock when it has one, the widget otherwise. Asking the
-        instance rather than the call site is the point: three places
-        mount panels, and one of them used to answer "the widget" for a
-        docked panel, so unchecking a moved panel emptied its dock and
-        left the frame standing.
-        """
-        if instance.container is not None:
-            return instance.container
-        return instance.widget
-
-    def _mount_action(self, instance):
-        """Give a mounted panel the one action that shows and hides it.
-
-        Everything that shows the panel -- toolbar buttons, menus, the
-        search jump -- mirrors this action, so no two of them can
-        disagree about what is on screen.
-        """
-        descriptor = instance.descriptor
-        target = self._shown_thing(instance)
-        action = QAction(
-            self.window.tr(descriptor.title),
-            self.window,
-        )
-        action.setCheckable(True)
-        action.setChecked(descriptor.default_visible)
-        action.toggled.connect(target.setVisible)
-        target.setVisible(descriptor.default_visible)
-        if instance.container is not None:
-            instance.container.visibilityChanged.connect(
-                partial(self._container_visibility_changed, descriptor.id)
-            )
-        instance.action = action
-        return action
-
-    def _container_visibility_changed(self, panel_id, visible):
-        """Follow a floating dock the person closed with its own button.
-
-        Only while floating, and that restriction is not caution but
-        correctness: Qt hides a docked widget whenever another tab in the
-        same area is selected, so treating every invisibility as "put
-        away" would close a panel merely tabbed behind its neighbour. A
-        floating dock is never tabbed, so there the signal means what it
-        appears to mean.
-        """
-        instance = self._instances.get(panel_id)
-        if instance is None or instance.action is None:
-            return
-        container = instance.container
-        if container is None or not container.isFloating():
-            return
-        if instance.action.isChecked() != visible:
-            instance.action.setChecked(visible)
 
     def release(self, panel_id):
         """Detach a living panel, leaving it whole.
@@ -300,16 +230,9 @@ class PanelHost:
             return None
         widget = instance.widget
         widget.hide()
-        if instance.action is not None:
-            # Stop driving whatever it was driving -- the widget in a
-            # slot, the dock when floating. The action belongs to the
-            # window and goes with it; an adopting host makes its own.
-            try:
-                instance.action.toggled.disconnect()
-            except TypeError:
-                pass
-            instance.action.setEnabled(False)
-            instance.action = None
+        # Stop the toggle driving whatever it was driving -- the widget in
+        # a slot, the dock when floating.
+        self.visibility.unbind(instance)
         splitter = self._slot_splitter(instance.descriptor)
         if splitter is not None and splitter.indexOf(widget) >= 0:
             instance.slot_sizes = splitter.sizes()
@@ -353,13 +276,13 @@ class PanelHost:
             container.show()
         # After the container is set, so the toggle drives the dock a
         # moved panel now lives in rather than the widget inside it.
-        self._mount_action(instance)
+        self.visibility.bind(instance)
         instance.host = self
         self._instances[descriptor.id] = instance
-        # Through the action, which is what makes it visible: showing the
+        # Through the toggle, which is what makes it visible: showing the
         # widget as well would only be a second way to say so, and every
         # extra show is a chance to take focus from somewhere.
-        instance.action.setChecked(True)
+        self.visibility.set_visible(instance)
         # Only once it is visible. A hidden child of a splitter has no
         # width, so restoring the arrangement before this would hand the
         # returning panel nothing and leave the rest as Qt left them.
@@ -390,11 +313,11 @@ class PanelHost:
         _parent, dock = mount.prepare(descriptor)
         mount.install_floating(descriptor, widget, dock)
         instance.container = dock
-        self._mount_action(instance)
+        self.visibility.bind(instance)
         instance.host = self
         self._instances[descriptor.id] = instance
         widget.show()
-        instance.action.setChecked(True)
+        self.visibility.set_visible(instance)
         return instance
 
     def redock(self, panel_id):
@@ -417,14 +340,10 @@ class PanelHost:
         )
 
     def set_visible(self, panel_id, visible=True):
-        """Toggle a panel through its own action, wherever it is shown.
-
-        Going through the action keeps every button that mirrors it in
-        agreement, which poking the widget directly would not.
-        """
+        """Show or hide one of this window's panels, by name."""
         instance = self._instances.get(panel_id)
-        if instance is not None and instance.action is not None:
-            instance.action.setChecked(visible)
+        if instance is not None:
+            self.visibility.set_visible(instance, visible)
 
     def close(self, panel_id):
         """Put a panel away. Its widget goes when nothing holds it."""
