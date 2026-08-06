@@ -122,6 +122,8 @@ class ProjectViewSet:
                 window,
                 runtime.settingsManager,
                 runtime.models,
+                # The project's, so both windows type into one text.
+                runtime.documentBuffers,
             ),
             result_views=lambda references: SearchResultViewAdapter(
                 window,

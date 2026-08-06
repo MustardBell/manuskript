@@ -18,6 +18,9 @@ from manuskript.projectManager import ProjectManager
 from manuskript.services.project_view_registry import (
     ProjectViewRegistry,
 )
+from manuskript.services.document_buffers import (
+    DocumentBufferRegistry,
+)
 from manuskript.services.revision_coordinator import (
     ProjectRevisionCoordinator,
 )
@@ -48,6 +51,11 @@ class ProjectRuntime(QObject):
         # Structure edits are undoable per project, and every window
         # showing the project shares the one history.
         self.undoStack = QUndoStack(self)
+        # One live text per document, shared by every view showing it.
+        # Project scope for the same reason the models are: a window
+        # closing is not a document closing, and the text a second
+        # window is still showing must not go with the first.
+        self.documentBuffers = DocumentBufferRegistry(self)
         self.revisionCoordinator = (
             revision_coordinator
             if revision_coordinator is not None

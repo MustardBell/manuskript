@@ -251,6 +251,13 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         final step every area came back showing whichever document was
         opened last rather than the one being read. The group records
         ``current`` for exactly this, and nothing was reading it.
+
+        Documents the outline no longer holds are skipped rather than
+        opened. A recorded arrangement can name something since deleted --
+        or belong to a different project entirely -- and asking to open an
+        id that resolves to nothing produced a tab bound to an invalid
+        index: a phantom in the tab bar, reported by tabOpenIndexes as a
+        document with no identity at all.
         """
         if self.editor_context is None:
             return
@@ -260,6 +267,8 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         )
         for document in group.documents:
             index = outline_model.getIndexByID(document)
+            if index is None or not index.isValid():
+                continue
             self.mainEditor.setCurrentModelIndex(
                 index,
                 newTab=True,

@@ -189,7 +189,14 @@ def test_working_area_follows_a_split_into_the_new_half(MWEmptyProject):
     window = MWEmptyProject
     editor = area(window)
     try:
-        documents(window, 1)
+        # Opened, not merely created: this used to lean on a tab an
+        # earlier test had left behind, and passed alone only because a
+        # phantom tab from a stale restore stood in for it.
+        opened = documents(window, 1)
+        window.mainEditor.setCurrentModelIndex(
+            window.mdlOutline.getIndexByID(opened[0]),
+            newTab=True,
+        )
         editor.split(state=1)
 
         assert window.mainEditor.currentTabWidget() is editor.secondTab.tab

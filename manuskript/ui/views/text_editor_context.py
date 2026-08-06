@@ -14,9 +14,12 @@ class TextEditorContext:
     invoke_outline_command: Callable[[DocumentCommand], None]
     markup_profiles: Optional[object] = None
     page_types: Optional[object] = None
+    #: The project's text buffers, so two views of one document are two
+    #: viewports on one text rather than two copies of it.
+    document_buffers: Optional[object] = None
 
 
-def text_editor_context_for(window, settings, models):
+def text_editor_context_for(window, settings, models, buffers=None):
     """Adapt the main UI to the text editor action boundary.
 
     Takes the project's models rather than reading them off the window.
@@ -52,6 +55,7 @@ def text_editor_context_for(window, settings, models):
 
     return TextEditorContext(
         settings=settings,
+        document_buffers=buffers,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,
