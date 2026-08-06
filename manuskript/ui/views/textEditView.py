@@ -20,6 +20,7 @@ from manuskript.enums import Outline, World, Character, Plot
 from manuskript import functions as F
 from manuskript.models import outlineModel, outlineItem
 from manuskript.ui.highlighters import BasicHighlighter
+from manuskript.domain.text import plain_text
 from manuskript.ui import style as S
 from manuskript.functions import Spellchecker
 from manuskript.models.characterModel import Character, CharacterInfo
@@ -30,9 +31,6 @@ from manuskript.ui.views.text_editor_settings import (
 
 import logging
 LOGGER = logging.getLogger(__name__)
-
-# See implementation of QTextDocument::toPlainText()
-PLAIN_TRANSLATION_TABLE = {0x2028: "\n", 0x2029: "\n", 0xfdd0: "\n", 0xfdd1: "\n"}
 
 class textEditView(QTextEdit):
 
@@ -478,10 +476,14 @@ class textEditView(QTextEdit):
         self.updateTimerConnection = self.document().contentsChanged.connect(self.updateTimer.start, F.AUC)
 
     def toIdealText(self):
-        """QTextDocument::toPlainText() replaces NBSP with spaces, which we don't want.
-        QTextDocument::toRawText() replaces nothing, but that leaves fancy paragraph and line separators that users would likely complain about.
-        This reimplements toPlainText(), except without the NBSP destruction."""
-        return self.document().toRawText().translate(PLAIN_TRANSLATION_TABLE)
+        """The text of this editor's document, NBSP and all.
+
+        The one definition of that, in manuskript.domain.text, so that the
+        buffer this editor may be sharing answers identically -- comparing
+        two spellings of the same text is how undo history got thrown away
+        once already.
+        """
+        return plain_text(self.document())
     toPlainText = toIdealText
 
     def updateText(self):

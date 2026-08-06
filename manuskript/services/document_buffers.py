@@ -28,6 +28,8 @@ import logging
 from PyQt5.QtCore import QObject, QPersistentModelIndex, QTimer
 from PyQt5.QtGui import QTextDocument
 
+from manuskript.domain.text import as_text, plain_text
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -178,14 +180,13 @@ class TextBuffer(QObject):
         return True
 
     def text(self):
-        """The buffer's text, with the substitutions views make undone.
+        """The buffer's text, read the one way the whole application reads it.
 
-        Matches textEditView.toIdealText: toPlainText replaces non-breaking
-        spaces, and the manuscript is entitled to keep them.
+        Asked of the domain rather than of the editor. What plain text means
+        for a QTextDocument used to be a constant in textEditView, so this
+        service imported a widget module to learn what its own text said.
         """
-        from manuskript.ui.views.textEditView import PLAIN_TRANSLATION_TABLE
-
-        return self.document.toRawText().translate(PLAIN_TRANSLATION_TABLE)
+        return plain_text(self.document)
 
     def flush(self):
         """Submit now rather than when the timer says so."""
@@ -278,8 +279,6 @@ class DocumentBufferRegistry(QObject):
 
 def text_of(model, index):
     """The model's text for a cell, as a string."""
-    from manuskript import functions as F
-
-    return F.toString(model.data(model.index(
+    return as_text(model.data(model.index(
         index.row(), index.column(), index.parent(),
     )))
