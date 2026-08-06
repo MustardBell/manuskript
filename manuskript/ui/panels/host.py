@@ -14,15 +14,10 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
-    QAction,
-    QDockWidget,
-    QSplitter,
-    QWidget,
-)
+from PyQt5.QtWidgets import QAction, QWidget
 
 from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
+from manuskript.ui.panels.mounts import mounts_for
 
 
 LOGGER = logging.getLogger(__name__)
@@ -61,6 +56,9 @@ class PanelHost:
         self.window = window
         self.registry = registry
         self._instances = {}
+        # One mount per way of fastening a panel, looked up by placement.
+        # The host asks a mount to do it and never asks which kind it is.
+        self._mounts = mounts_for(window)
         PanelHost._hosts.add(self)
 
     #: Every host alive, so a singleton panel can be found wherever it
@@ -108,81 +106,76 @@ class PanelHost:
                     "already open in another window; move it rather "
                     "than opening another.".format(panel_id)
                 )
-        if descriptor.placement == SPLITTER_SLOT:
-            return self._open_splitter(descriptor, context)
-        return self._open_dock(descriptor, context)
+        return self._build(descriptor, context)
 
-    def _open_splitter(self, descriptor, context):
-        """Build a panel into the splitter slot its descriptor names."""
-        window = self.window
-        slot = descriptor.slot
-        splitter = window.findChild(QSplitter, slot.splitter)
+    def _mount(self, descriptor):
+        """How this panel is fastened, by what its descriptor declares."""
         try:
-            if splitter is None:
-                raise LookupError(
-                    "This window has no splitter named {!r}.".format(
-                        slot.splitter
-                    )
+            return self._mounts[descriptor.placement]
+        except KeyError:
+            raise LookupError(
+                "Panel {} asks to be mounted as {!r}, and this window "
+                "has no way to do that.".format(
+                    descriptor.id, descriptor.placement,
                 )
-            widget = descriptor.widget_factory(context, splitter)
-            if not isinstance(widget, QWidget):
-                raise TypeError(
-                    "Panel factories must return QWidget instances."
-                )
-        except Exception as error:
-            self._report_failure(descriptor, error, context)
-            return None
-        splitter.insertWidget(slot.index, widget)
-        instance = PanelInstance(
-            descriptor=descriptor,
-            widget=widget,
-            host=self,
-        )
-        self._mount_action(instance)
-        self._instances[descriptor.id] = instance
-        return instance
+            ) from None
 
-    def _open_dock(self, descriptor, context):
-        window = self.window
-        dock = QDockWidget(descriptor.title, window)
-        dock.setObjectName(self._dock_name(descriptor))
-        dock.setAttribute(Qt.WA_DeleteOnClose, True)
+    def _build(self, descriptor, context):
+        """Build a panel and fasten it, whichever way it is fastened.
+
+        One path for both placements. There were two, alike in every step
+        but the mounting, so a change to what opening a panel means had to
+        be made twice -- and the toggle a dock panel needs was for a while
+        made in only one of them.
+        """
+        mount = None
+        container = None
         try:
+            # Inside the report, like everything else that can go wrong
+            # here: a panel asking for a mounting this window has not got
+            # is still a broken panel, not a reason to take down whatever
+            # asked for it.
+            mount = self._mount(descriptor)
+            parent, container = mount.prepare(descriptor)
             if descriptor.widget_factory is None:
                 raise TypeError(
-                    "Panel {} has no widget factory.".format(
-                        descriptor.id
-                    )
+                    "Panel {} has no widget factory.".format(descriptor.id)
                 )
-            widget = descriptor.widget_factory(context, dock)
+            widget = descriptor.widget_factory(context, parent)
             if not isinstance(widget, QWidget):
                 raise TypeError(
                     "Panel factories must return QWidget instances."
                 )
+            mount.install(descriptor, widget, container)
         except Exception as error:
-            dock.deleteLater()
+            if mount is not None:
+                mount.discard(container)
             self._report_failure(descriptor, error, context)
             return None
 
-        dock.setWidget(widget)
-        dock.destroyed.connect(
-            partial(self._container_destroyed, descriptor.id)
-        )
-        self._place_dock(dock)
         instance = PanelInstance(
             descriptor=descriptor,
             widget=widget,
-            container=dock,
+            container=container,
             host=self,
         )
-        # A dock panel gets a toggle like any other, so set_visible can
-        # reach it and so putting it away puts the dock away. It had none
-        # before, which is why only two of the three mount paths could
-        # even be wrong about what the toggle drives.
+        self._watch_container(instance)
+        # Every mounted panel gets a toggle, dock or slot, so set_visible
+        # can reach it and so putting it away puts away whatever it is
+        # actually sitting in.
         self._mount_action(instance)
         self._instances[descriptor.id] = instance
-        dock.show()
+        if container is not None:
+            container.show()
         return instance
+
+    def _watch_container(self, instance):
+        """Forget a panel whose container Qt destroys under us."""
+        container = instance.container
+        if container is not None:
+            container.destroyed.connect(
+                partial(self._container_destroyed, instance.descriptor.id)
+            )
 
     def _report_failure(self, descriptor, error, context=None):
         """Say a panel could not be built, without blocking on it.
@@ -211,55 +204,9 @@ class PanelHost:
         if show_status is not None:
             show_status(message, 8000, 2)
 
-    @staticmethod
-    def _dock_name(descriptor):
-        """The one name this panel's dock answers to.
-
-        Saved window layouts identify docks by it, so a panel that had
-        one before the panel vocabulary existed keeps it.
-        """
-        return (
-            descriptor.object_name
-            or "panel.{}".format(descriptor.id)
-        )
-
-    def _place_dock(self, dock, default_area=Qt.RightDockWidgetArea):
-        """Put a dock where the person last left it, if that is known.
-
-        Panels are built when they are asked for, which is long after
-        the window applied its saved layout -- and QMainWindow.restoreState
-        can only place docks that existed when it ran. So every dock
-        created later asks to be restored by name, and falls back to the
-        default area when the layout has never seen it.
-        """
-        window = self.window
-        # Asked for by name before being put anywhere. Adding it to an
-        # area first commits it there and makes the restore silently do
-        # nothing -- it still reports success, which is how this looked
-        # like Qt ignoring us rather than us asking too late.
-        #
-        # This is also all that is needed for a panel whose plugin is
-        # temporarily away. QMainWindow.saveState keeps the entry for a
-        # dock it restored but never found, and keeps it across any
-        # number of further sessions, so the place is held without our
-        # help: measured over three saves with the dock absent, then
-        # restored to the same area when it came back. No placeholder
-        # dock scheme is required, and building one would put a widget
-        # on screen to solve a problem Qt has already solved.
-        if window.restoreDockWidget(dock):
-            return True
-        # A dock the saved layout has never seen: it goes where panels
-        # of its kind go.
-        window.addDockWidget(default_area, dock)
-        return False
-
     def _slot_splitter(self, descriptor):
         """The splitter a panel belongs in, if it belongs in one."""
-        if descriptor.placement != SPLITTER_SLOT or descriptor.slot is None:
-            return None
-        return self.window.findChild(
-            QSplitter, descriptor.slot.splitter,
-        )
+        return self._mounts[SPLITTER_SLOT].find(descriptor)
 
     @staticmethod
     def _restore_slot_sizes(splitter, instance):
@@ -402,26 +349,15 @@ class PanelHost:
                 )
             )
         widget = instance.widget
-        if descriptor.placement == SPLITTER_SLOT:
-            splitter = self._slot_splitter(descriptor)
-            if splitter is None:
-                raise LookupError(
-                    "This window has no splitter named {!r}.".format(
-                        descriptor.slot.splitter
-                    )
-                )
-            splitter.insertWidget(descriptor.slot.index, widget)
-        else:
-            dock = QDockWidget(descriptor.title, self.window)
-            dock.setObjectName(self._dock_name(descriptor))
-            dock.setAttribute(Qt.WA_DeleteOnClose, True)
-            dock.setWidget(widget)
-            dock.destroyed.connect(
-                partial(self._container_destroyed, descriptor.id)
-            )
-            self._place_dock(dock)
-            instance.container = dock
-            dock.show()
+        mount = self._mount(descriptor)
+        # A container it did not arrive with: the one it had belonged to
+        # the window that let it go.
+        _parent, container = mount.prepare(descriptor)
+        mount.install(descriptor, widget, container)
+        instance.container = container
+        self._watch_container(instance)
+        if container is not None:
+            container.show()
         # After the container is set, so the toggle drives the dock a
         # moved panel now lives in rather than the widget inside it.
         self._mount_action(instance)
@@ -455,15 +391,11 @@ class PanelHost:
         descriptor = instance.descriptor
         instance = self._detach(panel_id, keep=True)
         widget = instance.widget
-        dock = QDockWidget(self.window.tr(descriptor.title), self.window)
-        # The same name it has when docked. A panel is one thing whether
-        # it is floating or not, and Qt records floating state against
-        # the name -- two names would mean a panel left floating came
-        # back docked, having saved its geometry under a name nothing
-        # would look for again.
-        dock.setObjectName(self._dock_name(descriptor))
-        dock.setWidget(widget)
-        dock.setFloating(True)
+        # A dock whatever the panel's placement: floating free is the one
+        # thing every panel does the same way.
+        mount = self._mounts[DOCK]
+        _parent, dock = mount.prepare(descriptor)
+        mount.install_floating(descriptor, widget, dock)
         instance.container = dock
         self._mount_action(instance)
         instance.host = self
