@@ -356,7 +356,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.timerUpdateWidgets.timeout.connect(self.updateAllWidgets)
 
         # Labels
-        self.lstLabels.setModel(self.mw.mdlLabels)
+        self.lstLabels.setModel(self._models().labels)
         self.lstLabels.setRowHidden(0, True)
         self.lstLabels.clicked.connect(self.updateLabelColor)
         self.btnLabelAdd.clicked.connect(self.addLabel)
@@ -364,7 +364,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.btnLabelColor.clicked.connect(self.setLabelColor)
 
         # Statuses
-        self.lstStatus.setModel(self.mw.mdlStatus)
+        self.lstStatus.setModel(self._models().statuses)
         self.lstStatus.setRowHidden(0, True)
         self.btnStatusAdd.clicked.connect(self.addStatus)
         self.btnStatusRemove.clicked.connect(self.removeStatus)
@@ -401,6 +401,14 @@ class settingsWindow(QWidget, Ui_Settings):
         self.setButtonColor(self.btnTooltipBorderColor, self.settings.tooltipStyle["borderColor"])
         self.btnTooltipBorderColor.clicked.connect(self.chooseTooltipBorderColor)
         self.updateTooltipControlsState()
+
+    def _models(self):
+        """The project's models, from the runtime that owns them.
+
+        Read when needed rather than captured: this window outlives any
+        one project, and the models under it are replaced with each.
+        """
+        return self.mw.projectRuntime.models
 
     def setTab(self, tab):
 
@@ -884,11 +892,11 @@ class settingsWindow(QWidget, Ui_Settings):
         ####################################################################################################
 
     def addStatus(self):
-        self.mw.mdlStatus.appendRow(QStandardItem(self.tr("New status")))
+        self._models().statuses.appendRow(QStandardItem(self.tr("New status")))
 
     def removeStatus(self):
         for i in self.lstStatus.selectedIndexes():
-            self.mw.mdlStatus.removeRows(i.row(), 1)
+            self._models().statuses.removeRows(i.row(), 1)
 
         ####################################################################################################
         #                                           LABELS                                                 #
@@ -896,30 +904,30 @@ class settingsWindow(QWidget, Ui_Settings):
 
     def updateLabelColor(self, index):
         # px = QPixmap(64, 64)
-        # px.fill(iconColor(self.mw.mdlLabels.item(index.row()).icon()))
+        # px.fill(iconColor(self._models().labels.item(index.row()).icon()))
         # self.btnLabelColor.setIcon(QIcon(px))
         self.btnLabelColor.setStyleSheet("background:{};".format(
-            iconColor(self.mw.mdlLabels.item(index.row()).icon()).name()))
+            iconColor(self._models().labels.item(index.row()).icon()).name()))
         self.btnLabelColor.setEnabled(True)
 
     def addLabel(self):
         px = QPixmap(32, 32)
         px.fill(Qt.transparent)
-        self.mw.mdlLabels.appendRow(QStandardItem(QIcon(px), self.tr("New label")))
+        self._models().labels.appendRow(QStandardItem(QIcon(px), self.tr("New label")))
 
     def removeLabel(self):
         for i in self.lstLabels.selectedIndexes():
-            self.mw.mdlLabels.removeRows(i.row(), 1)
+            self._models().labels.removeRows(i.row(), 1)
 
     def setLabelColor(self):
         index = self.lstLabels.currentIndex()
-        color = iconColor(self.mw.mdlLabels.item(index.row()).icon())
+        color = iconColor(self._models().labels.item(index.row()).icon())
         self.colorDialog = QColorDialog(color, self)
         color = self.colorDialog.getColor(color)
         if color.isValid():
             px = QPixmap(32, 32)
             px.fill(color)
-            self.mw.mdlLabels.item(index.row()).setIcon(QIcon(px))
+            self._models().labels.item(index.row()).setIcon(QIcon(px))
             self.updateLabelColor(index)
 
         ####################################################################################################

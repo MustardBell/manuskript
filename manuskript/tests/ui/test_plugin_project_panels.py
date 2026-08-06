@@ -22,8 +22,16 @@ class PanelTestWindow(QMainWindow):
         self.projectManager = MagicMock()
         self.projectManager.session.is_open = True
         self.currentProject = "/project/book.msk"
-        self.projectPluginData = ProjectPluginData()
+        # Plugin data belongs to the project, so it is reached through
+        # the runtime that owns it rather than off this window.
+        self.projectRuntime = MagicMock()
+        self.projectRuntime.models.plugin_data = ProjectPluginData()
         self.statusPresenter = MagicMock()
+
+    @property
+    def pluginData(self):
+        """This window's project's plugin data, for the assertions."""
+        return self.projectRuntime.models.plugin_data
 
 
 def panel_runtime(factory):
@@ -65,7 +73,7 @@ def test_project_panel_receives_scoped_raw_file_context():
         "Project note\n",
     )
     window.projectManager.startTimerNoChanges.assert_called_once_with()
-    assert window.projectPluginData.project_files() == (
+    assert window.pluginData.project_files() == (
         (
             "plugins/example.notes/notes/main.txt",
             "Project note\n",

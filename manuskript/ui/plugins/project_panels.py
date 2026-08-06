@@ -179,7 +179,7 @@ class ProjectPanelHost:
         plugin_context = PluginProjectContext(
             plugin_id=record.plugin_id,
             project_file=window.currentProject,
-            files=window.projectPluginData.namespace(
+            files=window.projectRuntime.models.plugin_data.namespace(
                 record.plugin_id,
                 on_change=window.projectManager.startTimerNoChanges,
             ),
@@ -262,7 +262,7 @@ class ProjectPanelHost:
             return
         if self.rawDataDialog is None:
             self.rawDataDialog = RawPluginDataDialog(
-                self.window.projectPluginData,
+                self.window.projectRuntime.models.plugin_data,
                 on_change=self.window.projectManager.startTimerNoChanges,
                 parent=self.window,
             )

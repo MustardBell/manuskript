@@ -27,7 +27,7 @@ class TargetsDialog(QWidget, Ui_targets):
         self.timer.start(2000)
 
     def getDraftStats(self):
-        item = self.mw.mdlOutline.rootItem
+        item = self.mw.projectRuntime.models.outline.rootItem
 
         wc = item.data(Outline.wordCount)
         goal = item.data(Outline.goal)

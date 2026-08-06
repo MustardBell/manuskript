@@ -579,7 +579,7 @@ class EditorWorkspaceHost(QObject):
             plugin_id=record.plugin_id,
             project_file=self.window.currentProject or "",
             selected_item_ids=selected_ids,
-            files=self.window.projectPluginData.namespace(
+            files=self.window.projectRuntime.models.plugin_data.namespace(
                 record.plugin_id,
                 on_change=self.window.projectManager.startTimerNoChanges,
             ),
