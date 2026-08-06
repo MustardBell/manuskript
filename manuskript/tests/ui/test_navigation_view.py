@@ -15,9 +15,10 @@ def make_window():
 
 def test_plot_navigation_does_not_reselect_current_plot():
     window = make_window()
+    runtime = MagicMock()
     window.tabMain.currentIndex.return_value = window.TabPlots
     window.lstPlots.currentPlotID.return_value = "plot-1"
-    view = MainNavigationView(window)
+    view = MainNavigationView(window, runtime)
 
     view.navigate(("plot", "plot-1"))
 
@@ -27,12 +28,13 @@ def test_plot_navigation_does_not_reselect_current_plot():
 
 def test_outline_navigation_selects_target_from_invalid_selection():
     window = make_window()
+    runtime = MagicMock()
     current = MagicMock()
     current.isValid.return_value = False
     window.treeOutlineOutline.selectionModel.return_value.currentIndex.return_value = current
     target = MagicMock()
-    window.mdlOutline.getIndexByID.return_value = target
-    view = MainNavigationView(window)
+    runtime.models.outline.getIndexByID.return_value = target
+    view = MainNavigationView(window, runtime)
 
     view.navigate(("outline", "scene-1"))
 
@@ -46,7 +48,8 @@ def test_outline_navigation_selects_target_from_invalid_selection():
 
 def test_character_navigation_clears_selection_for_empty_target():
     window = make_window()
-    view = MainNavigationView(window)
+    runtime = MagicMock()
+    view = MainNavigationView(window, runtime)
 
     view.navigate(("character", None))
 
@@ -56,7 +59,8 @@ def test_character_navigation_clears_selection_for_empty_target():
 
 def test_navigation_view_updates_history_actions():
     window = make_window()
-    view = MainNavigationView(window)
+    runtime = MagicMock()
+    view = MainNavigationView(window, runtime)
 
     view.set_history_actions(
         can_go_back=True,

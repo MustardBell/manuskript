@@ -1,8 +1,13 @@
 from manuskript.models.references import ReferenceNavigation
 
 
-def reference_navigation_for(window):
-    """Adapt one main window to the reference navigation interface."""
+def reference_navigation_for(window, models):
+    """Adapt one main window to the reference navigation interface.
+
+    The window is what gets navigated -- tabs, lists, the editor. The
+    models it navigates to are the project's, and are given rather than
+    read off the window that happens to have them installed.
+    """
 
     def open_character(character_id):
         item = window.lstCharacters.getItemByID(character_id)
@@ -13,7 +18,7 @@ def reference_navigation_for(window):
         return True
 
     def open_text(text_id):
-        index = window.mdlOutline.getIndexByID(text_id)
+        index = models.outline.getIndexByID(text_id)
         if not index.isValid():
             return False
         window.tabMain.setCurrentIndex(window.TabRedac)
@@ -29,11 +34,13 @@ def reference_navigation_for(window):
         return True
 
     def open_world(world_id):
-        item = window.mdlWorld.itemByID(world_id)
+        item = models.world.itemByID(world_id)
         if item is None:
             return False
         window.tabMain.setCurrentIndex(window.TabWorld)
-        window.treeWorld.setCurrentIndex(window.mdlWorld.indexFromItem(item))
+        window.treeWorld.setCurrentIndex(
+            models.world.indexFromItem(item)
+        )
         return True
 
     return ReferenceNavigation(

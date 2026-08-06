@@ -1,8 +1,12 @@
 class MainNavigationView:
     """Apply a history target to concrete main-window widgets."""
 
-    def __init__(self, window):
+    def __init__(self, window, runtime):
         self.window = window
+        # The window is what gets navigated; the models navigated to
+        # belong to the project. Read from the runtime when needed,
+        # because this view is built before any project is open.
+        self._runtime = runtime
         self._handlers = {
             "character": self._navigate_character,
             "plot": self._navigate_plot,
@@ -11,6 +15,10 @@ class MainNavigationView:
             "redac": self._navigate_redaction,
             "main": self._navigate_main,
         }
+
+    @property
+    def _models(self):
+        return self._runtime.models
 
     def navigate(self, entry):
         handler = self._handlers.get(entry[0])
@@ -59,7 +67,7 @@ class MainNavigationView:
         index = self.window.worldController.current_index()
         if (
             not index.isValid()
-            or self.window.mdlWorld.ID(index) != world_id
+            or self._models.world.ID(index) != world_id
         ):
             self.window.worldController.select_by_id(world_id)
 
@@ -79,10 +87,10 @@ class MainNavigationView:
         current = selection.currentIndex()
         if (
             current.isValid()
-            and self.window.mdlOutline.ID(current) == outline_id
+            and self._models.outline.ID(current) == outline_id
         ):
             return
-        outline = self.window.mdlOutline.getIndexByID(outline_id)
+        outline = self._models.outline.getIndexByID(outline_id)
         if outline is not None:
             tree.setCurrentIndex(outline)
 

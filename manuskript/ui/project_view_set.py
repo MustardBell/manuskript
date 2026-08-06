@@ -114,10 +114,14 @@ class ProjectViewSet:
             open_indexes=window.openIndexes,
             text_editors=lambda: window.findChildren(textEditView),
             completers=lambda: window.findChildren(MDEditCompleter),
-            navigation=reference_navigation_for(window),
+            navigation=reference_navigation_for(
+                window,
+                runtime.models,
+            ),
             text_editor_context=lambda: text_editor_context_for(
                 window,
                 runtime.settingsManager,
+                runtime.models,
             ),
             result_views=lambda references: SearchResultViewAdapter(
                 window,

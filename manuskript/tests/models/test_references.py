@@ -22,7 +22,7 @@ def test_references(MWSampleProject):
             statuses=MW.mdlStatus,
             labels=MW.mdlLabels,
         ),
-        reference_navigation_for(MW),
+        reference_navigation_for(MW, MW.projectRuntime.models),
     )
 
     # References

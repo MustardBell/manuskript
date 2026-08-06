@@ -165,7 +165,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # services every panel needs, rather than a window that can
         # answer anything.
         self.navigationController = NavigationController(
-            MainNavigationView(self)
+            MainNavigationView(self, self.projectRuntime)
         )
         self.history = self.navigationController.history
         # Panel controllers reach the history directly. Pushing an entry
