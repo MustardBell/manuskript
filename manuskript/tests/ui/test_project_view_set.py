@@ -100,3 +100,24 @@ def test_editors_are_asked_for_freshly_each_time(MWEmptyProject):
 
     assert first is not second
     assert list(first) == list(second)
+
+
+def test_panel_navigation_needs_no_window():
+    """Whether the selection was empty decides whether an entry replaces
+    the last one, and the history has always taken that as a parameter --
+    so it is passed rather than stored where both sides can reach it.
+    """
+    from unittest.mock import MagicMock
+
+    from manuskript.ui.panel_services import PanelNavigation
+
+    history = MagicMock()
+    navigation = PanelNavigation(history)
+
+    navigation.record(("character", "alice"), selection_empty=False)
+    navigation.record(("character", None), selection_empty=True)
+
+    assert history.record.call_args_list == [
+        (((("character", "alice"),)), {"replace": False}),
+        (((("character", None),)), {"replace": True}),
+    ]

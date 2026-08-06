@@ -164,7 +164,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Panel controllers are given the panel they drive and the two
         # services every panel needs, rather than a window that can
         # answer anything.
-        self.panelNavigation = PanelNavigation(self)
+        self.navigationController = NavigationController(
+            MainNavigationView(self)
+        )
+        self.history = self.navigationController.history
+        # Panel controllers reach the history directly. Pushing an entry
+        # used to read a private flag off this window, which made three
+        # controllers writers of one window attribute.
+        self.panelNavigation = PanelNavigation(self.navigationController)
         self.panelDialogs = PanelDialogs(self)
         self.characterController = CharacterController(
             CharacterModels(self.projectRuntime),
@@ -184,10 +191,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.panelNavigation,
             self.panelDialogs,
         )
-        self.navigationController = NavigationController(
-            MainNavigationView(self)
-        )
-        self.history = self.navigationController.history
         # Aliases onto the runtime for everything that still reaches
         # these by attribute. They retire as callers learn to ask the
         # runtime; what they name has moved, not what it does.

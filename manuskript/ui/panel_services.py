@@ -17,23 +17,17 @@ from PyQt5.QtWidgets import QColorDialog, QDialog, QMessageBox
 class PanelNavigation:
     """Records where the person just went, for the history.
 
-    The two halves were always used together: push an entry, then say
-    whether the selection it came from was empty, because that is what
-    decides whether the entry replaces the last one or follows it.
-    Separately they read as unrelated statements, and one was a private
-    attribute reached across an object boundary.
+    Talks to the navigation history rather than to a window. Whether the
+    selection was empty decides whether the entry replaces the last one
+    or follows it, and the history has always taken that as a parameter
+    -- so it is passed, not stored somewhere both sides can reach.
     """
 
-    def __init__(self, window):
-        self._window = window
+    def __init__(self, history):
+        self._history = history
 
     def record(self, entry, selection_empty):
-        self._window.pushHistory(entry)
-        self._window._previousSelectionEmpty = selection_empty
-
-    def note_selection(self, selection_empty):
-        """Say what the selection is without recording a visit."""
-        self._window._previousSelectionEmpty = selection_empty
+        self._history.record(entry, replace=selection_empty)
 
 
 class PanelDialogs:
