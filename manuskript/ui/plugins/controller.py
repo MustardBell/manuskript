@@ -27,11 +27,12 @@ class PluginUiController:
     workspaces, and the dialogs it opens. It used to describe itself as
     application-level, which was true only while there was one window.
 
-    What is genuinely application scope is passed in and shared by every
-    window -- the plugin runtime, the option store, the media type
-    registry -- and :func:`shared_services` says which, so that a later
-    change cannot quietly give one window its own copy of state the
-    others are reading.
+    What is genuinely application scope arrives as the contribution
+    service: the runtime, the option store, the media type registry, and
+    the one announcement that the set of contributions changed. Every
+    window subscribes to that and refreshes its own view; no window
+    refreshes anybody else's, and none of them can miss the news.
+    SHARED_SERVICES names what must be the same object in every window.
 
     The page type and markup profile services are deliberately per
     window: each reports errors to its own status bar and reads the
@@ -40,23 +41,37 @@ class PluginUiController:
     """
 
     #: Attributes that must be the same object in every window.
-    SHARED_SERVICES = ("runtime", "option_store", "mediaTypes")
+    SHARED_SERVICES = (
+        "contributions", "runtime", "option_store", "mediaTypes",
+    )
 
-    def __init__(self, window, runtime, option_store, media_types=None):
+    def __init__(self, window, contributions, option_store=None,
+                 media_types=None):
         self.window = window
-        self.runtime = runtime
-        self.option_store = option_store
-        self.mediaTypes = (
-            media_types if media_types is not None else core_registry()
+        self.contributions = contributions
+        self.runtime = contributions.runtime
+        self.option_store = (
+            option_store
+            if option_store is not None
+            else contributions.optionStore
         )
+        self.mediaTypes = (
+            media_types
+            if media_types is not None
+            else contributions.mediaTypes
+        )
+        # Every window refreshes its own view when the set of
+        # contributions changes, rather than only the window whose
+        # plugin manager happened to make the change.
+        contributions.changed.connect(self.refresh_contributions)
         self.markupProfiles = MarkupProfileService(
-            runtime.registry,
+            contributions.registry,
             report_error=window.statusPresenter.show,
             parent=window,
         )
         self.pageTypes = PageTypeService(
-            runtime.registry,
-            option_store=option_store,
+            contributions.registry,
+            option_store=self.option_store,
             media_types=self.mediaTypes,
             report_error=window.statusPresenter.show,
             source_provider=self._page_source,
@@ -80,12 +95,12 @@ class PluginUiController:
         self.globalActions = (self.menu.menuAction(),)
         self.projectPanels = ProjectPanelHost(
             window,
-            runtime,
+            self.runtime,
             menu=self.menu,
         )
         self.editorWorkspaces = EditorWorkspaceHost(
             window,
-            runtime,
+            self.runtime,
             menu=self.menu,
         )
 
@@ -112,16 +127,13 @@ class PluginUiController:
     def show_manager(self):
         if self.manager is None:
             self.manager = PluginManagerDialog(
-                self.runtime,
+                self.contributions,
                 self.window,
                 option_store=self.option_store,
                 settings_context_provider=self._settings_context,
                 media_types=self.mediaTypes,
             )
             self.manager.finished.connect(self._manager_closed)
-            self.manager.pluginsChanged.connect(
-                self.refresh_contributions
-            )
         self.manager.show()
         self.manager.raise_()
         self.manager.activateWindow()

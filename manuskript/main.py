@@ -22,6 +22,9 @@ from manuskript.services.media_type_preferences import (
 )
 from manuskript.panels import PanelRegistry
 from manuskript.plugins.runtime import PluginRuntime
+from manuskript.services.plugin_contributions import (
+    PluginContributionService,
+)
 from manuskript.services.plugin_options import PluginOptionStore
 from manuskript.services.plugin_preferences import PluginPreferences
 from manuskript.version import getVersion
@@ -200,6 +203,14 @@ def prepare(arguments, tests=False):
     media_type_preferences.apply(media_types)
     plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
+    # What plugins contribute is one application-wide fact, and so is the
+    # news that it changed. Windows subscribe rather than each telling
+    # itself.
+    plugin_contributions = PluginContributionService(
+        plugin_runtime,
+        option_store=plugin_option_store,
+        media_types=media_types,
+    )
     # Every panel a window can show, core's and plugins' alike, in one
     # application-scope list. Windows build their own copies from it.
     panel_registry = PanelRegistry()
@@ -236,6 +247,7 @@ def prepare(arguments, tests=False):
         application_preferences=preferences,
         plugin_runtime=plugin_runtime,
         plugin_option_store=plugin_option_store,
+        plugin_contributions=plugin_contributions,
         media_types=media_types,
         media_type_preferences=media_type_preferences,
         panel_registry=panel_registry,

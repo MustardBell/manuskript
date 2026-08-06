@@ -704,3 +704,80 @@ def test_application_scope_plugin_services_are_shared(MWEmptyProject):
             ), name
     finally:
         other.close()
+
+
+def test_a_plugin_change_reaches_every_window(MWEmptyProject):
+    """Enabling a plugin from one window used to leave the other's
+    menus, page types and card styles as they were -- silently, because
+    the announcement was made by that window's dialog to itself.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        heard = {"a": 0, "b": 0}
+        window.pluginUi.pageTypes.contributionsChanged.connect(
+            lambda: heard.__setitem__("a", heard["a"] + 1)
+        )
+        other.pluginUi.pageTypes.contributionsChanged.connect(
+            lambda: heard.__setitem__("b", heard["b"] + 1)
+        )
+
+        # What enabling a plugin amounts to, said once.
+        window.pluginContributions.announce()
+
+        assert heard == {"a": 1, "b": 1}
+    finally:
+        other.close()
+
+
+def test_every_window_shares_one_contribution_service(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        assert (
+            other.pluginContributions is window.pluginContributions
+        )
+        assert (
+            other.pluginUi.contributions
+            is window.pluginUi.contributions
+        )
+    finally:
+        other.close()
+
+
+def test_a_newly_contributed_panel_appears_in_both_windows(
+        MWEmptyProject):
+    """The declaration was already shared; what was missing was telling
+    the other window to look again.
+    """
+    from PyQt5.QtWidgets import QPlainTextEdit
+
+    from manuskript.plugins.api import (
+        ExtensionDescriptor,
+        ProjectPanelContribution,
+    )
+
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    registry = window.pluginRuntime.registry
+    try:
+        registrar = registry.registrar("vendor.late")
+        registrar.register_project_panel(ProjectPanelContribution(
+            descriptor=ExtensionDescriptor(
+                "vendor.late.panel", "Late panel",
+            ),
+            widget_factory=lambda context, parent: QPlainTextEdit(
+                parent
+            ),
+            default_file="late/main.txt",
+        ))
+        registry.install("vendor.late", registrar.contributions)
+
+        window.pluginContributions.announce()
+
+        assert "vendor.late.panel" in window.pluginUi.projectPanels.actions
+        assert "vendor.late.panel" in other.pluginUi.projectPanels.actions
+    finally:
+        registry.remove_plugin("vendor.late")
+        window.pluginContributions.announce()
+        other.close()

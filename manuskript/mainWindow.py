@@ -34,6 +34,9 @@ from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.ui.panels.core import core_panel_factories
+from manuskript.services.plugin_contributions import (
+    PluginContributionService,
+)
 from manuskript.services.project_runtime import ProjectRuntime
 from manuskript.services.window_registry import WindowRegistry
 from manuskript.services.media_type_preferences import (
@@ -126,6 +129,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         application_preferences=None,
         plugin_runtime=None,
         plugin_option_store=None,
+        plugin_contributions=None,
         media_types=None,
         media_type_preferences=None,
         panel_registry=None,
@@ -265,14 +269,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             report_error=self.statusPresenter.show,
             parent=self,
         )
+        # Application scope: what plugins contribute, and the one
+        # announcement that it changed. A window composes its own only
+        # when it was given none, which is a single-window application.
+        self.pluginContributions = (
+            plugin_contributions
+            if plugin_contributions is not None
+            else (
+                PluginContributionService(
+                    plugin_runtime,
+                    option_store=plugin_option_store,
+                    media_types=self.mediaTypes,
+                )
+                if plugin_runtime is not None
+                else None
+            )
+        )
         self.pluginUi = (
             PluginUiController(
                 self,
-                plugin_runtime,
-                plugin_option_store,
+                self.pluginContributions,
+                option_store=plugin_option_store,
                 media_types=self.mediaTypes,
             )
-            if plugin_runtime is not None
+            if self.pluginContributions is not None
             else None
         )
         self.buildDeveloperMenu()
@@ -585,6 +605,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             application_preferences=self.applicationPreferences,
             plugin_runtime=self.pluginRuntime,
             plugin_option_store=self.pluginOptionStore,
+            plugin_contributions=self.pluginContributions,
             media_types=self.mediaTypes,
             media_type_preferences=self.mediaTypePreferences,
             panel_registry=self.panelRegistry,
