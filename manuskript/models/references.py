@@ -54,6 +54,24 @@ class ReferenceModels:
     statuses: object
     labels: object
 
+    @classmethod
+    def for_project(cls, models):
+        """The reference-resolving subset of a project's model graph.
+
+        Which six of the project's models references are made of is a fact
+        about references, so it is stated here. Every caller that wanted a
+        reference service used to spell all six out, which meant a model
+        added to references had to be found in each of them.
+        """
+        return cls(
+            outline=models.outline,
+            characters=models.characters,
+            plots=models.plots,
+            world=models.world,
+            statuses=models.statuses,
+            labels=models.labels,
+        )
+
 
 @dataclass(frozen=True)
 class ReferenceNavigation:

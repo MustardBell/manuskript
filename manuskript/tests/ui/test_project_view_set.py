@@ -44,24 +44,46 @@ def test_the_binding_never_reaches_for_a_window():
     )
 
 
+def test_the_set_is_groups_rather_than_one_flat_catalog():
+    """Twenty-two fields on one object meant every binding could see every
+    view, and the pressure on the file was one more field per feature. What
+    a window offers is now four groups, each of which is what one binding
+    is handed.
+    """
+    import dataclasses
+
+    names = [
+        field.name for field in dataclasses.fields(ProjectViewSet)
+    ]
+
+    assert names == [
+        "models",
+        "navigation",
+        "editors",
+        "metadata",
+        "reference_panels",
+        "search",
+    ]
+
+
 def test_a_window_supplies_its_own_views(MWEmptyProject):
     window = MWEmptyProject
 
     views = ProjectViewSet.for_window(window)
 
-    # This window's own views.
-    assert views.outline_trees == (
+    # This window's own views, in the group that binds each.
+    assert views.editors.outline_trees == (
         window.treeRedacOutline,
         window.treeOutlineOutline,
     )
-    assert views.document_area is window.mainEditor
-    assert views.metadata_panel is window.redacMetadata
-    assert views.storyline is window.storylineView
-    assert views.search_view is window.widget
+    assert views.editors.document_area is window.mainEditor
+    assert views.metadata.panel is window.redacMetadata
+    assert views.reference_panels.storyline is window.storylineView
+    assert views.search.view is window.widget
     # The project's, shared by every window showing it.
     assert views.models is window.projectRuntime.models
-    assert views.settings is window.projectRuntime.settingsManager
-    assert views.undo_stack is window.projectRuntime.undoStack
+    assert views.editors.settings is window.projectRuntime.settingsManager
+    assert views.editors.undo_stack is window.projectRuntime.undoStack
 
 
 def test_two_windows_name_their_own_views_over_one_project(
@@ -75,14 +97,19 @@ def test_two_windows_name_their_own_views_over_one_project(
         mine = ProjectViewSet.for_window(window)
         theirs = ProjectViewSet.for_window(other)
 
-        assert mine.outline_trees != theirs.outline_trees
-        assert mine.document_area is not theirs.document_area
-        assert mine.metadata_panel is not theirs.metadata_panel
-        assert mine.selection_changed is not theirs.selection_changed
+        assert mine.editors.outline_trees != theirs.editors.outline_trees
+        assert (
+            mine.editors.document_area is not theirs.editors.document_area
+        )
+        assert mine.metadata.panel is not theirs.metadata.panel
+        assert (
+            mine.editors.selection_changed
+            is not theirs.editors.selection_changed
+        )
         # And the project underneath is the one project.
         assert mine.models is theirs.models
-        assert mine.settings is theirs.settings
-        assert mine.undo_stack is theirs.undo_stack
+        assert mine.editors.settings is theirs.editors.settings
+        assert mine.editors.undo_stack is theirs.editors.undo_stack
     finally:
         other.close()
 
@@ -95,8 +122,8 @@ def test_editors_are_asked_for_freshly_each_time(MWEmptyProject):
     window = MWEmptyProject
     views = ProjectViewSet.for_window(window)
 
-    first = views.text_editors()
-    second = views.text_editors()
+    first = views.editors.text_editors()
+    second = views.editors.text_editors()
 
     assert first is not second
     assert list(first) == list(second)
