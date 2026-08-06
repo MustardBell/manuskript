@@ -136,9 +136,9 @@ class PanelHost:
         instance = PanelInstance(
             descriptor=descriptor,
             widget=widget,
-            action=self._toggle_action(descriptor, widget),
             host=self,
         )
+        self._mount_action(instance)
         self._instances[descriptor.id] = instance
         return instance
 
@@ -175,6 +175,11 @@ class PanelHost:
             container=dock,
             host=self,
         )
+        # A dock panel gets a toggle like any other, so set_visible can
+        # reach it and so putting it away puts the dock away. It had none
+        # before, which is why only two of the three mount paths could
+        # even be wrong about what the toggle drives.
+        self._mount_action(instance)
         self._instances[descriptor.id] = instance
         dock.show()
         return instance
@@ -269,22 +274,62 @@ class PanelHost:
         if sizes and len(sizes) == splitter.count():
             splitter.setSizes(sizes)
 
-    def _toggle_action(self, descriptor, widget):
-        """The one action controlling a panel's visibility.
+    @staticmethod
+    def _shown_thing(instance):
+        """What showing or hiding this panel means where it now sits.
+
+        The dock when it has one, the widget otherwise. Asking the
+        instance rather than the call site is the point: three places
+        mount panels, and one of them used to answer "the widget" for a
+        docked panel, so unchecking a moved panel emptied its dock and
+        left the frame standing.
+        """
+        if instance.container is not None:
+            return instance.container
+        return instance.widget
+
+    def _mount_action(self, instance):
+        """Give a mounted panel the one action that shows and hides it.
 
         Everything that shows the panel -- toolbar buttons, menus, the
         search jump -- mirrors this action, so no two of them can
         disagree about what is on screen.
         """
+        descriptor = instance.descriptor
+        target = self._shown_thing(instance)
         action = QAction(
             self.window.tr(descriptor.title),
             self.window,
         )
         action.setCheckable(True)
         action.setChecked(descriptor.default_visible)
-        action.toggled.connect(widget.setVisible)
-        widget.setVisible(descriptor.default_visible)
+        action.toggled.connect(target.setVisible)
+        target.setVisible(descriptor.default_visible)
+        if instance.container is not None:
+            instance.container.visibilityChanged.connect(
+                partial(self._container_visibility_changed, descriptor.id)
+            )
+        instance.action = action
         return action
+
+    def _container_visibility_changed(self, panel_id, visible):
+        """Follow a floating dock the person closed with its own button.
+
+        Only while floating, and that restriction is not caution but
+        correctness: Qt hides a docked widget whenever another tab in the
+        same area is selected, so treating every invisibility as "put
+        away" would close a panel merely tabbed behind its neighbour. A
+        floating dock is never tabbed, so there the signal means what it
+        appears to mean.
+        """
+        instance = self._instances.get(panel_id)
+        if instance is None or instance.action is None:
+            return
+        container = instance.container
+        if container is None or not container.isFloating():
+            return
+        if instance.action.isChecked() != visible:
+            instance.action.setChecked(visible)
 
     def release(self, panel_id):
         """Detach a living panel, leaving it whole.
@@ -377,7 +422,9 @@ class PanelHost:
             self._place_dock(dock)
             instance.container = dock
             dock.show()
-        instance.action = self._toggle_action(descriptor, widget)
+        # After the container is set, so the toggle drives the dock a
+        # moved panel now lives in rather than the widget inside it.
+        self._mount_action(instance)
         instance.host = self
         self._instances[descriptor.id] = instance
         # Through the action, which is what makes it visible: showing the
@@ -418,7 +465,7 @@ class PanelHost:
         dock.setWidget(widget)
         dock.setFloating(True)
         instance.container = dock
-        instance.action = self._toggle_action(descriptor, dock)
+        self._mount_action(instance)
         instance.host = self
         self._instances[descriptor.id] = instance
         widget.show()

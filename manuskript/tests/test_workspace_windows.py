@@ -353,11 +353,86 @@ def test_a_moved_panel_is_toggled_from_its_new_window(MWEmptyProject):
             assert moved.action.parent() is other
 
             moved.action.setChecked(False)
-            assert moved.widget.isHidden()
-            moved.action.setChecked(True)
+            # The dock goes away, not merely the widget inside it. The
+            # old assertion was that the widget became hidden, which
+            # passed precisely because the toggle emptied the frame and
+            # left an empty dock standing in the new window.
+            assert moved.container.isHidden()
             assert not moved.widget.isHidden()
+            assert moved.container.widget() is moved.widget
+            moved.action.setChecked(True)
+            assert not moved.container.isHidden()
     finally:
         other.close()
+
+
+def test_a_dock_panel_is_put_away_whole_wherever_it_was_mounted(
+        MWEmptyProject):
+    """One rule for every mount: a docked panel's toggle drives its dock.
+
+    Three places mount panels -- opening, adopting a moved one, tearing
+    one off -- and each used to decide for itself what the toggle drove.
+    Opening gave a dock no toggle at all, adopting gave it one bound to
+    the inner widget. So the same panel answered its own toggle
+    differently depending on how it had arrived.
+    """
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window) as panel:
+            # As opened.
+            assert panel.action is not None
+            panel.action.setChecked(False)
+            assert panel.container.isHidden()
+            panel.action.setChecked(True)
+            assert not panel.container.isHidden()
+
+            # As adopted by another window.
+            moved = window.movePanelTo(NOTES, other)
+            moved.action.setChecked(False)
+            assert moved.container.isHidden()
+            moved.action.setChecked(True)
+
+            # As torn off into a float.
+            floated = other.panelHost.tear_off(NOTES)
+            assert floated.container.isFloating()
+            floated.action.setChecked(False)
+            assert floated.container.isHidden()
+            floated.action.setChecked(True)
+            assert not floated.container.isHidden()
+    finally:
+        other.close()
+
+
+def test_closing_a_floating_dock_unchecks_its_toggle(MWEmptyProject):
+    """Qt closes a floating dock by its own button, without asking the
+    host. The toggle has to notice, or it claims a panel is on screen
+    that is not.
+    """
+    window = MWEmptyProject
+    with movable_panel(window):
+        floated = window.panelHost.tear_off(NOTES)
+        assert floated.action.isChecked()
+
+        floated.container.close()
+
+        assert not floated.action.isChecked()
+
+
+def test_a_docked_panel_tabbed_behind_another_stays_open(MWEmptyProject):
+    """Qt hides a docked widget whenever a neighbour's tab is selected.
+    Following that as though the person had closed the panel would put
+    away whatever they tabbed away from.
+    """
+    window = MWEmptyProject
+    with movable_panel(window) as panel:
+        assert panel.action.isChecked()
+
+        # What Qt does to the dock left behind when a tab is selected.
+        panel.container.visibilityChanged.emit(False)
+
+        assert panel.action.isChecked()
+        assert not panel.container.isFloating()
 
 
 def test_the_toolbar_button_travels_with_the_panel(MWEmptyProject):
