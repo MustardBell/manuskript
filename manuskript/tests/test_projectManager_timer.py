@@ -17,6 +17,8 @@ class TestProjectManagerAutosave(unittest.TestCase):
         self.last_project_store = MagicMock()
         self.project_manager = ProjectManager(
             ProjectLifecycleView(self.window),
+            self.window.projectRuntime.settingsManager,
+            self.window.projectRuntime.modelParent,
             storage=self.storage,
             autosave=self.autosave,
             last_project_store=self.last_project_store,

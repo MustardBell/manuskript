@@ -26,11 +26,30 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ProjectManager:
+    """The project's own use cases: open it, save it, close it.
+
+    Takes the project's things -- its settings, the parent its models
+    hang off -- rather than reaching through a window for them. They
+    belong to the project either way, and a window only points at them;
+    but asking the view for them inverted the dependency, so the manager
+    could not create models or save a project without a window existing
+    to be asked. A headless save, a second window becoming the first, and
+    the moment between the last window closing and the project closing
+    were all shaped by that.
+
+    They arrive as plain parameters and not as one project-services
+    bundle. A bundle would be the same catalog one indirection further
+    out, and the thing this class needs least is another object that
+    answers every question about a project.
+    """
+
     def __init__(
-            self, lifecycle_view, storage=None, status_reporter=None,
-            model_factory=None, autosave=None, last_project_store=None,
-            revision_coordinator=None):
+            self, lifecycle_view, settings, model_parent, storage=None,
+            status_reporter=None, model_factory=None, autosave=None,
+            last_project_store=None, revision_coordinator=None):
         self.ui = lifecycle_view
+        self.settings = settings
+        self.model_parent = model_parent
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
         self.models = None
@@ -97,7 +116,7 @@ class ProjectManager:
 
         if loadFromFile:
             # Reset settings to defaults
-            self.ui.settings.reset_to_defaults()
+            self.settings.reset_to_defaults()
 
             # Load data
             self.loadEmptyDatas()
@@ -156,7 +175,7 @@ class ProjectManager:
         """
         if not self.session.is_open:
             return True
-        if self.ui.settings.saveOnQuit:
+        if self.settings.saveOnQuit:
             settled = self.saveDatas()
         else:
             settled = self.handleUnsavedChanges()
@@ -284,7 +303,7 @@ class ProjectManager:
         try:
             self.revision_coordinator.after_project_save(
                 self.currentProject,
-                self.ui.settings,
+                self.settings,
                 message=message,
             )
         except Exception as error:
@@ -302,8 +321,8 @@ class ProjectManager:
 
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(
-            self.ui.model_parent,
-            self.ui.settings,
+            self.model_parent,
+            self.settings,
         )
         self.ui.install_models(self.models)
         return self.models
@@ -318,8 +337,8 @@ class ProjectManager:
         loaded = self.revision_coordinator.load_snapshot(
             self.currentProject,
             revision,
-            self.ui.settings,
-            parent=self.ui.model_parent,
+            self.settings,
+            parent=self.model_parent,
         )
         return self.restoreRevisionSnapshot(loaded)
 
@@ -366,7 +385,7 @@ class ProjectManager:
             return False
 
         previous_models = self.models
-        previous_settings = self.ui.settings.save()
+        previous_settings = self.settings.save()
         restored_settings = snapshot.settings.save()
         replacement_attempted = False
 
@@ -432,7 +451,7 @@ class ProjectManager:
         return True
 
     def _installProjectState(self, models, serialized_settings):
-        self.ui.settings.load(
+        self.settings.load(
             serialized_settings,
             fromString=True,
             protocol=0,
@@ -481,11 +500,20 @@ class ProjectManager:
         outline = getattr(models, "outline", None)
         if outline is None:
             return
-        outline.settings = self.ui.settings
+        outline.settings = self.settings
         outline.rootItem.setModel(outline)
 
     def _connectModelChanges(self):
-        for model in self.ui.change_models():
+        """Watch the project's own models for edits that dirty it.
+
+        The models are asked which of them count. A window used to answer
+        that, which meant the list had to be taken from one nominated
+        window: connecting the same model once per window would have
+        marked the project dirty once per window for every edit.
+        """
+        if self.models is None:
+            return
+        for model in self.models.change_sources:
             self.modelConnections.connect(
                 model.dataChanged,
                 self.startTimerNoChanges,
@@ -551,7 +579,7 @@ class ProjectManager:
         self.storage.clear_cache()
 
     def reconfigureAutosave(self):
-        settings = self.ui.settings
+        settings = self.settings
         self.autosave.configure(
             periodic_enabled=settings.autoSave,
             periodic_delay_minutes=settings.autoSaveDelay,
@@ -565,5 +593,5 @@ class ProjectManager:
         return ProjectPersistenceContext(
             project_file=project_file,
             models=self.models,
-            settings=self.ui.settings,
+            settings=self.settings,
         )

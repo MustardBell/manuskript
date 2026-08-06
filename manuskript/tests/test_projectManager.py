@@ -31,6 +31,8 @@ class TestProjectManager(unittest.TestCase):
         self.lifecycle_view.show_load_failures = MagicMock()
         self.project_manager = ProjectManager(
             self.lifecycle_view,
+            settings_manager,
+            self.window.projectRuntime.modelParent,
             storage=self.storage,
             status_reporter=self.status_reporter,
             autosave=self.autosave,
@@ -407,6 +409,8 @@ class TestSaveFlushesPendingText(unittest.TestCase):
         self.view.show_save_failures = MagicMock()
         self.manager = ProjectManager(
             self.view,
+            settings_manager,
+            self.window.projectRuntime.modelParent,
             storage=self.storage,
             autosave=MagicMock(),
             last_project_store=MagicMock(),
@@ -443,3 +447,117 @@ class TestSaveFlushesPendingText(unittest.TestCase):
         self.manager.saveDatas("renamed.msk")
 
         self.view.flush_pending_edits.assert_called_once_with()
+
+
+#: Everything a lifecycle view is asked to do, and nothing else. The list
+#: is the contract: a view shows a project and answers for its window. It
+#: is not where the project's own facts are kept.
+LIFECYCLE_VIEW_METHODS = [
+    "translate",
+    "show_status",
+    "project_name",
+    "install_models",
+    "sync_to_state",
+    "connect_project",
+    "apply_loaded_settings",
+    "project_opened",
+    "prepare_close",
+    "prepare_model_replacement",
+    "flush_pending_edits",
+    "disconnect_project",
+    "project_closed",
+    "confirm_unsaved_changes",
+    "show_save_failures",
+    "show_load_failures",
+    "capture_project_state",
+]
+
+
+class TestTheProjectIsNotReadThroughAWindow(unittest.TestCase):
+    """The manager holds the project's things; the view only shows them.
+
+    The settings, the parent the models hang off and the list of models
+    whose edits mean unsaved changes all used to be read back out of the
+    lifecycle view -- which owns none of them and merely pointed at the
+    runtime that does. The manager could therefore not build models or
+    save a project unless some window existed to be asked.
+
+    The view here answers only the calls in LIFECYCLE_VIEW_METHODS;
+    reaching for anything else raises, which is what lets these tests
+    fail rather than quietly pass on a MagicMock that invents attributes.
+    """
+
+    def setUp(self):
+        self.view = MagicMock(spec=LIFECYCLE_VIEW_METHODS)
+        self.view.translate.side_effect = lambda text: text
+        self.settings = MagicMock()
+        self.model_parent = MagicMock()
+        self.model_factory = MagicMock()
+        self.storage = MagicMock()
+        self.storage.save.return_value = ProjectSaveResult()
+        self.revisions = MagicMock()
+        self.manager = ProjectManager(
+            self.view,
+            self.settings,
+            self.model_parent,
+            storage=self.storage,
+            model_factory=self.model_factory,
+            autosave=MagicMock(),
+            last_project_store=MagicMock(),
+            revision_coordinator=self.revisions,
+        )
+
+    def test_models_are_built_from_the_projects_settings_and_parent(self):
+        models = self.manager.loadEmptyDatas()
+
+        self.model_factory.create.assert_called_once_with(
+            self.model_parent,
+            self.settings,
+        )
+        self.assertIs(models, self.model_factory.create.return_value)
+        self.view.install_models.assert_called_once_with(models)
+
+    def test_a_save_finds_the_settings_without_asking_a_window(self):
+        self.manager.session.open("book.msk")
+
+        self.assertTrue(self.manager.saveDatas())
+
+        context = self.storage.save.call_args[0][0]
+        self.assertIs(context.settings, self.settings)
+        self.revisions.after_project_save.assert_called_once_with(
+            "book.msk",
+            self.settings,
+            message=None,
+        )
+
+    def test_settling_before_a_close_reads_the_projects_own_settings(self):
+        """saveOnQuit is a project setting, so the project reads it."""
+        self.manager.session.open("book.msk")
+        self.settings.saveOnQuit = True
+
+        self.assertTrue(self.manager.settleBeforeClosing())
+
+        self.storage.save.assert_called_once()
+
+    def test_what_marks_the_project_dirty_comes_from_its_own_models(self):
+        first, second = MagicMock(), MagicMock()
+        models = MagicMock()
+        models.change_sources = (first, second)
+        self.manager.models = models
+
+        self.manager._connectModelChanges()
+
+        for model in (first, second):
+            model.dataChanged.connect.assert_called_once_with(
+                self.manager.startTimerNoChanges,
+            )
+
+    def test_no_models_yet_means_nothing_to_watch_rather_than_a_crash(self):
+        """A project opened from data already in memory never went through
+        loadEmptyDatas, so there may be no model graph to connect.
+        """
+        self.manager.models = None
+
+        self.manager._connectModelChanges()
+
+        self.assertEqual(len(self.manager.modelConnections), 0)

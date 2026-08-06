@@ -15,6 +15,13 @@ than merely convenient:
   four times over.
 
 With one window registered this behaves exactly as that window did.
+
+What is *not* here: anything the project owns. The settings, the parent
+its models hang off and the models themselves were answerable here once,
+which let the project manager reach its own facts through whichever
+window happened to be first. Those now go from the runtime straight to
+the manager, and this stays what its name says -- a way to talk to
+windows.
 """
 
 
@@ -76,20 +83,6 @@ class ProjectViewRegistry:
         if view is not None:
             view.show_status(message, duration, importance)
 
-    # ------------------------------------------- shared project state
-    # Identical whichever view is asked, since all of them show the one
-    # project.
-
-    @property
-    def settings(self):
-        view = self.primary
-        return view.settings if view is not None else None
-
-    @property
-    def model_parent(self):
-        view = self.primary
-        return view.model_parent if view is not None else None
-
     # ------------------------------------------------- announcements
 
     def install_models(self, models):
@@ -141,16 +134,6 @@ class ProjectViewRegistry:
     def project_name(self):
         view = self.primary
         return view.project_name() if view is not None else ""
-
-    def change_models(self):
-        """The models whose edits mark the project dirty.
-
-        One project, one set of models, so the primary view speaks for
-        all of them -- connecting the same model once per window would
-        mark the project dirty once per window per edit.
-        """
-        view = self.primary
-        return view.change_models() if view is not None else []
 
     def confirm_unsaved_changes(self):
         view = self.primary

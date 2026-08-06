@@ -98,9 +98,8 @@ def test_a_window_shares_the_runtime_it_is_given(MWEmptyProject):
     assert window.undoStack is runtime.undoStack
     assert window.projectManager is runtime.projectManager
     assert window.revisionCoordinator is runtime.revisionCoordinator
-    assert (
-        window.projectManager.ui.model_parent is runtime.modelParent
-    )
+    assert window.projectManager.model_parent is runtime.modelParent
+    assert window.projectManager.settings is runtime.settingsManager
     # QObject.parent explicitly: an item model's own parent() takes an
     # index and answers about the tree, not about ownership.
     assert (

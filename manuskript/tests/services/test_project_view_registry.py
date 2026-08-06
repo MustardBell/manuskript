@@ -55,25 +55,16 @@ def test_shared_state_is_captured_once():
     second.capture_project_state.assert_not_called()
 
 
-def test_change_models_comes_from_one_view():
-    """Connecting the same model once per window would mark the project
-    dirty once per window for every single edit.
+def test_the_registry_answers_nothing_about_the_project_itself():
+    """It talks to windows. The project's settings, the parent its models
+    hang off and which models signal a change were all answerable here,
+    which let the project manager reach its own facts through whichever
+    window happened to be primary.
     """
-    first, second = MagicMock(), MagicMock()
-    models = [MagicMock(), MagicMock()]
-    first.change_models.return_value = models
-    registry = ProjectViewRegistry([first, second])
+    registry = ProjectViewRegistry([MagicMock()])
 
-    assert registry.change_models() == models
-    second.change_models.assert_not_called()
-
-
-def test_settings_and_model_parent_come_from_the_primary_view():
-    view = MagicMock()
-    registry = ProjectViewRegistry([view])
-
-    assert registry.settings is view.settings
-    assert registry.model_parent is view.model_parent
+    for absent in ("settings", "model_parent", "change_models"):
+        assert not hasattr(registry, absent), absent
 
 
 def test_the_next_view_inherits_the_primary_role():
@@ -94,10 +85,7 @@ def test_a_registry_with_no_views_answers_rather_than_raising():
     registry = ProjectViewRegistry()
 
     assert registry.primary is None
-    assert registry.settings is None
-    assert registry.model_parent is None
     assert registry.confirm_unsaved_changes() is None
-    assert registry.change_models() == []
     assert registry.project_name() == ""
     assert registry.translate("Manuskript") == "Manuskript"
     # Announcements to nobody are silent, not errors.

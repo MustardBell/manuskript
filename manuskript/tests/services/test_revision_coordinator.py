@@ -94,6 +94,8 @@ def test_restore_revision_is_orchestrated_by_the_manager():
     loaded = MagicMock()
     manager.revision_coordinator.load_snapshot.return_value = loaded
     manager.ui = MagicMock()
+    manager.settings = MagicMock()
+    manager.model_parent = MagicMock()
     manager.session = MagicMock()
     manager.session.path = "book.msk"
     manager.restoreRevisionSnapshot = MagicMock(return_value=True)
@@ -103,8 +105,8 @@ def test_restore_revision_is_orchestrated_by_the_manager():
     manager.revision_coordinator.load_snapshot.assert_called_once_with(
         manager.currentProject,
         "draft-one",
-        manager.ui.settings,
-        parent=manager.ui.model_parent,
+        manager.settings,
+        parent=manager.model_parent,
     )
     manager.restoreRevisionSnapshot.assert_called_once_with(loaded)
 

@@ -21,6 +21,28 @@ class ProjectModels:
     world: object
     plugin_data: ProjectPluginData
 
+    @property
+    def change_sources(self):
+        """The models whose edits mean the project has unsaved changes.
+
+        Asked of the models themselves. Which of them signal a change is
+        a fact about the model graph, and it used to be answered by a
+        window -- so the project could only learn what makes it dirty
+        from something that merely displays it.
+
+        ``plugin_data`` is absent deliberately: it is not an item model
+        and has no ``dataChanged`` to connect.
+        """
+        return (
+            self.flat_data,
+            self.outline,
+            self.characters,
+            self.plots,
+            self.world,
+            self.statuses,
+            self.labels,
+        )
+
     def install_on(self, window):
         """Expose the model graph through the legacy window attributes."""
         window.mdlFlatData = self.flat_data

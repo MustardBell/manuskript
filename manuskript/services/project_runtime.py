@@ -80,11 +80,18 @@ class ProjectRuntime(QObject):
         reports through the view registry, which picks a live window per
         call -- a reporter captured here would be the first window's for
         the life of the project, including after it closed.
+
+        The settings and the model parent are handed over here, from what
+        this runtime owns. They used to be read back out of the joining
+        window, which made the project's own facts reachable only through
+        something that displays them.
         """
         self.views.register(view)
         if self.projectManager is None:
             self.projectManager = ProjectManager(
                 self.views,
+                self.settingsManager,
+                self.modelParent,
                 last_project_store=self._projectHistory,
                 revision_coordinator=self.revisionCoordinator,
             )

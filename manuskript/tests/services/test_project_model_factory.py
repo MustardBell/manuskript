@@ -39,6 +39,35 @@ def test_project_model_factory_builds_connected_model_graph():
     )
 
 
+def test_the_models_say_which_of_them_mean_unsaved_changes():
+    """A window used to answer this, so the project could only learn what
+    makes it dirty by asking something that displays it.
+    """
+    # The parent is held for the length of the test: Qt deletes children
+    # with their parent, and a collected local would take the models.
+    parent = QObject()
+    models = ProjectModelFactory().create(
+        parent,
+        DefaultOutlineSettings(),
+    )
+
+    sources = models.change_sources
+
+    assert set(sources) == {
+        models.flat_data,
+        models.outline,
+        models.characters,
+        models.plots,
+        models.world,
+        models.statuses,
+        models.labels,
+    }
+    # Not an item model, so there is no change of its to connect to.
+    assert models.plugin_data not in sources
+    for model in sources:
+        assert hasattr(model, "dataChanged")
+
+
 def test_project_models_install_legacy_window_attributes():
     models = ProjectModelFactory().create(
         QObject(),

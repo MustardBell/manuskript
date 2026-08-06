@@ -15,17 +15,14 @@ class ProjectLifecycleView:
 
     @property
     def settings(self):
-        return self.window.projectRuntime.settingsManager
+        """The project's settings, read to configure this window's widgets.
 
-    @property
-    def model_parent(self):
-        """The runtime's model parent, never the window.
-
-        Qt deletes children with their parent, and a window closing is
-        not the project ending -- models parented to a window would go
-        with the first one to close.
+        A window reading its project is the ordinary direction. What used
+        to also live here -- the parent the models hang off -- was here
+        only so the project manager could reach it back through a window,
+        and goes from the runtime to the manager directly now.
         """
-        return self.window.projectRuntime.modelParent
+        return self.window.projectRuntime.settingsManager
 
     def translate(self, text):
         return self.window.tr(text)
@@ -49,19 +46,6 @@ class ProjectLifecycleView:
     def models(self):
         """The project's models, from the runtime that owns them."""
         return self.window.projectRuntime.models
-
-    def change_models(self):
-        """The models whose edits mark the project dirty."""
-        models = self.models
-        return [
-            models.flat_data,
-            models.outline,
-            models.characters,
-            models.plots,
-            models.world,
-            models.statuses,
-            models.labels,
-        ]
 
     def sync_to_state(self, project_open):
         for item in [self.window.actOpen, self.window.menuRecents]:
