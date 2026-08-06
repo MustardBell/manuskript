@@ -36,15 +36,22 @@ class ProjectLifecycleView:
     def install_models(self, models):
         models.install_on(self.window)
 
+    @property
+    def models(self):
+        """The project's models, from the runtime that owns them."""
+        return self.window.projectRuntime.models
+
     def change_models(self):
+        """The models whose edits mark the project dirty."""
+        models = self.models
         return [
-            self.window.mdlFlatData,
-            self.window.mdlOutline,
-            self.window.mdlCharacter,
-            self.window.mdlPlots,
-            self.window.mdlWorld,
-            self.window.mdlStatus,
-            self.window.mdlLabels,
+            models.flat_data,
+            models.outline,
+            models.characters,
+            models.plots,
+            models.world,
+            models.statuses,
+            models.labels,
         ]
 
     def sync_to_state(self, project_open):
@@ -120,7 +127,7 @@ class ProjectLifecycleView:
         self.window.tabMain.currentChanged.emit(
             self.window.tabMain.currentIndex()
         )
-        word_count = self.window.mdlOutline.rootItem.data(
+        word_count = self.models.outline.rootItem.data(
             Outline.wordCount
         )
         self.window.sessionStartWordCount = (

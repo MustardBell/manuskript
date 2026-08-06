@@ -225,7 +225,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.referenceService = None
         self.textEditorContext = None
-        self.projectBinding = ProjectBinding(self)
+        self.projectBinding = ProjectBinding(self, self.projectRuntime)
         # This window's layout, filed under this window. Two windows
         # sharing one set of keys meant the second saved over the first.
         self.windowId = window_id
@@ -319,6 +319,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self,
                 self.settingsManager,
                 self.projectHistory,
+                self.projectRuntime,
             )
         )
 

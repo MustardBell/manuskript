@@ -12,13 +12,19 @@ from manuskript.ui.project_view_binding import (
 class ProjectBinding:
     """Own the complete UI binding lifecycle for one active project."""
 
-    def __init__(self, window, contexts_factory=None):
+    def __init__(self, window, runtime, contexts_factory=None):
         self.window = window
+        # The window holds the widgets; the runtime holds the models they
+        # show. Passed on rather than looked up, so nothing below here
+        # reaches through a window for a model.
+        self.runtime = runtime
         self.connections = SignalConnectionRegistry()
-        self.flat_data = FlatDataProjectBinding(window)
-        self.features = ProjectFeatureBinding(window)
-        self.outline_selection = OutlineSelectionProjectBinding(window)
-        self.debug_views = DebugProjectBinding(window)
+        self.flat_data = FlatDataProjectBinding(window, runtime)
+        self.features = ProjectFeatureBinding(window, runtime)
+        self.outline_selection = OutlineSelectionProjectBinding(
+            window, runtime,
+        )
+        self.debug_views = DebugProjectBinding(window, runtime)
         # Built at bind time, because a window has no models to bind
         # until a project is open -- and injectable, so what the context
         # binding is given is one decision made in one place.

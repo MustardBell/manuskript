@@ -7,15 +7,22 @@ from manuskript.ui.views.plotDelegate import plotDelegate
 
 
 class CharacterProjectBinding:
-    def __init__(self, window):
+    def __init__(self, window, runtime):
         self.window = window
+        self._runtime = runtime
+
+    @property
+    def models(self):
+        """The project's models, from the runtime that owns them."""
+        return self._runtime.models
 
     def bind(self, connect):
         window = self.window
+        models = self.models
         controller = window.characterController
         controller.configure_info_view(window.tblPersoInfos)
-        window.lstCharacters.setCharactersModel(window.mdlCharacter)
-        window.tblPersoInfos.setModel(window.mdlCharacter)
+        window.lstCharacters.setCharactersModel(models.characters)
+        window.tblPersoInfos.setModel(models.characters)
         for signal, slot in [
             (
                 window.btnAddPerso.clicked,
@@ -59,7 +66,7 @@ class CharacterProjectBinding:
             (window.txtPersoSummaryFull, Character.summaryFull),
             (window.txtPersoNotes, Character.notes),
         ]:
-            widget.setModel(window.mdlCharacter)
+            widget.setModel(models.characters)
             widget.setColumn(column)
         window.tabPersos.setEnabled(False)
 
@@ -68,16 +75,23 @@ class CharacterProjectBinding:
 
 
 class PlotProjectBinding:
-    def __init__(self, window):
+    def __init__(self, window, runtime):
         self.window = window
+        self._runtime = runtime
+
+    @property
+    def models(self):
+        """The project's models, from the runtime that owns them."""
+        return self._runtime.models
 
     def bind(self, connect):
         window = self.window
+        models = self.models
         controller = window.plotController
-        window.lstSubPlots.setModel(window.mdlPlots)
-        window.lstPlotPerso.setModel(window.mdlPlots)
+        window.lstSubPlots.setModel(models.plots)
+        window.lstPlotPerso.setModel(models.plots)
         window.lstPlots.setPlotModel(
-            window.mdlPlots,
+            models.plots,
             settings=window.settingsManager,
         )
         for signal, slot in [
@@ -109,22 +123,22 @@ class PlotProjectBinding:
             (window.txtPlotResult, Plot.result),
             (window.sldPlotImportance, Plot.importance),
         ]:
-            widget.setModel(window.mdlPlots)
+            widget.setModel(models.plots)
             widget.setColumn(column)
 
         window.tabPlot.setEnabled(False)
         controller.refresh_character_menu()
         connect(
-            window.mdlCharacter.dataChanged,
+            models.characters.dataChanged,
             controller.refresh_character_menu,
         )
         window.lstOutlinePlots.setPlotModel(
-            window.mdlPlots,
+            models.plots,
             settings=window.settingsManager,
         )
         window.lstOutlinePlots.setShowSubPlot(True)
         window.plotCharacterDelegate = outlineCharacterDelegate(
-            window.mdlCharacter,
+            models.characters,
             window,
         )
         window.lstPlotPerso.setItemDelegate(
@@ -141,14 +155,21 @@ class PlotProjectBinding:
 
 
 class WorldProjectBinding:
-    def __init__(self, window):
+    def __init__(self, window, runtime):
         self.window = window
+        self._runtime = runtime
+
+    @property
+    def models(self):
+        """The project's models, from the runtime that owns them."""
+        return self._runtime.models
 
     def bind(self, connect):
         window = self.window
+        models = self.models
         controller = window.worldController
-        window.treeWorld.setModel(window.mdlWorld)
-        for column in range(window.mdlWorld.columnCount()):
+        window.treeWorld.setModel(models.world)
+        for column in range(models.world.columnCount()):
             window.treeWorld.hideColumn(column)
         window.treeWorld.showColumn(0)
         controller.build_data_set_menu()
@@ -170,7 +191,7 @@ class WorldProjectBinding:
             (window.txtWorldPassion, World.passion),
             (window.txtWorldConflict, World.conflict),
         ]:
-            widget.setModel(window.mdlWorld)
+            widget.setModel(models.world)
             widget.setColumn(column)
         window.tabWorld.setEnabled(False)
         window.treeWorld.expandAll()
@@ -182,11 +203,11 @@ class WorldProjectBinding:
 class ProjectFeatureBinding:
     """Composite lifecycle for independently bound project features."""
 
-    def __init__(self, window):
+    def __init__(self, window, runtime):
         self.bindings = (
-            CharacterProjectBinding(window),
-            PlotProjectBinding(window),
-            WorldProjectBinding(window),
+            CharacterProjectBinding(window, runtime),
+            PlotProjectBinding(window, runtime),
+            WorldProjectBinding(window, runtime),
         )
         self.bound = False
 

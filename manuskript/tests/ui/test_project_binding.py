@@ -12,6 +12,7 @@ def make_binding():
     contexts = MagicMock()
     binding = ProjectBinding(
         MagicMock(),
+        MagicMock(),
         contexts_factory=lambda: contexts,
     )
     binding.flat_data = MagicMock()

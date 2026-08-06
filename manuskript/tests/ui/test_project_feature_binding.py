@@ -11,13 +11,19 @@ binding_module = importlib.import_module(
 
 
 def make_window():
-    window = MagicMock()
-    window.mdlWorld.columnCount.return_value = 2
-    return window
+    return MagicMock()
+
+
+def make_runtime():
+    """The project the widgets show, separate from the window showing it."""
+    runtime = MagicMock()
+    runtime.models.world.columnCount.return_value = 2
+    return runtime
 
 
 def test_project_feature_binding_installs_all_feature_models():
     window = make_window()
+    runtime = make_runtime()
     connect = MagicMock()
 
     with patch.object(
@@ -29,24 +35,25 @@ def test_project_feature_binding_installs_all_feature_models():
         "plotDelegate",
         return_value=MagicMock(),
     ):
-        binding = ProjectFeatureBinding(window)
+        binding = ProjectFeatureBinding(window, runtime)
         binding.bind(connect)
 
     window.lstCharacters.setCharactersModel.assert_called_once_with(
-        window.mdlCharacter
+        runtime.models.characters
     )
     window.lstPlots.setPlotModel.assert_called_once_with(
-        window.mdlPlots,
+        runtime.models.plots,
         settings=window.settingsManager,
     )
-    window.treeWorld.setModel.assert_called_once_with(window.mdlWorld)
+    window.treeWorld.setModel.assert_called_once_with(runtime.models.world)
     assert binding.bound
     assert connect.call_count >= 10
 
 
 def test_project_feature_binding_resets_features_in_reverse_lifecycle():
     window = make_window()
-    binding = ProjectFeatureBinding(window)
+    runtime = make_runtime()
+    binding = ProjectFeatureBinding(window, runtime)
     for feature in binding.bindings:
         feature.bind = MagicMock()
         feature.unbind = MagicMock()
@@ -62,7 +69,8 @@ def test_project_feature_binding_resets_features_in_reverse_lifecycle():
 
 def test_project_feature_binding_rejects_double_binding():
     window = make_window()
-    binding = ProjectFeatureBinding(window)
+    runtime = make_runtime()
+    binding = ProjectFeatureBinding(window, runtime)
     for feature in binding.bindings:
         feature.bind = MagicMock()
 
@@ -74,7 +82,8 @@ def test_project_feature_binding_rejects_double_binding():
 
 def test_project_feature_binding_rolls_back_partial_install():
     window = make_window()
-    binding = ProjectFeatureBinding(window)
+    runtime = make_runtime()
+    binding = ProjectFeatureBinding(window, runtime)
     first, second, third = binding.bindings
     for feature in binding.bindings:
         feature.bind = MagicMock()

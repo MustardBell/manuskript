@@ -10,30 +10,32 @@ from manuskript.ui.project_view_binding import (
 
 def test_flat_data_binding_configures_summary_and_general_fields():
     window = MagicMock()
+    runtime = MagicMock()
 
-    FlatDataProjectBinding(window).bind(MagicMock())
+    FlatDataProjectBinding(window, runtime).bind(MagicMock())
 
     window.txtSummarySituation.setModel.assert_called_once_with(
-        window.mdlFlatData
+        runtime.models.flat_data
     )
     window.txtSummarySituation.setColumn.assert_called_once_with(0)
     window.txtSummarySituation.setCurrentModelIndex.assert_called_once_with(
-        window.mdlFlatData.index.return_value
+        runtime.models.flat_data.index.return_value
     )
     window.txtGeneralEmail.setModel.assert_called_once_with(
-        window.mdlFlatData
+        runtime.models.flat_data
     )
     window.txtGeneralEmail.setColumn.assert_called_once_with(7)
-    assert window.mdlFlatData.index.call_count == 19
-    window.mdlFlatData.index.assert_any_call(1, 4)
-    window.mdlFlatData.index.assert_any_call(0, 7)
+    assert runtime.models.flat_data.index.call_count == 19
+    runtime.models.flat_data.index.assert_any_call(1, 4)
+    runtime.models.flat_data.index.assert_any_call(0, 7)
 
 
 def test_outline_selection_binding_registers_project_connections():
     window = MagicMock()
+    runtime = MagicMock()
     connect = MagicMock()
 
-    OutlineSelectionProjectBinding(window).bind(connect)
+    OutlineSelectionProjectBinding(window, runtime).bind(connect)
 
     assert connect.call_count == 7
     connected_slots = [call.args[1] for call in connect.call_args_list]
@@ -44,6 +46,7 @@ def test_outline_selection_binding_registers_project_connections():
 
 def test_debug_binding_configures_models_and_named_selection_handlers():
     window = MagicMock()
+    runtime = MagicMock()
     connect = MagicMock()
     character_row = 4
     plot_row = 7
@@ -53,7 +56,7 @@ def test_debug_binding_configures_models_and_named_selection_handlers():
     window.tblDebugPlots.selectionModel().currentIndex().row.return_value = (
         plot_row
     )
-    binding = DebugProjectBinding(window)
+    binding = DebugProjectBinding(window, runtime)
 
     binding.bind(connect)
     binding._show_current_character()
@@ -61,15 +64,15 @@ def test_debug_binding_configures_models_and_named_selection_handlers():
     binding._show_current_plot_steps()
 
     window.tblDebugFlatData.setModel.assert_called_once_with(
-        window.mdlFlatData
+        runtime.models.flat_data
     )
     window.treeDebugOutline.setModel.assert_called_once_with(
-        window.mdlOutline
+        runtime.models.outline
     )
     assert connect.call_count == 3
-    window.mdlCharacter.index.assert_called_once_with(
+    runtime.models.characters.index.assert_called_once_with(
         character_row,
         Character.name,
     )
-    window.mdlPlots.index.assert_any_call(plot_row, Plot.characters)
-    window.mdlPlots.index.assert_any_call(plot_row, Plot.steps)
+    runtime.models.plots.index.assert_any_call(plot_row, Plot.characters)
+    runtime.models.plots.index.assert_any_call(plot_row, Plot.steps)
