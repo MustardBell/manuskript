@@ -430,6 +430,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.windowState.store.set_open_windows(
                     self.openWorkspaceIds()
                 )
+        # Before the tool windows go, because closing them takes the
+        # plugin docks out of the layout and QMainWindow.saveState can
+        # only record docks that are still there. The last window comes
+        # through here having already captured during the project close,
+        # and captures again to no effect: it is showing the welcome
+        # screen by now, which is the condition capture_layout declines
+        # on, so the good capture stands.
+        self.windowState.capture_layout()
         self.closeToolWindows()
         self.windowState.save()
         self.projectRuntime.detach(self.projectLifecycleView)

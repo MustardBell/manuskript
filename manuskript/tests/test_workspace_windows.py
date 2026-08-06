@@ -905,3 +905,59 @@ def test_a_window_with_no_recorded_tab_takes_the_projects(
         assert window.tabMain.currentIndex() == 5
     finally:
         controller._mainTab = previous
+
+
+def test_a_window_that_is_not_the_last_records_its_plugin_docks(
+        MWEmptyProject, tmp_path):
+    """Closing a window that is not the last never runs the project
+    close, so nothing captured its layout. The tool windows went first,
+    which takes the plugin docks out of the window, and only then did
+    QMainWindow.saveState run -- recording a window those docks had
+    already left.
+
+    It has to be a plugin panel: closing tool windows is what removes
+    those, so a panel opened straight onto the host would survive and
+    show nothing.
+    """
+    from PyQt5.QtWidgets import QPlainTextEdit
+
+    from manuskript.plugins.api import (
+        ExtensionDescriptor,
+        ProjectPanelContribution,
+    )
+
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    store = WorkspaceStateStore(
+        QSettings(str(tmp_path / "theirs.ini"), QSettings.IniFormat)
+    )
+    other.windowState.store = store
+    window_id = other.windowId
+    registry = window.pluginRuntime.registry
+    panel_id = "plugin.vendor.docked.vendor.docked.panel"
+    try:
+        registrar = registry.registrar("vendor.docked")
+        registrar.register_project_panel(ProjectPanelContribution(
+            descriptor=ExtensionDescriptor(
+                "vendor.docked.panel", "Docked panel",
+            ),
+            widget_factory=lambda context, parent: QPlainTextEdit(parent),
+            default_file="docked/main.txt",
+        ))
+        registry.install("vendor.docked", registrar.contributions)
+        window.pluginContributions.announce()
+
+        assert other.pluginUi.projectPanels.open_panel(
+            "vendor.docked.panel"
+        ) is not None
+        assert panel_id in other.panelHost.instances
+
+        # Not the last window, so this close does not touch the project.
+        assert not other.windowRegistry.is_last(other)
+        other.close()
+
+        # The dock was still mounted when the arrangement was recorded.
+        assert store.load(window_id).panels.get(panel_id) is True
+    finally:
+        registry.remove_plugin("vendor.docked")
+        window.pluginContributions.announce()
