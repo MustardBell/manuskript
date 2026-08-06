@@ -7,6 +7,7 @@ mounted -- which is what makes moving an instance to another window a
 change of host rather than a storm of signals.
 """
 
+import logging
 import weakref
 
 from dataclasses import dataclass
@@ -17,12 +18,14 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAction,
     QDockWidget,
-    QMessageBox,
     QSplitter,
     QWidget,
 )
 
 from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PanelScopeError(Exception):
@@ -127,11 +130,7 @@ class PanelHost:
                     "Panel factories must return QWidget instances."
                 )
         except Exception as error:
-            QMessageBox.critical(
-                window,
-                window.tr("Panel failed"),
-                "{}\n\n{}".format(descriptor.title, error),
-            )
+            self._report_failure(descriptor, error, context)
             return None
         splitter.insertWidget(slot.index, widget)
         instance = PanelInstance(
@@ -162,11 +161,7 @@ class PanelHost:
                 )
         except Exception as error:
             dock.deleteLater()
-            QMessageBox.critical(
-                window,
-                window.tr("Panel failed"),
-                "{}\n\n{}".format(descriptor.title, error),
-            )
+            self._report_failure(descriptor, error, context)
             return None
 
         dock.setWidget(widget)
@@ -183,6 +178,33 @@ class PanelHost:
         self._instances[descriptor.id] = instance
         dock.show()
         return instance
+
+    def _report_failure(self, descriptor, error, context=None):
+        """Say a panel could not be built, without blocking on it.
+
+        This used to raise a modal dialog. A modal turns any factory
+        fault into something that waits for a person, which in a test
+        run is a hang rather than a failure -- the suite stopped at the
+        same point twice and I mistook it for two runs competing.
+
+        Told, not asked: the status bar carries it where the window has
+        one, and the log always does, so a broken panel costs the person
+        a line rather than their attention.
+        """
+        message = self.window.tr(
+            "The {} panel could not be opened: {}"
+        ).format(descriptor.title, error)
+        LOGGER.warning(
+            "Panel %s failed to build: %s", descriptor.id, error,
+        )
+        show_status = getattr(context, "show_status", None)
+        if show_status is None:
+            presenter = getattr(self.window, "statusPresenter", None)
+            show_status = (
+                presenter.show if presenter is not None else None
+            )
+        if show_status is not None:
+            show_status(message, 8000, 2)
 
     @staticmethod
     def _dock_name(descriptor):

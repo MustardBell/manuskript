@@ -318,7 +318,9 @@ draw nothing, so a style cannot skip one by accident.
 ## Widgets you provide
 
 Several contributions take a factory returning a `QWidget`. The host checks
-the type and reports a failure against your plugin rather than crashing:
+the type and reports a failure against your plugin rather than crashing —
+in the status bar and the log, never a dialog, so a panel that cannot be
+built costs the reader a line rather than blocking them:
 
 - `ProjectPanelContribution.widget_factory(context, parent)`
 - `PluginSettingsContribution.widget_factory(context, parent)`
@@ -333,6 +335,25 @@ outline gateway, an editor factory — never the main window or raw models.
 what it hands back is scoped to you: routing exposes only the page types
 **you** registered and raises `PluginScopeError` for anyone else's. The
 scoping is enforced by the host rather than trusted to you.
+
+### One widget per window
+
+Manuskript can show one project in several windows at once. A project panel
+is **declared once** for the application and **built once per window**, so:
+
+- `widget_factory` is called once for every window that opens your panel.
+  Two calls means two widgets, both live, both showing the same project.
+- Keep per-widget state on the widget. Module-level or class-level state is
+  shared by every window and will read as one window changing another.
+- Your widget may be **reparented** after it is built: moved to another
+  window, or torn off into a floating dock. Do not assume the parent you
+  were given is the parent you keep, and do not cache `widget.window()`.
+- Both copies see the same models and the same file namespace, because those
+  belong to the project rather than to a window. Editing in one is editing
+  the project.
+
+Settings panels are built per plugin-manager dialog, and each window has its
+own dialog, so the same applies to them.
 
 ---
 

@@ -65,15 +65,15 @@ def test_opening_twice_reuses_the_living_instance():
     window.close()
 
 
-def test_a_failing_factory_reports_instead_of_raising(monkeypatch):
+def test_a_failing_factory_reports_instead_of_raising():
     """The action that opens a panel must survive the panel being
     broken; the person gets told, the caller gets None.
+
+    Told, not asked. A modal dialog here made every factory fault wait
+    for somebody, which in a test run is a hang rather than a failure --
+    the suite stopped at the same place twice before I believed it.
     """
     reported = []
-    monkeypatch.setattr(
-        "manuskript.ui.panels.host.QMessageBox.critical",
-        lambda *args: reported.append(args[2]),
-    )
 
     def broken(context, parent):
         raise RuntimeError("no widget today")
@@ -84,9 +84,30 @@ def test_a_failing_factory_reports_instead_of_raising(monkeypatch):
         widget_factory=broken,
     ))
 
-    assert host.open("core.broken", PanelContext()) is None
+    assert host.open(
+        "core.broken",
+        PanelContext(show_status=lambda *args: reported.append(args)),
+    ) is None
     assert host.instances == {}
-    assert "no widget today" in reported[0]
+    assert "no widget today" in reported[0][0]
+    window.close()
+
+
+def test_a_failing_factory_never_waits_for_anybody():
+    """No modal, even with nowhere to report to. A panel that cannot be
+    built must not be able to stop the application.
+    """
+    def broken(context, parent):
+        raise RuntimeError("no widget today")
+
+    host, window = make_host(PanelDescriptor(
+        id="core.silent",
+        title="Silent",
+        widget_factory=broken,
+    ))
+
+    # No status reporter anywhere: still returns, still does not block.
+    assert host.open("core.silent", PanelContext()) is None
     window.close()
 
 
