@@ -6,6 +6,7 @@ from manuskript.domain.project import (
     ProjectSession,
 )
 from manuskript.logging import getLogFilePath
+from manuskript import timing
 from manuskript.services.project_autosave import (
     ProjectAutosaveScheduler,
 )
@@ -119,29 +120,36 @@ class ProjectManager:
             )
             return False
 
-        if loadFromFile:
-            # Reset settings to defaults
-            self.settings.reset_to_defaults()
+        with timing.span("project.open"):
+            if loadFromFile:
+                # Reset settings to defaults
+                self.settings.reset_to_defaults()
 
-            # Load data
-            self.loadEmptyDatas()
-            
-            if not self.loadDatas(project):
-                self.autosave.stop()
-                self.storage.clear_cache()
-                return False
+                # Load data
+                with timing.span("project.open.models"):
+                    self.loadEmptyDatas()
 
-        self.session.open(project)
-        self.ui.connect_project()
-        self.ui.apply_loaded_settings()
+                with timing.span("project.open.read"):
+                    loaded = self.loadDatas(project)
+                if not loaded:
+                    self.autosave.stop()
+                    self.storage.clear_cache()
+                    return False
 
-        self.reconfigureAutosave()
-        self._connectModelChanges()
+            self.session.open(project)
+            with timing.span("project.open.connect"):
+                self.ui.connect_project()
+            with timing.span("project.open.settings"):
+                self.ui.apply_loaded_settings()
 
-        self.syncUiToState()
-        self.last_project_store.remember_last_project(project)
-        self.ui.project_opened()
-        return True
+            self.reconfigureAutosave()
+            self._connectModelChanges()
+
+            self.syncUiToState()
+            self.last_project_store.remember_last_project(project)
+            with timing.span("project.open.announce"):
+                self.ui.project_opened()
+            return True
 
     def handleUnsavedChanges(self):
         """
@@ -198,7 +206,8 @@ class ProjectManager:
         self._closeSettled = False
 
         # Close open tabs in editor
-        self.ui.prepare_close()
+        with timing.span("project.close.prepare"):
+            self.ui.prepare_close()
 
         self.session.close()
         self.last_project_store.clear_last_project()
@@ -249,7 +258,8 @@ class ProjectManager:
         # and a project close did not -- so a save could write the
         # manuscript as it stood before the last few keystrokes, and on the
         # close of the last window those keystrokes were simply gone.
-        self.flushPendingEdits()
+        with timing.span("project.save.flush"):
+            self.flushPendingEdits()
 
         previous_project = self.currentProject
         if projectName:
@@ -272,9 +282,10 @@ class ProjectManager:
             return False
 
         self.ui.capture_project_state()
-        result = self.storage.save(
-            self.persistence_context(self.currentProject)
-        )
+        with timing.span("project.save.write"):
+            result = self.storage.save(
+                self.persistence_context(self.currentProject)
+            )
         if result.failed_files:
             self.ui.show_save_failures(result.failed_files)
 

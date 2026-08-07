@@ -1,6 +1,7 @@
 from PyQt5.QtCore import QSize
 from PyQt5.QtWidgets import QListWidgetItem, QMessageBox
 
+from manuskript import timing
 from manuskript.domain.project import CloseDecision
 from manuskript.enums import Outline
 from manuskript.ui.listDialog import ListDialog
@@ -85,33 +86,39 @@ class ProjectLifecycleView:
         # to be working, and both taking the project's single answer
         # would make them the same place. What this window never recorded
         # falls back to the project's.
-        self.window.windowState.restore_view_state(
-            documents=settings.openIndexes,
-            main_tab=settings.lastTab,
-        )
-        self.window.generateViewMenu()
+        with timing.span("settings.reopen_documents"):
+            self.window.windowState.restore_view_state(
+                documents=settings.openIndexes,
+                main_tab=settings.lastTab,
+            )
+        with timing.span("settings.view_menu"):
+            self.window.generateViewMenu()
         self.window.mainEditor.sldCorkSizeFactor.setValue(
             settings.corkSizeFactor
         )
-        self.window.actSpellcheck.setChecked(settings.spellcheck)
-        self.window.toggleSpellcheck(settings.spellcheck)
-        self.window.updateMenuDict()
-        self.window.setDictionary()
+        with timing.span("settings.spellcheck"):
+            self.window.actSpellcheck.setChecked(settings.spellcheck)
+            self.window.toggleSpellcheck(settings.spellcheck)
+        with timing.span("settings.dictionary"):
+            self.window.updateMenuDict()
+            self.window.setDictionary()
 
         icon_size = settings.viewSettings["Tree"]["iconSize"]
         self.window.treeRedacOutline.setIconSize(
             QSize(icon_size, icon_size)
         )
-        self.window.mainEditor.setFolderView(settings.folderView)
-        self.window.mainEditor.updateFolderViewButtons(
-            settings.folderView
-        )
-        self.window.mainEditor.tabSplitter.updateStyleSheet()
-        self.window.mainEditor.updateCorkBackground()
-        if settings.viewMode == "simple":
-            self.window.setViewModeSimple()
-        else:
-            self.window.setViewModeFiction()
+        with timing.span("settings.folder_view"):
+            self.window.mainEditor.setFolderView(settings.folderView)
+            self.window.mainEditor.updateFolderViewButtons(
+                settings.folderView
+            )
+            self.window.mainEditor.tabSplitter.updateStyleSheet()
+            self.window.mainEditor.updateCorkBackground()
+        with timing.span("settings.view_mode"):
+            if settings.viewMode == "simple":
+                self.window.setViewModeSimple()
+            else:
+                self.window.setViewModeFiction()
 
     def project_opened(self):
         settings = self.settings

@@ -7,6 +7,8 @@ import sys
 import signal
 
 import manuskript.logging
+
+from manuskript import timing
 from PyQt5.QtCore import QLocale, QTranslator, QSettings, Qt
 from PyQt5.QtGui import QIcon, QColor, QPalette
 from PyQt5.QtWidgets import QApplication, qApp, QStyleFactory
@@ -42,7 +44,8 @@ def prepare(arguments, tests=False):
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 
     # Create the foundation that provides our Qt application with its event loop.
-    app = QApplication(sys.argv)
+    with timing.span("startup.qt"):
+        app = QApplication(sys.argv)
     app.setOrganizationName("manuskript" + ("_tests" if tests else ""))
     app.setOrganizationDomain("www.theologeek.ch")
     app.setApplicationName("manuskript" + ("_tests" if tests else ""))
@@ -186,7 +189,8 @@ def prepare(arguments, tests=False):
     plugin_settings = QSettings()
     # Before anything reads a routing choice, so nothing downstream has to
     # know how preferences used to be spelled.
-    preferences_migrations.upgrade(plugin_settings)
+    with timing.span("startup.preferences_migrations"):
+        preferences_migrations.upgrade(plugin_settings)
     # One registry, built in the order the layers arrive: core's formats,
     # then every discovered plugin's, then the user's own on top. The
     # runtime has to be given it rather than making its own, or plugin
@@ -198,10 +202,12 @@ def prepare(arguments, tests=False):
         PluginPreferences(plugin_settings),
         media_types=media_types,
     )
-    plugin_runtime.discover()
+    with timing.span("startup.plugins.discover"):
+        plugin_runtime.discover()
     media_type_preferences = MediaTypePreferences(plugin_settings)
     media_type_preferences.apply(media_types)
-    plugin_runtime.load_enabled()
+    with timing.span("startup.plugins.load"):
+        plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
     # What plugins contribute is one application-wide fact, and so is the
     # news that it changed. Windows subscribe rather than each telling
@@ -276,7 +282,8 @@ def prepare(arguments, tests=False):
     # Main window
     from manuskript.mainWindow import MainWindow
 
-    MW = MainWindow(window_services)
+    with timing.span("startup.main_window"):
+        MW = MainWindow(window_services)
     # We store the system default cursor flash time to be able to restore it
     # later if necessary
     MW._defaultCursorFlashTime = qApp.cursorFlashTime()
@@ -289,10 +296,12 @@ def prepare(arguments, tests=False):
         path = os.path.abspath(arguments.filename)
         MW._autoLoadProject = path
 
+    timing.mark("startup.prepared")
     return app, MW
 
 def launch(arguments, app, MW):
-    MW.show()
+    with timing.span("startup.show"):
+        MW.show()
 
     # Support for IPython Jupyter QT Console as a debugging aid.
     # Last argument must be --console to enable it
@@ -342,6 +351,7 @@ def launch(arguments, app, MW):
             print("$ pip3 install ipython qtconsole matplotlib")
             qApp.exec_()
     else:
+        timing.mark("startup.event_loop")
         qApp.exec_()
     qApp.deleteLater()
 
@@ -379,6 +389,9 @@ def process_commandline(argv):
                         action="store_true")
     parser.add_argument("-v", "--verbose", action="count", default=1, help="lower the threshold for messages logged to the terminal")
     parser.add_argument("-L", "--logfile", default=None, help="override the default log file location")
+    parser.add_argument("--measure-time", action="store_true",
+                        help="report how long each blocking milestone takes "
+                             "(startup, loading, saving) on stderr")
     parser.add_argument("filename", nargs="?", metavar="FILENAME", help="the manuskript project (.msk) to open",
                         type=lambda x: is_valid_project(parser, x))
 
@@ -404,6 +417,10 @@ def run():
     arguments = process_commandline(sys.argv[1:])
     # Initialize logging. (Does not include Qt integration yet.)
     manuskript.logging.setUp(console_level=arguments.verbose)
+    # Before anything worth measuring happens, and only if asked. Every
+    # milestone below is free while this is off.
+    if arguments.measure_time:
+        timing.enable()
 
     # Need to return and keep `app` otherwise it gets deleted.
     app, MW = prepare(arguments)

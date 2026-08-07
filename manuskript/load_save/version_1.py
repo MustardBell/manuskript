@@ -20,6 +20,7 @@ from manuskript.domain.persistence import (
 )
 from manuskript.domain.revisions import RevisionConfiguration
 from manuskript.enums import Character, World, Plot, PlotStep, Outline
+from manuskript import timing
 from manuskript.functions import iconColor, iconFromColorString
 from manuskript.converters import HTML2PlainText
 from lxml import etree as ET
@@ -548,7 +549,8 @@ def loadProject(
     # Read and store everything in a dict
 
     LOGGER.debug("Loading {} ({})".format(project, "zip" if zip else "folder"))
-    read_result = file_access.read(project, zipped=bool(zip))
+    with timing.span("load.files"):
+        read_result = file_access.read(project, zipped=bool(zip))
     files = read_result.files
     context.models.plugin_data.load_project_files(files)
     if not zip:
@@ -762,12 +764,14 @@ def loadProject(
 
 
     # We now just have to recursively add items.
-    addTextItems(mdl, outline)
+    with timing.span("load.outline.items"):
+        addTextItems(mdl, outline)
 
     # Adds revisions
     if "revisions.xml" in files:
-        root = parse_project_xml(files["revisions.xml"])
-        appendRevisions(mdl, root)
+        with timing.span("load.outline.revisions"):
+            root = parse_project_xml(files["revisions.xml"])
+            appendRevisions(mdl, root)
 
     # Check IDS
     mdl.rootItem.checkIDs()

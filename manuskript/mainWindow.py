@@ -37,6 +37,7 @@ from manuskript.ui.tools.media_type_inspector import (
     MediaTypeInspector,
 )
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
+from manuskript import timing
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
@@ -230,11 +231,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # UI. Panels are built before saved state is applied: a splitter
         # can only take back its saved sizes once every widget it is
         # meant to split exists.
-        self.setupMoreUi()
+        with timing.span("window.panels"):
+            self.setupMoreUi()
         # After the panels exist: a splitter can only take back its
         # saved sizes once every widget it splits is there, and panel
         # visibility is restored by panel id through the host.
-        self.windowState.restore()
+        with timing.span("window.layout"):
+            self.windowState.restore()
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
