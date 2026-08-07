@@ -23,6 +23,8 @@ except:
     pass
 
 import logging
+
+from manuskript import timing
 LOGGER = logging.getLogger(__name__)
 
 class mainEditor(QWidget, Ui_mainEditor):
@@ -346,6 +348,13 @@ class mainEditor(QWidget, Ui_mainEditor):
             return
 
         title = self.getIndexTitle(index)
+        # Opening a document is a blocking milestone of its own: reopening
+        # the tabs a session left behind is most of what applying settings
+        # costs, and it is one span per document that answers why.
+        with timing.span("editor.open_document"):
+            return self._openDocument(index, newTab, tabWidget, title)
+
+    def _openDocument(self, index, newTab, tabWidget, title):
 
         if tabWidget == None:
             # no tabWidget specified, update all tabs of views that are a target

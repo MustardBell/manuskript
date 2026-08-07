@@ -62,10 +62,14 @@ class BasicHighlighter(QSyntaxHighlighter):
         }
 
     def setDefaultBlockFormat(self, bf):
+        if bf == self._defaultBlockFormat:
+            return
         self._defaultBlockFormat = bf
         self.rehighlight()
 
     def setDefaultCharFormat(self, cf):
+        if cf == self._defaultCharFormat:
+            return
         self._defaultCharFormat = cf
         self.rehighlight()
 

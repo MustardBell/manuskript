@@ -596,19 +596,40 @@ class textEditView(QTextEdit):
         # Based on http://john.nachtimwald.com/2009/08/22/qplaintextedit-with-in-line-spell-check/
 
     def setDict(self, d):
+        """Use a dictionary, repainting only if the spelling marks change.
+
+        Rehighlighting walks every block of the document. Opening a project
+        sets the dictionary on every editor in the window -- 62 of them, and
+        almost always to the dictionary they already had -- so this was 62
+        full repaints to arrive at the marks already on screen.
+        """
+        settled = self.currentDict == d and (not d or self._dict is not None)
         self.currentDict = d
         if d:
             self._dict = Spellchecker.getDictionary(d)
+        if settled:
+            return
         if self.highlighter:
             self.highlighter.rehighlight()
 
     def toggleSpellcheck(self, v):
+        """Turn spelling marks on or off, repainting only on a change.
+
+        Compared after the fact rather than before, because asking for
+        spellcheck without a dictionary does not get it: what decides
+        whether anything needs repainting is the state this leaves behind,
+        not the state that was requested.
+        """
+        was_checking = self.spellcheck
         self.spellcheck = v
         if self.spellcheck and not self._dict:
             self._dict = Spellchecker.getDictionary(self.currentDict)
 
         if not self._dict:
             self.spellcheck = False
+
+        if self.spellcheck == was_checking:
+            return
 
         if self.highlighter:
             self.highlighter.rehighlight()
