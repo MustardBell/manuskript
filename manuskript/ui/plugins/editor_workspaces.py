@@ -1,3 +1,5 @@
+import logging
+
 from functools import partial
 
 from PyQt5.QtCore import QModelIndex, QObject, QPoint, Qt, pyqtSignal
@@ -7,7 +9,6 @@ from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QShortcut,
     QVBoxLayout,
@@ -17,6 +18,11 @@ from PyQt5.QtWidgets import (
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.plugins.api import EditorWorkspaceContext, WorkspaceDocument
+from manuskript.plugins.capabilities import (
+    CAPABILITY_EDITOR_CONTROL,
+    CAPABILITY_OUTLINE_READ,
+    CAPABILITY_OUTLINE_WRITE,
+)
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
@@ -25,6 +31,9 @@ from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationState,
 )
 from manuskript.ui.views.MDEditView import MDEditView
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class WorkspaceOutlineGateway(QObject):
@@ -215,6 +224,34 @@ class WorkspaceOutlineGateway(QObject):
 
     def _selection_changed(self, *_args):
         self.selectionChanged.emit(self.selected_item_ids())
+
+
+class ReadOnlyOutlineView:
+    """The manuscript as a plugin that only reads it sees the manuscript.
+
+    Not the gateway with its mutators disabled: the mutators are not here
+    at all. A plugin calling one gets an AttributeError naming the method
+    it should not have called, and anything asking whether it may write --
+    including the plugin itself -- is told the truth by ``hasattr``.
+
+    The signals are the gateway's own, passed through rather than
+    re-emitted. Watching the manuscript change is reading it.
+    """
+
+    def __init__(self, gateway):
+        self._gateway = gateway
+        self.documentChanged = gateway.documentChanged
+        self.structureChanged = gateway.structureChanged
+        self.selectionChanged = gateway.selectionChanged
+
+    def selected_item_ids(self):
+        return self._gateway.selected_item_ids()
+
+    def documents(self):
+        return self._gateway.documents()
+
+    def document(self, item_id):
+        return self._gateway.document(item_id)
 
 
 class _NullContext:
@@ -583,8 +620,8 @@ class EditorWorkspaceHost(QObject):
                 record.plugin_id,
                 on_change=self.window.projectManager.startTimerNoChanges,
             ),
-            outline=self._outline,
-            editors=self._editors,
+            outline=self._granted_outline(record.plugin_id),
+            editors=self._granted_editors(record.plugin_id),
             show_status=self.window.statusPresenter.show,
             close_workspace=self.close_workspace,
         )
@@ -598,11 +635,7 @@ class EditorWorkspaceHost(QObject):
                     "Editor workspace factories must return QWidget instances."
                 )
         except Exception as error:
-            QMessageBox.critical(
-                self.window,
-                self.window.tr("Plugin workspace failed"),
-                "{}\n\n{}".format(contribution.descriptor.name, error),
-            )
+            self._report_failure(contribution.descriptor, error)
             return None
 
         self._shell = EditorWorkspaceShell(
@@ -644,6 +677,52 @@ class EditorWorkspaceHost(QObject):
     def close_plugin(self, plugin_id):
         if self._active_plugin_id == plugin_id:
             self.close_workspace()
+
+    def _report_failure(self, descriptor, error):
+        """Say a workspace could not be opened, without waiting for anybody.
+
+        This was a modal dialog, and gating made the modal reachable in a
+        new way: a plugin that declares nothing is handed no manuscript and
+        no editors, so its factory raises on the first thing it reaches
+        for. A modal there stops the application on a plugin's mistake, and
+        in a test run stops it with nobody to press the button -- the same
+        fault the panel host had, with the same fix.
+        """
+        message = self.window.tr(
+            "The {} workspace could not be opened: {}"
+        ).format(descriptor.name, error)
+        LOGGER.warning(
+            "Editor workspace %s failed to open: %s", descriptor.id, error,
+        )
+        presenter = getattr(self.window, "statusPresenter", None)
+        if presenter is not None:
+            presenter.show(message, 8000, 2)
+        return message
+
+    def _granted_outline(self, plugin_id):
+        """As much of the manuscript as this plugin declared it needs.
+
+        Registering an editor workspace used to be the whole negotiation:
+        every workspace was handed the gateway that can rewrite any
+        document's text and title, create documents and change what
+        compiles, whether it asked or not. The one that ships uses five of
+        those operations and never touches text or titles.
+
+        Writing includes reading, so a plugin declaring outline.write need
+        not also declare outline.read; declaring neither is a workspace
+        that works on its own files and is given no manuscript at all.
+        """
+        if self.runtime.declares(plugin_id, CAPABILITY_OUTLINE_WRITE):
+            return self._outline
+        if self.runtime.declares(plugin_id, CAPABILITY_OUTLINE_READ):
+            return ReadOnlyOutlineView(self._outline)
+        return None
+
+    def _granted_editors(self, plugin_id):
+        """The editor factory, for a plugin that said it puts panes up."""
+        if self.runtime.declares(plugin_id, CAPABILITY_EDITOR_CONTROL):
+            return self._editors
+        return None
 
     def _install_services(self):
         if self._outline is not None:

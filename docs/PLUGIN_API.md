@@ -203,10 +203,17 @@ Both methods are optional, and returning nothing stays valid:
 | `markup.bbcode` | a `BBCodeConverter` | at registration |
 | `ui.export_routing` | an `ExportRoutingService` | in your settings panel |
 | `media.registry` | a read-only vocabulary view | in your settings panel |
+| `outline.read` | a manuscript you can read | in your editor workspace |
+| `outline.write` | a manuscript you can change | in your editor workspace |
+| `editor.control` | an editor pane factory | in your editor workspace |
 
 `api.capability(name)` raises `PluginScopeError` for anything you did not
 declare, even a name core has. The surface you touch is the intersection of
 what core publishes and what your manifest advertises.
+
+The three workspace services are not asked for by name — they arrive as
+fields of your `EditorWorkspaceContext`, or arrive as `None`. Declaring is
+still what decides which.
 
 Some services arrive later than others. A UI service needs a running
 application and a plugin to be scoped to, and neither exists while plugins
@@ -330,6 +337,32 @@ built costs the reader a line rather than blocking them:
 The `context` objects (`PluginSettingsContext`, `EditorWorkspaceContext`) are
 capability-scoped by design: you receive your own file namespace, a guarded
 outline gateway, an editor factory — never the main window or raw models.
+
+### What an editor workspace is given
+
+`EditorWorkspaceContext.outline` and `.editors` are what your manifest asked
+for, and `None` otherwise. Registering the contribution is not the request.
+
+| you declare | `context.outline` | `context.editors` |
+|---|---|---|
+| nothing | `None` | `None` |
+| `outline.read` | reads only: `document`, `documents`, `selected_item_ids`, and the change signals | `None` |
+| `outline.write` | all of the above plus `set_text`, `set_title`, `set_compile`, `set_compile_many`, `create_text_document`, `duplicate_text_document` | `None` |
+| `editor.control` | as above | the editor pane factory |
+
+`outline.write` includes reading, so declare one or the other, not both.
+
+A read-only outline does not have the writing methods — they are absent
+rather than disabled, so `hasattr(context.outline, "set_text")` tells you
+the truth and calling one raises `AttributeError` naming what you called.
+
+`context.selected_item_ids` arrives whatever you declared: it is what your
+workspace was opened on, the argument of the call rather than a view of the
+manuscript.
+
+Ask for the least you need. What a plugin may touch is shown to the reader
+who installs it, and a workspace that only compares scenes should not be
+able to rewrite the book.
 
 `PluginSettingsContext.capability` is how a panel reaches a UI service, and
 what it hands back is scoped to you: routing exposes only the page types

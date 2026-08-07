@@ -340,6 +340,23 @@ class PluginRuntime:
             )
         return entry
 
+    def declares(self, plugin_id, capability):
+        """Whether this plugin asked for a capability in its manifest.
+
+        The one place that answers it. Two hosts hand services over -- the
+        settings panel and the editor workspace -- and each used to read
+        the manifest itself, which is two chances to disagree about what a
+        declaration is.
+
+        A plugin core has no record of has declared nothing. That is the
+        honest answer rather than a cautious one: contributions arrive from
+        loaded plugins, and a loaded plugin has a manifest.
+        """
+        record = self.records.get(plugin_id)
+        if record is None:
+            return False
+        return capability in record.manifest.requires
+
     def _record(self, plugin_id):
         if plugin_id not in self.records:
             raise KeyError("Unknown plugin {!r}.".format(plugin_id))

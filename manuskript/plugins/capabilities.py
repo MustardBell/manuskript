@@ -22,6 +22,15 @@ CAPABILITY_UI_EXPORT_ROUTING = "ui.export_routing"
 #: Read what the shared media type vocabulary currently contains.
 CAPABILITY_MEDIA_REGISTRY = "media.registry"
 
+#: Read the manuscript an editor workspace was opened over.
+CAPABILITY_OUTLINE_READ = "outline.read"
+
+#: Change the manuscript: text, titles, compile flags, new documents.
+CAPABILITY_OUTLINE_WRITE = "outline.write"
+
+#: Put editor panes on screen and drive them.
+CAPABILITY_EDITOR_CONTROL = "editor.control"
+
 
 @dataclass(frozen=True)
 class Capability:
@@ -76,6 +85,31 @@ CAPABILITIES = (
             "Read the shared media type vocabulary: labels, what stands "
             "in for a format, and who declared or promised what. Read "
             "only -- declaring is done in your manifest."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_OUTLINE_READ,
+        summary=(
+            "Read the manuscript your editor workspace was opened over: "
+            "the selected items, every document, and word of it changing. "
+            "Your workspace context's outline reads but cannot write."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_OUTLINE_WRITE,
+        summary=(
+            "Change the manuscript from an editor workspace: text, "
+            "titles, compile flags, and new or duplicated documents. "
+            "Includes everything outline.read offers, so asking for both "
+            "is unnecessary."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_EDITOR_CONTROL,
+        summary=(
+            "Put editor panes in your workspace and drive them: cursor, "
+            "selection, scrolling, presentation and the editing lock. "
+            "Without it your workspace context has no editor factory."
         ),
     ),
 )

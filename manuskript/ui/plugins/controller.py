@@ -159,9 +159,7 @@ class PluginUiController:
         Same negotiation as during registration, enforced the same way:
         a name the manifest does not list is refused even when core has it.
         """
-        record = self.runtime.records.get(plugin_id)
-        declared = record.manifest.requires if record is not None else ()
-        if name not in declared:
+        if not self.runtime.declares(plugin_id, name):
             raise PluginScopeError(
                 "Plugin {} did not declare capability {!r} in its "
                 "manifest.".format(plugin_id, name)
