@@ -764,8 +764,17 @@ def loadProject(
 
 
     # We now just have to recursively add items.
+    #
+    # Inside the batch: every item added to a folder makes that folder's
+    # word count wrong, and each correction walks up to the root emitting
+    # as it goes. Loading a book that way recomputes the same ancestors
+    # once per document below them -- 231,658 index lookups for 918 items,
+    # measured -- to arrive at the totals one final pass computes anyway.
+    # The mechanism is the model's own, and was already used for bulk
+    # compile changes; loading simply never asked for it.
     with timing.span("load.outline.items"):
-        addTextItems(mdl, outline)
+        with mdl.batchWordCountUpdates():
+            addTextItems(mdl, outline)
 
     # Adds revisions
     if "revisions.xml" in files:
