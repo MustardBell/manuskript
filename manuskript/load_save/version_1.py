@@ -485,7 +485,26 @@ def outlineToMMD(item):
     content = ""
 
     # We don't want to write some datas (computed)
-    exclude = [Outline.wordCount, Outline.goal, Outline.goalPercentage, Outline.revisions, Outline.text]
+    #
+    # charCount joined the list late. It was written to every document
+    # file and read back into every item on load -- and then thrown away
+    # microseconds later, because loading sets the metadata first and the
+    # text last, and setting text recomputes both counts. So the stored
+    # number was never once consulted: pure write-only noise, one changed
+    # header line in every diff of every document anybody typed in, and a
+    # number that depended on the countSpaces preference, so two people
+    # with the same text wrote different bytes.
+    #
+    # Its absent twin, wordCount, has been in this list since the list was
+    # written in 2016. Nothing chose the difference.
+    exclude = [
+        Outline.wordCount,
+        Outline.charCount,
+        Outline.goal,
+        Outline.goalPercentage,
+        Outline.revisions,
+        Outline.text,
+    ]
     # We want to force some data even if they're empty
     force = [Outline.compile]
 
