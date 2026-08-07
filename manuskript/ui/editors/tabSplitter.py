@@ -324,6 +324,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
             self.splitState = 1
             self.splitter.setOrientation(Qt.Horizontal)
+            self.equalizeSplit()
             # self.btnSplit.setChecked(True)
             self.btnSplit.setIcon(QIcon.fromTheme("split-vertical"))
             self.btnSplit.setToolTip(self.tr("Split horizontally"))
@@ -334,6 +335,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
             self.splitter.setOrientation(Qt.Vertical)
             self.splitState = 2
+            self.equalizeSplit()
             # self.btnSplit.setChecked(True)
             self.btnSplit.setIcon(QIcon.fromTheme("split-horizontal"))
             self.btnSplit.setToolTip(self.tr("Close split"))
@@ -392,6 +394,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         self.firstTab = child
         self.splitter.setStretchFactor(0, 10)
         self.splitter.setStretchFactor(1, 10)
+        self.equalizeSplit()
         return child
 
     def collapseOwnSide(self):
@@ -427,6 +430,44 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             idx = self.mainEditor.currentEditor().currentIndex
             self.focusTab = 2
             self.mainEditor.setCurrentModelIndex(idx)
+
+    def equalizeSplit(self):
+        """Give this area's halves the same size.
+
+        Stretch factors decide how a splitter hands out space it *gains*,
+        not how it distributes what it already has -- that comes from the
+        child widgets' size hints. A pane built empty asks for very little,
+        so a fresh split appeared as a sliver beside the editor instead of
+        half of it, and the stretch factors set on either side of it never
+        had anything to do.
+
+        Silent when the splitter has not been laid out yet: a width of zero
+        divides into halves of zero, and a restored arrangement sets its own
+        remembered sizes anyway.
+        """
+        splitter = self.splitter
+        # Visible panes only. Nesting leaves this area's own tab widget in
+        # the splitter, hidden, once its documents have moved into a child,
+        # so counting panes would divide the space three ways to fill two.
+        shown = [
+            index for index in range(splitter.count())
+            if not splitter.widget(index).isHidden()
+        ]
+        if len(shown) < 2:
+            return False
+        extent = (
+            splitter.width()
+            if splitter.orientation() == Qt.Horizontal
+            else splitter.height()
+        )
+        if extent <= 0:
+            return False
+        share = extent // len(shown)
+        splitter.setSizes([
+            share if index in shown else 0
+            for index in range(splitter.count())
+        ])
+        return True
 
     def closeSplit(self):
         self.collapseOwnSide()
