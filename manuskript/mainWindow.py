@@ -94,7 +94,9 @@ from manuskript.ui.welcome_context import welcome_context_for
 from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.view_configuration import (
     MainViewConfiguration,
+    ViewConfigurationViews,
     ViewSettingsMenuBuilder,
+    ViewSettingsMenuViews,
 )
 from manuskript.services.workspace_state import (
     PRIMARY as WORKSPACE_PRIMARY,
@@ -175,16 +177,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
         )
-        self.viewConfigurationController = (
-            ViewConfigurationController(
-                MainViewConfiguration(self),
-                self.settingsManager,
-            )
-        )
-        self.viewSettingsMenu = ViewSettingsMenuBuilder(
-            self,
-            self.viewConfigurationController,
-        )
         self.referenceService = None
         self.textEditorContext = None
         # This window's layout, filed under this window. Two windows
@@ -241,6 +233,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             WorldPanelView.for_window(self),
             self.panelNavigation,
             self.panelDialogs,
+        )
+        self.viewConfigurationController = (
+            ViewConfigurationController(
+                MainViewConfiguration(
+                    ViewConfigurationViews.for_window(self)
+                ),
+                self.settingsManager,
+            )
+        )
+        self.viewSettingsMenu = ViewSettingsMenuBuilder(
+            ViewSettingsMenuViews.for_window(self),
+            self.viewConfigurationController,
         )
         # After the panels exist: a splitter can only take back its
         # saved sizes once every widget it splits is there, and panel
