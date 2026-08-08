@@ -166,6 +166,71 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         self.tab.removeTab(index)
         w.setCurrentModelIndex(QModelIndex())
         w.deleteLater()
+        self.collapseIfEmpty()
+
+    def parent_area(self):
+        """The area this one is a half of, if it is a half of one."""
+        parent = self.parentWidget()
+        while parent is not None:
+            if isinstance(parent, tabSplitter):
+                return parent
+            parent = parent.parentWidget()
+        return None
+
+    def collapseIfEmpty(self):
+        """Give an emptied half's space back instead of leaving a frame.
+
+        Closing the last document in one half of a split left that half
+        standing: an empty tab bar and a splitter handle, holding space
+        nothing was using and offering nothing to do.
+
+        Only for an area that holds documents itself. A nested area's own
+        tab widget is legitimately empty -- its documents live in the child
+        that took its side over -- and collapsing on that would undo the
+        nesting the moment it was made.
+        """
+        if self.firstTab is not None or self.tab.count():
+            return False
+
+        neighbour = self.secondTab
+        if neighbour is not None:
+            if neighbour.children_areas():
+                # The other half is itself divided. Absorbing a subtree
+                # means rebuilding its editors, and an editor losing its
+                # cursor because a neighbour closed a tab is worse than the
+                # frame this leaves behind.
+                return False
+            # Take the neighbour's documents and close the split, which is
+            # what collapsing a nested side already does one level down.
+            while neighbour.tab.count():
+                widget = neighbour.tab.widget(0)
+                title = neighbour.tab.tabText(0)
+                neighbour.tab.removeTab(0)
+                self.tab.addTab(widget, title)
+            self.closeSplit()
+            if self.tab.count():
+                return True
+            # The neighbour had nothing either, so this area has no more
+            # reason to exist than it did a moment ago. Ask again, now that
+            # it is no longer split.
+            return self.collapseIfEmpty()
+
+        parent = self.parent_area()
+        if parent is None:
+            # The only area there is. An editor with nothing open is a
+            # legitimate state, not an empty frame beside something.
+            return False
+        if parent.secondTab is self:
+            parent.closeSplit()
+            return True
+        if parent.firstTab is self:
+            # This area *was* the parent's own side. Handing it back leaves
+            # the parent's own side empty in turn, so it asks itself the
+            # same question.
+            parent.collapseOwnSide()
+            parent.collapseIfEmpty()
+            return True
+        return False
 
     def tabOpenIndexes(self):
         if self.editor_context is None:
