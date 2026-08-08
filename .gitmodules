@@ -5,3 +5,7 @@
 	path = manuskript/plugins/plain_lists
 	url = https://github.com/MustardBell/manuskript-plain-lists.git
 	branch = main
+[submodule "manuskript/plugins/anchors"]
+	path = manuskript/plugins/anchors
+	url = https://github.com/MustardBell/manuskript-anchors.git
+	branch = main
