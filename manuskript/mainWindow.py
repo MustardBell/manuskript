@@ -68,7 +68,7 @@ from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
 )
 from manuskript.ui.menu_tooltips import MenuTooltipController
-from manuskript.ui.navigation_view import MainNavigationView
+from manuskript.ui.navigation_view import MainNavigationView, NavigationViews
 from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_binding_views import ProjectBindingViews
 from manuskript.ui.project_context_binding import ProjectContextBinding
@@ -161,36 +161,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # The project layer. A window is one view of it and never its
         # owner, so this is always something it was handed.
         self.projectRuntime = services.project_runtime
-        # Panel controllers are given the panel they drive and the two
-        # services every panel needs, rather than a window that can
-        # answer anything.
-        self.navigationController = NavigationController(
-            MainNavigationView(self, self.projectRuntime)
-        )
-        self.history = self.navigationController.history
-        # Panel controllers reach the history directly. Pushing an entry
-        # used to read a private flag off this window, which made three
-        # controllers writers of one window attribute.
-        self.panelNavigation = PanelNavigation(self.navigationController)
-        self.panelDialogs = PanelDialogs(self)
-        self.characterController = CharacterController(
-            CharacterModels(self.projectRuntime),
-            CharacterPanelView.for_window(self),
-            self.panelNavigation,
-            self.panelDialogs,
-        )
-        self.plotController = PlotController(
-            PlotModels(self.projectRuntime),
-            PlotPanelView.for_window(self),
-            self.panelNavigation,
-            self.panelDialogs,
-        )
-        self.worldController = WorldController(
-            WorldModels(self.projectRuntime),
-            WorldPanelView.for_window(self),
-            self.panelNavigation,
-            self.panelDialogs,
-        )
         # Aliases onto the runtime for everything that still reaches
         # these by attribute. They retire as callers learn to ask the
         # runtime; what they name has moved, not what it does.
@@ -242,6 +212,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # meant to split exists.
         with timing.span("window.panels"):
             self.setupMoreUi()
+        # Now every core panel exists, compose the controllers from their
+        # explicit view contracts. Navigation used to be built before the
+        # project tree and kept the whole window so it could find it later.
+        self.navigationController = NavigationController(
+            MainNavigationView(
+                NavigationViews.for_window(self),
+                self.projectRuntime,
+            )
+        )
+        self.history = self.navigationController.history
+        self.panelNavigation = PanelNavigation(self.navigationController)
+        self.panelDialogs = PanelDialogs(self)
+        self.characterController = CharacterController(
+            CharacterModels(self.projectRuntime),
+            CharacterPanelView.for_window(self),
+            self.panelNavigation,
+            self.panelDialogs,
+        )
+        self.plotController = PlotController(
+            PlotModels(self.projectRuntime),
+            PlotPanelView.for_window(self),
+            self.panelNavigation,
+            self.panelDialogs,
+        )
+        self.worldController = WorldController(
+            WorldModels(self.projectRuntime),
+            WorldPanelView.for_window(self),
+            self.panelNavigation,
+            self.panelDialogs,
+        )
         # After the panels exist: a splitter can only take back its
         # saved sizes once every widget it splits is there, and panel
         # visibility is restored by panel id through the host.
