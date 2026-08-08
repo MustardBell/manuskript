@@ -1,25 +1,32 @@
-"""What a plugin may add to what Markdown means, once it becomes HTML.
+"""What a plugin may add to what one format means when it becomes another.
 
-Not a transform and not an exporter. A transform is middleware that has to be
-told where its output is going; an exporter produces a whole document. An
-augmentation says one thing more about Markdown -- lists written ``1)`` were
-the case that prompted it -- and every route that renders Markdown as HTML
-picks it up.
+The route is data, never part of the kind. A contribution kind per
+destination would make one format privileged -- native -- and leave every
+other reachable only through something more generic, which is a split these
+tests exist partly to prevent.
 
-The first test converts real Markdown through a real extension, because the
-whole point is what the reader ends up looking at.
+So these tests name Markdown and HTML themselves, the way the HTML exporter
+names its own route, and one of them checks that an augmentation declared for
+another route stays out of this one.
+
+The first test converts real Markdown and inspects the HTML, because what the
+reader ends up looking at is the whole claim.
 """
 
 import re
 
 import pytest
 
+from manuskript.media_types import BBCODE, HTML, MARKDOWN
 from manuskript.plugins.api import (
+    ConversionAugmentationContribution,
+    ConversionRequest,
     ExtensionDescriptor,
-    HtmlAugmentationContribution,
 )
 from manuskript.plugins.errors import PluginRegistrationError
-from manuskript.plugins.html_augmentations import markdown_extensions
+from manuskript.plugins.conversion_augmentations import (
+    augmentations_for,
+)
 from manuskript.plugins.registry import PluginRegistry
 
 markdown_module = pytest.importorskip("markdown")
@@ -62,16 +69,25 @@ class _ParenthesisPreprocessor(markdown_module.preprocessors.Preprocessor):
         return out
 
 
+#: The one route these tests are about. Named here, by the test, exactly as
+#: the exporter names its own route -- never by the contract.
+TO_HTML = ConversionRequest(source_format=MARKDOWN, target_format=HTML)
+
+
 def an_augmentation(
         extension_id="vendor.lists",
         factory=ParenthesisLists,
+        source=MARKDOWN,
+        target=HTML,
         page_types=(),
         priority=0):
-    return HtmlAugmentationContribution(
+    return ConversionAugmentationContribution(
         descriptor=ExtensionDescriptor(
             id=extension_id, name="Parenthesis lists",
         ),
-        extension_factory=factory,
+        source_format=source,
+        target_format=target,
+        augmentation_factory=factory,
         page_types=page_types,
         priority=priority,
     )
@@ -81,7 +97,7 @@ def registry_with(*contributions):
     registry = PluginRegistry()
     registrar = registry.registrar("vendor.markup")
     for contribution in contributions:
-        registrar.register_html_augmentation(contribution)
+        registrar.register_conversion_augmentation(contribution)
     registry.install("vendor.markup", registrar.contributions)
     return registry
 
@@ -94,7 +110,7 @@ def test_a_list_written_with_parentheses_becomes_a_list():
 
     plain = markdown_module.markdown(source)
     augmented = markdown_module.markdown(
-        source, extensions=markdown_extensions(registry_with(an_augmentation())),
+        source, extensions=augmentations_for(registry_with(an_augmentation()), TO_HTML),
     )
 
     assert "<li>" not in plain
@@ -108,7 +124,7 @@ def test_prose_is_left_alone():
     source = "She counted to 3) and stopped.\n\nA year (1999) went by."
 
     augmented = markdown_module.markdown(
-        source, extensions=markdown_extensions(registry_with(an_augmentation())),
+        source, extensions=augmentations_for(registry_with(an_augmentation()), TO_HTML),
     )
 
     assert "<li>" not in augmented
@@ -118,8 +134,33 @@ def test_prose_is_left_alone():
 # --------------------------------------------------------------- the kind
 
 def test_an_augmentation_needs_something_to_build():
-    with pytest.raises(ValueError, match="extension factory"):
+    with pytest.raises(ValueError, match="needs a factory"):
         an_augmentation(factory=None)
+
+
+def test_an_augmentation_must_name_the_route_it_augments():
+    """The formats are declared, never implied by the kind. A kind per
+    destination would privilege one format and leave every other reachable
+    only through something more generic.
+    """
+    with pytest.raises(ValueError, match="formats it augments"):
+        an_augmentation(target="")
+
+
+def test_an_augmentation_for_another_route_stays_out_of_this_one():
+    """The whole point of the route being data: augmenting Markdown to
+    BBCode is the same act as augmenting Markdown to HTML, and neither
+    leaks into the other.
+    """
+    to_bbcode = an_augmentation(
+        extension_id="vendor.bb", source=MARKDOWN, target=BBCODE,
+    )
+
+    assert to_bbcode.applies_to(TO_HTML) is False
+    assert to_bbcode.applies_to(
+        ConversionRequest(source_format=MARKDOWN, target_format=BBCODE)
+    ) is True
+    assert augmentations_for(registry_with(to_bbcode), TO_HTML) == []
 
 
 def test_the_registry_refuses_a_different_kind_of_contribution():
@@ -127,24 +168,30 @@ def test_the_registry_refuses_a_different_kind_of_contribution():
     registrar = registry.registrar("vendor.markup")
 
     with pytest.raises(PluginRegistrationError):
-        registrar.register_html_augmentation(object())
+        registrar.register_conversion_augmentation(object())
 
 
 # --------------------------------------------------------------- the scope
 
+def a_request(page_type=None):
+    return ConversionRequest(
+        source_format=MARKDOWN, target_format=HTML, page_type=page_type,
+    )
+
+
 def test_an_augmentation_naming_no_page_type_applies_everywhere():
     contribution = an_augmentation()
 
-    assert contribution.applies_to() is True
-    assert contribution.applies_to("vendor.sample") is True
+    assert contribution.applies_to(a_request()) is True
+    assert contribution.applies_to(a_request("vendor.sample")) is True
 
 
 def test_an_augmentation_naming_page_types_applies_only_to_those():
     contribution = an_augmentation(page_types=("vendor.sample",))
 
-    assert contribution.applies_to() is False
-    assert contribution.applies_to("other.page") is False
-    assert contribution.applies_to("vendor.sample") is True
+    assert contribution.applies_to(a_request()) is False
+    assert contribution.applies_to(a_request("other.page")) is False
+    assert contribution.applies_to(a_request("vendor.sample")) is True
 
 
 def test_the_registry_is_not_asked_which_ones_apply():
@@ -155,9 +202,9 @@ def test_the_registry_is_not_asked_which_ones_apply():
     """
     registry = registry_with(an_augmentation())
 
-    for query in ("html_augmentations_for", "transforms_for"):
+    for query in ("conversion_augmentations_for", "transforms_for"):
         assert not hasattr(registry, query), query
-    assert len(registry.html_augmentations) == 1
+    assert len(registry.conversion_augmentations) == 1
 
 
 def test_augmentations_are_built_highest_priority_first():
@@ -181,7 +228,7 @@ def test_augmentations_are_built_highest_priority_first():
         ),
     )
 
-    markdown_extensions(registry)
+    augmentations_for(registry, TO_HTML)
 
     assert built == ["first", "second"]
 
@@ -201,7 +248,9 @@ def test_an_extension_that_will_not_build_is_skipped_not_fatal():
         an_augmentation(extension_id="vendor.working", priority=-1),
     )
 
-    built = markdown_extensions(registry, report_error=said.append)
+    built = augmentations_for(
+        registry, TO_HTML, report_error=said.append,
+    )
 
     assert len(built) == 1
     assert isinstance(built[0], ParenthesisLists)
@@ -210,4 +259,4 @@ def test_an_extension_that_will_not_build_is_skipped_not_fatal():
 
 def test_no_registry_means_no_augmentations():
     """Rendering without a plugin layer at all is an ordinary case."""
-    assert markdown_extensions(None) == []
+    assert augmentations_for(None, TO_HTML) == []

@@ -7,7 +7,11 @@ from manuskript.exporter.manuskript.markdown import markdown, markdownSettings
 from manuskript.ui.views.webView import webView
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
 from manuskript.functions import safeTranslate
-from manuskript.media_types import HTML as HTML_MEDIA_TYPE
+from manuskript.media_types import (
+    HTML as HTML_MEDIA_TYPE,
+    MARKDOWN as MARKDOWN_MEDIA_TYPE,
+)
+from manuskript.plugins.api import ConversionRequest
 
 import logging
 import os
@@ -69,21 +73,29 @@ class HTML(markdown):
         return t
 
     def htmlAugmentations(self):
-        """What plugins add to Markdown for this rendering, if anything.
+        """What plugins add to this exporter's own conversion, if anything.
+
+        This exporter turns Markdown into HTML, so it is the code entitled to
+        say so: the route is named here rather than in the plugin contract,
+        where naming a format would make one privileged and every other
+        reachable only through something more generic.
 
         Asked of the context per rendering rather than held: a plugin can be
         enabled or disabled while an export dialog is open, and the answer
         must be current when the button is pressed.
         """
-        provider = getattr(self.context, "html_augmentations", None)
+        provider = getattr(self.context, "conversion_augmentations", None)
         if provider is None:
             return []
         try:
-            return list(provider())
+            return list(provider(ConversionRequest(
+                source_format=MARKDOWN_MEDIA_TYPE,
+                target_format=HTML_MEDIA_TYPE,
+            )))
         except Exception:
             LOGGER.exception(
-                "Cannot read what plugins add to Markdown; exporting "
-                "without their additions."
+                "Cannot read what plugins add to this conversion; "
+                "exporting without their additions."
             )
             return []
 

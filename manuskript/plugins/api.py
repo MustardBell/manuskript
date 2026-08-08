@@ -504,65 +504,111 @@ class MarkupContribution:
 
 
 @dataclass(frozen=True)
-class HtmlAugmentationContribution:
-    """Something Markdown should mean, once it becomes HTML.
+class ConversionRequest:
+    """One conversion about to happen, described so contributions can judge it.
 
-    Not a transform and not an exporter. A transform is middleware that has
-    to guess where its output is going, and would have to be told; an
-    exporter produces a whole document. This declares one addition to what
-    Markdown means -- lists written ``1)``, a footnote convention, a spoiler
-    box -- and every route that renders Markdown as HTML picks it up: the
-    HTML export, the preview beside it, and a page type's reading view.
+    A value rather than a pile of arguments, so that a contribution answers
+    one question -- does this apply to me -- and a later fact about a
+    rendering can be added here without changing what every contribution
+    implements.
+    """
 
-    ``extension_factory`` returns a ``markdown.Extension``, because the
-    conversion is python-markdown and extending it is what that library is
-    for. Emitting HTML from a Markdown-shaped source needs no escape hatch:
-    the extension participates in the conversion rather than smuggling tags
-    through it.
+    source_format: str
+    target_format: str
+    page_type: Optional[str] = None
 
-    ``page_types`` is the scope. Empty means every document. Naming page
-    types narrows it to documents of those types, which is how one
-    augmentation can apply to a whole manuscript and another only to the
-    pages that asked for it.
 
-    Augmentations stack, highest ``priority`` first, so an addition that
-    must see the source before another can say so.
+@dataclass(frozen=True)
+class ConversionAugmentationContribution:
+    """Something one format should additionally mean when it becomes another.
+
+    Not a transform and not a converter. A converter turns one format into
+    another and there is one of it; a transform is middleware over content
+    that stays in the same format. This adds to what an existing conversion
+    understands -- lists written ``1)``, a footnote convention, a spoiler box
+    -- and every route that performs that conversion picks it up.
+
+    The formats are **declared, not implied**. There is no contribution kind
+    per destination, because that would make one format privileged and every
+    other reachable only through something more generic: two classes of media
+    type, native and not. A route here is ordinary data drawn from the same
+    vocabulary a manifest declares, so augmenting Markdown to BBCode is the
+    same act as augmenting Markdown to HTML.
+
+    ``augmentation_factory`` returns whatever the converter for that route
+    accepts, and what that is belongs to the route rather than to this
+    contract -- a ``markdown.Extension`` where python-markdown performs the
+    conversion. The contract here is the route and the ordering; what the
+    engine takes is documented with the engine.
+
+    ``page_types`` is the scope. Empty means every document; naming page types
+    narrows it to documents of those types.
+
+    Augmentations stack, highest ``priority`` first, so an addition that must
+    see the source before another can say so.
     """
 
     descriptor: ExtensionDescriptor
-    extension_factory: Callable[[], Any]
+    source_format: str
+    target_format: str
+    augmentation_factory: Callable[[], Any]
     page_types: tuple[str, ...] = ()
     priority: int = 0
 
     def __post_init__(self):
         object.__setattr__(
+            self, "source_format", str(self.source_format).strip(),
+        )
+        object.__setattr__(
+            self, "target_format", str(self.target_format).strip(),
+        )
+        object.__setattr__(
             self,
             "page_types",
-            tuple(str(value).strip() for value in self.page_types if str(value).strip()),
+            tuple(
+                str(value).strip()
+                for value in self.page_types
+                if str(value).strip()
+            ),
         )
-        if self.extension_factory is None:
+        if not self.source_format or not self.target_format:
             raise ValueError(
-                "HTML augmentation {} needs an extension factory.".format(
+                "Conversion augmentation {} must name the formats it "
+                "augments between.".format(self.descriptor.id)
+            )
+        if self.augmentation_factory is None:
+            raise ValueError(
+                "Conversion augmentation {} needs a factory.".format(
                     self.descriptor.id
                 )
             )
 
-    def applies_to(self, page_type=None):
-        """Whether this augmentation is wanted for this document.
+    def applies_to(self, request):
+        """Whether this augmentation belongs in that conversion.
 
-        The rule lives here because the scope is declared here. A registry
-        answering it would be a catalogue that knows what page types are, and
-        would need another such question for every kind of context a caller
-        might be in.
+        The route must match, and the scope must admit the document. Asked of
+        the contribution because the contribution is where both were
+        declared; a registry answering it would need one such method per kind
+        of context a caller might be in.
         """
+        if request is None:
+            return False
+        if (
+            self.source_format != request.source_format
+            or self.target_format != request.target_format
+        ):
+            return False
         if not self.page_types:
             return True
-        return page_type is not None and page_type in self.page_types
+        return (
+            request.page_type is not None
+            and request.page_type in self.page_types
+        )
 
 
 Contribution = Union[
     ExportContribution,
-    HtmlAugmentationContribution,
+    ConversionAugmentationContribution,
     ImportContribution,
     ConversionContribution,
     ProjectPanelContribution,

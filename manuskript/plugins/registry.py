@@ -7,7 +7,7 @@ from manuskript.plugins.api import (
     ConversionContribution,
     EditorWorkspaceContribution,
     ExportContribution,
-    HtmlAugmentationContribution,
+    ConversionAugmentationContribution,
     ImportContribution,
     IndexCardStyleContribution,
     MarkupContribution,
@@ -36,7 +36,7 @@ class ContributionKind(str, Enum):
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
     TRANSFORM = "transform"
-    HTML_AUGMENTATION = "html_augmentation"
+    CONVERSION_AUGMENTATION = "conversion_augmentation"
 
 
 CONTRIBUTION_TYPES = {
@@ -51,7 +51,9 @@ CONTRIBUTION_TYPES = {
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
     ContributionKind.TRANSFORM: TransformContribution,
-    ContributionKind.HTML_AUGMENTATION: HtmlAugmentationContribution,
+    ContributionKind.CONVERSION_AUGMENTATION: (
+        ConversionAugmentationContribution
+    ),
 }
 
 
@@ -150,8 +152,8 @@ class PluginRegistrar:
     def register_transform(self, contribution):
         self._add(ContributionKind.TRANSFORM, contribution)
 
-    def register_html_augmentation(self, contribution):
-        self._add(ContributionKind.HTML_AUGMENTATION, contribution)
+    def register_conversion_augmentation(self, contribution):
+        self._add(ContributionKind.CONVERSION_AUGMENTATION, contribution)
 
     def _add(self, kind, contribution):
         expected = CONTRIBUTION_TYPES[kind]
@@ -300,6 +302,8 @@ class PluginRegistry:
         return self.contributions(ContributionKind.TRANSFORM)
 
     @property
-    def html_augmentations(self):
-        return self.contributions(ContributionKind.HTML_AUGMENTATION)
+    def conversion_augmentations(self):
+        return self.contributions(
+            ContributionKind.CONVERSION_AUGMENTATION
+        )
 

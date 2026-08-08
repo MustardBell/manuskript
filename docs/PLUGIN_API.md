@@ -188,7 +188,7 @@ Both methods are optional, and returning nothing stays valid:
 | `register_page_type` | `PageTypeContribution` |
 | `register_page_renderer` | `PageRendererContribution` |
 | `register_markup` | `MarkupContribution` |
-| `register_html_augmentation` | `HtmlAugmentationContribution` |
+| `register_conversion_augmentation` | `ConversionAugmentationContribution` |
 | `register_project_panel` | `ProjectPanelContribution` |
 | `register_settings_panel` | `PluginSettingsContribution` |
 | `register_editor_workspace` | `EditorWorkspaceContribution` |
@@ -370,37 +370,44 @@ what it hands back is scoped to you: routing exposes only the page types
 **you** registered and raises `PluginScopeError` for anyone else's. The
 scoping is enforced by the host rather than trusted to you.
 
-## HTML augmentations
+## Conversion augmentations
 
-Something Markdown should mean, once it becomes HTML.
+Something one format should additionally mean when it becomes another.
 
 ```python
-registrar.register_html_augmentation(HtmlAugmentationContribution(
-    descriptor=ExtensionDescriptor(id="vendor.lists", name="Parenthesis lists"),
-    extension_factory=ParenthesisLists,   # a markdown.Extension subclass
+registrar.register_conversion_augmentation(ConversionAugmentationContribution(
+    descriptor=ExtensionDescriptor(id="vendor.lists", name="Plain lists"),
+    source_format="text/markdown",
+    target_format="text/html",
+    augmentation_factory=PlainLists,
 ))
 ```
 
-`extension_factory` returns a `markdown.Extension`, because the conversion is
-python-markdown and extending it is what that library is for. Your addition
-participates in the conversion rather than smuggling tags through it.
+**The route is data.** There is no contribution kind per destination, and no
+format is named anywhere in this contract — that would make one format
+privileged and every other reachable only through something more generic, so
+that plugins would face two classes of media type, native and not. Augmenting
+Markdown to BBCode is the same act, through the same kind, as augmenting
+Markdown to HTML.
 
-It is neither a transform nor an exporter, and the difference matters. A
-transform is middleware over one media type and would have to be told where
-its output is going — a `<ol>` is only safe if HTML is the destination. An
-exporter produces a whole document. An augmentation says one thing more about
-what Markdown means, and **every route that renders Markdown as HTML picks it
-up**: the HTML export, the preview beside it, and a page type's reading view.
+`augmentation_factory` returns whatever the engine performing that route
+accepts, and what that is belongs to the route rather than to this contract.
+For Markdown to HTML the conversion is python-markdown, so it is a
+`markdown.Extension`; your addition participates in the conversion rather
+than smuggling tags through the source.
 
 | field | means |
 |---|---|
-| `extension_factory` | builds the `markdown.Extension`, called per rendering |
-| `page_types` | empty applies to every document; naming page types narrows it to documents of those types |
-| `applies_to(page_type)` | answers whether it is wanted here — the rule lives with the scope that declares it, not in the registry |
+| `source_format` / `target_format` | the route, from the same vocabulary your manifest declares |
+| `augmentation_factory` | builds the addition, called once per rendering |
+| `page_types` | empty applies to every document; naming page types narrows it |
 | `priority` | higher runs first, for an addition that must see the source before another |
+| `applies_to(request)` | answers whether it belongs in that conversion — the route and the scope were both declared here, so the question is answered here |
 
-An extension that will not build is reported in the status bar and skipped.
-Your fault must not be the difference between an export happening and not.
+Whoever performs a conversion describes it as a `ConversionRequest` and asks
+what applies. An addition that will not build is reported in the status bar
+and skipped: your fault must not be the difference between an export
+happening and not.
 
 ### One widget per window
 

@@ -1,3 +1,7 @@
 [submodule "manuskript/plugins/variant_workspaces"]
 	path = manuskript/plugins/variant_workspaces
 	url = https://github.com/MustardBell/manuskript-variant-workspaces.git
+[submodule "manuskript/plugins/plain_lists"]
+	path = manuskript/plugins/plain_lists
+	url = https://github.com/MustardBell/manuskript-plain-lists.git
+	branch = main
