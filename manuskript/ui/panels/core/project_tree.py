@@ -1,9 +1,9 @@
 """The Project tree panel: the outline tree and its add/remove buttons.
 
 The most referenced widget of the four -- action bindings, navigation,
-search and a dozen controllers reach ``treeRedacOutline`` by attribute.
-The factory rebuilds exactly what the Designer file declared, aliases
-included, and must run before the window's actions are bound.
+search and a dozen controllers use it through the core panel view set.
+The factory rebuilds exactly what the Designer file declared and must run
+before the window's actions are bound.
 """
 
 from PyQt5.QtGui import QIcon

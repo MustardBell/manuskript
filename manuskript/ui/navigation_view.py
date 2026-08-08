@@ -77,7 +77,10 @@ class MainNavigationView:
 
     def _navigate_redaction(self, outline_id):
         self._show_tab(self.window.TabRedac)
-        self._select_outline(self.window.treeRedacOutline, outline_id)
+        self._select_outline(
+            self.window.corePanels.project_tree.tree,
+            outline_id,
+        )
 
     def _select_outline(self, tree, outline_id):
         selection = tree.selectionModel()

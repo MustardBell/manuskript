@@ -233,23 +233,23 @@ class MainWindowActionBinding:
                 window.plotController.handle_plot_selection_changed,
             ),
             (
-                window.btnRedacAddFolder.clicked,
-                window.treeRedacOutline.addFolder,
+                window.corePanels.project_tree.add_folder.clicked,
+                window.corePanels.project_tree.tree.addFolder,
             ),
             (
                 window.btnOutlineAddFolder.clicked,
                 window.treeOutlineOutline.addFolder,
             ),
             (
-                window.btnRedacAddText.clicked,
-                window.treeRedacOutline.addText,
+                window.corePanels.project_tree.add_text.clicked,
+                window.corePanels.project_tree.tree.addText,
             ),
             (
                 window.btnOutlineAddText.clicked,
                 window.treeOutlineOutline.addText,
             ),
             (
-                window.btnRedacRemoveItem.clicked,
+                window.corePanels.project_tree.remove_item.clicked,
                 window.outlineRemoveItemsRedac,
             ),
             (

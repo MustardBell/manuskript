@@ -83,7 +83,10 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
 
     window.txtPersosFilter.textChanged.connect.assert_called_once()
     window.lstPlots.currentItemChanged.connect.assert_called_once()
-    window.btnRedacAddFolder.clicked.connect.assert_called_once()
+    (
+        window.corePanels.project_tree.add_folder.clicked.connect
+        .assert_called_once()
+    )
     window.tabMain.currentChanged.connect.assert_any_call(
         window.toolbar.setCurrentGroup
     )

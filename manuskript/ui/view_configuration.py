@@ -49,7 +49,7 @@ class MainViewConfiguration:
             window.mainEditor.updateTreeView()
             window.treeOutlineOutline.viewport().update()
         elif category == "Tree":
-            window.treeRedacOutline.viewport().update()
+            window.corePanels.project_tree.tree.viewport().update()
 
 
 class ViewSettingsMenuBuilder:

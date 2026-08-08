@@ -49,7 +49,11 @@ def text_editor_context_for(window, settings, models, buffers=None):
 
     def invoke_outline_command(command):
         command = DocumentCommand(command)
-        handler = getattr(window.treeRedacOutline, command.value, None)
+        handler = getattr(
+            window.corePanels.project_tree.tree,
+            command.value,
+            None,
+        )
         if callable(handler):
             handler()
 

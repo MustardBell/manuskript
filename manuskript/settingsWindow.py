@@ -659,9 +659,11 @@ class settingsWindow(QWidget, Ui_Settings):
         iconSize = self.sldTreeIconSize.value()
         if iconSize != self.settings.viewSettings["Tree"]["iconSize"]:
             self.settings.viewSettings["Tree"]["iconSize"] = iconSize
-            self.mw.treeRedacOutline.setIconSize(QSize(iconSize, iconSize))
+            self.mw.corePanels.project_tree.tree.setIconSize(
+                QSize(iconSize, iconSize)
+            )
 
-        self.mw.treeRedacOutline.viewport().update()
+        self.mw.corePanels.project_tree.tree.viewport().update()
 
     def countSpacesChanged(self):
         self.settings.countSpaces = True if self.chkCountSpaces.checkState() else False

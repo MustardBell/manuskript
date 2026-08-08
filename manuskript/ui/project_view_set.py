@@ -128,6 +128,7 @@ class ProjectViewSet:
         )
 
         runtime = window.projectRuntime
+        core = window.corePanels
         return cls(
             models=runtime.models,
             navigation=reference_navigation_for(
@@ -136,7 +137,7 @@ class ProjectViewSet:
             ),
             editors=EditorViews(
                 outline_trees=(
-                    window.treeRedacOutline,
+                    core.project_tree.tree,
                     window.treeOutlineOutline,
                 ),
                 document_area=window.mainEditor,
@@ -150,14 +151,14 @@ class ProjectViewSet:
                 ),
                 open_index=window.openIndex,
                 open_indexes=window.openIndexes,
-                selection_changed=window.redacMetadata.selectionChanged,
+                selection_changed=core.metadata.selectionChanged,
                 show_status=window.statusPresenter.show,
                 settings=runtime.settingsManager,
                 card_styles=getattr(window, "cardStyles", None),
                 undo_stack=runtime.undoStack,
             ),
             metadata=MetadataViews(
-                panel=window.redacMetadata,
+                panel=core.metadata,
                 item_editor=window.outlineItemEditor,
                 page_types=lambda: (
                     window.pluginUi.pageTypes
@@ -166,7 +167,7 @@ class ProjectViewSet:
                 ),
             ),
             reference_panels=ReferencePanelViews(
-                storyline=window.storylineView,
+                storyline=core.storyline,
                 cheat_sheet=window.cheatSheet,
                 completers=lambda: window.findChildren(MDEditCompleter),
             ),

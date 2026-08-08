@@ -137,7 +137,7 @@ def test_outline_views_delete_through_the_undo_stack(MWEmptyProject):
     window = MWEmptyProject
     model = window.mdlOutline
     item = scene(model, "Deleted from the tree")
-    tree = window.treeRedacOutline
+    tree = window.corePanels.project_tree.tree
     tree.setCurrentIndex(model.indexFromItem(item))
     settings = window.settingsManager
     previous = settings.dontShowDeleteWarning
@@ -164,7 +164,7 @@ def test_undo_is_scoped_to_the_outline_not_the_whole_window(MWEmptyProject):
     key, so binding undo on the window would break typing undo.
     """
     window = MWEmptyProject
-    tree = window.treeRedacOutline
+    tree = window.corePanels.project_tree.tree
 
     shortcuts = {
         action.shortcut().toString()

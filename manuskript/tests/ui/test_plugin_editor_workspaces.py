@@ -120,7 +120,7 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
     item.setData(Outline.text, "Original paragraph.")
     window.mdlOutline.appendItem(item)
     index = window.mdlOutline.indexFromItem(item)
-    window.treeRedacOutline.selectionModel().setCurrentIndex(
+    window.corePanels.project_tree.tree.selectionModel().setCurrentIndex(
         index,
         QItemSelectionModel.ClearAndSelect
         | QItemSelectionModel.Rows,
@@ -215,7 +215,7 @@ def _open_with(window, requires):
     item.setData(Outline.text, "A paragraph.")
     window.mdlOutline.appendItem(item)
     index = window.mdlOutline.indexFromItem(item)
-    window.treeRedacOutline.selectionModel().setCurrentIndex(
+    window.corePanels.project_tree.tree.selectionModel().setCurrentIndex(
         index,
         QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
     )
@@ -347,7 +347,7 @@ def test_a_workspace_that_falls_over_does_not_wait_for_anybody(
 
     item = outlineItem(title="Scene", _type="md")
     window.mdlOutline.appendItem(item)
-    window.treeRedacOutline.selectionModel().setCurrentIndex(
+    window.corePanels.project_tree.tree.selectionModel().setCurrentIndex(
         window.mdlOutline.indexFromItem(item),
         QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
     )
@@ -384,8 +384,8 @@ def test_workspace_action_respects_selection_and_disable(MWEmptyProject):
     endpoints = []
     _install_workspace(window, received, endpoints)
     try:
-        window.treeRedacOutline.clearSelection()
-        window.treeRedacOutline.setCurrentIndex(QModelIndex())
+        window.corePanels.project_tree.tree.clearSelection()
+        window.corePanels.project_tree.tree.setCurrentIndex(QModelIndex())
         window.pluginUi.editorWorkspaces._update_action_states()
         assert not window.pluginUi.editorWorkspaces.actions[
             CONTRIBUTION_ID

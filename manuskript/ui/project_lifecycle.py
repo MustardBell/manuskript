@@ -104,7 +104,7 @@ class ProjectLifecycleView:
             self.window.setDictionary()
 
         icon_size = settings.viewSettings["Tree"]["iconSize"]
-        self.window.treeRedacOutline.setIconSize(
+        self.window.corePanels.project_tree.tree.setIconSize(
             QSize(icon_size, icon_size)
         )
         with timing.span("settings.folder_view"):

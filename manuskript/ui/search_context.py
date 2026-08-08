@@ -19,7 +19,6 @@ from manuskript.enums import (
 )
 from manuskript.models import references
 from manuskript.models.flatDataModelWrapper import flatDataModelWrapper
-from manuskript.ui.views.metadataView import metadataView
 
 
 @dataclass(frozen=True)
@@ -191,7 +190,7 @@ class SearchResultViewAdapter:
         }
         name, widget_type, is_metadata = targets[result.column()]
         if is_metadata:
-            metadata = self.window.findChild(metadataView, "redacMetadata")
+            metadata = self.window.corePanels.metadata
             # Through the panel's own action, so the toolbar button that
             # mirrors it stays in agreement.
             self.window.panelHost.set_visible("core.metadata")

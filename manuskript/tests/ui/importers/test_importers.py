@@ -15,7 +15,7 @@ def test_loadImportWiget(MWSampleProject):
     """
     MW = MWSampleProject
     selected = MW.mdlOutline.index(0, 0, QModelIndex())
-    MW.treeRedacOutline.setCurrentIndex(selected)
+    MW.corePanels.project_tree.tree.setCurrentIndex(selected)
 
     # Loading from mainWindow
     MW.doImport()

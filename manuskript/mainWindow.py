@@ -36,8 +36,8 @@ from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.ui.panels.core import (
+    CorePanelViewSet,
     core_panel_factories,
-    install_legacy_panel_aliases,
 )
 from manuskript.ui.tools.media_type_inspector import (
     MediaTypeInspector,
@@ -702,7 +702,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.pushHistory(("outline", None))
                 self._previousSelectionEmpty = False
         elif tabIndex == self.TabRedac:
-            index = self.treeRedacOutline.selectionModel().currentIndex()
+            tree = self.corePanels.project_tree.tree
+            index = tree.selectionModel().currentIndex()
             if index.isValid():
                 id = self.projectRuntime.models.outline.ID(index)
                 self.pushHistory(("redac", id))
@@ -741,7 +742,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # to the right place
 
         targets = [
-            self.treeRedacOutline,
+            self.corePanels.project_tree.tree,
             self.mainEditor
         ]
 
@@ -778,7 +779,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     def outlineRemoveItemsRedac(self):
-        self.treeRedacOutline.delete()
+        self.corePanels.project_tree.tree.delete()
 
     def outlineRemoveItemsOutline(self):
         self.treeOutlineOutline.delete()
@@ -788,7 +789,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
 
     def redacOutlineChanged(self):
-        index = self.treeRedacOutline.selectionModel().currentIndex()
+        index = (
+            self.corePanels.project_tree.tree
+            .selectionModel().currentIndex()
+        )
         if not index.isValid():
             self.pushHistory(("redac", None))
             self._previousSelectionEmpty = True
@@ -800,7 +804,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._previousSelectionEmpty = False
 
     def openIndex(self, index):
-        self.treeRedacOutline.setCurrentIndex(index)
+        self.corePanels.project_tree.tree.setCurrentIndex(index)
 
     def openIndexes(self, indexes, newTab=True):
         self.mainEditor.openIndexes(indexes, newTab=True)
@@ -1077,15 +1081,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             if instance is None:
                 continue
-            install_legacy_panel_aliases(
-                self, panel_id, instance.widget,
-            )
             self.toolbar.addPanelToggle(
                 instance.action,
                 instance.widget,
                 instance.descriptor.group,
                 panel_id=panel_id,
             )
+
+        self.corePanels = CorePanelViewSet.from_host(self.panelHost)
 
         style.styleMainWindow(self)
 
@@ -1214,7 +1217,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.actSpellcheck.toggled.connect(self.toggleSpellcheck, F.AUC)
             # self.dictChanged.connect(self.mainEditor.setDict, F.AUC)
-            # self.dictChanged.connect(self.redacMetadata.setDict, F.AUC)
             # self.dictChanged.connect(self.outlineItemEditor.setDict, F.AUC)
 
         else:
@@ -1455,8 +1457,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 status_model=models.statuses,
                 settings=self.settingsManager,
                 current_outline_index=lambda: (
-                    self.treeRedacOutline.currentIndex()
-                    if self.treeRedacOutline.selectedIndexes()
+                    self.corePanels.project_tree.tree.currentIndex()
+                    if self.corePanels.project_tree.tree.selectedIndexes()
                     else QModelIndex()
                 ),
                 show_status=self.statusPresenter.show,

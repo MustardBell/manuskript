@@ -17,18 +17,19 @@ class FlatDataProjectBinding:
     def bind(self, _connect):
         window = self.window
         models = self.models
+        book_summary = window.corePanels.book_summary
         for widget, column in [
             (window.txtSummarySituation, 0),
             (window.txtSummarySentence, 1),
             (window.txtSummarySentence_2, 1),
             (window.txtSummaryPara, 2),
             (window.txtSummaryPara_2, 2),
-            (window.txtPlotSummaryPara, 2),
+            (book_summary.paragraph_editor, 2),
             (window.txtSummaryPage, 3),
             (window.txtSummaryPage_2, 3),
-            (window.txtPlotSummaryPage, 3),
+            (book_summary.page_editor, 3),
             (window.txtSummaryFull, 4),
-            (window.txtPlotSummaryFull, 4),
+            (book_summary.full_editor, 4),
         ]:
             widget.setModel(models.flat_data)
             widget.setColumn(column)
@@ -68,6 +69,8 @@ class OutlineSelectionProjectBinding:
     def bind(self, connect):
         window = self.window
         models = self.models
+        project_tree = window.corePanels.project_tree.tree
+        metadata = window.corePanels.metadata
         for signal, slot in [
             (
                 window.treeOutlineOutline.selectionModel().selectionChanged,
@@ -82,19 +85,19 @@ class OutlineSelectionProjectBinding:
                 window.outlineItemEditor.selectionChanged,
             ),
             (
-                window.treeRedacOutline.selectionModel().selectionChanged,
+                project_tree.selectionModel().selectionChanged,
                 window.redacOutlineChanged,
             ),
             (
-                window.treeRedacOutline.selectionModel().selectionChanged,
-                window.redacMetadata.selectionChanged,
+                project_tree.selectionModel().selectionChanged,
+                metadata.selectionChanged,
             ),
             (
-                window.treeRedacOutline.clicked,
-                window.redacMetadata.selectionChanged,
+                project_tree.clicked,
+                metadata.selectionChanged,
             ),
             (
-                window.treeRedacOutline.selectionModel().selectionChanged,
+                project_tree.selectionModel().selectionChanged,
                 window.mainEditor.selectionChanged,
             ),
         ]:

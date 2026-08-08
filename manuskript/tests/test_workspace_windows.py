@@ -169,14 +169,13 @@ def test_each_window_has_its_own_tree_and_editor(MWEmptyProject):
     window = MWEmptyProject
     other = window.openWorkspaceWindow()
     try:
-        assert other.treeRedacOutline is not window.treeRedacOutline
+        other_tree = other.corePanels.project_tree.tree
+        tree = window.corePanels.project_tree.tree
+        assert other_tree is not tree
         assert other.mainEditor is not window.mainEditor
-        assert (
-            other.treeRedacOutline.model()
-            is window.treeRedacOutline.model()
-        )
+        assert other_tree.model() is tree.model()
         assert other.panelHost.instance(PROJECT_TREE).widget is (
-            other.treeRedacWidget
+            other.corePanels.project_tree.panel
         )
     finally:
         other.close()

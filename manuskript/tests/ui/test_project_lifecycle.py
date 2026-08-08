@@ -122,7 +122,7 @@ def test_close_then_open_rebinds_outline_models_without_stale_delegates(
     qApp.processEvents()
 
     assert window.treeOutlineOutline.model() is None
-    assert window.treeRedacOutline.model() is None
+    assert window.corePanels.project_tree.tree.model() is None
     assert old_delegate.mdlCharacter is None
     old_delegate.sizeHint(QStyleOptionViewItem(), pov_index)
 
@@ -132,7 +132,7 @@ def test_close_then_open_rebinds_outline_models_without_stale_delegates(
 
     assert window.currentProject == str(next_project)
     assert window.treeOutlineOutline.model() is window.mdlOutline
-    assert window.treeRedacOutline.model() is window.mdlOutline
+    assert window.corePanels.project_tree.tree.model() is window.mdlOutline
     assert (
         window.treeOutlineOutline.itemDelegateForColumn(
             Outline.POV

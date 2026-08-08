@@ -76,7 +76,7 @@ def test_text_editor_context_routes_typed_outline_command():
 
     context.invoke_outline_command(DocumentCommand.MOVE_DOWN)
 
-    window.treeRedacOutline.moveDown.assert_called_once_with()
+    window.corePanels.project_tree.tree.moveDown.assert_called_once_with()
 
 
 def test_text_editor_routes_rename_as_typed_command():
