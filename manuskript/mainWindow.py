@@ -695,7 +695,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         elif tabIndex == self.TabOutline:
             index = self.treeOutlineOutline.selectionModel().currentIndex()
             if index.isValid():
-                id = self.mdlOutline.ID(index)
+                id = self.projectRuntime.models.outline.ID(index)
                 self.pushHistory(("outline", id))
                 self._previousSelectionEmpty = id is not None
             else:
@@ -704,7 +704,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         elif tabIndex == self.TabRedac:
             index = self.treeRedacOutline.selectionModel().currentIndex()
             if index.isValid():
-                id = self.mdlOutline.ID(index)
+                id = self.projectRuntime.models.outline.ID(index)
                 self.pushHistory(("redac", id))
                 self._previousSelectionEmpty = id is not None
             else:
@@ -771,7 +771,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._previousSelectionEmpty = True
             return
         
-        self.pushHistory(("outline", self.mdlOutline.ID(index)))
+        self.pushHistory((
+            "outline", self.projectRuntime.models.outline.ID(index),
+        ))
         self._previousSelectionEmpty = False
 
 
@@ -792,7 +794,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._previousSelectionEmpty = True
             return
         
-        self.pushHistory(("redac", self.mdlOutline.ID(index)))
+        self.pushHistory((
+            "redac", self.projectRuntime.models.outline.ID(index),
+        ))
         self._previousSelectionEmpty = False
 
     def openIndex(self, index):
@@ -1343,7 +1347,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def frequencyAnalyzer(self):
         self.fw = frequencyAnalyzer(
-            self.mdlOutline,
+            self.projectRuntime.models.outline,
             self.settingsManager,
             parent=self,
         )
@@ -1442,12 +1446,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 return
 
         # Proceed with Import
+        models = self.projectRuntime.models
         self.dialog = importerDialog(
             ImportContext(
-                outline_model=self.mdlOutline,
-                character_model=self.mdlCharacter,
-                label_model=self.mdlLabels,
-                status_model=self.mdlStatus,
+                outline_model=models.outline,
+                character_model=models.characters,
+                label_model=models.labels,
+                status_model=models.statuses,
                 settings=self.settingsManager,
                 current_outline_index=lambda: (
                     self.treeRedacOutline.currentIndex()
@@ -1497,12 +1502,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
 
     def exportContext(self):
+        models = self.projectRuntime.models
         return ExportContext(
             project_file=self.currentProject or "",
-            outline_model=self.mdlOutline,
-            flat_data_model=self.mdlFlatData,
-            label_model=self.mdlLabels,
-            status_model=self.mdlStatus,
+            outline_model=models.outline,
+            flat_data_model=models.flat_data,
+            label_model=models.labels,
+            status_model=models.statuses,
             parent=self,
             tool_paths=self.externalToolPaths,
             process_runner=self.externalProcessRunner,

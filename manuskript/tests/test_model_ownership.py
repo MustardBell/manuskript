@@ -8,8 +8,9 @@ installed on it.
 They no longer do, and this is what keeps it that way. It exists because
 checking by hand got it wrong: a grep for ``window.mdl`` reported zero
 while thirteen reads remained, spelled ``self.mw.mdl`` and
-``window.projectPluginData``. Reading the syntax instead of the text does
-not care what the variable was called.
+``window.projectPluginData``.  The main window's own ``self.mdl`` reads were
+another blind spot: there is no variable named ``window`` inside the window
+class.  Reading the syntax with the module context catches both forms.
 """
 
 import ast
@@ -20,6 +21,10 @@ import pathlib
 WINDOW_NAMES = frozenset({
     "window", "mw", "MW", "_window", "mainWindow",
 })
+
+#: Inside this module, ``self`` is itself the main window.  Elsewhere a class
+#: may legitimately own a field whose historic name begins with ``mdl``.
+SELF_IS_WINDOW = frozenset({"mainWindow.py"})
 
 #: Where the window attributes are still deliberately written, until the
 #: tests that read them are migrated too.
@@ -64,7 +69,11 @@ def model_reads_through_a_window(path):
             continue
         if not node.attr.startswith(MODEL_ATTRIBUTES):
             continue
-        if rooted_at(node.value) in WINDOW_NAMES:
+        receiver = rooted_at(node.value)
+        if (
+            receiver in WINDOW_NAMES
+            or (receiver == "self" and path.name in SELF_IS_WINDOW)
+        ):
             found.append((node.lineno, node.attr))
     return found
 
@@ -129,3 +138,17 @@ def test_an_objects_own_model_field_is_not_a_window_read(tmp_path):
     )
 
     assert model_reads_through_a_window(module) == []
+
+
+def test_the_main_windows_own_alias_reads_are_not_a_blind_spot(tmp_path):
+    module = tmp_path / "mainWindow.py"
+    module.write_text(
+        "class MainWindow:\n"
+        "    def export(self):\n"
+        "        return self.mdlOutline\n",
+        encoding="utf-8",
+    )
+
+    assert model_reads_through_a_window(module) == [
+        (3, "mdlOutline"),
+    ]
