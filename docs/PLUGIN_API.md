@@ -204,6 +204,7 @@ Both methods are optional, and returning nothing stays valid:
 | `markup.bbcode` | a `BBCodeConverter` | at registration |
 | `ui.export_routing` | an `ExportRoutingService` | in your settings panel |
 | `media.registry` | a read-only vocabulary view | in your settings panel |
+| `conversion` | a converter between two media types | at registration |
 | `outline.read` | a manuscript you can read | in your editor workspace |
 | `outline.write` | a manuscript you can change | in your editor workspace |
 | `editor.control` | an editor pane factory | in your editor workspace |
@@ -369,6 +370,34 @@ able to rewrite the book.
 what it hands back is scoped to you: routing exposes only the page types
 **you** registered and raises `PluginScopeError` for anyone else's. The
 scoping is enforced by the host rather than trusted to you.
+
+## `conversion` — converting markup
+
+```python
+def register(api):
+    convert = api.capability("conversion")          # declare it in requires
+    html = convert.convert(text, "text/markdown", "text/html")
+```
+
+Ask for a route, get the result. **Whatever other plugins have added to that
+conversion is applied for you**, so your rendering matches every other
+rendering of the same markup — and you never learn which plugins those were,
+or that any exist.
+
+That is the point of taking it rather than calling a Markdown library
+yourself. A renderer doing its own conversion silently opts out of every
+addition, and the same source then renders differently in your view than in
+an export.
+
+| call | answers |
+|---|---|
+| `convert(text, source, target, page_type=None)` | the converted text, or raises `UnknownRoute` |
+| `can_convert(source, target)` | whether that route exists |
+| `routes()` | every route this Manuskript performs |
+
+If you own a format of your own — a DSL your page type parses — converting
+*that* into Markdown remains yours; nobody else knows it. Hand the Markdown
+over from there.
 
 ## Conversion augmentations
 

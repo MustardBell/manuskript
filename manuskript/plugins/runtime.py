@@ -11,7 +11,13 @@ from manuskript.plugins.api import (
     PLUGIN_API_VERSION,
     PluginActivationContext,
 )
-from manuskript.plugins.capabilities import grant
+from manuskript.plugins.capabilities import (
+    PluginCapabilityContext,
+    grant,
+)
+from manuskript.converters.conversion_service import (
+    conversion_service,
+)
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
     PluginLoadError,
@@ -234,7 +240,9 @@ class PluginRuntime:
 
         # Negotiate before anything of the plugin's runs. A plugin whose
         # requirements core cannot meet is refused, not half-started.
-        capabilities, missing = grant(manifest.requires)
+        capabilities, missing = grant(
+            manifest.requires, self.capabilityContext()
+        )
         if missing:
             record.status = PluginStatus.UNSATISFIED
             record.error = (
@@ -339,6 +347,26 @@ class PluginRuntime:
                 )
             )
         return entry
+
+    def capabilityContext(self):
+        """What a capability may be built from, beyond nothing.
+
+        A service that has to see what other plugins contributed cannot come
+        from a plain factory, and reaching a runtime through a global to get
+        it would be the service locator this codebase has been removing. So
+        the runtime hands over what it has, and the catalogue says which
+        capabilities want it.
+
+        The registry is passed live rather than as a snapshot: a plugin
+        enabled later contributes to conversions performed later, which is
+        what enabling a plugin is expected to mean.
+        """
+        return PluginCapabilityContext(
+            registry=self.registry,
+            conversion_service=lambda: conversion_service(
+                registry=self.registry,
+            ),
+        )
 
     def declares(self, plugin_id, capability):
         """Whether this plugin asked for a capability in its manifest.
