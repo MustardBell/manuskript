@@ -13,6 +13,8 @@ supplied by the caller. So the tests name them, the way the code performing a
 conversion does.
 """
 
+import sys
+
 import pytest
 
 from manuskript.converters.conversion_service import (
@@ -89,6 +91,24 @@ def test_a_route_it_cannot_perform_says_so():
     assert not service.can_convert(HTML, MARKDOWN)
     with pytest.raises(UnknownRoute, match="text/html"):
         service.convert("<p>x</p>", HTML, MARKDOWN)
+
+
+def test_a_route_whose_library_is_not_installed_is_not_offered():
+    """python-markdown is a listed requirement, but an installation can be
+    without it and core guards for that in its own HTML exporter. A caller
+    told the route exists and then handed an ImportError has nothing left to
+    do; one told the route does not exist can show the text plainly instead.
+    """
+    with pytest.MonkeyPatch().context() as without_markdown:
+        without_markdown.setitem(sys.modules, "markdown", None)
+        engines = core_engines()
+        service = ConversionService(engines)
+
+    assert (MARKDOWN, HTML) not in engines
+    assert (MARKDOWN, BBCODE) in engines
+    assert not service.can_convert(MARKDOWN, HTML)
+    with pytest.raises(UnknownRoute):
+        service.convert("*yes*", MARKDOWN, HTML)
 
 
 def test_empty_text_is_returned_as_it_came():

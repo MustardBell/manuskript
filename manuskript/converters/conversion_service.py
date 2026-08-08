@@ -14,6 +14,7 @@ than pretending.
 """
 
 import logging
+from importlib.util import find_spec
 
 from manuskript.plugins.api import ConversionRequest
 from manuskript.plugins.conversion_augmentations import augmentations_for
@@ -96,18 +97,35 @@ def _markdown_to_bbcode(text, additions):
     return converter.convert(text)
 
 
+def _installed(name):
+    """Whether ``name`` could be imported, without importing it."""
+    try:
+        return find_spec(name) is not None
+    except (ImportError, ValueError):
+        # A parent package that will not import, or an entry deliberately
+        # blocked in sys.modules. Either way the import would fail.
+        return False
+
+
 def core_engines():
     """The conversions Manuskript itself performs.
 
     Kept here rather than discovered, because these are core's own and their
     absence would be a broken installation rather than a missing plugin.
+
+    Markdown to HTML is offered only where python-markdown is installed. It
+    is a listed requirement, but an installation can be without it -- core
+    guards for exactly that in its own HTML exporter -- and a caller told the
+    route exists and then handed an ImportError has nothing left to do,
+    while one told the route does not exist can show the text plainly
+    instead. Only a route that can be performed is offered.
     """
     from manuskript.media_types import BBCODE, HTML, MARKDOWN
 
-    return {
-        (MARKDOWN, HTML): _markdown_to_html,
-        (MARKDOWN, BBCODE): _markdown_to_bbcode,
-    }
+    engines = {(MARKDOWN, BBCODE): _markdown_to_bbcode}
+    if _installed("markdown"):
+        engines[(MARKDOWN, HTML)] = _markdown_to_html
+    return engines
 
 
 def conversion_service(registry=None, report_error=None):

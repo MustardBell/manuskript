@@ -395,6 +395,12 @@ an export.
 | `can_convert(source, target)` | whether that route exists |
 | `routes()` | every route this Manuskript performs |
 
+Which routes exist depends on the installation: a route whose library is not
+installed is not offered rather than offered and then failing, so
+`can_convert` is worth asking before you rely on one. Handle its absence the
+way you would handle a missing library yourself — show the source plainly,
+say the view is unavailable — rather than treating it as an error.
+
 If you own a format of your own — a DSL your page type parses — converting
 *that* into Markdown remains yours; nobody else knows it. Hand the Markdown
 over from there.
