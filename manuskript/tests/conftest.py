@@ -3,6 +3,8 @@
 
 """Fixtures."""
 
+import os
+
 import pytest
 
 
@@ -38,13 +40,44 @@ def MWNoProject(MW):
     assert MW.currentProject == None
     return MW
 
+#: The empty project the suite is currently reusing, and its temporary file.
+#: Held at module scope so the file is not collected out from under it.
+_empty_project = {"file": None}
+
+
+def _reusableEmptyProject(MW):
+    """Whether the last test left this fixture's project untouched.
+
+    Creating a project is the most expensive thing this suite does -- models
+    built, widgets rebuilt, files written -- and it happens for every one of
+    the several hundred tests that take this fixture. Most of them only read.
+
+    The project's own dirty flag decides, because it already answers exactly
+    this question: anything that changed a model marked it. A clean project
+    is one that nothing has altered, so the next test may have it as it is.
+    """
+    holder = _empty_project["file"]
+    if holder is None:
+        return False
+    manager = MW.projectManager
+    if not manager.session.is_open or manager.session.is_dirty:
+        return False
+    return MW.currentProject == os.path.normpath(holder.name)
+
+
 @pytest.fixture
 def MWEmptyProject(MW):
     """
     Creates a MainWindow and load an empty project.
+
+    Reused between tests that left it clean; rebuilt otherwise.
     """
+    if _reusableEmptyProject(MW):
+        return MW
+
     import tempfile
     tf = tempfile.NamedTemporaryFile(suffix=".msk")
+    _empty_project["file"] = tf
 
     closeProjectDiscardingChanges(MW)
     assert MW.currentProject == None
