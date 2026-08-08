@@ -15,9 +15,6 @@ from manuskript.plugins.capabilities import (
     PluginCapabilityContext,
     grant,
 )
-from manuskript.converters.conversion_service import (
-    conversion_service,
-)
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
     PluginLoadError,
@@ -361,6 +358,14 @@ class PluginRuntime:
         enabled later contributes to conversions performed later, which is
         what enabling a plugin is expected to mean.
         """
+        # Imported here, not at module scope: the conversion service reads
+        # the plugin API, which is this package, so importing it from here
+        # makes the two modules import each other. Whichever is imported
+        # first then decides whether either works at all.
+        from manuskript.converters.conversion_service import (
+            conversion_service,
+        )
+
         return PluginCapabilityContext(
             registry=self.registry,
             conversion_service=lambda: conversion_service(
