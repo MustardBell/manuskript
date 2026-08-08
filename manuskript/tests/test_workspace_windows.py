@@ -338,7 +338,7 @@ class movable_panel:
             widget_factory=lambda context, parent: QPlainTextEdit(parent),
         ))
         self.instance = self.window.panelHost.open(
-            NOTES, PanelContext(window=self.window),
+            NOTES, PanelContext(translate=self.window.tr),
         )
         self.window.toolbar.addPanelToggle(
             self.instance.action,

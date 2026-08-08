@@ -31,7 +31,6 @@ def _flat_icon_button(parent, theme_name, object_name):
 
 
 def build_project_tree(context, parent):
-    window = context.window
     panel = QWidget(parent)
     panel.setObjectName("treeRedacWidget")
     layout = QVBoxLayout(panel)
@@ -57,11 +56,4 @@ def build_project_tree(context, parent):
     ))
     layout.addLayout(buttons)
 
-    # Everything from action binding to search reaches these by
-    # attribute; the aliases retire as callers learn to ask the host.
-    window.treeRedacWidget = panel
-    window.treeRedacOutline = tree
-    window.btnRedacAddFolder = add_folder
-    window.btnRedacAddText = add_text
-    window.btnRedacRemoveItem = remove
     return panel

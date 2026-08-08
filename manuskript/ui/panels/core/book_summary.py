@@ -19,17 +19,17 @@ from manuskript.ui.views.MDEditCompleter import MDEditCompleter
 
 
 def build_book_summary(context, parent):
-    window = context.window
-    panel = QGroupBox(window.tr("Summary"), parent)
+    tr = context.translate
+    panel = QGroupBox(tr("Summary"), parent)
     panel.setObjectName("grpPlotSummary")
     layout = QVBoxLayout(panel)
 
     combo = QComboBox(panel)
     combo.setFrame(False)
     combo.setObjectName("comboBox_2")
-    combo.addItem(window.tr("One paragraph"))
-    combo.addItem(window.tr("One page"))
-    combo.addItem(window.tr("Full"))
+    combo.addItem(tr("One paragraph"))
+    combo.addItem(tr("One page"))
+    combo.addItem(tr("Full"))
     layout.addWidget(combo)
 
     stack = QStackedWidget(panel)
@@ -52,12 +52,4 @@ def build_book_summary(context, parent):
 
     combo.currentIndexChanged.connect(stack.setCurrentIndex)
 
-    # The rest of the window still reaches these by attribute; the
-    # aliases retire as callers learn to ask the panel host instead.
-    window.grpPlotSummary = panel
-    window.comboBox_2 = combo
-    window.stkPlotSummary = stack
-    window.txtPlotSummaryPara = editors["txtPlotSummaryPara"]
-    window.txtPlotSummaryPage = editors["txtPlotSummaryPage"]
-    window.txtPlotSummaryFull = editors["txtPlotSummaryFull"]
     return panel

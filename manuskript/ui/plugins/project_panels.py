@@ -53,8 +53,9 @@ def build_project_panel_widget(runtime, contribution_id, context, parent):
     alive for the whole session, and every later window still built its
     widget through the dead one's host.
 
-    Everything window-shaped comes from the context instead, which is
-    handed in per call by the host doing the building.
+    The per-window host supplies one narrow callback that constructs the
+    public PluginProjectContext.  The application-scoped descriptor therefore
+    closes over no window, and this factory can reach no window internals.
     """
     record = project_panel_record(runtime, contribution_id)
     if record is None:
@@ -63,17 +64,10 @@ def build_project_panel_widget(runtime, contribution_id, context, parent):
                 contribution_id
             )
         )
-    window = context.window
     contribution = record.contribution
-    plugin_context = PluginProjectContext(
-        plugin_id=record.plugin_id,
-        project_file=window.currentProject,
-        files=window.projectRuntime.models.plugin_data.namespace(
-            record.plugin_id,
-            on_change=window.projectManager.startTimerNoChanges,
-        ),
-        default_file=contribution.default_file,
-        show_status=window.statusPresenter.show,
+    plugin_context = context.project_for_plugin(
+        record.plugin_id,
+        contribution.default_file,
     )
     return contribution.widget_factory(plugin_context, parent)
 
@@ -254,10 +248,25 @@ class ProjectPanelHost:
         if panel_id is None:
             return None
         instance = self.panels.open(panel_id, PanelContext(
-            window=self.window,
+            translate=self.window.tr,
             show_status=self.window.statusPresenter.show,
+            plugin_project=self._plugin_project_context,
         ))
         return instance.container if instance is not None else None
+
+    def _plugin_project_context(self, plugin_id, default_file):
+        """The project authority a plugin panel is allowed to receive."""
+        window = self.window
+        return PluginProjectContext(
+            plugin_id=plugin_id,
+            project_file=window.currentProject,
+            files=window.projectRuntime.models.plugin_data.namespace(
+                plugin_id,
+                on_change=window.projectManager.startTimerNoChanges,
+            ),
+            default_file=default_file,
+            show_status=window.statusPresenter.show,
+        )
 
     def close_panel(self, contribution_id):
         panel_id = self._panelIds.get(contribution_id)

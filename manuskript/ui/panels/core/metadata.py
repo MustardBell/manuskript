@@ -12,5 +12,4 @@ from manuskript.ui.views.metadataView import metadataView
 def build_metadata(context, parent):
     view = metadataView(parent)
     view.setObjectName("redacMetadata")
-    context.window.redacMetadata = view
     return view

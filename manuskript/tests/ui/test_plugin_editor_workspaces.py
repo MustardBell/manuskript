@@ -21,10 +21,21 @@ from manuskript.plugins.runtime import PluginRecord, PluginStatus
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
+from manuskript.ui.plugins.editor_workspaces import _discard_endpoint
 
 
 PLUGIN_ID = "example.variant-workspace"
 CONTRIBUTION_ID = "example.variant-workspace.compare"
+
+
+def test_endpoint_destruction_cleanup_needs_no_live_qobject_owner():
+    """Late QWidget destruction operates on plain state, not a dead factory."""
+    endpoint = object()
+    endpoints = [endpoint]
+
+    _discard_endpoint(endpoints, endpoint)
+
+    assert endpoints == []
 
 
 def _declare(window, requires):

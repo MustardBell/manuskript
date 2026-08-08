@@ -11,7 +11,4 @@ from manuskript.ui.views.storylineView import storylineView
 def build_storyline(context, parent):
     view = storylineView(parent)
     view.setObjectName("storylineView")
-    # Project bindings still reach the view by attribute; the alias
-    # retires as callers learn to ask the panel host instead.
-    context.window.storylineView = view
     return view

@@ -35,7 +35,10 @@ from manuskript.plugins.conversion_augmentations import (
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
-from manuskript.ui.panels.core import core_panel_factories
+from manuskript.ui.panels.core import (
+    core_panel_factories,
+    install_legacy_panel_aliases,
+)
 from manuskript.ui.tools.media_type_inspector import (
     MediaTypeInspector,
 )
@@ -1066,10 +1069,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         ):
             instance = self.panelHost.open(
                 panel_id,
-                PanelContext(window=self),
+                PanelContext(translate=self.tr),
             )
             if instance is None:
                 continue
+            install_legacy_panel_aliases(
+                self, panel_id, instance.widget,
+            )
             self.toolbar.addPanelToggle(
                 instance.action,
                 instance.widget,

@@ -36,6 +36,18 @@ from manuskript.ui.views.MDEditView import MDEditView
 LOGGER = logging.getLogger(__name__)
 
 
+def _discard_endpoint(endpoints, endpoint, *_args):
+    """Forget an endpoint without dereferencing its QObject owner.
+
+    A host widget can outlive the factory's C++ object during project or
+    interpreter teardown.  Connecting ``destroyed`` to a bound factory method
+    then asks PyQt to invoke a deleted QObject wrapper.  The list is ordinary
+    Python state and is all cleanup needs, so the callback captures only that.
+    """
+    if endpoint in endpoints:
+        endpoints.remove(endpoint)
+
+
 class WorkspaceOutlineGateway(QObject):
     """Guard project-outline mutations exposed to editor workspaces."""
 
@@ -481,17 +493,19 @@ class WorkspaceEditorFactory(QObject):
             parent=host,
         )
         self._endpoints.append(endpoint)
-        host.destroyed.connect(partial(self._discard, endpoint))
+        host.destroyed.connect(partial(
+            _discard_endpoint, self._endpoints, endpoint,
+        ))
         return endpoint
 
     def close_all(self):
-        for endpoint in tuple(self._endpoints):
+        endpoints = tuple(self._endpoints)
+        # Keep the list object stable: destroyed callbacks hold this ordinary
+        # Python collection precisely so they never have to reach a factory
+        # QObject whose C++ lifetime may already have ended.
+        self._endpoints.clear()
+        for endpoint in endpoints:
             endpoint.close()
-        self._endpoints = []
-
-    def _discard(self, endpoint, *_args):
-        if endpoint in self._endpoints:
-            self._endpoints.remove(endpoint)
 
 
 class EditorWorkspaceShell(QFrame):

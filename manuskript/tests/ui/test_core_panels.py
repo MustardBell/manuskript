@@ -5,7 +5,9 @@ that the panel host now owns their toggles, so a second window can build
 the same set from the same declarations.
 """
 
-from manuskript.panels import PanelRegistry, SplitterSlot
+from dataclasses import fields
+
+from manuskript.panels import PanelContext, PanelRegistry, SplitterSlot
 from manuskript.panels.core import (
     BOOK_SUMMARY,
     METADATA,
@@ -13,6 +15,16 @@ from manuskript.panels.core import (
     STORYLINE,
     register_core_panels,
 )
+
+
+def test_panel_factories_receive_no_main_window_escape_hatch():
+    """New dependencies must be explicit rather than found on a window."""
+    assert tuple(field.name for field in fields(PanelContext)) == (
+        "translate",
+        "show_status",
+        "plugin_project",
+    )
+    assert not hasattr(PanelContext(), "window")
 
 
 def test_the_four_workspace_panels_are_attached_via_the_registry(
