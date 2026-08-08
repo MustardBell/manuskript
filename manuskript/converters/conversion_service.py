@@ -89,12 +89,9 @@ def _markdown_to_bbcode(text, additions):
     route is a rule. What an addition must be belongs to the route, which is
     why this service takes engines rather than assuming one shape.
     """
-    from manuskript.converters.markdownToBBCode import BBCodeConverter
+    from manuskript.converters.markdownToBBCode import markdown_to_bbcode
 
-    converter = BBCodeConverter()
-    if additions:
-        converter = converter.extended(*additions)
-    return converter.convert(text)
+    return markdown_to_bbcode(text, additions)
 
 
 def _installed(name):
