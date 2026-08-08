@@ -6,6 +6,10 @@ carries its own identifier, so two windows no longer save over each
 other.
 """
 
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any, Callable, Mapping, Tuple
+
 from PyQt5.QtWidgets import QSplitter
 
 from manuskript.panels import SPLITTER_SLOT
@@ -20,11 +24,56 @@ from manuskript.ui.editors.document_area_layout import (
 )
 
 
+@dataclass(frozen=True)
+class WorkspaceStateViews:
+    """Stable layout capabilities belonging to one workspace window."""
+
+    restore_geometry: Callable[[Any], bool]
+    restore_window_state: Callable[[Any], bool]
+    save_geometry: Callable[[], Any]
+    save_window_state: Callable[[], Any]
+    project_active: Callable[[], bool]
+    project_docks: Tuple[Any, ...]
+    default_dock_visibility: Mapping[str, bool]
+    document_area: Any
+    main_tabs: Any
+    find_splitter: Callable[[str], Any]
+    panel_registry: Any
+    panel_host: Any
+
+    @classmethod
+    def for_window(cls, window):
+        stack = window.stack
+        project_docks = (
+            window.dckNavigation,
+            window.dckCheatSheet,
+            window.dckSearch,
+        )
+        return cls(
+            restore_geometry=window.restoreGeometry,
+            restore_window_state=window.restoreState,
+            save_geometry=window.saveGeometry,
+            save_window_state=window.saveState,
+            project_active=lambda: stack.currentIndex() == 1,
+            project_docks=project_docks,
+            default_dock_visibility=MappingProxyType({
+                project_docks[0].objectName(): True,
+                project_docks[1].objectName(): False,
+                project_docks[2].objectName(): False,
+            }),
+            document_area=window.mainEditor.tabSplitter,
+            main_tabs=window.tabMain,
+            find_splitter=lambda name: window.findChild(QSplitter, name),
+            panel_registry=window.panelRegistry,
+            panel_host=window.panelHost,
+        )
+
+
 class WorkspaceStateController:
     """One window's layout, restored on open and captured on close."""
 
-    def __init__(self, window, store=None, window_id=PRIMARY):
-        self.window = window
+    def __init__(self, views, store=None, window_id=PRIMARY):
+        self.views = views
         self.windowId = window_id
         self.store = (
             store if store is not None else WorkspaceStateStore()
@@ -43,28 +92,21 @@ class WorkspaceStateController:
 
     @property
     def project_docks(self):
-        return (
-            self.window.dckNavigation,
-            self.window.dckCheatSheet,
-            self.window.dckSearch,
-        )
+        return self.views.project_docks
 
     # --------------------------------------------------------- restore
 
     def restore(self):
         state = self.store.load(self.windowId)
-        window = self.window
         if state.geometry is not None:
-            window.restoreGeometry(state.geometry)
+            self.views.restore_geometry(state.geometry)
         if state.window_state is not None:
-            window.restoreState(state.window_state)
+            self.views.restore_window_state(state.window_state)
 
         self._dock_visibility = (
-            dict(state.docks) if state.docks else {
-                window.dckNavigation.objectName(): True,
-                window.dckCheatSheet.objectName(): False,
-                window.dckSearch.objectName(): False,
-            }
+            dict(state.docks)
+            if state.docks
+            else dict(self.views.default_dock_visibility)
         )
         self._dock_visibility_locked = True
 
@@ -72,7 +114,7 @@ class WorkspaceStateController:
         self._mainTab = state.main_tab
         self._restore_panel_state(state)
         for name, value in (state.splitters or {}).items():
-            splitter = window.findChild(QSplitter, name)
+            splitter = self.views.find_splitter(name)
             if splitter is not None and value is not None:
                 splitter.restoreState(value)
         self._restore_panel_visibility(state)
@@ -86,9 +128,7 @@ class WorkspaceStateController:
             remembered.restore(widget, self._bool_list(value))
 
     def _restore_panel_visibility(self, state):
-        host = getattr(self.window, "panelHost", None)
-        if host is None:
-            return
+        host = self.views.panel_host
         for panel_id, visible in (state.panels or {}).items():
             if host.instance(panel_id) is not None:
                 host.set_visible(panel_id, visible)
@@ -96,19 +136,18 @@ class WorkspaceStateController:
     # --------------------------------------------------------- capture
 
     def save(self):
-        window = self.window
-        if window.stack.currentIndex() == 1:
+        if self.views.project_active():
             self._remember_project_docks()
         remembered = self._remembered
         self.store.save(
             WorkspaceWindowState(
-                geometry=window.saveGeometry(),
+                geometry=self.views.save_geometry(),
                 # Geometry is still true once a project closes; the dock
                 # layout is not, because closing a project closes the
                 # panels that were in it. So the arrangement recorded is
                 # the one captured while they were still there.
                 window_state=remembered.get(
-                    "window_state", window.saveState(),
+                    "window_state", self.views.save_window_state(),
                 ),
                 splitters=self._splitter_state(),
                 panels=remembered.get(
@@ -129,18 +168,15 @@ class WorkspaceStateController:
         documents, and recording none then would tell the next launch to
         open nothing rather than to open what was there.
         """
-        if self.window.stack.currentIndex() != 1:
+        if not self.views.project_active():
             return self._documents
-        editor = getattr(self.window, "mainEditor", None)
-        if editor is None:
-            return self._documents
-        return describe_area(editor.tabSplitter)
+        return describe_area(self.views.document_area)
 
     def _current_main_tab(self):
         """Which main tab this window is on, while it has a project."""
-        if self.window.stack.currentIndex() != 1:
+        if not self.views.project_active():
             return self._mainTab
-        return self.window.tabMain.currentIndex()
+        return self.views.main_tabs.currentIndex()
 
     def capture_view_state(self):
         """Remember this window's view of the project while it has one.
@@ -150,12 +186,10 @@ class WorkspaceStateController:
         showing the welcome screen -- which is how the last window to
         close came to record nothing at all.
         """
-        if self.window.stack.currentIndex() != 1:
+        if not self.views.project_active():
             return
-        editor = getattr(self.window, "mainEditor", None)
-        if editor is not None:
-            self._documents = describe_area(editor.tabSplitter)
-        self._mainTab = self.window.tabMain.currentIndex()
+        self._documents = describe_area(self.views.document_area)
+        self._mainTab = self.views.main_tabs.currentIndex()
 
     def capture_layout(self):
         """Remember the arrangement while every panel is still in it.
@@ -166,9 +200,9 @@ class WorkspaceStateController:
         the panels whose places were worth keeping.
         """
         self.capture_view_state()
-        if self.window.stack.currentIndex() != 1:
+        if not self.views.project_active():
             return
-        self._remembered["window_state"] = self.window.saveState()
+        self._remembered["window_state"] = self.views.save_window_state()
         self._remembered["panels"] = self._panel_visibility()
 
     def forget_captured_layout(self):
@@ -191,21 +225,21 @@ class WorkspaceStateController:
         recorded = self._documents
         if recorded:
             restore_area(
-                self.window.mainEditor.tabSplitter,
+                self.views.document_area,
                 recorded,
             )
         elif documents and documents != [""]:
-            self.window.mainEditor.tabSplitter.restoreOpenIndexes(
+            self.views.document_area.restoreOpenIndexes(
                 documents
             )
         tab = self._mainTab if self._mainTab is not None else main_tab
         if tab is not None:
-            self.window.tabMain.setCurrentIndex(int(tab))
+            self.views.main_tabs.setCurrentIndex(int(tab))
 
     def _splitter_state(self):
         state = {}
         for name in self._splitter_names():
-            splitter = self.window.findChild(QSplitter, name)
+            splitter = self.views.find_splitter(name)
             if splitter is not None:
                 state[name] = splitter.saveState()
         return state
@@ -218,9 +252,7 @@ class WorkspaceStateController:
         forgotten until somebody thought to come and add it -- and the
         splitter holding the book summary was exactly that case.
         """
-        registry = getattr(self.window, "panelRegistry", None)
-        if registry is None:
-            return ()
+        registry = self.views.panel_registry
         names = []
         for descriptor in registry.descriptors(placement=SPLITTER_SLOT):
             slot = descriptor.slot
@@ -229,9 +261,7 @@ class WorkspaceStateController:
         return tuple(names)
 
     def _panel_visibility(self):
-        host = getattr(self.window, "panelHost", None)
-        if host is None:
-            return {}
+        host = self.views.panel_host
         return {
             panel_id: not instance.widget.isHidden()
             for panel_id, instance in host.instances.items()
@@ -251,9 +281,7 @@ class WorkspaceStateController:
         call them on, which made adding a panel with state of its own a
         change to this file and put one panel's internals in it.
         """
-        host = getattr(self.window, "panelHost", None)
-        if host is None:
-            return
+        host = self.views.panel_host
         for instance in host.instances.values():
             for remembered in instance.descriptor.state:
                 yield remembered, instance.widget

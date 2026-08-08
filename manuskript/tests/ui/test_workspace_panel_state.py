@@ -29,6 +29,7 @@ from manuskript.ui import workspace_state_controller
 from manuskript.ui.panels.host import PanelInstance
 from manuskript.ui.workspace_state_controller import (
     WorkspaceStateController,
+    WorkspaceStateViews,
 )
 
 
@@ -112,6 +113,13 @@ def saved_state(controller):
     return controller.store.save.call_args[0][0]
 
 
+def state_controller(window, store=None):
+    return WorkspaceStateController(
+        WorkspaceStateViews.for_window(window),
+        store=store,
+    )
+
+
 def test_a_panel_the_controller_never_heard_of_keeps_its_state():
     """The whole point. Nothing in the controller mentions this panel, and
     its page survives a save and a restore.
@@ -120,7 +128,7 @@ def test_a_panel_the_controller_never_heard_of_keeps_its_state():
     instance = PanelInstance(descriptor=NOTEBOOK_PANEL, widget=notebook)
     window = a_window(instances={NOTEBOOK: instance})
     store = MagicMock()
-    controller = WorkspaceStateController(window, store=store)
+    controller = state_controller(window, store)
 
     controller.save()
 
@@ -141,7 +149,7 @@ def test_a_panel_that_remembers_nothing_files_nothing():
             plain.id: PanelInstance(descriptor=plain, widget=MagicMock()),
         }
     )
-    controller = WorkspaceStateController(window, store=MagicMock())
+    controller = state_controller(window, MagicMock())
 
     controller.save()
 
@@ -160,7 +168,7 @@ def test_nothing_recorded_leaves_a_panel_as_it_opened():
     )
     store = MagicMock()
     store.load.return_value = WorkspaceWindowState()
-    controller = WorkspaceStateController(window, store=store)
+    controller = state_controller(window, store)
 
     controller.restore()
 
@@ -189,7 +197,7 @@ def test_the_splitters_remembered_are_the_ones_panels_sit_in():
         PanelDescriptor(id="core.docked", title="Docked"),
     )
     window = a_window(descriptors=descriptors)
-    controller = WorkspaceStateController(window, store=MagicMock())
+    controller = state_controller(window, MagicMock())
 
     controller.save()
 
@@ -207,7 +215,7 @@ def test_the_splitter_holding_the_book_summary_is_among_them():
         plots_group=object(), redaction_group=object(),
     )
     window = a_window(descriptors=descriptors)
-    controller = WorkspaceStateController(window, store=MagicMock())
+    controller = state_controller(window, MagicMock())
 
     controller.save()
 
@@ -256,3 +264,9 @@ def test_the_controller_names_no_panel_and_no_panel_widget():
 
     for named in ("redacMetadata", "core.metadata", "revisions"):
         assert named not in source, named
+
+
+def test_workspace_state_controller_has_no_main_window_escape_hatch():
+    controller = WorkspaceStateController(MagicMock(), store=MagicMock())
+
+    assert not hasattr(controller, "window")

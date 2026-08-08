@@ -103,6 +103,7 @@ from manuskript.services.workspace_state import (
 )
 from manuskript.ui.workspace_state_controller import (
     WorkspaceStateController,
+    WorkspaceStateViews,
 )
 from manuskript.functions import Spellchecker
 
@@ -182,10 +183,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # This window's layout, filed under this window. Two windows
         # sharing one set of keys meant the second saved over the first.
         self.windowId = window_id
-        self.windowState = WorkspaceStateController(
-            self,
-            window_id=window_id,
-        )
 
         # Application scope: every window reads the same panel list.
         self.panelRegistry = services.panel_registry
@@ -204,6 +201,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # meant to split exists.
         with timing.span("window.panels"):
             self.setupMoreUi()
+        self.windowState = WorkspaceStateController(
+            WorkspaceStateViews.for_window(self),
+            window_id=window_id,
+        )
         # Now every core panel exists, compose the controllers from their
         # explicit view contracts. Navigation used to be built before the
         # project tree and kept the whole window so it could find it later.
