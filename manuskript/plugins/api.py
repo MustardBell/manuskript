@@ -490,8 +490,54 @@ class MarkupContribution:
             )
 
 
+@dataclass(frozen=True)
+class HtmlAugmentationContribution:
+    """Something Markdown should mean, once it becomes HTML.
+
+    Not a transform and not an exporter. A transform is middleware that has
+    to guess where its output is going, and would have to be told; an
+    exporter produces a whole document. This declares one addition to what
+    Markdown means -- lists written ``1)``, a footnote convention, a spoiler
+    box -- and every route that renders Markdown as HTML picks it up: the
+    HTML export, the preview beside it, and a page type's reading view.
+
+    ``extension_factory`` returns a ``markdown.Extension``, because the
+    conversion is python-markdown and extending it is what that library is
+    for. Emitting HTML from a Markdown-shaped source needs no escape hatch:
+    the extension participates in the conversion rather than smuggling tags
+    through it.
+
+    ``page_types`` is the scope. Empty means every document. Naming page
+    types narrows it to documents of those types, which is how one
+    augmentation can apply to a whole manuscript and another only to the
+    pages that asked for it.
+
+    Augmentations stack, highest ``priority`` first, so an addition that
+    must see the source before another can say so.
+    """
+
+    descriptor: ExtensionDescriptor
+    extension_factory: Callable[[], Any]
+    page_types: tuple[str, ...] = ()
+    priority: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "page_types",
+            tuple(str(value).strip() for value in self.page_types if str(value).strip()),
+        )
+        if self.extension_factory is None:
+            raise ValueError(
+                "HTML augmentation {} needs an extension factory.".format(
+                    self.descriptor.id
+                )
+            )
+
+
 Contribution = Union[
     ExportContribution,
+    HtmlAugmentationContribution,
     ImportContribution,
     ConversionContribution,
     ProjectPanelContribution,

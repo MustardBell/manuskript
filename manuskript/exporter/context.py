@@ -15,6 +15,10 @@ class ExportContext:
     tool_paths: object = None
     process_runner: object = None
     page_types: object = None
+    #: What Markdown additionally means once it becomes HTML, as a callable
+    #: answering with the augmentations that apply. A callable rather than a
+    #: list because plugins come and go while an export dialog is open.
+    html_augmentations: object = None
 
     @property
     def project_path(self):

@@ -29,6 +29,9 @@ from manuskript.ui.views.character_panel import (
 from manuskript.ui.views.plot_panel import PlotModels, PlotPanelView
 from manuskript.ui.views.world_panel import WorldModels, WorldPanelView
 from manuskript.panels import PanelContext
+from manuskript.plugins.html_augmentations import (
+    markdown_extensions,
+)
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
@@ -1464,6 +1467,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.dialog.show()
         self.centerChildWindow(self.dialog)
 
+    def htmlAugmentations(self, page_type=None):
+        """What Markdown additionally means once it becomes HTML here.
+
+        Asked per rendering rather than held, because plugins are enabled and
+        disabled while a project is open and an export dialog may outlive the
+        plugin that contributed to it.
+        """
+        registry = (
+            self.pluginRuntime.registry
+            if self.pluginRuntime is not None
+            else None
+        )
+        return markdown_extensions(
+            registry,
+            page_type,
+            report_error=lambda message: self.statusPresenter.show(
+                message, 8000, 2,
+            ),
+        )
+
     def exportContext(self):
         return ExportContext(
             project_file=self.currentProject or "",
@@ -1479,4 +1502,5 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 if self.pluginUi is not None
                 else None
             ),
+            html_augmentations=self.htmlAugmentations,
         )

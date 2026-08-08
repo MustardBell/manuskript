@@ -188,6 +188,7 @@ Both methods are optional, and returning nothing stays valid:
 | `register_page_type` | `PageTypeContribution` |
 | `register_page_renderer` | `PageRendererContribution` |
 | `register_markup` | `MarkupContribution` |
+| `register_html_augmentation` | `HtmlAugmentationContribution` |
 | `register_project_panel` | `ProjectPanelContribution` |
 | `register_settings_panel` | `PluginSettingsContribution` |
 | `register_editor_workspace` | `EditorWorkspaceContribution` |
@@ -368,6 +369,37 @@ able to rewrite the book.
 what it hands back is scoped to you: routing exposes only the page types
 **you** registered and raises `PluginScopeError` for anyone else's. The
 scoping is enforced by the host rather than trusted to you.
+
+## HTML augmentations
+
+Something Markdown should mean, once it becomes HTML.
+
+```python
+registrar.register_html_augmentation(HtmlAugmentationContribution(
+    descriptor=ExtensionDescriptor(id="vendor.lists", name="Parenthesis lists"),
+    extension_factory=ParenthesisLists,   # a markdown.Extension subclass
+))
+```
+
+`extension_factory` returns a `markdown.Extension`, because the conversion is
+python-markdown and extending it is what that library is for. Your addition
+participates in the conversion rather than smuggling tags through it.
+
+It is neither a transform nor an exporter, and the difference matters. A
+transform is middleware over one media type and would have to be told where
+its output is going — a `<ol>` is only safe if HTML is the destination. An
+exporter produces a whole document. An augmentation says one thing more about
+what Markdown means, and **every route that renders Markdown as HTML picks it
+up**: the HTML export, the preview beside it, and a page type's reading view.
+
+| field | means |
+|---|---|
+| `extension_factory` | builds the `markdown.Extension`, called per rendering |
+| `page_types` | empty applies to every document; naming page types narrows it to documents of those types |
+| `priority` | higher runs first, for an addition that must see the source before another |
+
+An extension that will not build is reported in the status bar and skipped.
+Your fault must not be the difference between an export happening and not.
 
 ### One widget per window
 

@@ -9,12 +9,15 @@ from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSetting
 from manuskript.functions import safeTranslate
 from manuskript.media_types import HTML as HTML_MEDIA_TYPE
 
+import logging
 import os
 
 try:
     import markdown as MD
 except ImportError:
     MD = None
+
+LOGGER = logging.getLogger(__name__)
 
 class HTML(markdown):
     name = "HTML"
@@ -65,8 +68,30 @@ class HTML(markdown):
         t.setCurrentIndex(2)
         return t
 
+    def htmlAugmentations(self):
+        """What plugins add to Markdown for this rendering, if anything.
+
+        Asked of the context per rendering rather than held: a plugin can be
+        enabled or disabled while an export dialog is open, and the answer
+        must be current when the button is pressed.
+        """
+        provider = getattr(self.context, "html_augmentations", None)
+        if provider is None:
+            return []
+        try:
+            return list(provider())
+        except Exception:
+            LOGGER.exception(
+                "Cannot read what plugins add to Markdown; exporting "
+                "without their additions."
+            )
+            return []
+
     def output(self, settingsWidget):
-        html = MD.markdown(markdown.output(self, settingsWidget))
+        html = MD.markdown(
+            markdown.output(self, settingsWidget),
+            extensions=self.htmlAugmentations(),
+        )
         return html
 
     def preview(self, settingsWidget, previewWidget):
@@ -76,7 +101,7 @@ class HTML(markdown):
         settingsWidget.writeSettings()
 
         md = markdown.output(self, settingsWidget)
-        html = MD.markdown(md)
+        html = MD.markdown(md, extensions=self.htmlAugmentations())
         path = os.path.join(self.projectPath(), "dummy.html")
 
         self.preparesTextEditView(previewWidget.widget(0), settings["Preview"]["PreviewFont"])
