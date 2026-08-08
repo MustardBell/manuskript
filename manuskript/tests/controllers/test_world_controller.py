@@ -23,6 +23,8 @@ def make_controller():
         tree=MagicMock(),
         tabs=MagicMock(),
         data_set_button=MagicMock(),
+        add_item_button=MagicMock(),
+        remove_item_button=MagicMock(),
         fields=(MagicMock(), MagicMock(), MagicMock(), MagicMock()),
     )
     panel.tree.selectedIndexes.return_value = [index]

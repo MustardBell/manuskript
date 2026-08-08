@@ -6,13 +6,15 @@ from manuskript.ui.project_view_binding import (
     FlatDataProjectBinding,
     OutlineSelectionProjectBinding,
 )
+from manuskript.ui.project_binding_views import ProjectBindingViews
 
 
 def test_flat_data_binding_configures_summary_and_general_fields():
     window = MagicMock()
     runtime = MagicMock()
+    views = ProjectBindingViews.for_window(window)
 
-    FlatDataProjectBinding(window, runtime).bind(MagicMock())
+    FlatDataProjectBinding(views.flat_data, runtime).bind(MagicMock())
 
     window.txtSummarySituation.setModel.assert_called_once_with(
         runtime.models.flat_data
@@ -34,8 +36,9 @@ def test_outline_selection_binding_registers_project_connections():
     window = MagicMock()
     runtime = MagicMock()
     connect = MagicMock()
+    views = ProjectBindingViews.for_window(window)
 
-    OutlineSelectionProjectBinding(window, runtime).bind(connect)
+    OutlineSelectionProjectBinding(views.outline_selection).bind(connect)
 
     assert connect.call_count == 7
     connected_slots = [call.args[1] for call in connect.call_args_list]
@@ -48,6 +51,7 @@ def test_debug_binding_configures_models_and_named_selection_handlers():
     window = MagicMock()
     runtime = MagicMock()
     connect = MagicMock()
+    views = ProjectBindingViews.for_window(window)
     character_row = 4
     plot_row = 7
     window.tblDebugPersos.selectionModel().currentIndex().row.return_value = (
@@ -56,7 +60,7 @@ def test_debug_binding_configures_models_and_named_selection_handlers():
     window.tblDebugPlots.selectionModel().currentIndex().row.return_value = (
         plot_row
     )
-    binding = DebugProjectBinding(window, runtime)
+    binding = DebugProjectBinding(views.debug, runtime)
 
     binding.bind(connect)
     binding._show_current_character()

@@ -7,207 +7,224 @@ from manuskript.ui.views.plotDelegate import plotDelegate
 
 
 class CharacterProjectBinding:
-    def __init__(self, window, runtime):
-        self.window = window
-        self._runtime = runtime
+    def __init__(self, controller):
+        self.controller = controller
+        self.panel = controller.panel
 
     @property
     def models(self):
-        """The project's models, from the runtime that owns them."""
-        return self._runtime.models
+        """The current project's models through the controller facade."""
+        return self.controller.models
 
     def bind(self, connect):
-        window = self.window
+        panel = self.panel
         models = self.models
-        controller = window.characterController
-        controller.configure_info_view(window.tblPersoInfos)
-        window.lstCharacters.setCharactersModel(models.characters)
-        window.tblPersoInfos.setModel(models.characters)
+        controller = self.controller
+        controller.configure_info_view(panel.info)
+        panel.characters.setCharactersModel(models.characters)
+        panel.info.setModel(models.characters)
         for signal, slot in [
             (
-                window.btnAddPerso.clicked,
-                window.lstCharacters.addCharacter,
+                panel.add_character_button.clicked,
+                panel.characters.addCharacter,
             ),
             (
-                window.btnRmPerso.clicked,
+                panel.remove_character_button.clicked,
                 controller.delete_characters,
             ),
             (
-                window.btnPersoColor.clicked,
+                panel.color_button.clicked,
                 controller.choose_character_color,
             ),
             (
-                window.chkPersoPOV.stateChanged,
+                panel.pov_checkbox.stateChanged,
                 controller.change_character_pov_state,
             ),
             (
-                window.btnPersoAddInfo.clicked,
+                panel.add_info_button.clicked,
                 controller.add_character_info,
             ),
             (
-                window.btnPersoRmInfo.clicked,
+                panel.remove_info_button.clicked,
                 controller.remove_character_info,
             ),
         ]:
             connect(signal, slot, F.AUC)
 
-        for widget, column in [
-            (window.txtPersoName, Character.name),
-            (window.sldPersoImportance, Character.importance),
-            (window.txtPersoMotivation, Character.motivation),
-            (window.txtPersoGoal, Character.goal),
-            (window.txtPersoConflict, Character.conflict),
-            (window.txtPersoEpiphany, Character.epiphany),
-            (
-                window.txtPersoSummarySentence,
-                Character.summarySentence,
-            ),
-            (window.txtPersoSummaryPara, Character.summaryPara),
-            (window.txtPersoSummaryFull, Character.summaryFull),
-            (window.txtPersoNotes, Character.notes),
-        ]:
+        columns = (
+            Character.name,
+            Character.importance,
+            Character.motivation,
+            Character.goal,
+            Character.conflict,
+            Character.epiphany,
+            Character.summarySentence,
+            Character.summaryPara,
+            Character.summaryFull,
+            Character.notes,
+        )
+        if len(panel.fields) != len(columns):
+            raise ValueError("Character panel field contract is incomplete.")
+        for widget, column in zip(panel.fields, columns):
             widget.setModel(models.characters)
             widget.setColumn(column)
-        window.tabPersos.setEnabled(False)
+        panel.tabs.setEnabled(False)
 
     def unbind(self):
-        self.window.characterController.reset()
+        self.controller.reset()
 
 
 class PlotProjectBinding:
-    def __init__(self, window, runtime):
-        self.window = window
-        self._runtime = runtime
+    def __init__(self, controller, settings):
+        self.controller = controller
+        self.panel = controller.panel
+        self.settings = settings
+        self._character_delegate = None
+        self._step_delegate = None
 
     @property
     def models(self):
-        """The project's models, from the runtime that owns them."""
-        return self._runtime.models
+        """The current project's models through the controller facade."""
+        return self.controller.models
 
     def bind(self, connect):
-        window = self.window
+        panel = self.panel
         models = self.models
-        controller = window.plotController
-        window.lstSubPlots.setModel(models.plots)
-        window.lstPlotPerso.setModel(models.plots)
-        window.lstPlots.setPlotModel(
+        controller = self.controller
+        panel.steps.setModel(models.plots)
+        panel.characters.setModel(models.plots)
+        panel.plots.setPlotModel(
             models.plots,
-            settings=window.settingsManager,
+            settings=self.settings,
         )
         for signal, slot in [
-            (window.btnAddPlot.clicked, controller.add_plot),
-            (window.btnRmPlot.clicked, controller.remove_current_plot),
-            (window.btnAddSubPlot.clicked, controller.add_sub_plot),
+            (panel.add_plot_button.clicked, controller.add_plot),
+            (panel.remove_plot_button.clicked, controller.remove_current_plot),
+            (panel.add_step_button.clicked, controller.add_sub_plot),
             (
-                window.btnRmSubPlot.clicked,
+                panel.remove_step_button.clicked,
                 controller.remove_selected_sub_plots,
             ),
             (
-                window.lstPlotPerso.selectionModel().selectionChanged,
+                panel.characters.selectionModel().selectionChanged,
                 controller.handle_plot_character_selection,
             ),
             (
-                window.btnRmPlotPerso.clicked,
+                panel.remove_character_button.clicked,
                 controller.remove_selected_plot_characters,
             ),
             (
-                window.lstSubPlots.selectionModel().currentRowChanged,
+                panel.steps.selectionModel().currentRowChanged,
                 controller.change_current_sub_plot,
             ),
         ]:
             connect(signal, slot, F.AUC)
 
-        for widget, column in [
-            (window.txtPlotName, Plot.name),
-            (window.txtPlotDescription, Plot.description),
-            (window.txtPlotResult, Plot.result),
-            (window.sldPlotImportance, Plot.importance),
-        ]:
+        columns = (
+            Plot.name,
+            Plot.description,
+            Plot.result,
+            Plot.importance,
+        )
+        if len(panel.fields) != len(columns):
+            raise ValueError("Plot panel field contract is incomplete.")
+        for widget, column in zip(panel.fields, columns):
             widget.setModel(models.plots)
             widget.setColumn(column)
 
-        window.tabPlot.setEnabled(False)
+        panel.tabs.setEnabled(False)
         controller.refresh_character_menu()
         connect(
             models.characters.dataChanged,
             controller.refresh_character_menu,
         )
-        window.lstOutlinePlots.setPlotModel(
+        panel.outline_plots.setPlotModel(
             models.plots,
-            settings=window.settingsManager,
+            settings=self.settings,
         )
-        window.lstOutlinePlots.setShowSubPlot(True)
-        window.plotCharacterDelegate = outlineCharacterDelegate(
+        panel.outline_plots.setShowSubPlot(True)
+        self._character_delegate = outlineCharacterDelegate(
             models.characters,
-            window,
+            panel.characters,
         )
-        window.lstPlotPerso.setItemDelegate(
-            window.plotCharacterDelegate
-        )
-        window.plotDelegate = plotDelegate(window)
-        window.lstSubPlots.setItemDelegateForColumn(
+        panel.characters.setItemDelegate(self._character_delegate)
+        self._step_delegate = plotDelegate(panel.steps)
+        panel.steps.setItemDelegateForColumn(
             PlotStep.meta,
-            window.plotDelegate,
+            self._step_delegate,
         )
 
     def unbind(self):
-        self.window.plotController.reset()
+        self.controller.reset()
+        if self._character_delegate is not None:
+            self._character_delegate.mdlCharacter = None
+        self._character_delegate = None
+        self._step_delegate = None
 
 
 class WorldProjectBinding:
-    def __init__(self, window, runtime):
-        self.window = window
-        self._runtime = runtime
+    def __init__(self, controller):
+        self.controller = controller
+        self.panel = controller.panel
 
     @property
     def models(self):
-        """The project's models, from the runtime that owns them."""
-        return self._runtime.models
+        """The current project's models through the controller facade."""
+        return self.controller.models
 
     def bind(self, connect):
-        window = self.window
+        panel = self.panel
         models = self.models
-        controller = window.worldController
-        window.treeWorld.setModel(models.world)
+        controller = self.controller
+        panel.tree.setModel(models.world)
         for column in range(models.world.columnCount()):
-            window.treeWorld.hideColumn(column)
-        window.treeWorld.showColumn(0)
+            panel.tree.hideColumn(column)
+        panel.tree.showColumn(0)
         controller.build_data_set_menu()
         for signal, slot in [
             (
-                window.treeWorld.selectionModel().selectionChanged,
+                panel.tree.selectionModel().selectionChanged,
                 controller.handle_selection_changed,
             ),
-            (window.btnAddWorld.clicked, controller.add_item),
+            (panel.add_item_button.clicked, controller.add_item),
             (
-                window.btnRmWorld.clicked,
+                panel.remove_item_button.clicked,
                 controller.remove_selected_items,
             ),
         ]:
             connect(signal, slot, F.AUC)
-        for widget, column in [
-            (window.txtWorldName, World.name),
-            (window.txtWorldDescription, World.description),
-            (window.txtWorldPassion, World.passion),
-            (window.txtWorldConflict, World.conflict),
-        ]:
+        columns = (
+            World.name,
+            World.description,
+            World.passion,
+            World.conflict,
+        )
+        if len(panel.fields) != len(columns):
+            raise ValueError("World panel field contract is incomplete.")
+        for widget, column in zip(panel.fields, columns):
             widget.setModel(models.world)
             widget.setColumn(column)
-        window.tabWorld.setEnabled(False)
-        window.treeWorld.expandAll()
+        panel.tabs.setEnabled(False)
+        panel.tree.expandAll()
 
     def unbind(self):
-        self.window.worldController.reset()
+        self.controller.reset()
 
 
 class ProjectFeatureBinding:
     """Composite lifecycle for independently bound project features."""
 
-    def __init__(self, window, runtime):
+    def __init__(
+        self,
+        character_controller,
+        plot_controller,
+        world_controller,
+        settings,
+    ):
         self.bindings = (
-            CharacterProjectBinding(window, runtime),
-            PlotProjectBinding(window, runtime),
-            WorldProjectBinding(window, runtime),
+            CharacterProjectBinding(character_controller),
+            PlotProjectBinding(plot_controller, settings),
+            WorldProjectBinding(world_controller),
         )
         self.bound = False
 

@@ -28,6 +28,11 @@ def make_controller():
         remove_character_button=MagicMock(),
         importance_slider=MagicMock(),
         step_summary=MagicMock(),
+        add_plot_button=MagicMock(),
+        remove_plot_button=MagicMock(),
+        add_step_button=MagicMock(),
+        remove_step_button=MagicMock(),
+        outline_plots=MagicMock(),
         fields=(MagicMock(), MagicMock(), MagicMock(), MagicMock()),
     )
     panel.plots.currentPlotIndex.return_value = plot_index

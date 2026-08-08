@@ -40,8 +40,14 @@ class PlotPanelView:
     remove_character_button: Any
     importance_slider: Any
     step_summary: Any
+    add_plot_button: Any
+    remove_plot_button: Any
+    add_step_button: Any
+    remove_step_button: Any
+    #: The outline-side plot list, which shares the plot model.
+    outline_plots: Any
     #: Every field bound to the selected plot's model index.
-    fields: Tuple[Any, ...] = ()
+    fields: Tuple[Any, ...]
 
     @classmethod
     def for_window(cls, window):
@@ -61,4 +67,9 @@ class PlotPanelView:
                 window.txtPlotResult,
                 window.sldPlotImportance,
             ),
+            add_plot_button=window.btnAddPlot,
+            remove_plot_button=window.btnRmPlot,
+            add_step_button=window.btnAddSubPlot,
+            remove_step_button=window.btnRmSubPlot,
+            outline_plots=window.lstOutlinePlots,
         )

@@ -1,8 +1,42 @@
+import ast
+import inspect
 from unittest.mock import MagicMock
 
 import pytest
 
 from manuskript.ui.project_binding import ProjectBinding
+from manuskript.ui import (
+    project_binding,
+    project_feature_binding,
+    project_view_binding,
+)
+
+
+def window_names(module):
+    """Names that would let a binding grow a MainWindow dependency."""
+    tree = ast.parse(inspect.getsource(module))
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and "window" in node.id.lower():
+            found.add(node.id)
+        elif isinstance(node, ast.arg) and "window" in node.arg.lower():
+            found.add(node.arg)
+        elif (
+            isinstance(node, ast.Attribute)
+            and "window" in node.attr.lower()
+        ):
+            found.add(node.attr)
+    return found
+
+
+def test_project_bindings_cannot_reach_through_a_main_window():
+    """Only ProjectBindingViews may translate a window into contracts."""
+    for module in (
+        project_binding,
+        project_feature_binding,
+        project_view_binding,
+    ):
+        assert window_names(module) == set(), module.__name__
 
 
 def make_binding():
@@ -10,13 +44,16 @@ def make_binding():
     # there are no models to bind until a project is open. A test says
     # what that factory hands back rather than assigning afterwards.
     contexts = MagicMock()
+    views = MagicMock()
+    features = MagicMock()
     binding = ProjectBinding(
+        views,
         MagicMock(),
-        MagicMock(),
+        features,
         contexts_factory=lambda: contexts,
     )
     binding.flat_data = MagicMock()
-    binding.features = MagicMock()
+    binding.features = features
     binding.outline_selection = MagicMock()
     binding.debug_views = MagicMock()
     binding.expectedContexts = contexts

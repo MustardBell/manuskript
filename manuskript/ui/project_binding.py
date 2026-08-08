@@ -1,7 +1,4 @@
 from manuskript.ui.connections import SignalConnectionRegistry
-from manuskript.ui.project_context_binding import ProjectContextBinding
-from manuskript.ui.project_feature_binding import ProjectFeatureBinding
-from manuskript.ui.project_view_set import ProjectViewSet
 from manuskript.ui.project_view_binding import (
     DebugProjectBinding,
     FlatDataProjectBinding,
@@ -12,29 +9,20 @@ from manuskript.ui.project_view_binding import (
 class ProjectBinding:
     """Own the complete UI binding lifecycle for one active project."""
 
-    def __init__(self, window, runtime, contexts_factory=None):
-        self.window = window
-        # The window holds the widgets; the runtime holds the models they
-        # show. Passed on rather than looked up, so nothing below here
-        # reaches through a window for a model.
-        self.runtime = runtime
+    def __init__(self, views, runtime, features, contexts_factory):
+        # The views name only the widgets each binding owns; the runtime
+        # resolves the model set afresh whenever a project is bound.
         self.connections = SignalConnectionRegistry()
-        self.flat_data = FlatDataProjectBinding(window, runtime)
-        self.features = ProjectFeatureBinding(window, runtime)
+        self.flat_data = FlatDataProjectBinding(views.flat_data, runtime)
+        self.features = features
         self.outline_selection = OutlineSelectionProjectBinding(
-            window, runtime,
+            views.outline_selection,
         )
-        self.debug_views = DebugProjectBinding(window, runtime)
+        self.debug_views = DebugProjectBinding(views.debug, runtime)
         # Built at bind time, because a window has no models to bind
         # until a project is open -- and injectable, so what the context
         # binding is given is one decision made in one place.
-        self.contextsFactory = (
-            contexts_factory
-            if contexts_factory is not None
-            else lambda: ProjectContextBinding(
-                ProjectViewSet.for_window(window)
-            )
-        )
+        self.contextsFactory = contexts_factory
         self.contexts = None
         self.bound = False
 

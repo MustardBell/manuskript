@@ -21,6 +21,10 @@ def make_controller(confirm=True):
         color_button=MagicMock(),
         pov_checkbox=MagicMock(),
         importance_slider=MagicMock(),
+        add_character_button=MagicMock(),
+        remove_character_button=MagicMock(),
+        add_info_button=MagicMock(),
+        remove_info_button=MagicMock(),
         fields=(MagicMock(), MagicMock()),
     )
     navigation = MagicMock()

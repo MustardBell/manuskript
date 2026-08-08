@@ -44,8 +44,12 @@ class CharacterPanelView:
     color_button: Any
     pov_checkbox: Any
     importance_slider: Any
+    add_character_button: Any
+    remove_character_button: Any
+    add_info_button: Any
+    remove_info_button: Any
     #: Every field bound to the selected character's model index.
-    fields: Tuple[Any, ...] = ()
+    fields: Tuple[Any, ...]
 
     @classmethod
     def for_window(cls, window):
@@ -69,4 +73,8 @@ class CharacterPanelView:
                 window.txtPersoSummaryFull,
                 window.txtPersoNotes,
             ),
+            add_character_button=window.btnAddPerso,
+            remove_character_button=window.btnRmPerso,
+            add_info_button=window.btnPersoAddInfo,
+            remove_info_button=window.btnPersoRmInfo,
         )

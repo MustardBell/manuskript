@@ -29,8 +29,10 @@ class WorldPanelView:
     tabs: Any
     #: Opens the menu of data sets that can be filled in.
     data_set_button: Any
+    add_item_button: Any
+    remove_item_button: Any
     #: Every field bound to the selected item's model index.
-    fields: Tuple[Any, ...] = ()
+    fields: Tuple[Any, ...]
 
     @classmethod
     def for_window(cls, window):
@@ -45,4 +47,6 @@ class WorldPanelView:
                 window.txtWorldPassion,
                 window.txtWorldConflict,
             ),
+            add_item_button=window.btnAddWorld,
+            remove_item_button=window.btnRmWorld,
         )

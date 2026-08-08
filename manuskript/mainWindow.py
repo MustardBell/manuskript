@@ -70,7 +70,11 @@ from manuskript.ui.main_window_action_binding import (
 from manuskript.ui.menu_tooltips import MenuTooltipController
 from manuskript.ui.navigation_view import MainNavigationView
 from manuskript.ui.project_binding import ProjectBinding
+from manuskript.ui.project_binding_views import ProjectBindingViews
+from manuskript.ui.project_context_binding import ProjectContextBinding
+from manuskript.ui.project_feature_binding import ProjectFeatureBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
+from manuskript.ui.project_view_set import ProjectViewSet
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
 from manuskript.ui.editors.themes import ThemePreviewRenderer
@@ -213,7 +217,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.referenceService = None
         self.textEditorContext = None
-        self.projectBinding = ProjectBinding(self, self.projectRuntime)
         # This window's layout, filed under this window. Two windows
         # sharing one set of keys meant the second saved over the first.
         self.windowId = window_id
@@ -287,6 +290,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # window's.
         self.projectManager = self.projectRuntime.attach(
             self.projectLifecycleView
+        )
+        # Project bindings receive stable, grouped widget contracts. Models
+        # remain runtime-owned and are resolved only when a project binds,
+        # because opening another project replaces the entire model set.
+        self.projectBinding = ProjectBinding(
+            ProjectBindingViews.for_window(self),
+            self.projectRuntime,
+            ProjectFeatureBinding(
+                self.characterController,
+                self.plotController,
+                self.worldController,
+                self.settingsManager,
+            ),
+            contexts_factory=lambda: ProjectContextBinding(
+                ProjectViewSet.for_window(self)
+            ),
         )
         self.projectHistory = self.projectManager.last_project_store
         self.welcome.set_context(
