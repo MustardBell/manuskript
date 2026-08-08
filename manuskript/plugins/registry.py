@@ -303,16 +303,3 @@ class PluginRegistry:
     def html_augmentations(self):
         return self.contributions(ContributionKind.HTML_AUGMENTATION)
 
-    def transforms_for(self, media_type):
-        """Middleware over one media type, in the order it runs."""
-        return tuple(sorted(
-            (
-                contribution
-                for contribution in self.transforms
-                if contribution.media_type == media_type
-            ),
-            key=lambda value: (
-                -value.priority,
-                value.descriptor.id,
-            ),
-        ))

@@ -462,6 +462,19 @@ class TransformContribution:
                 "Transforms must name the media type they take and return."
             )
 
+    def applies_to(self, media_type):
+        """Whether this transform handles content of that media type.
+
+        Here rather than in the registry, for the reason HTML augmentations
+        answer for their own scope: a catalogue that filters by one kind of
+        context ends up with a method per kind of caller.
+        """
+        return self.media_type == media_type
+        if not self.media_type:
+            raise ValueError(
+                "Transforms must name the media type they take and return."
+            )
+
 
 class MarkupMode(str, Enum):
     AUGMENT = "augment"

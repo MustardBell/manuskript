@@ -150,11 +150,13 @@ def test_an_augmentation_naming_page_types_applies_only_to_those():
 def test_the_registry_is_not_asked_which_ones_apply():
     """It is a catalogue of what exists. Which of it applies is a question
     about one rendering, and a registry answering it would need another such
-    method for every kind of context a caller might be in.
+    method for every kind of context a caller might be in: by page type, by
+    media type, by route, by window.
     """
     registry = registry_with(an_augmentation())
 
-    assert not hasattr(registry, "html_augmentations_for")
+    for query in ("html_augmentations_for", "transforms_for"):
+        assert not hasattr(registry, query), query
     assert len(registry.html_augmentations) == 1
 
 

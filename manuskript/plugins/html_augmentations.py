@@ -9,6 +9,8 @@ rendering at all.
 
 import logging
 
+from manuskript.plugins.applicable import applicable
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,17 +27,7 @@ def markdown_extensions(registry, page_type=None, report_error=None):
     if registry is None:
         return []
     try:
-        # Filtered and ordered here, not by the registry: the registry is a
-        # catalogue of what exists, and which of it applies is a question
-        # about this rendering. Each contribution answers for its own scope.
-        contributions = sorted(
-            (
-                contribution
-                for contribution in registry.html_augmentations
-                if contribution.applies_to(page_type)
-            ),
-            key=lambda contribution: -contribution.priority,
-        )
+        contributions = applicable(registry.html_augmentations, page_type)
     except Exception:
         LOGGER.exception("Cannot read the registered HTML augmentations.")
         return []

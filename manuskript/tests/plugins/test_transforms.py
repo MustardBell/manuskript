@@ -10,6 +10,7 @@ Nothing in the API could express that before.
 import pytest
 
 from manuskript.media_types import BBCODE, MARKDOWN
+from manuskript.plugins.applicable import applicable
 from manuskript.plugins import ExtensionDescriptor, OptionField
 from manuskript.plugins.api import TransformContribution
 from manuskript.plugins.errors import PluginRegistrationError
@@ -95,7 +96,7 @@ def test_transforms_are_found_by_media_type():
         transform("vendor.bb", "bb", media_type=BBCODE),
     )
 
-    found = registry.transforms_for(MARKDOWN)
+    found = applicable(registry.transforms, MARKDOWN)
 
     assert [t.descriptor.id for t in found] == ["vendor.md"]
 
@@ -103,7 +104,7 @@ def test_transforms_are_found_by_media_type():
 def test_a_media_type_with_no_middleware_yields_nothing():
     registry = registry_with(transform("vendor.md", "md"))
 
-    assert registry.transforms_for(BBCODE) == ()
+    assert applicable(registry.transforms, BBCODE) == ()
 
 
 def test_transforms_stack_in_priority_order():
@@ -112,7 +113,7 @@ def test_transforms_stack_in_priority_order():
         transform("vendor.early", "early", priority=9),
     )
 
-    found = registry.transforms_for(MARKDOWN)
+    found = applicable(registry.transforms, MARKDOWN)
 
     assert [t.descriptor.id for t in found] == [
         "vendor.early", "vendor.late",
@@ -130,7 +131,7 @@ def test_transforms_from_different_plugins_stack_together():
 
     # Neither plugin knows the other exists; the media type is the meeting
     # point, as it is for renderers.
-    assert len(registry.transforms_for(MARKDOWN)) == 2
+    assert len(applicable(registry.transforms, MARKDOWN)) == 2
 
 
 # --------------------------------------------------------------- running
@@ -160,7 +161,7 @@ def test_transforms_run_in_order_over_one_document():
         transform("vendor.first", "first", priority=9),
     )
 
-    result = run_transforms(registry.transforms_for(MARKDOWN), "body")
+    result = run_transforms(applicable(registry.transforms, MARKDOWN), "body")
 
     assert result == "body[first][second]"
 
