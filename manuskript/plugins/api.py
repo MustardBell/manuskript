@@ -534,6 +534,18 @@ class HtmlAugmentationContribution:
                 )
             )
 
+    def applies_to(self, page_type=None):
+        """Whether this augmentation is wanted for this document.
+
+        The rule lives here because the scope is declared here. A registry
+        answering it would be a catalogue that knows what page types are, and
+        would need another such question for every kind of context a caller
+        might be in.
+        """
+        if not self.page_types:
+            return True
+        return page_type is not None and page_type in self.page_types
+
 
 Contribution = Union[
     ExportContribution,

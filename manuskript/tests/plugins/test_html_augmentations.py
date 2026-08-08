@@ -133,35 +133,55 @@ def test_the_registry_refuses_a_different_kind_of_contribution():
 # --------------------------------------------------------------- the scope
 
 def test_an_augmentation_naming_no_page_type_applies_everywhere():
-    registry = registry_with(an_augmentation())
+    contribution = an_augmentation()
 
-    assert len(registry.html_augmentations_for()) == 1
-    assert len(registry.html_augmentations_for("vendor.sample")) == 1
+    assert contribution.applies_to() is True
+    assert contribution.applies_to("vendor.sample") is True
 
 
 def test_an_augmentation_naming_page_types_applies_only_to_those():
-    registry = registry_with(
-        an_augmentation(page_types=("vendor.sample",)),
-    )
+    contribution = an_augmentation(page_types=("vendor.sample",))
 
-    assert registry.html_augmentations_for() == ()
-    assert registry.html_augmentations_for("other.page") == ()
-    assert len(registry.html_augmentations_for("vendor.sample")) == 1
+    assert contribution.applies_to() is False
+    assert contribution.applies_to("other.page") is False
+    assert contribution.applies_to("vendor.sample") is True
 
 
-def test_augmentations_run_highest_priority_first():
+def test_the_registry_is_not_asked_which_ones_apply():
+    """It is a catalogue of what exists. Which of it applies is a question
+    about one rendering, and a registry answering it would need another such
+    method for every kind of context a caller might be in.
+    """
+    registry = registry_with(an_augmentation())
+
+    assert not hasattr(registry, "html_augmentations_for")
+    assert len(registry.html_augmentations) == 1
+
+
+def test_augmentations_are_built_highest_priority_first():
     """So an addition that must see the source before another can say so."""
+    built = []
+
+    def recording(name):
+        def factory():
+            built.append(name)
+            return ParenthesisLists()
+        return factory
+
     registry = registry_with(
-        an_augmentation(extension_id="vendor.second", priority=1),
-        an_augmentation(extension_id="vendor.first", priority=5),
+        an_augmentation(
+            extension_id="vendor.second", factory=recording("second"),
+            priority=1,
+        ),
+        an_augmentation(
+            extension_id="vendor.first", factory=recording("first"),
+            priority=5,
+        ),
     )
 
-    order = [
-        contribution.descriptor.id
-        for contribution in registry.html_augmentations_for()
-    ]
+    markdown_extensions(registry)
 
-    assert order == ["vendor.first", "vendor.second"]
+    assert built == ["first", "second"]
 
 
 # ------------------------------------------------------------- when it breaks

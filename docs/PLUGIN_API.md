@@ -396,6 +396,7 @@ up**: the HTML export, the preview beside it, and a page type's reading view.
 |---|---|
 | `extension_factory` | builds the `markdown.Extension`, called per rendering |
 | `page_types` | empty applies to every document; naming page types narrows it to documents of those types |
+| `applies_to(page_type)` | answers whether it is wanted here — the rule lives with the scope that declares it, not in the registry |
 | `priority` | higher runs first, for an addition that must see the source before another |
 
 An extension that will not build is reported in the status bar and skipped.

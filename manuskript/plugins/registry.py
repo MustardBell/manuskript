@@ -303,24 +303,6 @@ class PluginRegistry:
     def html_augmentations(self):
         return self.contributions(ContributionKind.HTML_AUGMENTATION)
 
-    def html_augmentations_for(self, page_type=None):
-        """What Markdown additionally means here, highest priority first.
-
-        An augmentation naming no page type applies to every document; one
-        naming page types applies to documents of those types. Asking without
-        a page type asks for the unrestricted ones, which is what rendering
-        an ordinary document wants.
-        """
-        return tuple(sorted(
-            (
-                contribution
-                for contribution in self.html_augmentations
-                if not contribution.page_types
-                or (page_type is not None and page_type in contribution.page_types)
-            ),
-            key=lambda contribution: -contribution.priority,
-        ))
-
     def transforms_for(self, media_type):
         """Middleware over one media type, in the order it runs."""
         return tuple(sorted(
