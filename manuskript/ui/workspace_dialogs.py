@@ -7,7 +7,6 @@ services, and the controller receives no unrestricted ``MainWindow`` object.
 """
 
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Callable
 
 from PyQt5.QtCore import Qt
@@ -15,6 +14,7 @@ from PyQt5.QtWidgets import QWidget
 
 from manuskript.settingsWindow import settingsWindow
 from manuskript.ui.about import aboutDialog
+from manuskript.ui.dialog_lifecycle import NamedDialogLifecycle
 from manuskript.ui.git_revision_dialog import GitRevisionDialog
 from manuskript.ui.settings_window_views import SettingsWindowViews
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
@@ -118,39 +118,38 @@ class WorkspaceDialogController:
 
     def __init__(self, views):
         self.views = views
-        self._dialogs = {}
-        self._tokens = {}
+        self._lifecycle = NamedDialogLifecycle(views.center)
 
     @property
     def settings_dialog(self):
-        return self._dialogs.get(self.SETTINGS)
+        return self._lifecycle.current(self.SETTINGS)
 
     @property
     def frequency_dialog(self):
-        return self._dialogs.get(self.FREQUENCY)
+        return self._lifecycle.current(self.FREQUENCY)
 
     @property
     def targets_dialog(self):
-        return self._dialogs.get(self.TARGETS)
+        return self._lifecycle.current(self.TARGETS)
 
     @property
     def revision_dialog(self):
-        return self._dialogs.get(self.REVISIONS)
+        return self._lifecycle.current(self.REVISIONS)
 
     @property
     def media_type_dialog(self):
-        return self._dialogs.get(self.MEDIA_TYPES)
+        return self._lifecycle.current(self.MEDIA_TYPES)
 
     @property
     def about_dialog(self):
-        return self._dialogs.get(self.ABOUT)
+        return self._lifecycle.current(self.ABOUT)
 
     def show_settings(self, tab=None, _checked=False):
         # QAction.triggered supplies its checked state positionally.  It is
         # not a settings-page index.
         if isinstance(tab, bool):
             tab = None
-        dialog = self._replace(
+        dialog = self._lifecycle.replace(
             self.SETTINGS,
             self.views.authoring.settings,
         )
@@ -158,7 +157,7 @@ class WorkspaceDialogController:
         dialog.setWindowFlags(Qt.Dialog)
         if tab is not None:
             dialog.setTab(tab)
-        return self._present(dialog)
+        return self._lifecycle.present(dialog)
 
     def show_labels(self, _checked=False):
         return self.show_settings(3)
@@ -167,13 +166,13 @@ class WorkspaceDialogController:
         return self.show_settings(4)
 
     def show_frequency(self, _checked=False):
-        return self._present(self._replace(
+        return self._lifecycle.present(self._lifecycle.replace(
             self.FREQUENCY,
             self.views.authoring.frequency,
         ))
 
     def show_targets(self, _checked=False):
-        return self._present(self._replace(
+        return self._lifecycle.present(self._lifecycle.replace(
             self.TARGETS,
             self.views.authoring.targets,
         ))
@@ -189,63 +188,27 @@ class WorkspaceDialogController:
         dialog = self.revision_dialog
         if dialog is None:
             dialog = self.views.authoring.revisions(host)
-            self._register(self.REVISIONS, dialog)
+            self._lifecycle.register(self.REVISIONS, dialog)
         elif dialog.parentWidget() is not host:
             # A child of application-modal Settings stays interactive;
             # a sibling top-level dialog would be blocked by it.
             dialog.hide()
             dialog.setParent(host, Qt.Dialog)
-        return self._present(dialog, center=False)
+        return self._lifecycle.present(dialog, center=False)
 
     def show_media_types(self, _checked=False):
-        return self._present(self._replace(
+        return self._lifecycle.present(self._lifecycle.replace(
             self.MEDIA_TYPES,
             self.views.application.media_types,
         ))
 
     def show_about(self, _checked=False):
-        dialog = self._replace(
+        dialog = self._lifecycle.replace(
             self.ABOUT,
             self.views.application.about,
         )
         dialog.setFixedSize(dialog.size())
-        return self._present(dialog)
+        return self._lifecycle.present(dialog)
 
     def close_all(self):
-        dialogs = tuple(self._dialogs.values())
-        self._dialogs.clear()
-        self._tokens.clear()
-        for dialog in dialogs:
-            dialog.close()
-
-    def _replace(self, name, factory):
-        previous = self._dialogs.pop(name, None)
-        self._tokens.pop(name, None)
-        if previous is not None:
-            previous.close()
-        dialog = factory()
-        self._register(name, dialog)
-        return dialog
-
-    def _register(self, name, dialog):
-        token = object()
-        self._dialogs[name] = dialog
-        self._tokens[name] = token
-        dialog.setAttribute(Qt.WA_DeleteOnClose)
-        dialog.destroyed.connect(
-            partial(self._discard, name, token)
-        )
-
-    def _discard(self, name, token, _object=None):
-        if self._tokens.get(name) is not token:
-            return
-        self._tokens.pop(name, None)
-        self._dialogs.pop(name, None)
-
-    def _present(self, dialog, center=True):
-        if center:
-            self.views.center(dialog)
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
-        return dialog
+        self._lifecycle.close_all()

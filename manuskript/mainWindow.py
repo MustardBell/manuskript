@@ -2,13 +2,11 @@
 # --!-- coding: utf8 --!--
 import importlib
 import os
-import re
 
 from functools import partial
 
-from PyQt5.Qt import qVersion, PYQT_VERSION_STR
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
-                          QRegExp, QUrl, QSize, QModelIndex)
+                          QRegExp, QUrl, QSize)
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
@@ -33,9 +31,6 @@ from manuskript.ui.views.character_panel import (
 from manuskript.ui.views.plot_panel import PlotModels, PlotPanelView
 from manuskript.ui.views.world_panel import WorldModels, WorldPanelView
 from manuskript.panels import PanelContext
-from manuskript.plugins.conversion_augmentations import (
-    augmentations_for,
-)
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
@@ -52,15 +47,11 @@ from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
 from manuskript.models.worldModel import worldModel
-from manuskript.exporter.context import ExportContext
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.theme_repository import ThemeRepository
 from manuskript.ui import style
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
-from manuskript.ui.importers.importer import importerDialog
-from manuskript.ui.importers.import_context import ImportContext
-from manuskript.ui.exporters.exporter import exporterDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.main_window_action_binding import (
@@ -88,6 +79,10 @@ from manuskript.ui.status_presenter import (
 from manuskript.ui.workspace_dialogs import (
     WorkspaceDialogController,
     WorkspaceDialogViews,
+)
+from manuskript.ui.workspace_transfers import (
+    WorkspaceTransferController,
+    WorkspaceTransferViews,
 )
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
@@ -265,6 +260,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pluginOptionStore = services.plugin_option_store
         self.mediaTypes = services.media_types
         self.mediaTypePreferences = services.media_type_preferences
+        self.externalProcessRunner = ExternalProcessRunner()
+        self.externalToolPaths = ExternalToolPaths()
+        self.workspaceTransfers = WorkspaceTransferController(
+            WorkspaceTransferViews.for_window(self)
+        )
         self.cardStyles = IndexCardStyleService(
             self.pluginRuntime.registry
             if self.pluginRuntime is not None
@@ -292,8 +292,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.projectRuntime,
             ProjectLifecycleViews.for_window(self),
         )
-        self.externalProcessRunner = ExternalProcessRunner()
-        self.externalToolPaths = ExternalToolPaths()
         self.themeRepository = ThemeRepository()
         self.themePreviewRenderer = ThemePreviewRenderer()
         # The runtime builds the manager around the view side this
@@ -696,6 +694,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         used to do.
         """
         self.workspaceDialogs.close_all()
+        self.workspaceTransfers.close_all()
         if self.pluginUi is not None:
             self.pluginUi.projectPanels.close_all()
 
@@ -1326,112 +1325,3 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def setViewModeFiction(self, _checked=False):
         self.viewConfigurationController.set_fiction()
-
-    ###############################################################################
-    # IMPORT / EXPORT
-    ###############################################################################
-
-    def doImport(self):
-        # Warn about buggy Qt versions and import crash
-        #
-        # (Py)Qt 5.11 and 5.12 have a bug that can cause crashes when simply
-        # setting up various UI elements.
-        # This has been reported and verified to happen with File -> Import.
-        # See PR #611.
-        if re.match("^5\\.1[12](\\.?|$)", qVersion()):
-            warning1 = self.tr("PyQt / Qt versions 5.11 and 5.12 are known to cause a crash which might result in a loss of data.")
-            warning2 = self.tr("PyQt {} and Qt {} are in use.").format(qVersion(), PYQT_VERSION_STR)
-
-            # Don't translate for debug log.
-            LOGGER.warning(warning1)
-            LOGGER.warning(warning2)
-
-            msg = QMessageBox(QMessageBox.Warning,
-                self.tr("Proceed with import at your own risk"),
-                "<p><b>" +
-                    warning1 +
-                "</b></p>" +
-                "<p>" +
-                    warning2 +
-                "</p>",
-                QMessageBox.Abort | QMessageBox.Ignore)
-            msg.setDefaultButton(QMessageBox.Abort)
-
-            # Return because user heeds warning
-            if msg.exec() == QMessageBox.Abort:
-                return
-
-        # Proceed with Import
-        models = self.projectRuntime.models
-        self.dialog = importerDialog(
-            ImportContext(
-                outline_model=models.outline,
-                character_model=models.characters,
-                label_model=models.labels,
-                status_model=models.statuses,
-                settings=self.projectRuntime.settingsManager,
-                current_outline_index=lambda: (
-                    self.corePanels.project_tree.tree.currentIndex()
-                    if self.corePanels.project_tree.tree.selectedIndexes()
-                    else QModelIndex()
-                ),
-                show_status=self.statusPresenter.show,
-            ),
-            plugin_runtime=self.pluginRuntime,
-            plugin_option_store=self.pluginOptionStore,
-        )
-        self.dialog.show()
-        self.centerChildWindow(self.dialog)
-
-
-    def doCompile(self):
-        self.dialog = exporterDialog(
-            self.exportContext(),
-            preferences=self.applicationPreferences,
-            plugin_runtime=self.pluginRuntime,
-            plugin_option_store=self.pluginOptionStore,
-        )
-        self.dialog.show()
-        self.centerChildWindow(self.dialog)
-
-    def conversionAugmentations(self, request):
-        """What plugins add to the conversion described by ``request``.
-
-        Asked per rendering rather than held, because plugins are enabled and
-        disabled while a project is open and an export dialog may outlive the
-        plugin that contributed to it.
-
-        The request comes from whoever is converting. This window does not
-        know or care which formats are involved.
-        """
-        registry = (
-            self.pluginRuntime.registry
-            if self.pluginRuntime is not None
-            else None
-        )
-        return augmentations_for(
-            registry,
-            request,
-            report_error=lambda message: self.statusPresenter.show(
-                message, 8000, 2,
-            ),
-        )
-
-    def exportContext(self):
-        models = self.projectRuntime.models
-        return ExportContext(
-            project_file=self.currentProject or "",
-            outline_model=models.outline,
-            flat_data_model=models.flat_data,
-            label_model=models.labels,
-            status_model=models.statuses,
-            parent=self,
-            tool_paths=self.externalToolPaths,
-            process_runner=self.externalProcessRunner,
-            page_types=(
-                self.pluginUi.pageTypes
-                if self.pluginUi is not None
-                else None
-            ),
-            conversion_augmentations=self.conversionAugmentations,
-        )

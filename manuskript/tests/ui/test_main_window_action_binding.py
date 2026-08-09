@@ -41,6 +41,12 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.actGitRevisions.triggered.connect.assert_called_once_with(
         window.workspaceDialogs.show_revision_history
     )
+    window.actImport.triggered.connect.assert_called_once_with(
+        window.workspaceTransfers.show_import
+    )
+    window.actCompile.triggered.connect.assert_called_once_with(
+        window.workspaceTransfers.show_export
+    )
     window.actBack.triggered.connect.assert_called_once_with(
         window.navigationController.back
     )

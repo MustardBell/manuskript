@@ -53,8 +53,8 @@ class MainWindowActionBinding:
                 window.actGitRevisions,
                 window.workspaceDialogs.show_revision_history,
             ),
-            (window.actImport, window.doImport),
-            (window.actCompile, window.doCompile),
+            (window.actImport, window.workspaceTransfers.show_import),
+            (window.actCompile, window.workspaceTransfers.show_export),
             (
                 window.actCloseProject,
                 window.projectManager.closeProject,

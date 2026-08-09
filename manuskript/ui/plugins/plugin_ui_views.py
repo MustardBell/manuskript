@@ -44,7 +44,7 @@ class PluginUiViews:
             translate=window.tr,
             show_status=project.show_status,
             editor_host=window.mainEditor,
-            export_context=window.exportContext,
+            export_context=window.workspaceTransfers.export_context,
             refresh_card_styles=refresh_card_styles,
             project_panels=ProjectPanelViews.for_window(
                 window,

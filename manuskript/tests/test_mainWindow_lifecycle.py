@@ -147,10 +147,14 @@ def test_a_window_closes_its_own_tool_windows_only(MWNoProject):
     with patch.object(
         MWNoProject.workspaceDialogs,
         "close_all",
-    ) as close_all:
+    ) as close_dialogs, patch.object(
+        MWNoProject.workspaceTransfers,
+        "close_all",
+    ) as close_transfers:
         MWNoProject.closeToolWindows()
 
-    close_all.assert_called_once_with()
+    close_dialogs.assert_called_once_with()
+    close_transfers.assert_called_once_with()
     stranger.close.assert_not_called()
 
 

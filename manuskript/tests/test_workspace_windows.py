@@ -126,6 +126,28 @@ def test_each_workspace_owns_only_its_tool_dialogs(MWEmptyProject):
         other.close()
 
 
+def test_each_workspace_owns_only_its_transfer_dialogs(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    first = window.workspaceTransfers.show_export()
+    second = other.workspaceTransfers.show_export()
+    try:
+        assert window.workspaceTransfers is not other.workspaceTransfers
+        assert first is not second
+        assert not first.isHidden()
+        assert not second.isHidden()
+
+        window.closeToolWindows()
+
+        assert first.isHidden()
+        assert not second.isHidden()
+        assert window.workspaceTransfers.export_dialog is None
+        assert other.workspaceTransfers.export_dialog is second
+    finally:
+        other.workspaceTransfers.close_all()
+        other.close()
+
+
 def test_both_windows_are_workspaces_and_neither_is_last(
         MWEmptyProject):
     window = MWEmptyProject
