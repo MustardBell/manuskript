@@ -31,6 +31,7 @@ class WindowRegistry:
         every later binding wrong.
         """
         self._windows = []
+        self._focus_handlers = {}
         self._active = None
         self._focus_source = focus_source
         self._watching_focus = False
@@ -38,9 +39,11 @@ class WindowRegistry:
         #: last one to go does not record a session of just itself.
         self.quitting = False
 
-    def register(self, window):
+    def register(self, window, focus_handler=None):
         if window not in self._windows:
             self._windows.append(window)
+        if focus_handler is not None:
+            self._focus_handlers[window] = focus_handler
         if self._active is None:
             self._active = window
         return window
@@ -48,6 +51,7 @@ class WindowRegistry:
     def unregister(self, window):
         if window in self._windows:
             self._windows.remove(window)
+        self._focus_handlers.pop(window, None)
         if self._active is window:
             self._active = self._windows[0] if self._windows else None
 
@@ -99,7 +103,7 @@ class WindowRegistry:
         if window not in self._windows:
             return
         self._active = window
-        forward = getattr(window, "focusChanged", None)
+        forward = self._focus_handlers.get(window)
         if forward is not None:
             forward(old, new)
 

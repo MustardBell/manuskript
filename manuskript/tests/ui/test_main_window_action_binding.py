@@ -159,7 +159,7 @@ def test_format_action_reaches_the_active_markup_editor(MWEmptyProject):
         cursor = editor.textCursor()
         cursor.select(QTextCursor.Document)
         editor.setTextCursor(cursor)
-        window.focusChanged(None, editor)
+        window.workspaceFocus.focus_changed(None, editor)
 
         window.actFormatBold.trigger()
 

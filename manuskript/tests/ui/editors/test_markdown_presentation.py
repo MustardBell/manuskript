@@ -768,7 +768,7 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
 
         assert source_editor.toPlainText() == source
         assert item.data(Outline.text) == source
-        assert window._lastMDEditView is source_editor
+        assert window.workspaceFocus.markup_target is source_editor
 
         insertion_position = source_editor.textCursor().position()
         # QTest sends synthetic key events to the widget supplied here.

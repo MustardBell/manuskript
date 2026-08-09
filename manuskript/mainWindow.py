@@ -21,10 +21,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from manuskript.commands import (
-    DocumentCommandRouter,
-    MarkupCommandRouter,
-)
+from manuskript.commands import DocumentCommandRouter, MarkupCommandRouter
 from manuskript.domain.writing_session import WritingSessionProgress
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
@@ -85,7 +82,6 @@ from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
 from manuskript.ui.editors.themes import ThemePreviewRenderer
-from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import (
     StatusPresenter,
@@ -108,6 +104,10 @@ from manuskript.ui.workspace_windows import (
     WorkspaceWindowViews,
 )
 from manuskript.ui.workspace_lifetime import WorkspaceLifetime
+from manuskript.ui.workspace_focus import (
+    WorkspaceFocusController,
+    WorkspaceFocusViews,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -177,24 +177,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.workspaceLifetime = WorkspaceLifetime()
 
         # Var
-        self._lastFocus = None
-        self._lastMDEditView = None
         self._autoLoadProject = None  # Used to load a command line project
         self.writingSession = WritingSessionProgress()
         self._previousSelectionEmpty = True
-        self.documentCommands = DocumentCommandRouter(
-            lambda: self._lastFocus
-        )
-        self.markupCommands = MarkupCommandRouter(
-            lambda: self._lastMDEditView
-        )
         # The project layer. A window is one view of it and never its
         # owner, so this is always something it was handed.
         self.projectRuntime = services.project_runtime
         # Which windows are workspaces. Registering makes this one count
         # towards "the last window", and towards where commands go.
         self.windowRegistry = services.window_registry
-        self.windowRegistry.register(self)
         self.applicationPreferences = services.application_preferences
         self.referenceService = None
         self.textEditorContext = None
@@ -221,6 +212,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # meant to split exists.
         with timing.span("window.panels"):
             self.setupMoreUi()
+        self.workspaceFocus = self.workspaceLifetime.own(
+            WorkspaceFocusController(
+                WorkspaceFocusViews.for_window(self)
+            )
+        )
+        self.documentCommands = DocumentCommandRouter(
+            self.workspaceFocus.current_document_target
+        )
+        self.markupCommands = MarkupCommandRouter(
+            self.workspaceFocus.current_markup_target
+        )
         self.markdownMenu = self.workspaceLifetime.own(
             MarkdownMenuController(
                 MarkdownMenuViews.for_window(self)
@@ -442,6 +444,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
 
         self.characterController.capture_tabs()
+        # Register only after successful composition.  A constructor that
+        # fails halfway must not leave a phantom workspace in the application
+        # registry, and focus routing now has an explicit destination.
+        self.windowRegistry.register(
+            self,
+            self.workspaceFocus.focus_changed,
+        )
 
     @property
     def currentProject(self):
@@ -593,43 +602,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             self.pushHistory(("main", self.tabMain.currentIndex()))
             self._previousSelectionEmpty = False
-
-    def focusChanged(self, old, new):
-        """
-        We get notified by qApp when focus changes, from old to new widget.
-        """
-
-        # Projection widgets are siblings of their canonical editor in a
-        # MarkdownEditorHost.
-        markdown_editor = new
-        while (
-            markdown_editor is not None
-            and not isinstance(markdown_editor, MDEditView)
-        ):
-            canonical_editor = getattr(
-                markdown_editor,
-                "canonicalEditor",
-                None,
-            )
-            if isinstance(canonical_editor, MDEditView):
-                markdown_editor = canonical_editor
-                break
-            markdown_editor = markdown_editor.parent()
-        self._lastMDEditView = markdown_editor
-
-        # Determine which view had focus last, to send the keyboard shortcuts
-        # to the right place
-
-        targets = [
-            self.corePanels.project_tree.tree,
-            self.mainEditor
-        ]
-
-        while new is not None:
-            if new in targets:
-                self._lastFocus = new
-                break
-            new = new.parent()
 
     def projectName(self):
         """

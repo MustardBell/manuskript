@@ -84,16 +84,18 @@ def test_activating_a_stranger_changes_nothing():
 def test_focus_in_a_workspace_makes_it_active_and_is_forwarded():
     registry = WindowRegistry()
     first, second = MagicMock(), MagicMock()
-    registry.register(first)
-    registry.register(second)
+    first_focus = MagicMock()
+    second_focus = MagicMock()
+    registry.register(first, first_focus)
+    registry.register(second, second_focus)
     widget = MagicMock()
     widget.window.return_value = second
 
     registry.focus_changed(None, widget)
 
     assert registry.active is second
-    second.focusChanged.assert_called_once_with(None, widget)
-    first.focusChanged.assert_not_called()
+    second_focus.assert_called_once_with(None, widget)
+    first_focus.assert_not_called()
 
 
 def test_focus_outside_any_workspace_is_ignored():
@@ -102,7 +104,8 @@ def test_focus_outside_any_workspace_is_ignored():
     """
     registry = WindowRegistry()
     window = MagicMock()
-    registry.register(window)
+    focus_handler = MagicMock()
+    registry.register(window, focus_handler)
     stray = MagicMock()
     stray.window.return_value = MagicMock()
 
@@ -110,7 +113,21 @@ def test_focus_outside_any_workspace_is_ignored():
     registry.focus_changed(None, None)
 
     assert registry.active is window
-    window.focusChanged.assert_not_called()
+    focus_handler.assert_not_called()
+
+
+def test_unregistering_a_workspace_releases_its_focus_handler():
+    registry = WindowRegistry()
+    window = MagicMock()
+    focus_handler = MagicMock()
+    widget = MagicMock()
+    widget.window.return_value = window
+    registry.register(window, focus_handler)
+
+    registry.unregister(window)
+    registry.focus_changed(None, widget)
+
+    focus_handler.assert_not_called()
 
 
 def test_focus_is_watched_once_however_many_windows_ask():
