@@ -116,3 +116,24 @@ def test_real_focus_switches_the_active_split_pane(MWEmptyProject):
             root.closeTab(0)
         if not was_visible:
             window.hide()
+
+
+def test_closing_the_focused_tab_releases_workspace_command_targets(
+        MWEmptyProject):
+    from manuskript.models.outlineItem import outlineItem
+
+    window = MWEmptyProject
+    model = window.projectRuntime.models.outline
+    item = outlineItem(title="Disposable focus", _type="md")
+    model.appendItem(item)
+    window.mainEditor.setCurrentModelIndex(
+        model.indexFromItem(item),
+        newTab=True,
+    )
+    editor = window.mainEditor.currentEditor().txtRedacText
+    editor.text_editor_context.focus_received(editor)
+
+    window.mainEditor.closeAllTabs()
+
+    assert window.workspaceFocus.focused_widget is None
+    assert window.workspaceFocus.markup_target is None
