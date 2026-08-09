@@ -14,6 +14,7 @@ from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.fullScreenEditor import fullScreenEditor
 from manuskript.ui.editors.mainEditor_ui import Ui_mainEditor
 from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationBinding,
     MarkdownPresentationMode,
 )
 
@@ -95,12 +96,17 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         self.editor_context = None
         self.settings = None
-        self._markdownPresentationState = None
         self._markdownModes = (
             MarkdownPresentationMode.SOURCE,
             MarkdownPresentationMode.FORMATTED_SOURCE,
             MarkdownPresentationMode.LIVE_PREVIEW,
             MarkdownPresentationMode.READING,
+        )
+        self._markdownPresentationBinding = MarkdownPresentationBinding(
+            set_enabled=self.cmbMarkdownMode.setEnabled,
+            state_changed=self._announceMarkdownPresentationState,
+            sync_mode=self.syncMarkdownPresentationMode,
+            sync_allowed_modes=self.syncMarkdownPresentationModes,
         )
         self.cmbMarkdownMode.setEnabled(False)
 
@@ -158,34 +164,10 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.editor_context = None
 
     def attachMarkdownPresentationState(self, state):
-        if state is self._markdownPresentationState:
-            return
-        if self._markdownPresentationState is not None:
-            try:
-                self._markdownPresentationState.modeChanged.disconnect(
-                    self.syncMarkdownPresentationMode
-                )
-                (
-                    self._markdownPresentationState
-                    .allowedModesChanged.disconnect(
-                        self.syncMarkdownPresentationModes
-                    )
-                )
-            except (RuntimeError, TypeError):
-                pass
+        self._markdownPresentationBinding.attach(state)
 
-        self._markdownPresentationState = state
-        self.cmbMarkdownMode.setEnabled(state is not None)
+    def _announceMarkdownPresentationState(self, state):
         self.activeMarkdownPresentationStateChanged.emit(state)
-        if state is None:
-            return
-
-        state.modeChanged.connect(self.syncMarkdownPresentationMode)
-        state.allowedModesChanged.connect(
-            self.syncMarkdownPresentationModes
-        )
-        self.syncMarkdownPresentationModes(state.allowed_modes)
-        self.syncMarkdownPresentationMode(state.mode)
 
     def _currentMarkdownPresentationState(self):
         editor = self.currentEditor()
@@ -196,12 +178,9 @@ class mainEditor(QWidget, Ui_mainEditor):
         )
 
     def setMarkdownPresentationMode(self, index):
-        if (
-            self._markdownPresentationState is None
-            or not 0 <= index < len(self._markdownModes)
-        ):
+        if not 0 <= index < len(self._markdownModes):
             return
-        self._markdownPresentationState.set_mode(
+        self._markdownPresentationBinding.set_mode(
             self._markdownModes[index]
         )
 

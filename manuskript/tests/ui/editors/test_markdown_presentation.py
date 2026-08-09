@@ -15,6 +15,7 @@ from manuskript.models.outlineItem import outlineItem
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationBinding,
     MarkdownPresentationDefaults,
     MarkdownPresentationMode,
     MarkdownPresentationState,
@@ -119,6 +120,54 @@ def test_leaf_presentation_state_emits_only_real_transitions():
         MarkdownPresentationMode.SOURCE,
         MarkdownPresentationMode.READING,
     ]
+
+
+def test_presentation_binding_moves_one_control_surface_between_leaves():
+    enabled = []
+    attached = []
+    modes = []
+    allowed_modes = []
+    binding = MarkdownPresentationBinding(
+        set_enabled=enabled.append,
+        state_changed=attached.append,
+        sync_mode=modes.append,
+        sync_allowed_modes=allowed_modes.append,
+    )
+    first = MarkdownPresentationState()
+    second = MarkdownPresentationState(MarkdownPresentationMode.SOURCE)
+
+    binding.attach(first)
+    first.set_mode(MarkdownPresentationMode.READING)
+    binding.attach(second)
+    modes.clear()
+    first.set_mode(MarkdownPresentationMode.LIVE_PREVIEW)
+    second.set_mode(MarkdownPresentationMode.FORMATTED_SOURCE)
+
+    assert enabled == [True, True]
+    assert attached == [first, second]
+    assert modes == [MarkdownPresentationMode.FORMATTED_SOURCE]
+    assert allowed_modes[-1] == tuple(MarkdownPresentationMode)
+
+
+def test_presentation_binding_detaches_and_routes_mode_intent():
+    enabled = []
+    attached = []
+    binding = MarkdownPresentationBinding(
+        set_enabled=enabled.append,
+        state_changed=attached.append,
+        sync_mode=lambda _mode: None,
+        sync_allowed_modes=lambda _modes: None,
+    )
+    state = MarkdownPresentationState()
+    binding.attach(state)
+
+    binding.set_mode(MarkdownPresentationMode.LIVE_PREVIEW)
+    binding.dispose()
+    state.set_mode(MarkdownPresentationMode.READING)
+
+    assert state.mode is MarkdownPresentationMode.READING
+    assert enabled == [True, False]
+    assert attached == [state, None]
 
 
 def test_presentation_defaults_repair_an_unknown_persisted_value():

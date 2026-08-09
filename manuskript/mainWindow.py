@@ -71,6 +71,10 @@ from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
 )
+from manuskript.ui.markdown_menu_controller import (
+    MarkdownMenuController,
+    MarkdownMenuViews,
+)
 from manuskript.ui.menu_tooltips import MenuTooltipController
 from manuskript.ui.navigation_view import MainNavigationView, NavigationViews
 from manuskript.ui.project_binding import ProjectBinding
@@ -81,9 +85,6 @@ from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
 from manuskript.ui.editors.themes import ThemePreviewRenderer
-from manuskript.ui.editors.markdownPresentation import (
-    MarkdownPresentationMode,
-)
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import (
@@ -178,7 +179,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Var
         self._lastFocus = None
         self._lastMDEditView = None
-        self._markdownPresentationState = None
         self._autoLoadProject = None  # Used to load a command line project
         self.writingSession = WritingSessionProgress()
         self._previousSelectionEmpty = True
@@ -221,6 +221,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # meant to split exists.
         with timing.span("window.panels"):
             self.setupMoreUi()
+        self.markdownMenu = self.workspaceLifetime.own(
+            MarkdownMenuController(
+                MarkdownMenuViews.for_window(self)
+            )
+        )
         self.spellcheck = self.workspaceLifetime.own(
             SpellcheckController(
                 SpellcheckViews.for_window(self),
@@ -693,67 +698,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         searchTextInput.setFocus()
         searchTextInput.selectAll()
 
-    def setMarkdownPresentationMode(self, mode):
-        if self._markdownPresentationState is not None:
-            self._markdownPresentationState.set_mode(mode)
-
-    def attachMarkdownPresentationState(self, state):
-        if self._markdownPresentationState is not None:
-            try:
-                self._markdownPresentationState.modeChanged.disconnect(
-                    self.syncMarkdownPresentationActions
-                )
-                (
-                    self._markdownPresentationState
-                    .allowedModesChanged.disconnect(
-                        self.syncMarkdownPresentationModes
-                    )
-                )
-            except (RuntimeError, TypeError):
-                pass
-
-        self._markdownPresentationState = state
-        self.menuMarkdownMode.setEnabled(state is not None)
-        if state is None:
-            return
-
-        state.modeChanged.connect(
-            self.syncMarkdownPresentationActions
-        )
-        state.allowedModesChanged.connect(
-            self.syncMarkdownPresentationModes
-        )
-        self.syncMarkdownPresentationModes(state.allowed_modes)
-        self.syncMarkdownPresentationActions(state.mode)
-
-    def syncMarkdownPresentationActions(self, mode):
-        mode = MarkdownPresentationMode.from_value(mode)
-        actions = {
-            MarkdownPresentationMode.SOURCE:
-                self.actMarkdownSource,
-            MarkdownPresentationMode.FORMATTED_SOURCE:
-                self.actMarkdownFormattedSource,
-            MarkdownPresentationMode.LIVE_PREVIEW:
-                self.actMarkdownLivePreview,
-            MarkdownPresentationMode.READING:
-                self.actMarkdownReading,
-        }
-        actions[mode].setChecked(True)
-
-    def syncMarkdownPresentationModes(self, modes):
-        allowed = set(modes)
-        for mode, action in {
-            MarkdownPresentationMode.SOURCE:
-                self.actMarkdownSource,
-            MarkdownPresentationMode.FORMATTED_SOURCE:
-                self.actMarkdownFormattedSource,
-            MarkdownPresentationMode.LIVE_PREVIEW:
-                self.actMarkdownLivePreview,
-            MarkdownPresentationMode.READING:
-                self.actMarkdownReading,
-        }.items():
-            action.setEnabled(mode in allowed)
-
     # Navigate
     
     def navigateBack(self):
@@ -779,7 +723,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def breakConnections(self):
         """Release every signal connection owned by the current project."""
         self.projectBinding.unbind()
-        self.attachMarkdownPresentationState(None)
+        self.markdownMenu.attach(None)
         self.textEditorContext = None
         self.referenceService = None
 

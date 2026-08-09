@@ -70,7 +70,7 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         window.actMarkdownLivePreview.triggered.connect.call_args.args[0]
     )
     live_preview_slot()
-    window.setMarkdownPresentationMode.assert_called_once_with(
+    window.markdownMenu.set_mode.assert_called_once_with(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
     assert binding.bound

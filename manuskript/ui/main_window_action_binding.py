@@ -194,7 +194,7 @@ class MainWindowActionBinding:
         window.generateViewMenu()
         self._connect(
             window.mainEditor.activeMarkdownPresentationStateChanged,
-            window.attachMarkdownPresentationState
+            window.markdownMenu.attach,
         )
         window.actModeGroup = QActionGroup(window)
         window.actModeSimple.setActionGroup(window.actModeGroup)
@@ -231,7 +231,7 @@ class MainWindowActionBinding:
                 action.triggered,
                 partial(
                     activate_markdown_mode,
-                    window.setMarkdownPresentationMode,
+                    window.markdownMenu.set_mode,
                     mode,
                 )
             )
