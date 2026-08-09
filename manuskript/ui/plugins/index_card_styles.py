@@ -103,3 +103,7 @@ class IndexCardStyleService(QObject):
         )
         LOGGER.exception(message)
         self._report_error(message, 8000, 2)
+
+    def dispose(self):
+        self.registry = None
+        self._report_error = None

@@ -86,6 +86,11 @@ from manuskript.ui.workspace_transfers import (
     WorkspaceTransferController,
     WorkspaceTransferViews,
 )
+from manuskript.ui.workspace_windows import (
+    WorkspaceWindowController,
+    WorkspaceWindowViews,
+)
+from manuskript.ui.workspace_lifetime import WorkspaceLifetime
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -156,15 +161,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #: Kept whole so another window can be opened from this one
         #: without naming the services one at a time.
         self.services = services
+        self.workspaceLifetime = WorkspaceLifetime()
 
         # Var
         self._lastFocus = None
         self._lastMDEditView = None
         self._markdownPresentationState = None
-        self._defaultCursorFlashTime = 1000 # Overridden at startup with system
-                                            # value. In manuskript.main.
         self._autoLoadProject = None  # Used to load a command line project
-        self._restoredWorkspaceWindows = False
         self.writingSession = WritingSessionProgress()
         self._previousSelectionEmpty = True
         self.documentCommands = DocumentCommandRouter(
@@ -181,9 +184,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.windowRegistry = services.window_registry
         self.windowRegistry.register(self)
         self.applicationPreferences = services.application_preferences
-        self.projectRuntime.settingsManager.configure_cursor_flash_time(
-            lambda: self._defaultCursorFlashTime
-        )
         self.referenceService = None
         self.textEditorContext = None
         # This window's layout, filed under this window. Two windows
@@ -196,10 +196,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # registry describes, findable from the other windows through the
         # application's one directory.
         self.panelDirectory = services.panel_directory
-        self.panelHost = PanelHost(
-            PanelWindow.for_window(self),
-            self.panelRegistry,
-            self.panelDirectory,
+        self.panelHost = self.workspaceLifetime.own(
+            PanelHost(
+                PanelWindow.for_window(self),
+                self.panelRegistry,
+                self.panelDirectory,
+            )
         )
 
         # UI. Panels are built before saved state is applied: a splitter
@@ -207,9 +209,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # meant to split exists.
         with timing.span("window.panels"):
             self.setupMoreUi()
-        self.windowState = WorkspaceStateController(
-            WorkspaceStateViews.for_window(self),
-            window_id=window_id,
+        self.windowState = self.workspaceLifetime.own(
+            WorkspaceStateController(
+                WorkspaceStateViews.for_window(self),
+                window_id=window_id,
+            )
         )
         # Now every core panel exists, compose the controllers from their
         # explicit view contracts. Navigation used to be built before the
@@ -222,7 +226,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.history = self.navigationController.history
         self.panelNavigation = PanelNavigation(self.navigationController)
-        self.panelDialogs = PanelDialogs(self.centralWidget(), self.tr)
+        self.panelDialogs = self.workspaceLifetime.own(
+            PanelDialogs(self.centralWidget(), self.tr)
+        )
         self.characterController = CharacterController(
             CharacterModels(self.projectRuntime),
             CharacterPanelView.for_window(self),
@@ -241,7 +247,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.panelNavigation,
             self.panelDialogs,
         )
-        self.viewConfigurationController = (
+        self.viewConfigurationController = self.workspaceLifetime.own(
             ViewConfigurationController(
                 MainViewConfiguration(
                     ViewConfigurationViews.for_window(self)
@@ -249,9 +255,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.projectRuntime.settingsManager,
             )
         )
-        self.viewSettingsMenu = ViewSettingsMenuBuilder(
-            ViewSettingsMenuViews.for_window(self),
-            self.viewConfigurationController,
+        self.viewSettingsMenu = self.workspaceLifetime.own(
+            ViewSettingsMenuBuilder(
+                ViewSettingsMenuViews.for_window(self),
+                self.viewConfigurationController,
+            )
         )
         # After the panels exist: a splitter can only take back its
         # saved sizes once every widget it splits is there, and panel
@@ -261,8 +269,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
-        self.statusPresenter = StatusPresenter(
-            StatusPresenterViews.for_window(self, self.statusLabel)
+        self.statusPresenter = self.workspaceLifetime.own(
+            StatusPresenter(
+                StatusPresenterViews.for_window(self, self.statusLabel)
+            )
         )
         self.pluginRuntime = services.plugin_runtime
         self.pluginOptionStore = services.plugin_option_store
@@ -270,15 +280,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.mediaTypePreferences = services.media_type_preferences
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
-        self.workspaceTransfers = WorkspaceTransferController(
-            WorkspaceTransferViews.for_window(self)
+        self.workspaceTransfers = self.workspaceLifetime.own(
+            WorkspaceTransferController(
+                WorkspaceTransferViews.for_window(self)
+            )
         )
-        self.cardStyles = IndexCardStyleService(
-            self.pluginRuntime.registry
-            if self.pluginRuntime is not None
-            else None,
-            report_error=self.statusPresenter.show,
-            parent=self,
+        self.cardStyles = self.workspaceLifetime.own(
+            IndexCardStyleService(
+                self.pluginRuntime.registry
+                if self.pluginRuntime is not None
+                else None,
+                report_error=self.statusPresenter.show,
+                parent=self,
+            )
         )
         # Application scope: what plugins contribute, and the one
         # announcement that it changed. None where plugins are not
@@ -286,20 +300,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # not a reason for this window to invent one.
         self.pluginContributions = services.plugin_contributions
         self.pluginUi = (
-            PluginUiController(
-                PluginUiViews.for_window(self),
-                self.pluginContributions,
-                option_store=self.pluginOptionStore,
-                media_types=self.mediaTypes,
+            self.workspaceLifetime.own(
+                PluginUiController(
+                    PluginUiViews.for_window(self),
+                    self.pluginContributions,
+                    option_store=self.pluginOptionStore,
+                    media_types=self.mediaTypes,
+                )
             )
             if self.pluginContributions is not None
             else None
         )
-        self.buildWorkspaceMenu()
-        self.projectLifecycleView = ProjectLifecycleView(
-            self.projectRuntime,
-            ProjectLifecycleViews.for_window(self),
+        self.projectLifecycleView = self.workspaceLifetime.own(
+            ProjectLifecycleView(
+                self.projectRuntime,
+                ProjectLifecycleViews.for_window(self),
+            )
         )
+        self.workspaceWindows = self.workspaceLifetime.own(
+            WorkspaceWindowController(
+                WorkspaceWindowViews.for_window(self)
+            )
+        )
+        self.buildWorkspaceMenu()
         self.themeRepository = ThemeRepository()
         self.themePreviewRenderer = ThemePreviewRenderer()
         # The runtime builds the manager around the view side this
@@ -313,30 +336,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Project bindings receive stable, grouped widget contracts. Models
         # remain runtime-owned and are resolved only when a project binds,
         # because opening another project replaces the entire model set.
-        self.projectBinding = ProjectBinding(
-            ProjectBindingViews.for_window(self),
-            self.projectRuntime,
-            ProjectFeatureBinding(
-                self.characterController,
-                self.plotController,
-                self.worldController,
-                self.projectRuntime.settingsManager,
-            ),
-            contexts_factory=lambda: ProjectContextBinding(
-                ProjectViewSet.for_window(self)
-            ),
+        self.projectBinding = self.workspaceLifetime.own(
+            ProjectBinding(
+                ProjectBindingViews.for_window(self),
+                self.projectRuntime,
+                ProjectFeatureBinding(
+                    self.characterController,
+                    self.plotController,
+                    self.worldController,
+                    self.projectRuntime.settingsManager,
+                ),
+                contexts_factory=lambda: ProjectContextBinding(
+                    ProjectViewSet.for_window(self)
+                ),
+            )
         )
         self.projectHistory = self.projectManager.last_project_store
-        self.workspaceDialogs = WorkspaceDialogController(
-            WorkspaceDialogViews.for_window(self)
+        self.workspaceDialogs = self.workspaceLifetime.own(
+            WorkspaceDialogController(
+                WorkspaceDialogViews.for_window(self)
+            )
         )
         self.buildDeveloperMenu()
         self.welcome.set_context(
-            welcome_context_for(
-                self,
-                self.projectRuntime.settingsManager,
-                self.projectHistory,
-                self.projectRuntime,
+            self.workspaceLifetime.own(
+                welcome_context_for(
+                    self,
+                    self.projectRuntime.settingsManager,
+                    self.projectHistory,
+                    self.projectRuntime,
+                )
             )
         )
 
@@ -352,14 +381,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             (self.txtSummaryPage, 2),
             (self.txtSummaryFull, 3)
         ]:
-            t.textChanged.connect(self.mprWordCount.map)
             self.mprWordCount.setMapping(t, i)
-        self.mprWordCount.mapped.connect(self.wordCount)
 
         self.cmbSummary.setCurrentIndex(0)
         self.cmbSummary.currentIndexChanged.emit(0)
 
-        self.actionBinding = MainWindowActionBinding(self)
+        self.actionBinding = self.workspaceLifetime.own(
+            MainWindowActionBinding(self)
+        )
         self.actionBinding.bind()
         self.menuTooltipController = MenuTooltipController(
             self.menubar,
@@ -442,7 +471,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # Closed one at a time rather than quit: the windows
                 # still open are the session to come back to.
                 self.windowState.store.set_open_windows(
-                    self.openWorkspaceIds()
+                    self.workspaceWindows.open_ids()
                 )
         # Before the tool windows go, because closing them takes the
         # plugin docks out of the layout and QMainWindow.saveState can
@@ -453,11 +482,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # on, so the good capture stands.
         self.windowState.capture_layout()
         self.closeToolWindows()
+        # A non-last workspace does not close the shared project, so the
+        # project manager will not broadcast disconnect_project for it.  Its
+        # own runtime-model signals must still be released before the Qt tree
+        # goes away.  On the last workspace this is an idempotent second call.
+        self.breakConnections()
         self.windowState.save()
-        if self.testAttribute(Qt.WA_DeleteOnClose):
-            self.panelPlacement.dispose()
         self.projectRuntime.detach(self.projectLifecycleView)
         self.windowRegistry.unregister(self)
+        self.workspaceLifetime.dispose()
         super().closeEvent(event)
 
     def buildWorkspaceMenu(self):
@@ -472,105 +505,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actNewWindow.setStatusTip(
             self.tr("Open another window onto this project")
         )
-        self.actNewWindow.triggered.connect(self.openWorkspaceWindow)
         before = self.menuView.actions()
         anchor = before[0] if before else None
         self.menuView.insertAction(anchor, self.actNewWindow)
-        self.panelPlacement = PanelPlacementController(
-            PanelPlacementViews.for_window(self, anchor=anchor)
+        self.panelPlacement = self.workspaceLifetime.own(
+            PanelPlacementController(
+                PanelPlacementViews.for_window(self, anchor=anchor)
+            )
         )
-
-    def nextWorkspaceId(self):
-        """An identifier no open window is already filing state under.
-
-        Stable per window rather than positional, so a window keeps its
-        own layout even when the windows before it have closed.
-        """
-        taken = {
-            getattr(window, "windowId", None)
-            for window in self.windowRegistry.workspace_windows
-        }
-        index = 2
-        while "window-{}".format(index) in taken:
-            index += 1
-        return "window-{}".format(index)
-
-    def openWorkspaceWindow(self, window_id=None):
-        """Another view of this project, sharing everything it owns.
-
-        The same services object, passed on whole rather than unpacked and
-        re-listed. Every application-scope thing the new window sees is
-        therefore the same instance this one sees -- one project, one panel
-        list, one set of plugins -- and a service added later cannot arrive
-        in the first window and be forgotten here.
-
-        It joins a project already open instead of going through the
-        welcome screen.
-        """
-        window = MainWindow(
-            self.services,
-            window_id=window_id or self.nextWorkspaceId(),
-        )
-        window.adoptOpenProject()
-        window.show()
-        return window
-
-    def adoptOpenProject(self):
-        """Show the project this window's runtime already has open.
-
-        A first window reaches a project by loading one; a later window
-        finds it already loaded and only has to catch its own widgets
-        up -- signals connected and saved view settings applied. Models
-        stay in the shared runtime; a window never owns or installs them.
-        """
-        runtime = self.projectRuntime
-        if not runtime.isOpen:
-            return False
-        view = self.projectLifecycleView
-        view.sync_to_state(True)
-        view.connect_project()
-        view.apply_loaded_settings()
-        view.project_opened()
-        return True
-
-    def quitApplication(self):
-        """Close every workspace window, the primary last.
-
-        Returns whether the application is actually going: a cancelled
-        save prompt aborts the quit and leaves the windows standing.
-        """
-        session = self.openWorkspaceIds()
-        if not self.windowRegistry.close_all():
-            return False
-        # Only once the quit succeeded, or a cancelled prompt would
-        # record a session that never ended.
-        self.windowState.store.set_open_windows(session)
-        return True
-
-    def openWorkspaceIds(self):
-        return [
-            getattr(window, "windowId", WORKSPACE_PRIMARY)
-            for window in self.windowRegistry.workspace_windows
-        ]
-
-    def restoreWorkspaceWindows(self):
-        """Reopen the windows the last session left open.
-
-        Tied to a project opening rather than to launch, because a
-        workspace window with no project is only a welcome screen. Runs
-        once, from the window the project was opened in.
-        """
-        if self._restoredWorkspaceWindows:
-            return ()
-        if self.windowId != WORKSPACE_PRIMARY:
-            return ()
-        self._restoredWorkspaceWindows = True
-        reopened = []
-        for window_id in self.windowState.store.open_windows():
-            if window_id in self.openWorkspaceIds():
-                continue
-            reopened.append(self.openWorkspaceWindow(window_id))
-        return tuple(reopened)
 
     def closeToolWindows(self):
         """Close the tool windows this window opened.

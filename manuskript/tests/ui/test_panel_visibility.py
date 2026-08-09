@@ -42,7 +42,8 @@ def test_a_toggle_drives_the_dock_a_panel_lives_in():
         descriptor=a_panel(), widget=widget, container=dock,
     )
 
-    action = visibility_for(window).bind(instance)
+    visibility = visibility_for(window)
+    action = visibility.bind(instance)
 
     assert PanelVisibility.shown_thing(instance) is dock
     action.setChecked(False)
@@ -58,7 +59,8 @@ def test_a_toggle_drives_the_widget_where_there_is_no_dock():
     widget = QLabel("body", window)
     instance = PanelInstance(descriptor=a_panel(), widget=widget)
 
-    action = visibility_for(window).bind(instance)
+    visibility = visibility_for(window)
+    action = visibility.bind(instance)
 
     assert PanelVisibility.shown_thing(instance) is widget
     action.setChecked(False)
@@ -128,7 +130,8 @@ def test_closing_a_floating_dock_unchecks_its_toggle():
     instance = PanelInstance(
         descriptor=a_panel(), widget=dock.widget(), container=dock,
     )
-    action = visibility_for(window).bind(instance)
+    visibility = visibility_for(window)
+    action = visibility.bind(instance)
 
     dock.visibilityChanged.emit(False)
 
@@ -150,7 +153,8 @@ def test_a_panel_tabbed_behind_a_neighbour_is_not_put_away():
     instance = PanelInstance(
         descriptor=a_panel(), widget=dock.widget(), container=dock,
     )
-    action = visibility_for(window).bind(instance)
+    visibility = visibility_for(window)
+    action = visibility.bind(instance)
 
     dock.visibilityChanged.emit(False)
 

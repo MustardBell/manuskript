@@ -140,7 +140,9 @@ class ProjectLifecycleViews:
                 show_welcome=window.switchToWelcome,
                 update_welcome=window.welcome.updateValues,
                 view_state=window.windowState,
-                restore_workspace_windows=window.restoreWorkspaceWindows,
+                restore_workspace_windows=(
+                    lambda: window.workspaceWindows.restore()
+                ),
                 connect_project=window.makeConnections,
                 disconnect_project=window.breakConnections,
                 undo_stack=window.projectRuntime.undoStack,

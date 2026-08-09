@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import QActionGroup
 
 from manuskript import functions as F
 from manuskript.commands import DocumentCommand, MarkupCommand
+from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -19,7 +20,11 @@ class MainWindowActionBinding:
 
     def __init__(self, window):
         self._window = window
+        self._connections = SignalConnectionRegistry()
         self.bound = False
+
+    def _connect(self, signal, slot, connection_type=None):
+        self._connections.connect_weak(signal, slot, connection_type)
 
     def bind(self):
         if self.bound:
@@ -43,6 +48,10 @@ class MainWindowActionBinding:
         # this one-shot installer into a permanent service locator.
         self._window = None
 
+    def dispose(self):
+        """Release every signal installed for this workspace window."""
+        self._connections.disconnect_all()
+
     def _bind_file_actions(self):
         window = self._window
         for action, slot in [
@@ -60,9 +69,9 @@ class MainWindowActionBinding:
                 window.projectManager.closeProject,
             ),
             # Quit means every workspace window, not just this one.
-            (window.actQuit, window.quitApplication),
+            (window.actQuit, window.workspaceWindows.quit),
         ]:
-            action.triggered.connect(slot)
+            self._connect(action.triggered, slot)
 
     def _bind_edit_actions(self):
         window = self._window
@@ -75,7 +84,8 @@ class MainWindowActionBinding:
             (window.actDuplicate, DocumentCommand.DUPLICATE),
             (window.actDelete, DocumentCommand.DELETE),
         ]:
-            action.triggered.connect(
+            self._connect(
+                action.triggered,
                 partial(window.documentCommands.dispatch, command)
             )
         for action, slot in [
@@ -84,7 +94,7 @@ class MainWindowActionBinding:
             (window.actStatus, window.workspaceDialogs.show_statuses),
             (window.actSettings, window.workspaceDialogs.show_settings),
         ]:
-            action.triggered.connect(slot)
+            self._connect(action.triggered, slot)
 
     def _install_history_actions(self):
         """Put project history at the top of the Edit menu.
@@ -149,7 +159,8 @@ class MainWindowActionBinding:
             ),
             (window.actFormatClear, MarkupCommand.CLEAR_FORMAT),
         ]:
-            action.triggered.connect(
+            self._connect(
+                action.triggered,
                 partial(window.markupCommands.dispatch, command)
             )
 
@@ -162,32 +173,38 @@ class MainWindowActionBinding:
             (window.actSplitCursor, DocumentCommand.SPLIT_CURSOR),
             (window.actMerge, DocumentCommand.MERGE),
         ]:
-            action.triggered.connect(
+            self._connect(
+                action.triggered,
                 partial(window.documentCommands.dispatch, command)
             )
 
     def _bind_navigation_actions(self):
         window = self._window
-        window.actBack.triggered.connect(
+        self._connect(
+            window.actBack.triggered,
             window.navigationController.back
         )
-        window.actForward.triggered.connect(
+        self._connect(
+            window.actForward.triggered,
             window.navigationController.forward
         )
 
     def _bind_view_actions(self):
         window = self._window
         window.generateViewMenu()
-        window.mainEditor.activeMarkdownPresentationStateChanged.connect(
+        self._connect(
+            window.mainEditor.activeMarkdownPresentationStateChanged,
             window.attachMarkdownPresentationState
         )
         window.actModeGroup = QActionGroup(window)
         window.actModeSimple.setActionGroup(window.actModeGroup)
         window.actModeFiction.setActionGroup(window.actModeGroup)
-        window.actModeSimple.triggered.connect(
+        self._connect(
+            window.actModeSimple.triggered,
             window.setViewModeSimple
         )
-        window.actModeFiction.triggered.connect(
+        self._connect(
+            window.actModeFiction.triggered,
             window.setViewModeFiction
         )
         window.actMarkdownModeGroup = QActionGroup(window)
@@ -210,7 +227,8 @@ class MainWindowActionBinding:
             ),
         ]:
             action.setActionGroup(window.actMarkdownModeGroup)
-            action.triggered.connect(
+            self._connect(
+                action.triggered,
                 partial(
                     activate_markdown_mode,
                     window.setMarkdownPresentationMode,
@@ -231,7 +249,7 @@ class MainWindowActionBinding:
             (window.actLocateLog, window.locateLogFile),
             (window.actAbout, window.workspaceDialogs.show_about),
         ]:
-            action.triggered.connect(slot)
+            self._connect(action.triggered, slot)
 
     def _bind_permanent_feature_signals(self):
         window = self._window
@@ -277,12 +295,34 @@ class MainWindowActionBinding:
                 window.outlineRemoveItemsOutline,
             ),
         ]:
-            signal.connect(slot, F.AUC)
+            self._connect(signal, slot, F.AUC)
 
-        window.tabMain.currentChanged.connect(
+        self._connect(
+            window.tabMain.currentChanged,
             window.toolbar.setCurrentGroup
         )
-        window.tabMain.currentChanged.connect(window.tabMainChanged)
+        self._connect(
+            window.tabMain.currentChanged,
+            window.tabMainChanged,
+        )
+        self._connect(
+            window.actNewWindow.triggered,
+            window.workspaceWindows.open,
+        )
+        self._connect(
+            window.mprWordCount.mapped,
+            window.wordCount,
+        )
+        for summary in (
+            window.txtSummarySentence,
+            window.txtSummaryPara,
+            window.txtSummaryPage,
+            window.txtSummaryFull,
+        ):
+            self._connect(
+                summary.textChanged,
+                window.mprWordCount.map,
+            )
         # Focus is application-wide, so the window registry follows it
         # once and forwards to whichever workspace gained it. Connecting
         # per window would have every window react to every other

@@ -53,6 +53,10 @@ class NamedDialogLifecycle:
         for dialog in dialogs:
             dialog.close()
 
+    def dispose(self):
+        self.close_all()
+        self._center = None
+
     def _discard(self, name, token, _object=None):
         if self._tokens.get(name) is not token:
             return

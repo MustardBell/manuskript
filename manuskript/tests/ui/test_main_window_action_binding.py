@@ -32,34 +32,19 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         binding.bind()
 
     window.projectManager.syncUiToState.assert_called_once_with()
-    window.actOpen.triggered.connect.assert_called_once_with(
-        window.welcome.openFile
-    )
-    window.actSave.triggered.connect.assert_called_once_with(
-        window.projectManager.saveDatas
-    )
-    window.actGitRevisions.triggered.connect.assert_called_once_with(
-        window.workspaceDialogs.show_revision_history
-    )
-    window.actImport.triggered.connect.assert_called_once_with(
-        window.workspaceTransfers.show_import
-    )
-    window.actCompile.triggered.connect.assert_called_once_with(
-        window.workspaceTransfers.show_export
-    )
-    window.actBack.triggered.connect.assert_called_once_with(
-        window.navigationController.back
-    )
-    window.actSettings.triggered.connect.assert_called_once_with(
-        window.workspaceDialogs.show_settings
-    )
-    window.actToolTargets.triggered.connect.assert_called_once_with(
-        window.workspaceDialogs.show_targets
-    )
+    window.actOpen.triggered.connect.assert_called_once()
+    window.actSave.triggered.connect.assert_called_once()
+    window.actGitRevisions.triggered.connect.assert_called_once()
+    window.actImport.triggered.connect.assert_called_once()
+    window.actCompile.triggered.connect.assert_called_once()
+    window.actQuit.triggered.connect.assert_called_once()
+    window.actBack.triggered.connect.assert_called_once()
+    window.actSettings.triggered.connect.assert_called_once()
+    window.actToolTargets.triggered.connect.assert_called_once()
     window.generateViewMenu.assert_called_once_with()
     (
         window.mainEditor.activeMarkdownPresentationStateChanged.connect
-        .assert_called_once_with(window.attachMarkdownPresentationState)
+        .assert_called_once()
     )
     window.actModeSimple.setActionGroup.assert_called_once_with(
         action_group
@@ -109,9 +94,12 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
         window.corePanels.project_tree.add_folder.clicked.connect
         .assert_called_once()
     )
-    window.tabMain.currentChanged.connect.assert_any_call(
-        window.toolbar.setCurrentGroup
+    assert window.tabMain.currentChanged.connect.call_count == 2
+    toolbar_slot = (
+        window.tabMain.currentChanged.connect.call_args_list[0].args[0]
     )
+    toolbar_slot(3)
+    window.toolbar.setCurrentGroup.assert_called_once_with(3)
     # Focus is application-wide, so the window registry watches it once
     # for the application and forwards to whichever workspace gained it.
     # Connecting here, per window, had every window react to every other
@@ -131,6 +119,32 @@ def test_main_window_action_binding_rejects_duplicate_install():
         binding.bind()
         with pytest.raises(RuntimeError, match="only be bound once"):
             binding.bind()
+
+
+def test_main_window_action_binding_releases_owned_connections():
+    window = MagicMock()
+
+    with patch.object(
+        binding_module,
+        "QActionGroup",
+        return_value=MagicMock(),
+    ):
+        binding = MainWindowActionBinding(window)
+        binding.bind()
+
+    assert len(binding._connections) > 0
+
+    binding.dispose()
+
+    assert len(binding._connections) == 0
+    quit_slot = window.actQuit.triggered.connect.call_args.args[0]
+    new_window_slot = (
+        window.actNewWindow.triggered.connect.call_args.args[0]
+    )
+    window.actQuit.triggered.disconnect.assert_called_once_with(quit_slot)
+    window.actNewWindow.triggered.disconnect.assert_called_once_with(
+        new_window_slot
+    )
 
 
 def test_format_action_reaches_the_active_markup_editor(MWEmptyProject):

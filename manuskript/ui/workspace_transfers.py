@@ -184,3 +184,7 @@ class WorkspaceTransferController:
 
     def close_all(self):
         self._lifecycle.close_all()
+
+    def dispose(self):
+        self._lifecycle.dispose()
+        self.views = None

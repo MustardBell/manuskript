@@ -76,3 +76,15 @@ class ProjectBinding:
             self.contexts.unbind()
         self.features.unbind()
         self.bound = False
+
+    def dispose(self):
+        """Release stable workspace views after their project unbinds."""
+        self.unbind()
+        self.connections.disconnect_all()
+        self.flat_data.views = None
+        self.outline_selection.views = None
+        self.debug_views.views = None
+        self.features.dispose()
+        self.features = None
+        self.contexts = None
+        self.contextsFactory = None

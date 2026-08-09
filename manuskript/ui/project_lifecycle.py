@@ -231,3 +231,8 @@ class ProjectLifecycleView:
         workspace.set_window_title(self.translate("Manuskript"))
         workspace.update_welcome()
         workspace.show_welcome()
+
+    def dispose(self):
+        """Release callbacks into a workspace detached from the runtime."""
+        self.views = None
+        self.runtime = None

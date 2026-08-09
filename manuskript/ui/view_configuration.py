@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QAction, QActionGroup, QMenu
 
 from manuskript import functions as F
 from manuskript.enums import Outline
+from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.propertiesView import propertiesView
 
@@ -116,8 +117,10 @@ class ViewSettingsMenuBuilder:
     def __init__(self, views, controller):
         self.views = views
         self.controller = controller
+        self.connections = SignalConnectionRegistry()
 
     def rebuild(self):
+        self.connections.disconnect_all()
         views = self.views
         tr = views.translate
         values = [
@@ -172,7 +175,8 @@ class ViewSettingsMenuBuilder:
                         ][part]
                         == value
                     )
-                    action.triggered.connect(
+                    self.connections.connect_weak(
+                        action.triggered,
                         partial(
                             self.controller.set_view_setting,
                             category,
@@ -185,3 +189,8 @@ class ViewSettingsMenuBuilder:
                     submenu.addAction(action)
                 menu.addMenu(submenu)
             views.menu.addMenu(menu)
+
+    def dispose(self):
+        self.connections.disconnect_all()
+        self.views = None
+        self.controller = None

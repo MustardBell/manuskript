@@ -247,3 +247,31 @@ class PluginUiController:
     def prepare_project_close(self):
         self.editorWorkspaces.prepare_project_close()
         self.projectPanels.prepare_project_close()
+
+    def dispose(self):
+        """Release this window's plugin UI from application services."""
+        contributions = self.contributions
+        if contributions is None:
+            return
+        try:
+            contributions.changed.disconnect(
+                self.refresh_contributions
+            )
+        except (RuntimeError, TypeError):
+            pass
+        self.editorWorkspaces.prepare_project_close()
+        self.projectPanels.prepare_project_close()
+        manager = self.manager
+        self.manager = None
+        if manager is not None:
+            manager.close()
+            manager.deleteLater()
+        self.markupProfiles = None
+        self.pageTypes = None
+        self.projectPanels = None
+        self.editorWorkspaces = None
+        self.menu = None
+        self.manageAction = None
+        self.globalActions = ()
+        self.views = None
+        self.contributions = None

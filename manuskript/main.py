@@ -184,6 +184,13 @@ def prepare(arguments, tests=False):
     # Apply configurable tooltip styling
     from manuskript.settingsManager import SettingsManager
     settings_manager = SettingsManager()
+    # Cursor blinking is application state, not a property of whichever
+    # workspace window happened to be created last.  Capture the platform
+    # default once without retaining a window in the project settings.
+    default_cursor_flash_time = qApp.cursorFlashTime()
+    settings_manager.configure_cursor_flash_time(
+        lambda: default_cursor_flash_time
+    )
     settings_manager.applyTooltipStyle()
 
     plugin_settings = QSettings()
@@ -284,10 +291,6 @@ def prepare(arguments, tests=False):
 
     with timing.span("startup.main_window"):
         MW = MainWindow(window_services)
-    # We store the system default cursor flash time to be able to restore it
-    # later if necessary
-    MW._defaultCursorFlashTime = qApp.cursorFlashTime()
-
     # Command line project
     if arguments.filename is not None and arguments.filename[-4:] == ".msk":
         # The file is verified to already exist during argument parsing.
@@ -362,7 +365,7 @@ def sigint_handler(sig, MW):
         LOGGER.info(f'{sig} received. Quitting...')
         # Every workspace window, so a second one does not keep the
         # application alive after an interrupt.
-        MW.quitApplication()
+        MW.workspaceWindows.quit()
         print(f'{sig} received, quit.')
 
     return handler

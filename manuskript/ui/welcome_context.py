@@ -7,7 +7,7 @@ from manuskript.services.project_templates import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass
 class WelcomeContext:
     project_manager: object
     project_history: object
@@ -15,6 +15,14 @@ class WelcomeContext:
     consume_auto_load_project: Callable
     set_window_title: Callable[[str], None]
     template_initializer: ProjectTemplateInitializer
+
+    def dispose(self):
+        self.project_manager = None
+        self.project_history = None
+        self.recent_menu = None
+        self.consume_auto_load_project = None
+        self.set_window_title = None
+        self.template_initializer = None
 
 
 def welcome_context_for(window, settings, project_history, runtime):

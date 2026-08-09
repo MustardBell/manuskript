@@ -6,6 +6,9 @@ closing is not the project's closing. Each window keeps its own
 selection, its own open documents and its own panels.
 """
 
+from pathlib import Path
+import subprocess
+import sys
 from weakref import ref
 
 import pytest
@@ -50,7 +53,7 @@ def test_a_second_window_shares_every_application_scope_service(
     of its own instead of an error.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         assert other.services is window.services
         for name in WorkspaceWindowServices.field_names():
@@ -63,7 +66,7 @@ def test_a_second_window_shares_every_application_scope_service(
 def test_a_second_window_has_its_own_id_and_nothing_else_of_its_own(
         MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         assert other.windowId != window.windowId
         assert other.panelRegistry is window.panelRegistry
@@ -77,9 +80,26 @@ def test_a_second_window_has_its_own_id_and_nothing_else_of_its_own(
         other.close()
 
 
+def test_workspace_coordination_receives_explicit_ports(MWEmptyProject):
+    window = MWEmptyProject
+    controller = window.workspaceWindows
+
+    assert controller.views.current_id == window.windowId
+    assert controller.views.adoption.is_open()
+    assert not hasattr(controller, "window")
+    assert not hasattr(controller, "mw")
+    assert not hasattr(window, "nextWorkspaceId")
+    assert not hasattr(window, "openWorkspaceWindow")
+    assert not hasattr(window, "adoptOpenProject")
+    assert not hasattr(window, "quitApplication")
+    assert not hasattr(window, "openWorkspaceIds")
+    assert not hasattr(window, "restoreWorkspaceWindows")
+    assert not hasattr(window, "_restoredWorkspaceWindows")
+
+
 def test_a_second_window_edits_the_same_project(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         # The project layer is shared, not copied.
         assert other.projectRuntime is window.projectRuntime
@@ -112,7 +132,7 @@ def test_a_second_window_edits_the_same_project(MWEmptyProject):
 
 def test_each_workspace_owns_only_its_tool_dialogs(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     first = window.workspaceDialogs.show_targets()
     second = other.workspaceDialogs.show_targets()
     try:
@@ -133,7 +153,7 @@ def test_each_workspace_owns_only_its_tool_dialogs(MWEmptyProject):
 
 def test_each_workspace_owns_only_its_transfer_dialogs(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     first = window.workspaceTransfers.show_export()
     second = other.workspaceTransfers.show_export()
     try:
@@ -156,7 +176,7 @@ def test_each_workspace_owns_only_its_transfer_dialogs(MWEmptyProject):
 def test_both_windows_are_workspaces_and_neither_is_last(
         MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         registry = window.windowRegistry
         assert set(registry.workspace_windows) >= {window, other}
@@ -171,7 +191,7 @@ def test_the_project_reports_to_both_windows(MWEmptyProject):
     current when the project changes underneath them.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         views = window.projectRuntime.views.views
         assert window.projectLifecycleView in views
@@ -184,7 +204,7 @@ def test_closing_the_second_window_leaves_the_project_open(
         MWEmptyProject):
     window = MWEmptyProject
     project = window.currentProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
 
     other.close()
 
@@ -197,8 +217,63 @@ def test_closing_the_second_window_leaves_the_project_open(
         window.projectRuntime.views.views
     )
     assert other not in window.windowRegistry.workspace_windows
+    assert not other.projectBinding.bound
     # The first window is alone again, so its close is the project's.
     assert window.windowRegistry.is_last(window)
+
+
+def test_closing_a_secondary_disconnects_application_plugin_updates(
+        MWEmptyProject):
+    window = MWEmptyProject
+    service = window.pluginContributions
+    other = window.workspaceWindows.open()
+    before = service.receivers(service.changed)
+
+    other.close()
+
+    assert service.receivers(service.changed) == before - 1
+    assert other.pluginUi.contributions is None
+    assert other.pluginUi.views is None
+
+
+def test_a_deleted_secondary_window_is_collectable_in_isolation():
+    """Exercise native deletion and cyclic collection in another process.
+
+    A stale SIP wrapper terminates Python rather than raising an exception,
+    so isolation turns that native failure into an ordinary test result and
+    keeps the rest of the suite diagnosable.
+    """
+    script = """
+import gc
+import weakref
+
+from PyQt5 import sip
+from PyQt5.QtCore import QCoreApplication, QEvent
+from PyQt5.QtWidgets import qApp
+
+from manuskript.tests import MW
+
+gc.disable()
+gc.collect()
+window = MW.workspaceWindows.open("collection-probe")
+window_ref = weakref.ref(window)
+window.close()
+qApp.processEvents()
+QCoreApplication.sendPostedEvents(window, QEvent.DeferredDelete)
+assert sip.isdeleted(window)
+del window
+gc.collect()
+assert window_ref() is None
+"""
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", script],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_each_window_has_its_own_panels(MWEmptyProject):
@@ -206,7 +281,7 @@ def test_each_window_has_its_own_panels(MWEmptyProject):
     not hide the other's.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         mine = window.panelHost.instance(METADATA)
         theirs = other.panelHost.instance(METADATA)
@@ -230,7 +305,7 @@ def test_each_window_has_its_own_panels(MWEmptyProject):
 def test_each_window_has_its_own_tree_and_editor(MWEmptyProject):
     """Its own view of the outline, over the one shared model."""
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         other_tree = other.corePanels.project_tree.tree
         tree = window.corePanels.project_tree.tree
@@ -246,7 +321,7 @@ def test_each_window_has_its_own_tree_and_editor(MWEmptyProject):
 
 def test_the_active_window_follows_focus(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         registry = window.windowRegistry
         registry.activate(other)
@@ -281,18 +356,18 @@ class isolated_session:
             QSettings(self.path, QSettings.IniFormat)
         )
         controller.store.set_open_windows(self.open_windows)
-        self.window._restoredWorkspaceWindows = False
+        self.window.workspaceWindows.reset_restoration(False)
         return self
 
     def restore(self):
-        self.opened = list(self.window.restoreWorkspaceWindows())
+        self.opened = list(self.window.workspaceWindows.restore())
         return self.opened
 
     def __exit__(self, *_exception):
         for entry in self.opened:
             entry.close()
         self.window.windowState.store = self.previous
-        self.window._restoredWorkspaceWindows = True
+        self.window.workspaceWindows.reset_restoration(True)
         return False
 
 
@@ -324,7 +399,7 @@ def test_a_session_is_restored_once_per_window(
         window, tmp_path, ["main", "window-restored"],
     ) as session:
         assert len(session.restore()) == 1
-        assert window.restoreWorkspaceWindows() == ()
+        assert window.workspaceWindows.restore() == ()
 
 
 def test_a_window_already_open_is_not_opened_twice(
@@ -332,14 +407,14 @@ def test_a_window_already_open_is_not_opened_twice(
     window = MWEmptyProject
     with isolated_session(window, tmp_path, ["main"]) as session:
         assert session.restore() == []
-        assert window.openWorkspaceIds().count("main") == 1
+        assert window.workspaceWindows.open_ids().count("main") == 1
 
 
 def test_only_the_primary_window_restores_a_session(
         MWEmptyProject, tmp_path):
     """Otherwise each reopened window would reopen the session again."""
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with isolated_session(
             other, tmp_path, ["main", "window-unwanted"],
@@ -359,10 +434,10 @@ def test_the_open_windows_are_what_a_quit_records(
         MWEmptyProject, tmp_path):
     """So the next launch comes back to the same set."""
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with isolated_session(window, tmp_path) as session:
-            ids = window.openWorkspaceIds()
+            ids = window.workspaceWindows.open_ids()
             assert other.windowId in ids
 
             window.windowState.store.set_open_windows(ids)
@@ -424,7 +499,7 @@ def test_a_moved_panel_is_the_same_widget_in_the_other_window(
     nothing it was showing is lost.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window) as panel:
             panel.widget.setPlainText("half-written note")
@@ -445,7 +520,7 @@ def test_a_moved_panel_is_the_same_widget_in_the_other_window(
 
 def test_a_moved_panel_is_mounted_in_its_new_window(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window):
             moved = window.panelPlacement.move_to(
@@ -466,7 +541,7 @@ def test_a_moved_panel_is_toggled_from_its_new_window(MWEmptyProject):
     host gives it one of its own.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window) as panel:
             old_action = panel.action
@@ -503,7 +578,7 @@ def test_a_dock_panel_is_put_away_whole_wherever_it_was_mounted(
     differently depending on how it had arrived.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window) as panel:
             # As opened.
@@ -565,7 +640,7 @@ def test_a_docked_panel_tabbed_behind_another_stays_open(MWEmptyProject):
 
 def test_the_toolbar_button_travels_with_the_panel(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window):
             assert NOTES in window.toolbar._panelToggles
@@ -585,7 +660,7 @@ def test_a_refused_move_leaves_the_panel_where_it_was(MWEmptyProject):
     belonging to nobody -- so the target is asked first.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         instance = window.panelHost.instance(METADATA)
 
@@ -603,7 +678,7 @@ def test_a_refused_move_leaves_the_panel_where_it_was(MWEmptyProject):
 def test_a_failed_adoption_rolls_the_living_panel_back(
         MWEmptyProject, monkeypatch):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window) as panel:
             original = panel.widget
@@ -645,7 +720,7 @@ def test_moving_a_panel_to_its_own_window_changes_nothing(
 def test_panel_placement_receives_explicit_workspace_ports(
         MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         controller = window.panelPlacement
 
@@ -668,7 +743,7 @@ def test_panel_placement_receives_explicit_workspace_ports(
 def test_the_move_menu_offers_only_panels_that_can_move(MWEmptyProject):
     """Core panels exist in every window, so they have nowhere to go."""
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         with movable_panel(window):
             window.panelPlacement.build_move_menu()
@@ -687,7 +762,7 @@ def test_the_move_menu_offers_only_panels_that_can_move(MWEmptyProject):
 
 def test_the_move_menu_says_when_nothing_can_move(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         window.panelPlacement.build_move_menu()
 
@@ -713,7 +788,7 @@ def test_the_move_menu_says_when_there_is_nowhere_to_move(
 
 def test_a_move_menu_does_not_retain_a_closed_target(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     with movable_panel(window):
         window.panelPlacement.build_move_menu()
         destination = ref(other.panelPlacement.target)
@@ -878,7 +953,7 @@ def test_each_window_records_its_own_open_documents(
     them.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         mine = WorkspaceStateStore(
             QSettings(str(tmp_path / "mine.ini"), QSettings.IniFormat)
@@ -957,7 +1032,7 @@ def test_each_window_owns_its_plugin_user_interface(MWEmptyProject):
     window's Plugins menu, its panels and its dialogs.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         assert other.pluginUi is not window.pluginUi
         assert other.pluginUi.menu is not window.pluginUi.menu
@@ -982,7 +1057,7 @@ def test_application_scope_plugin_services_are_shared(MWEmptyProject):
     else could see, or save a routing choice nobody else would read.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         for name in window.pluginUi.SHARED_SERVICES:
             assert getattr(other.pluginUi, name) is getattr(
@@ -998,7 +1073,7 @@ def test_a_plugin_change_reaches_every_window(MWEmptyProject):
     the announcement was made by that window's dialog to itself.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         heard = {"a": 0, "b": 0}
         window.pluginUi.pageTypes.contributionsChanged.connect(
@@ -1018,7 +1093,7 @@ def test_a_plugin_change_reaches_every_window(MWEmptyProject):
 
 def test_every_window_shares_one_contribution_service(MWEmptyProject):
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         assert (
             other.pluginContributions is window.pluginContributions
@@ -1044,7 +1119,7 @@ def test_a_newly_contributed_panel_appears_in_both_windows(
     )
 
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     registry = window.pluginRuntime.registry
     try:
         registrar = registry.registrar("vendor.late")
@@ -1075,7 +1150,7 @@ def test_each_window_keeps_its_own_main_tab(MWEmptyProject):
     to win and the other's choice was lost.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         window.tabMain.setCurrentIndex(2)
         other.tabMain.setCurrentIndex(6)
@@ -1137,7 +1212,7 @@ def test_a_window_that_is_not_the_last_records_its_plugin_docks(
     )
 
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     store = WorkspaceStateStore(
         QSettings(str(tmp_path / "theirs.ini"), QSettings.IniFormat)
     )
@@ -1183,7 +1258,7 @@ def test_a_cancelled_quit_leaves_both_real_windows_open(MWEmptyProject):
     application still running.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     manager = window.projectManager
     settled = []
     try:

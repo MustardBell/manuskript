@@ -250,3 +250,12 @@ class ProjectFeatureBinding:
         for binding in reversed(self.bindings):
             binding.unbind()
         self.bound = False
+
+    def dispose(self):
+        self.unbind()
+        for binding in self.bindings:
+            binding.controller = None
+            binding.panel = None
+            if hasattr(binding, "settings"):
+                binding.settings = None
+        self.bindings = ()

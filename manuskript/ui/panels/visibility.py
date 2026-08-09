@@ -21,6 +21,8 @@ this away" would close a panel merely tabbed behind its neighbour.
 
 from functools import partial
 
+from manuskript.ui.connections import weak_callback
+
 class PanelVisibility:
     """One window's panel toggles: what they drive and what drives them."""
 
@@ -45,11 +47,14 @@ class PanelVisibility:
         action = self._create_action(descriptor.title)
         action.setCheckable(True)
         action.setChecked(descriptor.default_visible)
-        action.toggled.connect(target.setVisible)
+        action.toggled.connect(weak_callback(target.setVisible))
         target.setVisible(descriptor.default_visible)
         if instance.container is not None:
             instance.container.visibilityChanged.connect(
-                partial(self._container_changed, instance)
+                weak_callback(partial(
+                    self._container_changed,
+                    instance,
+                ))
             )
         instance.action = action
         return action
@@ -95,3 +100,6 @@ class PanelVisibility:
             return
         if instance.action.isChecked() != visible:
             instance.action.setChecked(visible)
+
+    def dispose(self):
+        self._create_action = None

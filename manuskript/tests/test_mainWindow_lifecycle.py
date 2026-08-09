@@ -30,12 +30,23 @@ class reopened:
 
     def __init__(self, window):
         self.window = window
+        self._keep_workspace_composed = None
 
     def __enter__(self):
+        # These tests exercise close coordination on the suite's one shared
+        # primary window, then deliberately put that same object back.  A
+        # real accepted close now disposes its view ports deterministically;
+        # suppress only that final teardown for this synthetic reopen.
+        self._keep_workspace_composed = patch.object(
+            self.window.workspaceLifetime,
+            "dispose",
+        )
+        self._keep_workspace_composed.start()
         return self.window
 
     def __exit__(self, *_exception):
         window = self.window
+        self._keep_workspace_composed.stop()
         window.windowRegistry.register(window)
         window.projectRuntime.attach(
             window.projectLifecycleView,

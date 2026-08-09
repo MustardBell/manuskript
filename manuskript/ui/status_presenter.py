@@ -56,3 +56,7 @@ class StatusPresenter:
         self.label.setGeometry(geometry)
         self.label.show()
         QTimer.singleShot(duration, self.label.hide)
+
+    def dispose(self):
+        self.views = None
+        self.label = None

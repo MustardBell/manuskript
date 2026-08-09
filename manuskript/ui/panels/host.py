@@ -26,6 +26,7 @@ from typing import Any, Optional
 from PyQt5.QtWidgets import QWidget
 
 from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
+from manuskript.ui.connections import weak_callback
 from manuskript.ui.panels.mounts import mounts_for
 from manuskript.ui.panels.visibility import PanelVisibility
 
@@ -180,7 +181,10 @@ class PanelHost:
         container = instance.container
         if container is not None:
             container.destroyed.connect(
-                partial(self._container_destroyed, instance.descriptor.id)
+                weak_callback(partial(
+                    self._container_destroyed,
+                    instance.descriptor.id,
+                ))
             )
 
     def _slot_splitter(self, descriptor):
@@ -354,6 +358,17 @@ class PanelHost:
     def close_all(self):
         for panel_id in tuple(self._instances):
             self.close(panel_id)
+
+    def dispose(self):
+        self.visibility.dispose()
+        self.close_all()
+        self.directory.remove(self)
+        self._mounts.clear()
+        self.views = None
+        self.registry = None
+        self.directory = None
+        self.visibility = None
+        self.failures = None
 
     def _container_destroyed(self, panel_id, _object=None):
         # Qt may destroy containers after the host is already being torn

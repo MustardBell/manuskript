@@ -92,7 +92,7 @@ def test_two_windows_name_their_own_views_over_one_project(
     editors, two metadata panels, one project.
     """
     window = MWEmptyProject
-    other = window.openWorkspaceWindow()
+    other = window.workspaceWindows.open()
     try:
         mine = ProjectViewSet.for_window(window)
         theirs = ProjectViewSet.for_window(other)

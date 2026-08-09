@@ -313,3 +313,7 @@ class WorkspaceStateController:
         if isinstance(values, (list, tuple)):
             return [as_bool(value) for value in values]
         return values
+
+    def dispose(self):
+        """Release this controller's callbacks into its closing window."""
+        self.views = None

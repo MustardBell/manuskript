@@ -100,3 +100,7 @@ class PanelDialogs:
             fields.descriptionLineEdit.text(),
             fields.valueLineEdit.text(),
         )
+
+    def dispose(self):
+        self._parent = None
+        self._translate = None
