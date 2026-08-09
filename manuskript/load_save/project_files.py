@@ -4,6 +4,10 @@ import stat
 import zipfile
 from dataclasses import dataclass
 
+from manuskript.domain.project_paths import (
+    normalize_project_path,
+    project_path_on_disk,
+)
 from manuskript.domain.persistence import ProjectSaveResult
 
 import logging
@@ -62,7 +66,17 @@ class Version1ProjectFiles:
             for member in archive.namelist():
                 if member.endswith("/"):
                     continue
-                path = os.path.normpath(member)
+                try:
+                    path = normalize_project_path(member)
+                except ValueError as error:
+                    LOGGER.error(
+                        "Cannot read unsafe path %s from %s: %s",
+                        member,
+                        project_file,
+                        error,
+                    )
+                    unreadable.append(member)
+                    continue
                 try:
                     content = archive.read(member)
                     if not self._is_binary(path):
@@ -98,7 +112,7 @@ class Version1ProjectFiles:
             for name in filenames:
                 if name.startswith("."):
                     continue
-                relative_path = os.path.normpath(
+                relative_path = normalize_project_path(
                     os.path.join(relative_directory, name)
                 )
                 filename = os.path.join(directory, name)
@@ -371,30 +385,8 @@ class Version1ProjectFiles:
 
     @staticmethod
     def _validated_relative_path(path):
-        normalized = os.path.normpath(path)
-        if (
-            os.path.isabs(path)
-            or normalized == os.pardir
-            or normalized.startswith(os.pardir + os.sep)
-        ):
-            raise ValueError(
-                "Project path escapes its storage root: {}".format(path)
-            )
-        return normalized
+        return normalize_project_path(path)
 
     @classmethod
     def _path_within(cls, root, path):
-        normalized = cls._validated_relative_path(path)
-        root = os.path.abspath(root)
-        candidate = os.path.abspath(os.path.join(root, normalized))
-        try:
-            within_root = os.path.commonpath(
-                (root, candidate)
-            ) == root
-        except ValueError:
-            within_root = False
-        if not within_root:
-            raise ValueError(
-                "Project path escapes its storage root: {}".format(path)
-            )
-        return candidate
+        return project_path_on_disk(root, path)

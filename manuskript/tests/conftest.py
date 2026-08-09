@@ -43,9 +43,8 @@ def MWNoProject(MW):
     assert MW.currentProject == None
     return MW
 
-#: The empty project the suite is currently reusing, and its temporary file.
-#: Held at module scope so the file is not collected out from under it.
-_empty_project = {"file": None}
+#: The empty project the suite is currently reusing.
+_empty_project = {"path": None}
 
 
 def _reusableEmptyProject(MW):
@@ -59,17 +58,23 @@ def _reusableEmptyProject(MW):
     this question: anything that changed a model marked it. A clean project
     is one that nothing has altered, so the next test may have it as it is.
     """
-    holder = _empty_project["file"]
-    if holder is None:
+    project_path = _empty_project["path"]
+    if project_path is None:
         return False
     manager = MW.projectManager
     if not manager.session.is_open or manager.session.is_dirty:
         return False
-    return MW.currentProject == os.path.normpath(holder.name)
+    return MW.currentProject == os.path.normpath(project_path)
+
+
+@pytest.fixture(scope="session")
+def empty_project_path(tmp_path_factory):
+    """A reusable project path that is never held open by Python."""
+    return tmp_path_factory.mktemp("empty-project") / "empty.msk"
 
 
 @pytest.fixture
-def MWEmptyProject(MW):
+def MWEmptyProject(MW, empty_project_path):
     """
     Creates a MainWindow and load an empty project.
 
@@ -78,13 +83,12 @@ def MWEmptyProject(MW):
     if _reusableEmptyProject(MW):
         return MW
 
-    import tempfile
-    tf = tempfile.NamedTemporaryFile(suffix=".msk")
-    _empty_project["file"] = tf
+    project_path = str(empty_project_path)
+    _empty_project["path"] = project_path
 
     closeProjectDiscardingChanges(MW)
     assert MW.currentProject == None
-    MW.welcome.createFile(tf.name, overwrite=True)
+    MW.welcome.createFile(project_path, overwrite=True)
     assert MW.currentProject != None
     return MW
 
@@ -94,7 +98,7 @@ def MWEmptyProject(MW):
     # MW.deleteLater()
 
 @pytest.fixture
-def MWSampleProject(MW):
+def MWSampleProject(MW, tmp_path):
     """
     Creates a MainWindow and load a copy of the Acts sample project.
     """
@@ -108,14 +112,14 @@ def MWSampleProject(MW):
     # `name` folder.
     src = [f for f in lst if f[-4:] == ".msk" and f[:-4] in lst][0]
     src = os.path.join(spDir, src)
-    # Copy to a temp file
-    import tempfile
-    tf = tempfile.NamedTemporaryFile(suffix=".msk")
+    # Copy to a path that is not held open. Windows denies replacement of
+    # an open NamedTemporaryFile.
+    project_file = tmp_path / "sample.msk"
     import shutil
-    shutil.copyfile(src, tf.name)
-    shutil.copytree(src[:-4], tf.name[:-4])
+    shutil.copyfile(src, project_file)
+    shutil.copytree(src[:-4], project_file.with_suffix(""))
     closeProjectDiscardingChanges(MW)
-    MW.projectManager.loadProject(tf.name)
+    MW.projectManager.loadProject(str(project_file))
     assert MW.currentProject != None
 
     return MW

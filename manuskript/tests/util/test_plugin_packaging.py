@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from util.plugin_packaging import plugin_data_entries, rsync_filter_lines
 
@@ -32,12 +33,12 @@ def test_packaging_includes_runtime_files_but_not_tests_or_docs(tmp_path):
     gitmodules = declare_submodule(tmp_path, "example")
     entries = plugin_data_entries(tmp_path, gitmodules)
 
-    sources = {source for source, _destination in entries}
-    assert str(plugin / "plugin.json") in sources
-    assert str(plugin / "plugin.py") in sources
-    assert str(plugin / "model.py") in sources
-    assert str(plugin / "README.md") not in sources
-    assert str(tests / "test_plugin.py") not in sources
+    sources = {Path(source) for source, _destination in entries}
+    assert plugin / "plugin.json" in sources
+    assert plugin / "plugin.py" in sources
+    assert plugin / "model.py" in sources
+    assert plugin / "README.md" not in sources
+    assert tests / "test_plugin.py" not in sources
 
 
 def test_packaging_ignores_folders_without_manifests(tmp_path):

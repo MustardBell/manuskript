@@ -6,6 +6,8 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 
+from manuskript.domain.project_paths import normalize_project_path
+
 
 class GitRevisionError(RuntimeError):
     """A Git revision operation could not be completed safely."""
@@ -696,12 +698,9 @@ class GitRevisionBackend:
                 for member in archive.infolist():
                     if member.is_dir():
                         continue
-                    path = os.path.normpath(member.filename)
-                    if (
-                        os.path.isabs(path)
-                        or path == os.pardir
-                        or path.startswith(os.pardir + os.sep)
-                    ):
+                    try:
+                        path = normalize_project_path(member.filename)
+                    except ValueError:
                         raise GitRevisionError(
                             "The selected project archive contains "
                             "an unsafe path."
@@ -735,12 +734,9 @@ class GitRevisionBackend:
             relative = path[len(prefix):] if prefix else path
             if not relative:
                 continue
-            normalized = os.path.normpath(relative)
-            if (
-                os.path.isabs(normalized)
-                or normalized == os.pardir
-                or normalized.startswith(os.pardir + os.sep)
-            ):
+            try:
+                normalized = normalize_project_path(relative)
+            except ValueError:
                 raise GitRevisionError(
                     "The selected project contains an unsafe path."
                 )

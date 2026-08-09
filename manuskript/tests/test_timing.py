@@ -122,14 +122,20 @@ def test_a_mark_says_how_far_into_the_session_it_happened(measured):
     assert timing.since_start() > 0
 
 
-def test_milestones_do_not_land_in_the_ordinary_log(measured, caplog):
+def test_milestones_do_not_land_in_the_ordinary_log(measured):
     """They answer a question somebody asked at the command line; the log
     file is for everything else.
     """
-    with caplog.at_level(logging.DEBUG):
+    ordinary_stream = io.StringIO()
+    ordinary_handler = logging.StreamHandler(ordinary_stream)
+    root = logging.getLogger()
+    root.addHandler(ordinary_handler)
+    try:
         timing.mark("startup.prepared")
+    finally:
+        root.removeHandler(ordinary_handler)
 
-    assert "startup.prepared" not in caplog.text
+    assert "startup.prepared" not in ordinary_stream.getvalue()
 
 
 def test_measuring_is_off_unless_the_flag_is_given():

@@ -181,7 +181,7 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
         expected_left = (available_width - host.width()) // 2
 
         assert host.maximumWidth() == 600
-        assert host.width() == 600
+        assert host.width() == min(600, available_width)
         assert abs(host.x() - expected_left) <= 1
         assert editor.txtRedacText.width() == host.contentsRect().width()
         assert "background: #f7f4ee" in editor.text.styleSheet()

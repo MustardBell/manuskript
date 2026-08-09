@@ -1,5 +1,8 @@
 from unittest.mock import MagicMock
 
+from PyQt5 import sip
+from PyQt5.QtWidgets import QWidget
+
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.workspace_focus import (
     WorkspaceFocusController,
@@ -96,6 +99,18 @@ def test_workspace_focus_notifies_a_listener_once_and_tracks_widget():
     listener.assert_called_once_with(None, focused)
 
 
+def test_duplicate_native_and_global_focus_delivery_is_coalesced():
+    controller = WorkspaceFocusController(WorkspaceFocusViews(()))
+    listener = MagicMock()
+    focused = _Widget()
+    controller.subscribe(listener)
+
+    controller.focus_changed(None, focused)
+    controller.focus_changed(None, focused)
+
+    listener.assert_called_once_with(None, focused)
+
+
 def test_workspace_focus_unsubscribe_stops_notifications():
     controller = WorkspaceFocusController(WorkspaceFocusViews(()))
     listener = MagicMock()
@@ -126,3 +141,15 @@ def test_workspace_focus_does_not_retain_a_listener_owner():
 
     assert listener_ref() is None
     assert controller._listeners == []
+
+
+def test_deleted_native_focus_target_is_not_returned():
+    controller = WorkspaceFocusController(WorkspaceFocusViews(()))
+    widget = QWidget()
+    controller._focused_widget = widget
+    controller._markup_target = widget
+
+    sip.delete(widget)
+
+    assert controller.focused_widget is None
+    assert controller.markup_target is None

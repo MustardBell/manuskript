@@ -643,6 +643,10 @@ class textEditView(QTextEdit):
             event = QMouseEvent(QEvent.MouseButtonPress, event.pos(),
                                 Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
         QTextEdit.mousePressEvent(self, event)
+        # A click is itself sufficient evidence that this editor is the
+        # workspace command target. Some headless/native Qt backends defer or
+        # omit focusChanged even though the text edit receives the press.
+        self._reportWorkspaceFocus()
 
     def beginTooltipMoveEvent(self):
         self._tooltip['depth'] += 1
@@ -941,8 +945,16 @@ class textEditView(QTextEdit):
         The one being worked in is the right one.
         """
         QTextEdit.focusInEvent(self, event)
+        self._reportWorkspaceFocus()
         if self._buffer is not None:
             self._buffer.focused(self)
+
+    def _reportWorkspaceFocus(self):
+        """Publish this editor through its injected workspace focus port."""
+        context = self.text_editor_context
+        focus_received = getattr(context, "focus_received", None)
+        if callable(focus_received):
+            focus_received(self)
 
     def focusOutEvent(self, event):
         """Submit changes just before focusing out."""
