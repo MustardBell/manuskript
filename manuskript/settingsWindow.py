@@ -2,17 +2,18 @@
 # --!-- coding: utf8 --!--
 import os
 import shutil
-from collections import OrderedDict
 
-from PyQt5.QtCore import QSize, QRegExp, QTranslator, QObject
+from PyQt5.QtCore import QSize, QTranslator, QObject
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIntValidator, QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
+from PyQt5.QtGui import QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
 from PyQt5.QtGui import QStyleHints
-from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListWidgetItem, QMessageBox
+from PyQt5.QtWidgets import QWidget, QStyle, QColorDialog, QListWidgetItem, QMessageBox
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
-from manuskript.domain.revisions import RevisionBackendKind
+from manuskript.services.git_revisions import (
+    inspect_git_availability,
+)
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
@@ -26,31 +27,35 @@ from manuskript.functions import (
     writablePath,
 )
 from manuskript.functions import findBackground, themeIcon
-from manuskript.ui.editors.tabSplitter import tabSplitter
+from manuskript.ui.application_settings_controller import (
+    ApplicationSettingsController,
+    ApplicationSettingsViews,
+)
 from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
 )
+from manuskript.ui.revision_settings_controller import (
+    RevisionSettingsController,
+    RevisionSettingsViews,
+)
 from manuskript.ui.settings_ui import Ui_Settings
-from manuskript.ui.views.outlineView import outlineView
-from manuskript.ui.views.textEditView import textEditView
-from manuskript.ui.welcome import welcome
 from manuskript.ui import style as S
 
 
 class settingsWindow(QWidget, Ui_Settings):
     def __init__(
         self,
-        mainWindow,
+        views,
         settings_manager,
         theme_repository=None,
         theme_preview_renderer=None,
         application_preferences=None,
         card_styles=None,
     ):
-        QWidget.__init__(self)
+        QWidget.__init__(self, views.parent)
         self.setupUi(self)
-        self.mw = mainWindow
+        self.views = views
         self.settings = settings_manager
         self.themeRepository = (
             theme_repository
@@ -101,134 +106,33 @@ class settingsWindow(QWidget, Ui_Settings):
         self.lstMenu.setMaximumWidth(140)
         self.lstMenu.setMinimumWidth(140)
 
-        lowerKeys = [i.lower() for i in list(QStyleFactory.keys())]
-
-        # General
-        self.cmbStyle.addItems(list(QStyleFactory.keys()))
-
-        try:
-            self.cmbStyle.setCurrentIndex(lowerKeys.index(qApp.style().objectName()))
-        except ValueError:
-            self.cmbStyle.setCurrentIndex(0)
-
-        self.cmbStyle.currentIndexChanged[str].connect(self.setStyle)
-
-        self.cmbTranslation.clear()
-        tr = OrderedDict()
-        tr["English"] = ""
-        tr["Arabic (Saudi Arabia)"] = "manuskript_ar_SA.qm"
-        tr["German"] = "manuskript_de.qm"
-        tr["English (Great Britain)"] = "manuskript_en_GB.qm"
-        tr["Spanish"] = "manuskript_es.qm"
-        tr["Persian"] = "manuskript_fa.qm"
-        tr["French"] = "manuskript_fr.qm"
-        tr["Hungarian"] = "manuskript_hu.qm"
-        tr["Indonesian"] = "manuskript_id.qm"
-        tr["Italian"] = "manuskript_it.qm"
-        tr["Japanese"] = "manuskript_ja.qm"
-        tr["Korean"] = "manuskript_ko.qm"
-        tr["Norwegian Bokmål"] = "manuskript_nb_NO.qm"
-        tr["Dutch"] = "manuskript_nl.qm"
-        tr["Polish"] = "manuskript_pl.qm"
-        tr["Portuguese (Brazil)"] = "manuskript_pt_BR.qm"
-        tr["Portuguese (Portugal)"] = "manuskript_pt_PT.qm"
-        tr["Romanian"] = "manuskript_ro.qm"
-        tr["Russian"] = "manuskript_ru.qm"
-        tr["Svenska"] = "manuskript_sv.qm"
-        tr["Turkish"] = "manuskript_tr.qm"
-        tr["Ukrainian"] = "manuskript_uk.qm"
-        tr["Chinese (Simplified)"] = "manuskript_zh_CN.qm"
-        tr["Chinese (Traditional)"] = "manuskript_zh_HANT.qm"
-        self.translations = tr
-
-        for name in tr:
-            self.cmbTranslation.addItem(name, tr[name])
-
-        translation = self.applicationPreferences.translation
-        if translation is not None and translation in tr.values():
-            # Sets the correct translation
-            self.cmbTranslation.setCurrentText(
-                [i for i in tr
-                 if tr[i] == translation][0])
-
-        self.cmbTranslation.currentIndexChanged.connect(self.setTranslation)
-
-        f = qApp.font()
-        self.spnGeneralFontSize.setValue(f.pointSize())
-        self.spnGeneralFontSize.valueChanged.connect(self.setAppFontSize)
-
-        self.chkProgressChars.setChecked(self.settings.progressChars);
-        self.chkProgressChars.stateChanged.connect(self.charSettingsChanged)
-
-        self.txtAutoSave.setValidator(QIntValidator(0, 999, self))
-        self.txtAutoSaveNoChanges.setValidator(QIntValidator(0, 999, self))
-        self.chkAutoSave.setChecked(self.settings.autoSave)
-        self.chkAutoSaveNoChanges.setChecked(self.settings.autoSaveNoChanges)
-        self.txtAutoSave.setText(str(self.settings.autoSaveDelay))
-        self.txtAutoSaveNoChanges.setText(str(self.settings.autoSaveNoChangesDelay))
-        self.chkSaveOnQuit.setChecked(self.settings.saveOnQuit)
-        self.chkSaveToZip.setChecked(self.settings.saveToZip)
-        self.chkAutoSave.stateChanged.connect(self.saveSettingsChanged)
-        self.chkAutoSaveNoChanges.stateChanged.connect(self.saveSettingsChanged)
-        self.chkSaveOnQuit.stateChanged.connect(self.saveSettingsChanged)
-        self.chkSaveToZip.stateChanged.connect(self.saveSettingsChanged)
-        self.txtAutoSave.textEdited.connect(self.saveSettingsChanged)
-        self.txtAutoSaveNoChanges.textEdited.connect(self.saveSettingsChanged)
-        autoLoad, last = self.mw.welcome.getAutoLoadValues()
-        self.chkAutoLoad.setChecked(autoLoad)
-        self.chkAutoLoad.stateChanged.connect(self.saveSettingsChanged)
-
-        # Revisions
-        opt = self.settings.revisions
-        self.chkRevisionsKeep.setChecked(opt["keep"])
-        self.cmbRevisionBackend.clear()
-        self.cmbRevisionBackend.addItem(
-            self.tr("Internal snapshots (legacy, unstable)"),
-            RevisionBackendKind.INTERNAL.value,
+        self.applicationSettings = ApplicationSettingsController(
+            ApplicationSettingsViews.for_dialog(self),
+            self.settings,
+            self.applicationPreferences,
+            qApp,
+            auto_load_values=self.views.startup.auto_load_values,
+            set_auto_load=self.views.startup.set_auto_load,
+            reconfigure_autosave=self.views.project.reconfigure_autosave,
+            apply_workspace_font=self.views.appearance.set_font,
+            update_stats=self.views.appearance.update_stats,
         )
-        self.cmbRevisionBackend.addItem(
-            self.tr("Git project history"),
-            RevisionBackendKind.GIT.value,
+        self.applicationSettings.install()
+        # Compatibility for extensions that inspect the available mapping.
+        self.translations = self.applicationSettings.translations
+
+        # Revisions are one settings feature with their own state and
+        # commands. The dialog exposes compatibility methods below, but no
+        # longer coordinates Git availability and ten controls itself.
+        self.revisionSettings = RevisionSettingsController(
+            RevisionSettingsViews.for_dialog(self),
+            self.settings,
+            current_project=self.views.project.current_file,
+            show_history=self.views.project.show_revision_history,
+            availability=lambda: self.gitAvailability(),
+            translate=self.tr,
         )
-        backend_index = self.cmbRevisionBackend.findData(
-            opt.get(
-                "backend",
-                RevisionBackendKind.INTERNAL.value,
-            )
-        )
-        self.cmbRevisionBackend.setCurrentIndex(
-            max(0, backend_index)
-        )
-        self.chkRevisionRemove.setChecked(opt["smartremove"])
-        git_options = opt.get("git") or {}
-        self.chkGitAutoCommit.setChecked(
-            bool(git_options.get("autoCommit", False))
-        )
-        self.chkGitTaggedOnly.setChecked(
-            bool(git_options.get("taggedOnly", True))
-        )
-        self.spnRevisions10Mn.setValue(int(60 / opt["rules"][10 * 60]))
-        self.spnRevisionsHour.setValue(int(60 * 10 / opt["rules"][60 * 60]))
-        self.spnRevisionsDay.setValue(int(60 * 60 / opt["rules"][60 * 60 * 24]))
-        self.spnRevisionsMonth.setValue(int(60 * 60 * 24 / opt["rules"][60 * 60 * 24 * 30]))
-        self.spnRevisionsEternity.setValue(int(60 * 60 * 24 * 7 / opt["rules"][None]))
-        for signal in [
-            self.chkRevisionsKeep.stateChanged,
-            self.cmbRevisionBackend.currentIndexChanged,
-            self.chkRevisionRemove.toggled,
-            self.chkGitAutoCommit.toggled,
-            self.chkGitTaggedOnly.toggled,
-            self.spnRevisions10Mn.valueChanged,
-            self.spnRevisionsHour.valueChanged,
-            self.spnRevisionsDay.valueChanged,
-            self.spnRevisionsMonth.valueChanged,
-            self.spnRevisionsEternity.valueChanged,
-        ]:
-            signal.connect(self.revisionsSettingsChanged)
-        self.btnManageGitRevisions.clicked.connect(
-            lambda _checked=False: self.mw.showGitRevisions(self)
-        )
-        self.updateRevisionBackendUi()
+        self.revisionSettings.install()
 
         # Views
         self.tabViews.setCurrentIndex(0)
@@ -349,7 +253,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.timerUpdateWidgets.timeout.connect(self.updateAllWidgets)
 
         # Labels
-        self.lstLabels.setModel(self.mw.mdlLabels)
+        self.lstLabels.setModel(self._models().labels)
         self.lstLabels.setRowHidden(0, True)
         self.lstLabels.clicked.connect(self.updateLabelColor)
         self.btnLabelAdd.clicked.connect(self.addLabel)
@@ -357,7 +261,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.btnLabelColor.clicked.connect(self.setLabelColor)
 
         # Statuses
-        self.lstStatus.setModel(self.mw.mdlStatus)
+        self.lstStatus.setModel(self._models().statuses)
         self.lstStatus.setRowHidden(0, True)
         self.btnStatusAdd.clicked.connect(self.addStatus)
         self.btnStatusRemove.clicked.connect(self.removeStatus)
@@ -395,6 +299,14 @@ class settingsWindow(QWidget, Ui_Settings):
         self.btnTooltipBorderColor.clicked.connect(self.chooseTooltipBorderColor)
         self.updateTooltipControlsState()
 
+    def _models(self):
+        """The project's models, from the runtime that owns them.
+
+        Read when needed rather than captured: this window outlives any
+        one project, and the models under it are replaced with each.
+        """
+        return self.views.project.models()
+
     def setTab(self, tab):
 
         tabs = {
@@ -415,85 +327,38 @@ class settingsWindow(QWidget, Ui_Settings):
     ####################################################################################################
 
     def setStyle(self, style):
-        self.applicationPreferences.style = style
-        qApp.setStyle(style)
-        self.settings.applyTooltipStyle()
+        self.applicationSettings.set_style(style)
 
     def setTranslation(self, index):
-        path = self.cmbTranslation.currentData()
-        self.applicationPreferences.translation = path
-
-        # QMessageBox.information(self, "Warning", "You'll have to restart manuskript.")
+        self.applicationSettings.set_translation(index)
 
     def setAppFontSize(self, val):
-        """
-        Set application default font point size.
-        """
-        f = qApp.font()
-        f.setPointSize(val)
-        qApp.setFont(f)
-        self.mw.setFont(f)
-        self.applicationPreferences.font_size = val
+        self.applicationSettings.set_font_size(val)
 
-    def charSettingsChanged(self):
-        self.settings.progressChars = True if self.chkProgressChars.checkState() else False
+    def charSettingsChanged(self, state=None):
+        self.applicationSettings.set_progress_characters(state)
 
-        self.mw.mainEditor.updateStats()
-
-    def saveSettingsChanged(self):
-        if self.txtAutoSave.text() in ["", "0"]:
-            self.txtAutoSave.setText("1")
-        if self.txtAutoSaveNoChanges.text() in ["", "0"]:
-            self.txtAutoSaveNoChanges.setText("1")
-
-        self.mw.welcome.setAutoLoad(
-            True if self.chkAutoLoad.checkState() else False
-        )
-
-        self.settings.autoSave = True if self.chkAutoSave.checkState() else False
-        self.settings.autoSaveNoChanges = True if self.chkAutoSaveNoChanges.checkState() else False
-        self.settings.saveOnQuit = True if self.chkSaveOnQuit.checkState() else False
-        self.settings.saveToZip = True if self.chkSaveToZip.checkState() else False
-        self.settings.autoSaveDelay = int(self.txtAutoSave.text())
-        self.settings.autoSaveNoChangesDelay = int(self.txtAutoSaveNoChanges.text())
-        self.mw.projectManager.reconfigureAutosave()
+    def saveSettingsChanged(self, *_args):
+        self.applicationSettings.save_project_preferences()
 
     ####################################################################################################
     #                                           REVISION                                               #
     ####################################################################################################
 
-    def revisionsSettingsChanged(self):
-        opt = self.settings.revisions
-        opt["keep"] = True if self.chkRevisionsKeep.checkState() else False
-        opt["backend"] = self.cmbRevisionBackend.currentData()
-        opt["smartremove"] = self.chkRevisionRemove.isChecked()
-        git_options = opt.setdefault("git", {})
-        git_options["autoCommit"] = self.chkGitAutoCommit.isChecked()
-        git_options["taggedOnly"] = self.chkGitTaggedOnly.isChecked()
-        opt["rules"][10 * 60] = 60 / self.spnRevisions10Mn.value()
-        opt["rules"][60 * 60] = 60 * 10 / self.spnRevisionsHour.value()
-        opt["rules"][60 * 60 * 24] = 60 * 60 / self.spnRevisionsDay.value()
-        opt["rules"][60 * 60 * 24 * 30] = 60 * 60 * 24 / self.spnRevisionsMonth.value()
-        opt["rules"][None] = 60 * 60 * 24 * 7 / self.spnRevisionsEternity.value()
-        self.updateRevisionBackendUi()
+    def revisionsSettingsChanged(self, *_args):
+        self.revisionSettings.save()
+
+    def gitAvailability(self):
+        return inspect_git_availability(self.views.project.current_file())
 
     def updateRevisionBackendUi(self):
-        enabled = self.chkRevisionsKeep.isChecked()
-        backend = self.cmbRevisionBackend.currentData()
-        internal = backend == RevisionBackendKind.INTERNAL.value
-        git = backend == RevisionBackendKind.GIT.value
+        self.revisionSettings.update()
 
-        self.cmbRevisionBackend.setEnabled(enabled)
-        self.chkRevisionRemove.setVisible(internal)
-        self.chkRevisionRemove.setEnabled(enabled and internal)
-        self.label_revisionDeprecation.setVisible(internal)
-        self.grpGitRevisionOptions.setVisible(git)
-        self.grpGitRevisionOptions.setEnabled(enabled and git)
-        self.btnManageGitRevisions.setEnabled(
-            enabled
-            and git
-            and bool(self.mw.currentProject)
-        )
+    def revisionStatusMessage(self, availability):
+        return self.revisionSettings.status_message(availability)
+
+    def initGitRepository(self):
+        return self.revisionSettings.initialize_git_repository()
 
     ####################################################################################################
     #                                           VIEWS                                                  #
@@ -519,8 +384,8 @@ class settingsWindow(QWidget, Ui_Settings):
         lst = ["Nothing", "POV", "Label", "Progress", "Compile"]
         item, part = self.viewSettingsDatas()[cmb]
         element = lst[cmb.currentIndex()]
-        self.mw.setViewSettings(item, part, element)
-        self.mw.generateViewMenu()
+        self.views.appearance.set_view_setting(item, part, element)
+        self.views.appearance.rebuild_view_menu()
 
     def outlineColumnsData(self):
         return {
@@ -544,7 +409,7 @@ class settingsWindow(QWidget, Ui_Settings):
             self.settings.outlineViewColumns.remove(col)
 
         # Update views
-        for w in self.mw.findChildren(outlineView, QRegExp()):
+        for w in self.views.appearance.outlines():
             w.hideColumns()
 
     def treeViewSettignsChanged(self):
@@ -567,14 +432,16 @@ class settingsWindow(QWidget, Ui_Settings):
         iconSize = self.sldTreeIconSize.value()
         if iconSize != self.settings.viewSettings["Tree"]["iconSize"]:
             self.settings.viewSettings["Tree"]["iconSize"] = iconSize
-            self.mw.treeRedacOutline.setIconSize(QSize(iconSize, iconSize))
+            self.views.appearance.project_tree.setIconSize(
+                QSize(iconSize, iconSize)
+            )
 
-        self.mw.treeRedacOutline.viewport().update()
+        self.views.appearance.project_tree.viewport().update()
 
     def countSpacesChanged(self):
         self.settings.countSpaces = True if self.chkCountSpaces.checkState() else False
 
-        self.mw.mainEditor.updateStats()
+        self.views.appearance.update_stats()
 
     def setCorkColor(self):
         color = QColor(self.settings.corkBackground["color"])
@@ -584,7 +451,7 @@ class settingsWindow(QWidget, Ui_Settings):
             self.settings.corkBackground["color"] = color.name()
             self.updateCorkColor()
             # Update Cork view
-            self.mw.mainEditor.updateCorkBackground()
+            self.views.appearance.update_cork_background()
 
     def populateCorkStyles(self):
         """List built-in and plugin card styles without firing a save."""
@@ -608,7 +475,7 @@ class settingsWindow(QWidget, Ui_Settings):
         if not style_id:
             return
         self.settings.indexCardStyle = style_id
-        self.mw.mainEditor.updateCorkView()
+        self.views.appearance.update_cork_view()
 
     def updateCorkColor(self):
         self.btnCorkColor.setStyleSheet("background:{};".format(self.settings.corkBackground["color"]))
@@ -633,7 +500,7 @@ class settingsWindow(QWidget, Ui_Settings):
                     self.settings.corkBackground["image"] = img
                 self.setCorkImageDefault()
         # Update Cork view
-        self.mw.mainEditor.updateCorkBackground()
+        self.views.appearance.update_cork_background()
 
     def populatesCmbBackgrounds(self, cmb):
         # self.cmbDelegate = cmbPixmapDelegate()
@@ -654,7 +521,7 @@ class settingsWindow(QWidget, Ui_Settings):
         cmb.setIconSize(QSize(128, 64))
 
     def addBackgroundImage(self):
-        lastDirectory = self.mw.welcome.getLastAccessedDirectory()
+        lastDirectory = self.views.startup.last_accessed_directory()
 
         """File dialog that request an existing file. For opening an image."""
         filename = QFileDialog.getOpenFileName(self,
@@ -746,15 +613,15 @@ class settingsWindow(QWidget, Ui_Settings):
     def updateAllWidgets(self):
 
         # Update font and defaultBlockFormat to all textEditView. Drastically.
-        for w in self.mw.findChildren(textEditView, QRegExp(".*")):
+        for w in self.views.editors.text_editors():
             w.loadFontSettings()
 
         # Update background color in all tabSplitter (tabs)
-        for w in self.mw.findChildren(tabSplitter, QRegExp(".*")):
+        for w in self.views.editors.tab_splitters():
             w.updateStyleSheet()
 
         # Update background color in all folder text view:
-        for w in self.mw.findChildren(QWidget, QRegExp("editorWidgetFolderText")):
+        for w in self.views.editors.folder_text_views():
             w.setStyleSheet("background: {};".format(self.settings.textEditor["background"]))
 
     def setApplicationCursorBlinking(self):
@@ -800,11 +667,11 @@ class settingsWindow(QWidget, Ui_Settings):
         ####################################################################################################
 
     def addStatus(self):
-        self.mw.mdlStatus.appendRow(QStandardItem(self.tr("New status")))
+        self._models().statuses.appendRow(QStandardItem(self.tr("New status")))
 
     def removeStatus(self):
         for i in self.lstStatus.selectedIndexes():
-            self.mw.mdlStatus.removeRows(i.row(), 1)
+            self._models().statuses.removeRows(i.row(), 1)
 
         ####################################################################################################
         #                                           LABELS                                                 #
@@ -812,30 +679,30 @@ class settingsWindow(QWidget, Ui_Settings):
 
     def updateLabelColor(self, index):
         # px = QPixmap(64, 64)
-        # px.fill(iconColor(self.mw.mdlLabels.item(index.row()).icon()))
+        # px.fill(iconColor(self._models().labels.item(index.row()).icon()))
         # self.btnLabelColor.setIcon(QIcon(px))
         self.btnLabelColor.setStyleSheet("background:{};".format(
-            iconColor(self.mw.mdlLabels.item(index.row()).icon()).name()))
+            iconColor(self._models().labels.item(index.row()).icon()).name()))
         self.btnLabelColor.setEnabled(True)
 
     def addLabel(self):
         px = QPixmap(32, 32)
         px.fill(Qt.transparent)
-        self.mw.mdlLabels.appendRow(QStandardItem(QIcon(px), self.tr("New label")))
+        self._models().labels.appendRow(QStandardItem(QIcon(px), self.tr("New label")))
 
     def removeLabel(self):
         for i in self.lstLabels.selectedIndexes():
-            self.mw.mdlLabels.removeRows(i.row(), 1)
+            self._models().labels.removeRows(i.row(), 1)
 
     def setLabelColor(self):
         index = self.lstLabels.currentIndex()
-        color = iconColor(self.mw.mdlLabels.item(index.row()).icon())
+        color = iconColor(self._models().labels.item(index.row()).icon())
         self.colorDialog = QColorDialog(color, self)
         color = self.colorDialog.getColor(color)
         if color.isValid():
             px = QPixmap(32, 32)
             px.fill(color)
-            self.mw.mdlLabels.item(index.row()).setIcon(QIcon(px))
+            self._models().labels.item(index.row()).setIcon(QIcon(px))
             self.updateLabelColor(index)
 
         ####################################################################################################

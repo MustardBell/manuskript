@@ -286,7 +286,10 @@ class MarkdownHighlighter(BasicHighlighter):
     def updateColorScheme(self, rehighlight=True):
         BasicHighlighter.updateColorScheme(self, rehighlight)
         self.theme = self.defaultTheme()
-        self.setEnableLargeHeadingSizes(True)
+        # The theme only, not the setter: the setter repaints, and a
+        # highlighter being constructed has nothing painted yet. Qt
+        # highlights the document itself once it is attached.
+        self.setupHeadingFontSize(True)
 
     def defaultTheme(self):
 
@@ -662,7 +665,10 @@ class MarkdownHighlighter(BasicHighlighter):
             self.rehighlight()
 
     def setPluginExtensions(self, extensions):
-        self.pluginExtensions = tuple(extensions)
+        extensions = tuple(extensions)
+        if extensions == self.pluginExtensions:
+            return
+        self.pluginExtensions = extensions
         self.rehighlight()
 
     def setSearched(self, expression, regExp=False, caseSensitivity=False):

@@ -7,6 +7,8 @@ import sys
 import signal
 
 import manuskript.logging
+
+from manuskript import timing
 from PyQt5.QtCore import QLocale, QTranslator, QSettings, Qt
 from PyQt5.QtGui import QIcon, QColor, QPalette
 from PyQt5.QtWidgets import QApplication, qApp, QStyleFactory
@@ -15,7 +17,16 @@ from manuskript.functions import appPath, resetTranslation
 from manuskript.services.application_preferences import (
     ApplicationPreferences,
 )
+from manuskript import preferences_migrations
+from manuskript.media_types import core_registry
+from manuskript.services.media_type_preferences import (
+    MediaTypePreferences,
+)
+from manuskript.panels import PanelRegistry
 from manuskript.plugins.runtime import PluginRuntime
+from manuskript.services.plugin_contributions import (
+    PluginContributionService,
+)
 from manuskript.services.plugin_options import PluginOptionStore
 from manuskript.services.plugin_preferences import PluginPreferences
 from manuskript.version import getVersion
@@ -33,7 +44,8 @@ def prepare(arguments, tests=False):
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 
     # Create the foundation that provides our Qt application with its event loop.
-    app = QApplication(sys.argv)
+    with timing.span("startup.qt"):
+        app = QApplication(sys.argv)
     app.setOrganizationName("manuskript" + ("_tests" if tests else ""))
     app.setOrganizationDomain("www.theologeek.ch")
     app.setApplicationName("manuskript" + ("_tests" if tests else ""))
@@ -172,16 +184,57 @@ def prepare(arguments, tests=False):
     # Apply configurable tooltip styling
     from manuskript.settingsManager import SettingsManager
     settings_manager = SettingsManager()
+    # Cursor blinking is application state, not a property of whichever
+    # workspace window happened to be created last.  Capture the platform
+    # default once without retaining a window in the project settings.
+    default_cursor_flash_time = qApp.cursorFlashTime()
+    settings_manager.configure_cursor_flash_time(
+        lambda: default_cursor_flash_time
+    )
     settings_manager.applyTooltipStyle()
 
     plugin_settings = QSettings()
+    # Before anything reads a routing choice, so nothing downstream has to
+    # know how preferences used to be spelled.
+    with timing.span("startup.preferences_migrations"):
+        preferences_migrations.upgrade(plugin_settings)
+    # One registry, built in the order the layers arrive: core's formats,
+    # then every discovered plugin's, then the user's own on top. The
+    # runtime has to be given it rather than making its own, or plugin
+    # declarations would land somewhere the rest of the application cannot
+    # see.
+    media_types = core_registry()
     plugin_runtime = PluginRuntime(
         [appPath("manuskript/plugins")],
         PluginPreferences(plugin_settings),
+        media_types=media_types,
     )
-    plugin_runtime.discover()
-    plugin_runtime.load_enabled()
+    with timing.span("startup.plugins.discover"):
+        plugin_runtime.discover()
+    media_type_preferences = MediaTypePreferences(plugin_settings)
+    media_type_preferences.apply(media_types)
+    with timing.span("startup.plugins.load"):
+        plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
+    # What plugins contribute is one application-wide fact, and so is the
+    # news that it changed. Windows subscribe rather than each telling
+    # itself.
+    plugin_contributions = PluginContributionService(
+        plugin_runtime,
+        option_store=plugin_option_store,
+        media_types=media_types,
+    )
+    # Every panel a window can show, core's and plugins' alike, in one
+    # application-scope list. Windows build their own copies from it.
+    panel_registry = PanelRegistry()
+    # And where the copies are. A panel declared to exist once in the
+    # application has to be findable in whichever window has it, so one
+    # directory is shared by every window's host. Imported here rather
+    # than at module scope: it reaches Qt widgets, and through them the
+    # palette snapshot that must not be taken before a style is chosen.
+    from manuskript.ui.panels import PanelInstanceDirectory
+
+    panel_directory = PanelInstanceDirectory()
 
     QIcon.setThemeSearchPaths(QIcon.themeSearchPaths() + [appPath("icons")])
     QIcon.setThemeName("NumixMsk")
@@ -192,19 +245,52 @@ def prepare(arguments, tests=False):
         f.setPointSize(preferences.font_size)
         app.setFont(f)
 
-    # Main window
-    from manuskript.mainWindow import MainWindow
+    # The project layer, composed before any window: a window is one
+    # view of a project, not its owner. Imported here rather than at
+    # module scope because the project models reach Qt widgets and from
+    # there manuskript.ui.style, which snapshots the palette at import.
+    from manuskript.services.project_runtime import ProjectRuntime
+    from manuskript.services.project_history import ProjectHistory
+    from manuskript.services.window_registry import WindowRegistry
 
-    MW = MainWindow(
-        settings_manager,
+    # Which windows are workspaces, so closing one is not closing all.
+    # Built first so the project layer can ask which window is in use
+    # without being given one.
+    window_registry = WindowRegistry()
+
+    project_runtime = ProjectRuntime(
+        settings_manager=settings_manager,
+        project_history=ProjectHistory(),
+        active_window_source=window_registry.get_active,
+    )
+
+    # Everything composed above, gathered into the one thing a window is
+    # given. This is the composition root and the only one: a window that
+    # had to be handed each service separately could compose a fallback
+    # for anything it was missed, and then be a second application
+    # wearing the shape of a view onto the first.
+    from manuskript.services.workspace_window_services import (
+        WorkspaceWindowServices,
+    )
+
+    window_services = WorkspaceWindowServices(
         application_preferences=preferences,
         plugin_runtime=plugin_runtime,
         plugin_option_store=plugin_option_store,
+        plugin_contributions=plugin_contributions,
+        media_types=media_types,
+        media_type_preferences=media_type_preferences,
+        panel_registry=panel_registry,
+        panel_directory=panel_directory,
+        project_runtime=project_runtime,
+        window_registry=window_registry,
     )
-    # We store the system default cursor flash time to be able to restore it
-    # later if necessary
-    MW._defaultCursorFlashTime = qApp.cursorFlashTime()
 
+    # Main window
+    from manuskript.mainWindow import MainWindow
+
+    with timing.span("startup.main_window"):
+        MW = MainWindow(window_services)
     # Command line project
     if arguments.filename is not None and arguments.filename[-4:] == ".msk":
         # The file is verified to already exist during argument parsing.
@@ -213,10 +299,12 @@ def prepare(arguments, tests=False):
         path = os.path.abspath(arguments.filename)
         MW._autoLoadProject = path
 
+    timing.mark("startup.prepared")
     return app, MW
 
 def launch(arguments, app, MW):
-    MW.show()
+    with timing.span("startup.show"):
+        MW.show()
 
     # Support for IPython Jupyter QT Console as a debugging aid.
     # Last argument must be --console to enable it
@@ -266,6 +354,7 @@ def launch(arguments, app, MW):
             print("$ pip3 install ipython qtconsole matplotlib")
             qApp.exec_()
     else:
+        timing.mark("startup.event_loop")
         qApp.exec_()
     qApp.deleteLater()
 
@@ -274,7 +363,9 @@ def sigint_handler(sig, MW):
     def handler(*args):
         # Log before winding down to preserve order of cause and effect.
         LOGGER.info(f'{sig} received. Quitting...')
-        MW.close()
+        # Every workspace window, so a second one does not keep the
+        # application alive after an interrupt.
+        MW.workspaceWindows.quit()
         print(f'{sig} received, quit.')
 
     return handler
@@ -301,6 +392,9 @@ def process_commandline(argv):
                         action="store_true")
     parser.add_argument("-v", "--verbose", action="count", default=1, help="lower the threshold for messages logged to the terminal")
     parser.add_argument("-L", "--logfile", default=None, help="override the default log file location")
+    parser.add_argument("--measure-time", action="store_true",
+                        help="report how long each blocking milestone takes "
+                             "(startup, loading, saving) on stderr")
     parser.add_argument("filename", nargs="?", metavar="FILENAME", help="the manuskript project (.msk) to open",
                         type=lambda x: is_valid_project(parser, x))
 
@@ -326,6 +420,10 @@ def run():
     arguments = process_commandline(sys.argv[1:])
     # Initialize logging. (Does not include Qt integration yet.)
     manuskript.logging.setUp(console_level=arguments.verbose)
+    # Before anything worth measuring happens, and only if asked. Every
+    # milestone below is free while this is off.
+    if arguments.measure_time:
+        timing.enable()
 
     # Need to return and keep `app` otherwise it gets deleted.
     app, MW = prepare(arguments)

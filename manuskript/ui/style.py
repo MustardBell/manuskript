@@ -100,7 +100,7 @@ def styleMainWindow(mw):
     # Custom palette?
     #qApp.setPalette(appPalette())
 
-    mw.treeRedacOutline.setStyleSheet("""
+    mw.corePanels.project_tree.tree.setStyleSheet("""
             QTreeView{
                 background: transparent;
                 margin-top: 30px;

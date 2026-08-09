@@ -2,6 +2,8 @@ from enum import Enum
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from manuskript.ui.connections import weak_callback
+
 
 class MarkdownPresentationMode(Enum):
     """How a Markdown document is presented without changing its source."""
@@ -96,6 +98,65 @@ class MarkdownPresentationState(QObject):
             )
             self._mode = preferred
             self.modeChanged.emit(preferred)
+
+
+class MarkdownPresentationBinding:
+    """Bind one control surface to whichever editor state is active.
+
+    The editor footer and the main-window menu are two presentations of the
+    same leaf-owned state.  This owns the observer transition once: detach
+    the old leaf, announce and synchronize the new one, and never retain the
+    widget or controller receiving those callbacks.
+    """
+
+    def __init__(
+        self,
+        *,
+        set_enabled,
+        state_changed,
+        sync_mode,
+        sync_allowed_modes,
+    ):
+        self._set_enabled = weak_callback(set_enabled)
+        self._state_changed = weak_callback(state_changed)
+        self._sync_mode = weak_callback(sync_mode)
+        self._sync_allowed_modes = weak_callback(sync_allowed_modes)
+        self.state = None
+
+    def attach(self, state):
+        if state is self.state:
+            return
+        previous = self.state
+        if previous is not None:
+            try:
+                previous.modeChanged.disconnect(self._sync_mode)
+                previous.allowedModesChanged.disconnect(
+                    self._sync_allowed_modes
+                )
+            except (RuntimeError, TypeError):
+                pass
+
+        self.state = state
+        self._set_enabled(state is not None)
+        self._state_changed(state)
+        if state is None:
+            return
+
+        state.modeChanged.connect(self._sync_mode)
+        state.allowedModesChanged.connect(self._sync_allowed_modes)
+        self._sync_allowed_modes(state.allowed_modes)
+        self._sync_mode(state.mode)
+
+    def set_mode(self, mode):
+        if self.state is not None:
+            self.state.set_mode(mode)
+
+    def dispose(self):
+        self.attach(None)
+        self._set_enabled = None
+        self._state_changed = None
+        self._sync_mode = None
+        self._sync_allowed_modes = None
 
 
 class MarkdownPresentationDefaults:

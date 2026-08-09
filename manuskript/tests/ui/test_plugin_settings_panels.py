@@ -12,9 +12,16 @@ from manuskript.services.plugin_preferences import (
     InMemoryPluginPreferences,
 )
 from manuskript.tests.plugins.test_runtime import create_plugin
+from manuskript.services.plugin_contributions import (
+    PluginContributionService,
+)
 from manuskript.ui.plugins.manager import PluginManagerDialog
 from manuskript.ui.plugins.page_routing import PageRoutingGateway
 from manuskript.ui.plugins.page_types import PageTypeService
+from manuskript.ui.plugins.routing_panel import ExportRoutingService
+from manuskript.plugins.capabilities import (
+    CAPABILITY_UI_EXPORT_ROUTING,
+)
 
 
 PAGES_SOURCE = """
@@ -36,7 +43,7 @@ def register(api):
             id='pages.renderer', name='Fancy renderer'),
         page_type_id='pages.type',
         renderer_factory=object,
-        target_formats=('markdown',),
+        target_formats=('text/markdown',),
     ))
     api.register_settings_panel(PluginSettingsContribution(
         descriptor=ExtensionDescriptor(
@@ -70,7 +77,7 @@ def register(api):
             id='other.renderer', name='Borrowed renderer'),
         page_type_id='pages.type',
         renderer_factory=object,
-        target_formats=('markdown',),
+        target_formats=('text/markdown',),
         priority=5,
     ))
 """
@@ -92,9 +99,17 @@ def register(api):
 
 ROUTES = (
     PageRendererRoute(
-        "plain:markdown", "Plain text", "plain", "markdown", "Manuskript",
+        "text/plain|text/markdown", "Plain text",
+        "text/plain", "text/markdown", "Manuskript",
     ),
 )
+
+
+#: Every fixture below renders Markdown, so they all promise the same thing.
+MARKDOWN_PROMISE = {
+    "media_types": ["text/markdown"],
+    "produces": ["text/markdown"],
+}
 
 
 def build_runtime(tmp_path, *sources):
@@ -102,7 +117,12 @@ def build_runtime(tmp_path, *sources):
     for index, source in enumerate(sources):
         plugin_id = "plugin.{}".format(index)
         ids.append(plugin_id)
-        create_plugin(tmp_path, plugin_id=plugin_id, source=source)
+        create_plugin(
+            tmp_path,
+            plugin_id=plugin_id,
+            source=source,
+            manifest=MARKDOWN_PROMISE,
+        )
     runtime = PluginRuntime([tmp_path], InMemoryPluginPreferences(ids))
     runtime.discover()
     runtime.load_enabled()
@@ -113,22 +133,36 @@ def build_dialog(runtime, routes=ROUTES):
     store = InMemoryPluginOptionStore()
     page_types = PageTypeService(runtime.registry, store)
 
+    def capability(plugin_id, name):
+        # The host serves a deferred capability only to a plugin whose
+        # manifest declared it, exactly as the registrar does at load.
+        record = runtime.records.get(plugin_id)
+        declared = record.manifest.requires if record is not None else ()
+        if name not in declared:
+            raise PluginScopeError(
+                "Plugin {} did not declare {!r}.".format(plugin_id, name)
+            )
+        if name != CAPABILITY_UI_EXPORT_ROUTING:
+            raise PluginScopeError("Unknown capability {!r}.".format(name))
+        return ExportRoutingService(PageRoutingGateway(
+            plugin_id,
+            runtime.registry,
+            page_types,
+            export_routes_provider=lambda: routes,
+        ))
+
     def context(plugin_id):
         return PluginSettingsContext(
             plugin_id=plugin_id,
-            page_routing=PageRoutingGateway(
-                plugin_id,
-                runtime.registry,
-                page_types,
-                export_routes_provider=lambda: routes,
-            ),
             option_store=store,
             edit_options=lambda *a, **k: None,
             show_status=lambda *a, **k: None,
+            capability=lambda name, plugin_id=plugin_id: capability(
+                plugin_id, name),
         )
 
     return PluginManagerDialog(
-        runtime,
+        PluginContributionService(runtime),
         option_store=store,
         settings_context_provider=context,
     )
@@ -226,13 +260,13 @@ def test_gateway_refuses_a_page_type_the_plugin_does_not_own(tmp_path):
         "plugin.1", runtime.registry, page_types, lambda: ROUTES)
 
     with pytest.raises(PluginScopeError):
-        stranger.candidates("pages.type", "markdown")
+        stranger.candidates("pages.type", "text/markdown")
     with pytest.raises(PluginScopeError):
-        stranger.selected("pages.type", "plain:markdown")
+        stranger.selected("pages.type", "text/plain|text/markdown")
     with pytest.raises(PluginScopeError):
         stranger.select(
-            "pages.type", "plain:markdown", "pages.renderer",
-            representation_format="markdown",
+            "pages.type", "text/plain|text/markdown", "pages.renderer",
+            representation_format="text/markdown",
         )
 
     assert store.load_values(
@@ -249,7 +283,7 @@ def test_gateway_offers_another_plugins_renderer_for_its_own_page_type(
     gateway = PageRoutingGateway(
         "plugin.0", runtime.registry, page_types, lambda: ROUTES)
 
-    candidates = gateway.candidates("pages.type", "markdown")
+    candidates = gateway.candidates("pages.type", "text/markdown")
     ids = [renderer.descriptor.id for renderer in candidates]
 
     # Routing spans plugins: plugin.1's renderer is a legitimate choice
@@ -259,10 +293,10 @@ def test_gateway_offers_another_plugins_renderer_for_its_own_page_type(
     assert gateway.owner_of("pages.renderer") == "plugin.0"
 
     gateway.select(
-        "pages.type", "plain:markdown", "other.renderer",
-        representation_format="markdown",
+        "pages.type", "text/plain|text/markdown", "other.renderer",
+        representation_format="text/markdown",
     )
 
-    assert gateway.selected("pages.type", "plain:markdown") == (
+    assert gateway.selected("pages.type", "text/plain|text/markdown") == (
         "other.renderer"
     )

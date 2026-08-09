@@ -10,6 +10,7 @@ from manuskript.ui.highlighters.searchResultHighlighters.searchResultHighlighter
 from manuskript.ui.search_context import (
     SearchContext,
     SearchResultViewAdapter,
+    SearchResultViews,
 )
 
 
@@ -65,7 +66,10 @@ def test_result_adapter_routes_reference_navigation(
 ):
     window = MagicMock()
     reference_service = MagicMock()
-    adapter = SearchResultViewAdapter(window, reference_service)
+    adapter = SearchResultViewAdapter(
+        SearchResultViews.for_window(window),
+        reference_service,
+    )
 
     adapter.open_result(search_result(model_type))
 
@@ -78,12 +82,23 @@ def test_result_adapter_opens_flat_data_without_reference_navigation():
     window = MagicMock()
     window.TabSummary = 4
     reference_service = MagicMock()
-    adapter = SearchResultViewAdapter(window, reference_service)
+    adapter = SearchResultViewAdapter(
+        SearchResultViews.for_window(window),
+        reference_service,
+    )
 
     adapter.open_result(search_result(Model.FlatData))
 
     window.tabMain.setCurrentIndex.assert_called_once_with(4)
     reference_service.open.assert_not_called()
+
+
+def test_result_adapter_has_no_main_window_escape_hatch():
+    views = MagicMock()
+    adapter = SearchResultViewAdapter(views, MagicMock())
+
+    assert adapter.views is views
+    assert not hasattr(adapter, "window")
 
 
 def test_result_highlighter_uses_one_context_for_opening_and_selection():

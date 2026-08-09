@@ -265,11 +265,11 @@ def test_markup_profile_is_independent_per_editor_leaf(
     second_item = outlineItem(title="Markdown", _type="md")
     first_item.setData(Outline.text, "[b]First[/b]")
     second_item.setData(Outline.text, "**Second**")
-    window.mdlOutline.appendItem(first_item)
-    window.mdlOutline.appendItem(second_item)
+    window.projectRuntime.models.outline.appendItem(first_item)
+    window.projectRuntime.models.outline.appendItem(second_item)
     try:
         window.mainEditor.setCurrentModelIndex(
-            window.mdlOutline.indexFromItem(first_item),
+            window.projectRuntime.models.outline.indexFromItem(first_item),
             newTab=True,
         )
         first = window.mainEditor.currentEditor()
@@ -296,7 +296,7 @@ def test_markup_profile_is_independent_per_editor_leaf(
         )
 
         window.mainEditor.setCurrentModelIndex(
-            window.mdlOutline.indexFromItem(second_item),
+            window.projectRuntime.models.outline.indexFromItem(second_item),
             newTab=True,
         )
         second = window.mainEditor.currentEditor()

@@ -1,5 +1,6 @@
 import os
 import shutil
+import stat
 import zipfile
 from dataclasses import dataclass
 
@@ -23,6 +24,13 @@ class ProjectFileReadResult:
 
 class Version1ProjectFiles:
     """Read and write the physical files used by format version 1."""
+
+    def __init__(self):
+        # Permissions of files we have seen, so a file that is deleted and
+        # later written again comes back as it was. Without this an undone
+        # deletion restores the text but resets the mode, which shows up as
+        # noise in a project kept under version control.
+        self._modes = {}
 
     def read(self, project_file, *, zipped):
         if zipped:
@@ -94,6 +102,7 @@ class Version1ProjectFiles:
                     os.path.join(relative_directory, name)
                 )
                 filename = os.path.join(directory, name)
+                self._remember_mode(relative_path, filename)
                 try:
                     if self._is_binary(relative_path):
                         with open(filename, "rb") as file_object:
@@ -233,6 +242,7 @@ class Version1ProjectFiles:
                     os.path.dirname(filename),
                     exist_ok=True,
                 )
+                mode = self._mode_to_keep(path, filename)
                 if isinstance(content, bytes):
                     with open(filename, "wb") as file_object:
                         file_object.write(content)
@@ -244,6 +254,7 @@ class Version1ProjectFiles:
                         newline="\n",
                     ) as file_object:
                         file_object.write(content)
+                self._apply_mode(filename, mode)
             except (OSError, ValueError) as error:
                 LOGGER.error(
                     "Cannot write %s in %s: %s",
@@ -256,6 +267,35 @@ class Version1ProjectFiles:
 
             cache[path] = content
 
+    def _remember_mode(self, path, filename):
+        """Note a file's permissions so a later rewrite can restore them."""
+        try:
+            self._modes[path] = stat.S_IMODE(os.stat(filename).st_mode)
+        except OSError:
+            pass
+
+    def _mode_to_keep(self, path, filename):
+        """The mode this path should end up with, if we know of one.
+
+        Prefer what is on disk right now; fall back to what the file had
+        before it was removed, which is the delete-then-undo case.
+        """
+        try:
+            return stat.S_IMODE(os.stat(filename).st_mode)
+        except OSError:
+            return self._modes.get(path)
+
+    def _apply_mode(self, filename, mode):
+        if mode is None:
+            return
+        try:
+            if stat.S_IMODE(os.stat(filename).st_mode) != mode:
+                os.chmod(filename, mode)
+        except OSError as error:
+            LOGGER.debug(
+                "Cannot restore permissions on %s: %s", filename, error
+            )
+
     def _remove_stale_files(self, root, files, cache, failures):
         current_paths = {path for path, _content in files}
         for path in [
@@ -265,6 +305,7 @@ class Version1ProjectFiles:
         ]:
             try:
                 filename = self._path_within(root, path)
+                self._remember_mode(path, filename)
                 if os.path.isdir(filename):
                     shutil.rmtree(filename)
                 else:

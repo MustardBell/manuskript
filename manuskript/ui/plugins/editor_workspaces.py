@@ -1,3 +1,5 @@
+import logging
+
 from functools import partial
 
 from PyQt5.QtCore import QModelIndex, QObject, QPoint, Qt, pyqtSignal
@@ -7,7 +9,6 @@ from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QShortcut,
     QVBoxLayout,
@@ -17,6 +18,11 @@ from PyQt5.QtWidgets import (
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.plugins.api import EditorWorkspaceContext, WorkspaceDocument
+from manuskript.plugins.capabilities import (
+    CAPABILITY_EDITOR_CONTROL,
+    CAPABILITY_OUTLINE_READ,
+    CAPABILITY_OUTLINE_WRITE,
+)
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
@@ -25,6 +31,21 @@ from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationState,
 )
 from manuskript.ui.views.MDEditView import MDEditView
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _discard_endpoint(endpoints, endpoint, *_args):
+    """Forget an endpoint without dereferencing its QObject owner.
+
+    A host widget can outlive the factory's C++ object during project or
+    interpreter teardown.  Connecting ``destroyed`` to a bound factory method
+    then asks PyQt to invoke a deleted QObject wrapper.  The list is ordinary
+    Python state and is all cleanup needs, so the callback captures only that.
+    """
+    if endpoint in endpoints:
+        endpoints.remove(endpoint)
 
 
 class WorkspaceOutlineGateway(QObject):
@@ -215,6 +236,34 @@ class WorkspaceOutlineGateway(QObject):
 
     def _selection_changed(self, *_args):
         self.selectionChanged.emit(self.selected_item_ids())
+
+
+class ReadOnlyOutlineView:
+    """The manuscript as a plugin that only reads it sees the manuscript.
+
+    Not the gateway with its mutators disabled: the mutators are not here
+    at all. A plugin calling one gets an AttributeError naming the method
+    it should not have called, and anything asking whether it may write --
+    including the plugin itself -- is told the truth by ``hasattr``.
+
+    The signals are the gateway's own, passed through rather than
+    re-emitted. Watching the manuscript change is reading it.
+    """
+
+    def __init__(self, gateway):
+        self._gateway = gateway
+        self.documentChanged = gateway.documentChanged
+        self.structureChanged = gateway.structureChanged
+        self.selectionChanged = gateway.selectionChanged
+
+    def selected_item_ids(self):
+        return self._gateway.selected_item_ids()
+
+    def documents(self):
+        return self._gateway.documents()
+
+    def document(self, item_id):
+        return self._gateway.document(item_id)
 
 
 class _NullContext:
@@ -444,17 +493,19 @@ class WorkspaceEditorFactory(QObject):
             parent=host,
         )
         self._endpoints.append(endpoint)
-        host.destroyed.connect(partial(self._discard, endpoint))
+        host.destroyed.connect(partial(
+            _discard_endpoint, self._endpoints, endpoint,
+        ))
         return endpoint
 
     def close_all(self):
-        for endpoint in tuple(self._endpoints):
+        endpoints = tuple(self._endpoints)
+        # Keep the list object stable: destroyed callbacks hold this ordinary
+        # Python collection precisely so they never have to reach a factory
+        # QObject whose C++ lifetime may already have ended.
+        self._endpoints.clear()
+        for endpoint in endpoints:
             endpoint.close()
-        self._endpoints = []
-
-    def _discard(self, endpoint, *_args):
-        if endpoint in self._endpoints:
-            self._endpoints.remove(endpoint)
 
 
 class EditorWorkspaceShell(QFrame):
@@ -497,9 +548,9 @@ class EditorWorkspaceShell(QFrame):
 class EditorWorkspaceHost(QObject):
     """Own plugin workspace actions and project-scoped lifecycles."""
 
-    def __init__(self, window, runtime, menu, parent=None):
-        super().__init__(parent or window)
-        self.window = window
+    def __init__(self, views, runtime, menu, parent=None):
+        super().__init__(parent or views.editor_host)
+        self.views = views
         self.runtime = runtime
         self.menu = menu
         self.actions = {}
@@ -577,32 +628,28 @@ class EditorWorkspaceHost(QObject):
         self._install_services()
         context = EditorWorkspaceContext(
             plugin_id=record.plugin_id,
-            project_file=self.window.currentProject or "",
+            project_file=self.views.project.current_file(),
             selected_item_ids=selected_ids,
-            files=self.window.projectPluginData.namespace(
+            files=self.views.project.plugin_data().namespace(
                 record.plugin_id,
-                on_change=self.window.projectManager.startTimerNoChanges,
+                on_change=self.views.project.mark_changed,
             ),
-            outline=self._outline,
-            editors=self._editors,
-            show_status=self.window.statusPresenter.show,
+            outline=self._granted_outline(record.plugin_id),
+            editors=self._granted_editors(record.plugin_id),
+            show_status=self.views.project.show_status,
             close_workspace=self.close_workspace,
         )
         try:
             workspace = contribution.workspace_factory(
                 context,
-                self.window.mainEditor,
+                self.views.editor_host,
             )
             if not isinstance(workspace, QWidget):
                 raise TypeError(
                     "Editor workspace factories must return QWidget instances."
                 )
         except Exception as error:
-            QMessageBox.critical(
-                self.window,
-                self.window.tr("Plugin workspace failed"),
-                "{}\n\n{}".format(contribution.descriptor.name, error),
-            )
+            self._report_failure(contribution.descriptor, error)
             return None
 
         self._shell = EditorWorkspaceShell(
@@ -610,11 +657,11 @@ class EditorWorkspaceHost(QObject):
             contribution.descriptor.description,
             workspace,
             self.close_workspace,
-            parent=self.window.mainEditor,
+            parent=self.views.editor_host,
         )
         self._active_id = contribution_id
         self._active_plugin_id = record.plugin_id
-        self.window.mainEditor.showPluginWorkspace(self._shell)
+        self.views.editor_host.showPluginWorkspace(self._shell)
         return self._shell
 
     def close_workspace(self):
@@ -625,7 +672,7 @@ class EditorWorkspaceHost(QObject):
             try:
                 prepare_close()
             except Exception as error:
-                self.window.statusPresenter.show(
+                self.views.project.show_status(
                     self.tr("Plugin workspace cleanup failed: {}").format(
                         error
                     ),
@@ -637,7 +684,7 @@ class EditorWorkspaceHost(QObject):
         self._shell = None
         self._active_id = None
         self._active_plugin_id = None
-        self.window.mainEditor.closePluginWorkspace()
+        self.views.editor_host.closePluginWorkspace()
         if shell is not None:
             shell.deleteLater()
 
@@ -645,10 +692,54 @@ class EditorWorkspaceHost(QObject):
         if self._active_plugin_id == plugin_id:
             self.close_workspace()
 
+    def _report_failure(self, descriptor, error):
+        """Say a workspace could not be opened, without waiting for anybody.
+
+        This was a modal dialog, and gating made the modal reachable in a
+        new way: a plugin that declares nothing is handed no manuscript and
+        no editors, so its factory raises on the first thing it reaches
+        for. A modal there stops the application on a plugin's mistake, and
+        in a test run stops it with nobody to press the button -- the same
+        fault the panel host had, with the same fix.
+        """
+        message = self.views.translate(
+            "The {} workspace could not be opened: {}"
+        ).format(descriptor.name, error)
+        LOGGER.warning(
+            "Editor workspace %s failed to open: %s", descriptor.id, error,
+        )
+        self.views.project.show_status(message, 8000, 2)
+        return message
+
+    def _granted_outline(self, plugin_id):
+        """As much of the manuscript as this plugin declared it needs.
+
+        Registering an editor workspace used to be the whole negotiation:
+        every workspace was handed the gateway that can rewrite any
+        document's text and title, create documents and change what
+        compiles, whether it asked or not. The one that ships uses five of
+        those operations and never touches text or titles.
+
+        Writing includes reading, so a plugin declaring outline.write need
+        not also declare outline.read; declaring neither is a workspace
+        that works on its own files and is given no manuscript at all.
+        """
+        if self.runtime.declares(plugin_id, CAPABILITY_OUTLINE_WRITE):
+            return self._outline
+        if self.runtime.declares(plugin_id, CAPABILITY_OUTLINE_READ):
+            return ReadOnlyOutlineView(self._outline)
+        return None
+
+    def _granted_editors(self, plugin_id):
+        """The editor factory, for a plugin that said it puts panes up."""
+        if self.runtime.declares(plugin_id, CAPABILITY_EDITOR_CONTROL):
+            return self._editors
+        return None
+
     def _install_services(self):
         if self._outline is not None:
             return
-        context = self.window.mainEditor.editor_context
+        context = self.views.editor_host.editor_context
         if context is None:
             return
         self._outline = WorkspaceOutlineGateway(

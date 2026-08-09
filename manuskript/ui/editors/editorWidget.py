@@ -3,7 +3,7 @@
 from PyQt5.QtCore import pyqtSignal, QModelIndex
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QWidget, QFrame, QSpacerItem, QSizePolicy
-from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
+from PyQt5.QtWidgets import QVBoxLayout, QStyle
 
 from manuskript.commands import DocumentCommand
 from manuskript.functions import AUC
@@ -11,6 +11,12 @@ from manuskript.ui.editors.editorWidget_ui import Ui_editorWidget_ui
 from manuskript.ui.editors.editorOverlayButton import (
     OVERLAY_HEIGHT,
     OVERLAY_MARGIN,
+)
+from manuskript.ui.editors.editorTextHistory import (
+    EditorTextHistory,
+)
+from manuskript.ui.editors.historyToolButtons import (
+    HistoryToolButton,
 )
 from manuskript.ui.editors.markdownModeToolButton import (
     MarkdownModeToolButton,
@@ -59,7 +65,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
     _maxTabTitleLength = 24
 
-    def __init__(self, parent, editor_context=None):
+    def __init__(self, parent, editor_context=None, focus_source=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.horizontalLayout_2.removeWidget(self.txtRedacText)
@@ -88,6 +94,15 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self,
         )
         self.markdownModeButton.resize(38, OVERLAY_HEIGHT)
+        self.textHistory = EditorTextHistory(
+            self,
+            focus_source=focus_source,
+            parent=self,
+        )
+        self.undoButton = HistoryToolButton(self.textHistory, False, self)
+        self.redoButton = HistoryToolButton(self.textHistory, True, self)
+        for button in (self.undoButton, self.redoButton):
+            button.resize(32, OVERLAY_HEIGHT)
         self.pageType = None
         markup_profiles = (
             self.editor_context.text_editor.markup_profiles
@@ -130,6 +145,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self.txtRedacText.setPageTypeState(self.pageType)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
         self.currentIndex = QModelIndex()
@@ -160,6 +177,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # self._model = model
         # self.setView()
 
+    def dispose(self):
+        self.textHistory.dispose()
+
     def set_context(self, editor_context):
         self.editor_context = editor_context
         self.outline_context = editor_context.outline_views
@@ -187,6 +207,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.txtEditScrollBar.setGeometry(r)
         self._positionMarkdownModeButton()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
 
@@ -207,6 +229,11 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                 ),
                 OVERLAY_MARGIN,
             )
+        self.undoButton.move(12, OVERLAY_MARGIN)
+        self.redoButton.move(
+            self.undoButton.x() + self.undoButton.width() + 4,
+            OVERLAY_MARGIN,
+        )
         self._reserveOverlaySpace()
 
     def _reserveOverlaySpace(self):
@@ -289,6 +316,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
     def _updateMarkdownModeButtonVisibility(self):
         visible = self.stack.currentIndex() in (0, 1)
         self.markdownModeButton.setVisible(visible)
+        for button in (self.undoButton, self.redoButton):
+            button.setVisible(visible)
         if self.markupProfileButton is not None:
             service = self.markupProfile.service
             has_profiles = bool(
@@ -543,6 +572,8 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.updateStatusBar()
         self._updateMarkdownModeButtonVisibility()
         self.markdownModeButton.raise_()
+        self.undoButton.raise_()
+        self.redoButton.raise_()
         if self.markupProfileButton is not None:
             self.markupProfileButton.raise_()
 

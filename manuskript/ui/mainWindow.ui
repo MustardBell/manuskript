@@ -1319,66 +1319,6 @@
                 </layout>
                </widget>
               </widget>
-              <widget class="QGroupBox" name="grpPlotSummary">
-               <property name="title">
-                <string>Summary</string>
-               </property>
-               <layout class="QVBoxLayout" name="verticalLayout_18">
-                <item>
-                 <widget class="QComboBox" name="comboBox_2">
-                  <property name="currentIndex">
-                   <number>0</number>
-                  </property>
-                  <property name="frame">
-                   <bool>false</bool>
-                  </property>
-                  <item>
-                   <property name="text">
-                    <string>One paragraph</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>One page</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>Full</string>
-                   </property>
-                  </item>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QStackedWidget" name="stkPlotSummary">
-                  <property name="currentIndex">
-                   <number>0</number>
-                  </property>
-                  <widget class="QWidget" name="page">
-                   <layout class="QHBoxLayout" name="horizontalLayout_6">
-                    <item>
-                     <widget class="MDEditCompleter" name="txtPlotSummaryPara"/>
-                    </item>
-                   </layout>
-                  </widget>
-                  <widget class="QWidget" name="page_2">
-                   <layout class="QHBoxLayout" name="horizontalLayout_10">
-                    <item>
-                     <widget class="MDEditCompleter" name="txtPlotSummaryPage"/>
-                    </item>
-                   </layout>
-                  </widget>
-                  <widget class="QWidget" name="page_3">
-                   <layout class="QHBoxLayout" name="horizontalLayout_13">
-                    <item>
-                     <widget class="MDEditCompleter" name="txtPlotSummaryFull"/>
-                    </item>
-                   </layout>
-                  </widget>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
              </widget>
             </item>
            </layout>
@@ -1783,101 +1723,8 @@
                <property name="childrenCollapsible">
                 <bool>false</bool>
                </property>
-               <widget class="QWidget" name="treeRedacWidget" native="true">
-                <layout class="QVBoxLayout" name="verticalLayout_30">
-                 <property name="leftMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="topMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="rightMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="bottomMargin">
-                  <number>0</number>
-                 </property>
-                 <item>
-                  <widget class="treeView" name="treeRedacOutline">
-                   <property name="autoFillBackground">
-                    <bool>true</bool>
-                   </property>
-                   <property name="frameShape">
-                    <enum>QFrame::NoFrame</enum>
-                   </property>
-                   <property name="editTriggers">
-                    <set>QAbstractItemView::EditKeyPressed</set>
-                   </property>
-                   <attribute name="headerVisible">
-                    <bool>false</bool>
-                   </attribute>
-                  </widget>
-                 </item>
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_31">
-                   <item>
-                    <widget class="QPushButton" name="btnRedacAddFolder">
-                     <property name="text">
-                      <string/>
-                     </property>
-                     <property name="icon">
-                      <iconset theme="folder-new">
-                       <normaloff>.</normaloff>.</iconset>
-                     </property>
-                     <property name="flat">
-                      <bool>true</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QPushButton" name="btnRedacAddText">
-                     <property name="text">
-                      <string/>
-                     </property>
-                     <property name="icon">
-                      <iconset theme="document-new">
-                       <normaloff>.</normaloff>.</iconset>
-                     </property>
-                     <property name="flat">
-                      <bool>true</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QPushButton" name="btnRedacRemoveItem">
-                     <property name="text">
-                      <string/>
-                     </property>
-                     <property name="icon">
-                      <iconset theme="list-remove">
-                       <normaloff>.</normaloff>.</iconset>
-                     </property>
-                     <property name="flat">
-                      <bool>true</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_7">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
-                  </layout>
-                 </item>
-                </layout>
-               </widget>
                <widget class="mainEditor" name="mainEditor" native="true"/>
-               <widget class="metadataView" name="redacMetadata" native="true"/>
               </widget>
-              <widget class="storylineView" name="storylineView" native="true"/>
              </widget>
             </item>
            </layout>
@@ -3046,10 +2893,6 @@
   <tabstop>btnAddSubPlot</tabstop>
   <tabstop>btnRmSubPlot</tabstop>
   <tabstop>btnShowSubPlotSummary</tabstop>
-  <tabstop>comboBox_2</tabstop>
-  <tabstop>txtPlotSummaryPara</tabstop>
-  <tabstop>txtPlotSummaryPage</tabstop>
-  <tabstop>txtPlotSummaryFull</tabstop>
   <tabstop>treeWorld</tabstop>
   <tabstop>btnAddWorld</tabstop>
   <tabstop>btnRmWorld</tabstop>
@@ -3066,10 +2909,6 @@
   <tabstop>btnOutlineAddText</tabstop>
   <tabstop>btnOutlineRemoveItem</tabstop>
   <tabstop>btnPlanShowDetails</tabstop>
-  <tabstop>treeRedacOutline</tabstop>
-  <tabstop>btnRedacAddFolder</tabstop>
-  <tabstop>btnRedacAddText</tabstop>
-  <tabstop>btnRedacRemoveItem</tabstop>
   <tabstop>tabWidget</tabstop>
   <tabstop>tblDebugFlatData</tabstop>
   <tabstop>tblDebugPersos</tabstop>
@@ -3085,22 +2924,6 @@
  </tabstops>
  <resources/>
  <connections>
-  <connection>
-   <sender>comboBox_2</sender>
-   <signal>currentIndexChanged(int)</signal>
-   <receiver>stkPlotSummary</receiver>
-   <slot>setCurrentIndex(int)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>1033</x>
-     <y>126</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>868</x>
-     <y>232</y>
-    </hint>
-   </hints>
-  </connection>
   <connection>
    <sender>btnPlanShowDetails</sender>
    <signal>toggled(bool)</signal>

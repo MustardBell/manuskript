@@ -20,6 +20,7 @@ from manuskript.domain.persistence import (
 )
 from manuskript.domain.revisions import RevisionConfiguration
 from manuskript.enums import Character, World, Plot, PlotStep, Outline
+from manuskript import timing
 from manuskript.functions import iconColor, iconFromColorString
 from manuskript.converters import HTML2PlainText
 from lxml import etree as ET
@@ -485,7 +486,26 @@ def outlineToMMD(item):
     content = ""
 
     # We don't want to write some datas (computed)
-    exclude = [Outline.wordCount, Outline.goal, Outline.goalPercentage, Outline.revisions, Outline.text]
+    #
+    # charCount joined the list late. It was written to every document
+    # file and read back into every item on load -- and then thrown away
+    # microseconds later, because loading sets the metadata first and the
+    # text last, and setting text recomputes both counts. So the stored
+    # number was never once consulted: pure write-only noise, one changed
+    # header line in every diff of every document anybody typed in, and a
+    # number that depended on the countSpaces preference, so two people
+    # with the same text wrote different bytes.
+    #
+    # Its absent twin, wordCount, has been in this list since the list was
+    # written in 2016. Nothing chose the difference.
+    exclude = [
+        Outline.wordCount,
+        Outline.charCount,
+        Outline.goal,
+        Outline.goalPercentage,
+        Outline.revisions,
+        Outline.text,
+    ]
     # We want to force some data even if they're empty
     force = [Outline.compile]
 
@@ -529,7 +549,8 @@ def loadProject(
     # Read and store everything in a dict
 
     LOGGER.debug("Loading {} ({})".format(project, "zip" if zip else "folder"))
-    read_result = file_access.read(project, zipped=bool(zip))
+    with timing.span("load.files"):
+        read_result = file_access.read(project, zipped=bool(zip))
     files = read_result.files
     context.models.plugin_data.load_project_files(files)
     if not zip:
@@ -743,12 +764,23 @@ def loadProject(
 
 
     # We now just have to recursively add items.
-    addTextItems(mdl, outline)
+    #
+    # Inside the batch: every item added to a folder makes that folder's
+    # word count wrong, and each correction walks up to the root emitting
+    # as it goes. Loading a book that way recomputes the same ancestors
+    # once per document below them -- 231,658 index lookups for 918 items,
+    # measured -- to arrive at the totals one final pass computes anyway.
+    # The mechanism is the model's own, and was already used for bulk
+    # compile changes; loading simply never asked for it.
+    with timing.span("load.outline.items"):
+        with mdl.batchWordCountUpdates():
+            addTextItems(mdl, outline)
 
     # Adds revisions
     if "revisions.xml" in files:
-        root = parse_project_xml(files["revisions.xml"])
-        appendRevisions(mdl, root)
+        with timing.span("load.outline.revisions"):
+            root = parse_project_xml(files["revisions.xml"])
+            appendRevisions(mdl, root)
 
     # Check IDS
     mdl.rootItem.checkIDs()

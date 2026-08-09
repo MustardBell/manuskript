@@ -75,14 +75,15 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
     run_git(tmp_path, "commit", "-q", "-m", "Change scene")
 
     assert MWNoProject.projectManager.loadProject(str(project_file))
-    MWNoProject.settingsManager.saveOnQuit = False
-    MWNoProject.settingsManager.revisions.update({
+    settings = MWNoProject.projectRuntime.settingsManager
+    settings.saveOnQuit = False
+    settings.revisions.update({
         "keep": True,
         "backend": "git",
     })
     before_restore = [
         item.text()
-        for item in MWNoProject.mdlOutline.searchableItems()
+        for item in MWNoProject.projectRuntime.models.outline.searchableItems()
     ]
     assert any("RESTORE-INTEGRATION-MARKER" in text
                for text in before_restore)
@@ -93,8 +94,7 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
         == "Changed raw plugin content"
     )
 
-    restored = MWNoProject.revisionCoordinator.restore(
-        MWNoProject.projectManager,
+    restored = MWNoProject.projectManager.restoreRevision(
         initial_commit,
     )
 
@@ -102,7 +102,7 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
     assert MWNoProject.currentProject == str(project_file)
     after_restore = [
         item.text()
-        for item in MWNoProject.mdlOutline.searchableItems()
+        for item in MWNoProject.projectRuntime.models.outline.searchableItems()
     ]
     assert not any("RESTORE-INTEGRATION-MARKER" in text
                    for text in after_restore)
@@ -118,5 +118,5 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
     assert plugin_file.read_text(encoding="utf-8") == (
         "Initial raw plugin content"
     )
-    assert MWNoProject.settingsManager.revisions["backend"] == "git"
+    assert settings.revisions["backend"] == "git"
     assert MWNoProject.projectManager.session.is_open

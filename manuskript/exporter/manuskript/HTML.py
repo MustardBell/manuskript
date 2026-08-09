@@ -7,6 +7,7 @@ from manuskript.exporter.manuskript.markdown import markdown, markdownSettings
 from manuskript.ui.views.webView import webView
 from manuskript.ui.exporters.manuskript.plainTextSettings import exporterSettings
 from manuskript.functions import safeTranslate
+from manuskript.media_types import HTML as HTML_MEDIA_TYPE
 
 import os
 
@@ -20,8 +21,7 @@ class HTML(markdown):
     description = safeTranslate(qApp, "Export", "Basic HTML output using the Python module 'markdown'.")
     InvalidBecause = safeTranslate(qApp, "Export", "Python module 'markdown'.")
     icon = "text-html"
-    format_id = "html"
-    artifact_media_type = "text/html"
+    media_type = HTML_MEDIA_TYPE
 
     exportVarName = "lastManuskriptHTML"
     exportFilter = "HTML files (*.html);; Any files (*)"
@@ -66,7 +66,10 @@ class HTML(markdown):
         return t
 
     def output(self, settingsWidget):
-        html = MD.markdown(markdown.output(self, settingsWidget))
+        html = MD.markdown(
+            markdown.output(self, settingsWidget),
+            extensions=self.augmentations(),
+        )
         return html
 
     def preview(self, settingsWidget, previewWidget):
@@ -76,7 +79,7 @@ class HTML(markdown):
         settingsWidget.writeSettings()
 
         md = markdown.output(self, settingsWidget)
-        html = MD.markdown(md)
+        html = MD.markdown(md, extensions=self.augmentations())
         path = os.path.join(self.projectPath(), "dummy.html")
 
         self.preparesTextEditView(previewWidget.widget(0), settings["Preview"]["PreviewFont"])

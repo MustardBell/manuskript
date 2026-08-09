@@ -6,7 +6,10 @@ import pytest
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
 
 from manuskript import exporter
-from manuskript.exporter.context import ExportContext
+from manuskript.exporter.context import (
+    ExportContext,
+    ExportContextProvider,
+)
 from manuskript.exporter.page_routes import page_renderer_routes
 from manuskript.exporter.pandoc import pandocExporter
 from manuskript.exporter.pandoc.abstractPlainText import pandocSettings
@@ -17,6 +20,7 @@ from manuskript.plugins.api import (
 )
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.services.plugin_options import InMemoryPluginOptionStore
+from manuskript.media_types import BBCODE, MARKDOWN
 
 busy_cursor_module = importlib.import_module(
     "manuskript.ui.busy_cursor"
@@ -48,6 +52,44 @@ def test_export_context_resolves_project_directory():
     assert context.project_path == "/work/novel"
 
 
+def test_export_context_provider_resolves_live_project_sources():
+    first_models = SimpleNamespace(
+        outline=object(),
+        flat_data=object(),
+        labels=object(),
+        statuses=object(),
+    )
+    second_models = SimpleNamespace(
+        outline=object(),
+        flat_data=object(),
+        labels=object(),
+        statuses=object(),
+    )
+    state = {
+        "project": "/work/first.msk",
+        "models": first_models,
+        "page_types": object(),
+    }
+    provider = ExportContextProvider(
+        project_file=lambda: state["project"],
+        models=lambda: state["models"],
+        parent=object(),
+        page_types=lambda: state["page_types"],
+    )
+
+    first = provider.create()
+    state["project"] = "/work/second.msk"
+    state["models"] = second_models
+    state["page_types"] = object()
+    second = provider.create()
+
+    assert first.project_file == "/work/first.msk"
+    assert first.outline_model is first_models.outline
+    assert second.project_file == "/work/second.msk"
+    assert second.outline_model is second_models.outline
+    assert second.page_types is state["page_types"]
+
+
 def test_exporter_factory_builds_isolated_project_graphs():
     context = make_context()
 
@@ -74,7 +116,7 @@ def test_exporter_factory_always_exposes_native_bbcode():
 
     assert bbcode is not None
     assert bbcode.isValid()
-    assert bbcode.format_id == "bbcode"
+    assert bbcode.media_type == BBCODE
 
 
 def test_page_renderer_routes_come_from_usable_export_formats():
@@ -83,10 +125,10 @@ def test_page_renderer_routes_come_from_usable_export_formats():
     routes = page_renderer_routes(exporters[:1])
 
     assert {route.id for route in routes} == {
-        "plain:plain",
-        "markdown:markdown",
-        "bbcode:bbcode",
-        "html:html",
+        "text/plain|text/plain",
+        "text/markdown|text/markdown",
+        "text/x-bbcode|text/x-bbcode",
+        "text/html|text/html",
     }
     assert "OPML" not in {route.label for route in routes}
 
@@ -103,8 +145,8 @@ def test_exporter_factory_exposes_plugin_converters_as_compile_formats():
         ConversionContribution(
             ExtensionDescriptor("example.bbcode", "Plugin BBCode"),
             Converter,
-            source_formats=("markdown",),
-            target_formats=("bbcode",),
+            source_formats=(MARKDOWN,),
+            target_formats=(BBCODE,),
         )
     )
     registry.install("example.converter", registrar.contributions)
@@ -119,12 +161,12 @@ def test_exporter_factory_exposes_plugin_converters_as_compile_formats():
     plugin_format = exporters[-1].getFormatByName("Plugin BBCode")
     assert plugin_format is not None
     assert plugin_format.source_format.name == "Markdown"
-    assert plugin_format.source_format_id == "markdown"
-    assert plugin_format.format_id == "bbcode"
+    assert plugin_format.source_media_type == MARKDOWN
+    assert plugin_format.media_type == BBCODE
     plugin_route = next(
         route
         for route in page_renderer_routes(exporters)
-        if route.id == "bbcode:markdown"
+        if route.id == "text/x-bbcode|text/markdown"
     )
     assert plugin_route.label == "Plugin BBCode"
     assert plugin_route.exporter_name == "example.converter"

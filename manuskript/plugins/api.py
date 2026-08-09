@@ -1,11 +1,14 @@
 """Stable, mostly Qt-free contracts exposed to Manuskript plugins."""
 
+import re
+
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import PurePosixPath
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
+from manuskript.media_types import MARKDOWN
 
 
 PLUGIN_API_VERSION = 1
@@ -42,6 +45,13 @@ class OptionField:
             )
 
 
+#: Same characters a plugin ID allows, and at least one dot: extension IDs
+#: are addressed globally, so they carry their namespace with them.
+EXTENSION_ID = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+)
+
+
 @dataclass(frozen=True)
 class ExtensionDescriptor:
     id: str
@@ -53,6 +63,26 @@ class ExtensionDescriptor:
     def __post_init__(self):
         if not self.id or not self.name:
             raise ValueError("Extension IDs and names are required.")
+        if not EXTENSION_ID.match(self.id) or "." not in self.id:
+            raise ValueError(
+                "Invalid extension ID {!r}: use a dotted name of letters, "
+                "digits, '.', '_' and '-', prefixed with your plugin's "
+                "namespace, like 'vendor.notes.panel'.".format(self.id)
+            )
+
+
+@dataclass(frozen=True)
+class PluginActivationContext:
+    """What a handle's ``activate`` receives, once install has succeeded.
+
+    The entry point stages contributions and can still be refused, so it
+    must not leave side effects behind. Anything that connects signals,
+    starts timers or touches the world belongs in ``activate``, which only
+    runs for a plugin that is installed and staying.
+    """
+
+    plugin_id: str
+    capability: Callable[[str], Any]
 
 
 @dataclass(frozen=True)
@@ -120,7 +150,7 @@ class RenderedDocument:
 @dataclass(frozen=True)
 class PageExportDocument:
     content: str
-    source_format: str = "markdown"
+    source_format: str = MARKDOWN
 
 
 @dataclass(frozen=True)
@@ -254,16 +284,19 @@ class PluginSettingsContext:
 
     Like EditorWorkspaceContext, the services are capability interfaces
     scoped to the plugin rather than the registry or main window.
-    ``page_routing`` only exposes page types this plugin registered and
-    rejects attempts to route anything else, so the scoping is enforced by
-    the host instead of trusted to the panel.
+
+    ``capability`` is the same negotiation as ``api.capability`` during
+    registration, moved to where a widget can actually be built: plugins
+    register before there is a main window, so a UI service cannot be handed
+    over then. It refuses any name the manifest did not declare, so core
+    stops pushing services at panels that never asked for one.
     """
 
     plugin_id: str
-    page_routing: Any
     option_store: Any
     edit_options: Callable[..., None]
     show_status: Callable[..., None]
+    capability: Callable[[str], Any]
 
 
 @dataclass(frozen=True)
@@ -312,9 +345,44 @@ class EditorWorkspaceContribution:
 
 
 @dataclass(frozen=True)
+class ContentSignature:
+    """A pattern core matches so a plugin need not read foreign documents.
+
+    A page type has to be recognised before any property marks an item as
+    belonging to it, and only the plugin knows its own format. Declaring the
+    format instead of inspecting the text resolves that: the plugin remains
+    the authority on what its pages look like, while core does the matching
+    and the plugin is never handed a document it does not own.
+
+    All declared parts must match. Patterns are regular expressions applied
+    with MULTILINE, against text normalised to newline endings.
+    """
+
+    starts_with: str = ""
+    ends_with: str = ""
+    contains: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "contains",
+            tuple(str(value) for value in self.contains),
+        )
+        if not any((self.starts_with, self.ends_with, self.contains)):
+            raise ValueError(
+                "A content signature must declare at least one pattern."
+            )
+
+
+@dataclass(frozen=True)
 class PageTypeContribution:
     descriptor: ExtensionDescriptor
     property_label: str
+    #: Declarative recognition. Preferred: core matches it, so the plugin
+    #: never receives the text of a document that is not its own.
+    signature: Optional[ContentSignature] = None
+    #: Escape hatch for formats a signature cannot express. Receives a
+    #: bounded window of the document, not the whole of it.
     detector: Optional[Callable[[str], bool]] = None
     parser_factory: Optional[Callable[[], Any]] = None
     renderer_factory: Optional[Callable[[], Any]] = None
@@ -365,6 +433,49 @@ class PageRendererContribution:
             )
 
 
+@dataclass(frozen=True)
+class TransformContribution:
+    """Middleware over whatever produces a format.
+
+    A transform takes content in one media type and returns it in the same
+    one: a table-of-contents injector, a link rewriter, a house-style pass.
+    It converts nothing, which is why it is not a converter, and it does not
+    produce the format either -- it waits for something that does and adds
+    to the result.
+
+    Transforms stack. Several may apply to one media type and they run in
+    priority order, highest first, between the producer and the output.
+    """
+
+    descriptor: ExtensionDescriptor
+    media_type: str
+    engine_factory: Callable[[], Any]
+    options: tuple[OptionField, ...] = ()
+    options_view_factory: Optional[Callable[..., Any]] = None
+    priority: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(self, "media_type", str(self.media_type).strip())
+        object.__setattr__(self, "options", tuple(self.options))
+        if not self.media_type:
+            raise ValueError(
+                "Transforms must name the media type they take and return."
+            )
+
+    def applies_to(self, media_type):
+        """Whether this transform handles content of that media type.
+
+        Here rather than in the registry, for the reason HTML augmentations
+        answer for their own scope: a catalogue that filters by one kind of
+        context ends up with a method per kind of caller.
+        """
+        return self.media_type == media_type
+        if not self.media_type:
+            raise ValueError(
+                "Transforms must name the media type they take and return."
+            )
+
+
 class MarkupMode(str, Enum):
     AUGMENT = "augment"
     REPLACE = "replace"
@@ -392,8 +503,112 @@ class MarkupContribution:
             )
 
 
+@dataclass(frozen=True)
+class ConversionRequest:
+    """One conversion about to happen, described so contributions can judge it.
+
+    A value rather than a pile of arguments, so that a contribution answers
+    one question -- does this apply to me -- and a later fact about a
+    rendering can be added here without changing what every contribution
+    implements.
+    """
+
+    source_format: str
+    target_format: str
+    page_type: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ConversionAugmentationContribution:
+    """Something one format should additionally mean when it becomes another.
+
+    Not a transform and not a converter. A converter turns one format into
+    another and there is one of it; a transform is middleware over content
+    that stays in the same format. This adds to what an existing conversion
+    understands -- lists written ``1)``, a footnote convention, a spoiler box
+    -- and every route that performs that conversion picks it up.
+
+    The formats are **declared, not implied**. There is no contribution kind
+    per destination, because that would make one format privileged and every
+    other reachable only through something more generic: two classes of media
+    type, native and not. A route here is ordinary data drawn from the same
+    vocabulary a manifest declares, so augmenting Markdown to BBCode is the
+    same act as augmenting Markdown to HTML.
+
+    ``augmentation_factory`` returns whatever the converter for that route
+    accepts, and what that is belongs to the route rather than to this
+    contract -- a ``markdown.Extension`` where python-markdown performs the
+    conversion. The contract here is the route and the ordering; what the
+    engine takes is documented with the engine.
+
+    ``page_types`` is the scope. Empty means every document; naming page types
+    narrows it to documents of those types.
+
+    Augmentations stack, highest ``priority`` first, so an addition that must
+    see the source before another can say so.
+    """
+
+    descriptor: ExtensionDescriptor
+    source_format: str
+    target_format: str
+    augmentation_factory: Callable[[], Any]
+    page_types: tuple[str, ...] = ()
+    priority: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(
+            self, "source_format", str(self.source_format).strip(),
+        )
+        object.__setattr__(
+            self, "target_format", str(self.target_format).strip(),
+        )
+        object.__setattr__(
+            self,
+            "page_types",
+            tuple(
+                str(value).strip()
+                for value in self.page_types
+                if str(value).strip()
+            ),
+        )
+        if not self.source_format or not self.target_format:
+            raise ValueError(
+                "Conversion augmentation {} must name the formats it "
+                "augments between.".format(self.descriptor.id)
+            )
+        if self.augmentation_factory is None:
+            raise ValueError(
+                "Conversion augmentation {} needs a factory.".format(
+                    self.descriptor.id
+                )
+            )
+
+    def applies_to(self, request):
+        """Whether this augmentation belongs in that conversion.
+
+        The route must match, and the scope must admit the document. Asked of
+        the contribution because the contribution is where both were
+        declared; a registry answering it would need one such method per kind
+        of context a caller might be in.
+        """
+        if request is None:
+            return False
+        if (
+            self.source_format != request.source_format
+            or self.target_format != request.target_format
+        ):
+            return False
+        if not self.page_types:
+            return True
+        return (
+            request.page_type is not None
+            and request.page_type in self.page_types
+        )
+
+
 Contribution = Union[
     ExportContribution,
+    ConversionAugmentationContribution,
     ImportContribution,
     ConversionContribution,
     ProjectPanelContribution,
@@ -402,6 +617,7 @@ Contribution = Union[
     EditorWorkspaceContribution,
     PageTypeContribution,
     PageRendererContribution,
+    TransformContribution,
     MarkupContribution,
 ]
 

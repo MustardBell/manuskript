@@ -8,7 +8,13 @@ from manuskript.enums import Character
 from manuskript.enums import Plot
 from manuskript.ui import style as S
 from manuskript.ui.cheatSheet_ui import Ui_cheatSheet
-from manuskript.models import references as Ref
+from manuskript.models.reference_identity import (
+    CHARACTER_REFERENCE_KIND,
+    PLOT_REFERENCE_KIND,
+    TEXT_REFERENCE_KIND,
+    WORLD_REFERENCE_KIND,
+    make_reference,
+)
 
 
 class cheatSheet(QWidget, Ui_cheatSheet):
@@ -111,7 +117,7 @@ class cheatSheet(QWidget, Ui_cheatSheet):
                 imp = [self.tr("Minor"), self.tr("Secondary"), self.tr("Main")][int(c.importance())]
                 d.append((c.name(), c.ID(), imp))
 
-            self.data[(self.tr("Characters"), Ref.CharacterLetter)] = d
+            self.data[(self.tr("Characters"), CHARACTER_REFERENCE_KIND)] = d
 
         if self.outlineModel:
             d = []
@@ -124,7 +130,7 @@ class cheatSheet(QWidget, Ui_cheatSheet):
             r = self.outlineModel.rootItem
             addChildren(r)
 
-            self.data[(self.tr("Texts"), Ref.TextLetter)] = d
+            self.data[(self.tr("Texts"), TEXT_REFERENCE_KIND)] = d
 
         if self.plotModel:
             d = []
@@ -136,11 +142,11 @@ class cheatSheet(QWidget, Ui_cheatSheet):
                 imp = [self.tr("Minor"), self.tr("Secondary"), self.tr("Main")][int(imp)]
                 d.append((name, ID, imp))
 
-            self.data[(self.tr("Plots"), Ref.PlotLetter)] = d
+            self.data[(self.tr("Plots"), PLOT_REFERENCE_KIND)] = d
 
         if self.worldModel:
             d = self.worldModel.listAll()
-            self.data[(self.tr("World"), Ref.WorldLetter)] = d
+            self.data[(self.tr("World"), WORLD_REFERENCE_KIND)] = d
 
         self.updateListFromData()
 
@@ -163,7 +169,10 @@ class cheatSheet(QWidget, Ui_cheatSheet):
                 self.addCategory(cat[0])
                 for item in filtered:
                     i = QListWidgetItem(item[0])
-                    i.setData(Qt.UserRole, Ref.EmptyRef.format(cat[1], item[1], item[0]))
+                    i.setData(
+                        Qt.UserRole,
+                        make_reference(cat[1], item[1], label=item[0]),
+                    )
                     i.setData(Qt.UserRole + 1, item[2])
                     self.list.addItem(i)
 

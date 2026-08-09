@@ -4,6 +4,7 @@ from manuskript.converters.markdownToBBCode import markdown_to_bbcode
 from manuskript.exporter.manuskript.markdown import markdown
 from manuskript.exporter.manuskript.plainText import plainText
 from manuskript.functions import safeTranslate
+from manuskript.media_types import BBCODE
 from manuskript.ui.exporters.manuskript.plainTextSettings import (
     exporterSettings,
 )
@@ -17,8 +18,7 @@ class BBCode(markdown):
         "Native forum BBCode output. Does not require Pandoc.",
     )
     icon = "text-plain"
-    format_id = "bbcode"
-    artifact_media_type = "text/plain"
+    media_type = BBCODE
 
     exportVarName = "lastManuskriptBBCode"
     exportFilter = "BBCode files (*.bbcode *.txt);; Any files (*)"
@@ -38,4 +38,4 @@ class BBCode(markdown):
 
     def processText(self, text, settings):
         transformed = plainText.processText(self, text, settings)
-        return markdown_to_bbcode(transformed)
+        return markdown_to_bbcode(transformed, self.augmentations())

@@ -2,10 +2,7 @@ import datetime
 import logging
 
 from manuskript.domain.revisions import RevisionConfiguration
-from manuskript.services.git_revisions import (
-    GitRevisionBackend,
-    GitRevisionError,
-)
+from manuskript.services.git_revisions import GitRevisionBackend
 from manuskript.services.revision_snapshot import RevisionSnapshotLoader
 
 
@@ -53,31 +50,24 @@ class ProjectRevisionCoordinator:
             )
         return self.git_backend(project_file).commit(message)
 
-    def restore(self, project_manager, revision):
-        backend = self.git_backend(
-            project_manager.currentProject
-        )
-        git_snapshot = backend.snapshot(revision)
+    def load_snapshot(self, project_file, revision, settings, parent=None):
+        """One revision as a validated, separate model.
+
+        The coordinator knows Git and snapshots; what happens to the
+        loaded model is the project manager's business, so this takes
+        plain data and never a project manager.
+        """
+        git_snapshot = self.git_backend(project_file).snapshot(revision)
         loaded = self.snapshot_loader.load(
-            project_manager.currentProject,
+            project_file,
             git_snapshot,
-            parent=project_manager.ui.model_parent,
+            parent=parent,
         )
         self.snapshot_loader.preserve_revision_configuration(
             loaded,
-            project_manager.ui.settings,
+            settings,
         )
-        return project_manager.restoreRevisionSnapshot(loaded)
-
-    def manual_commit(self, project_manager, message):
-        project_manager.ui.flush_pending_edits()
-        if not project_manager.saveDatas(record_revision=False):
-            raise GitRevisionError(
-                "The project could not be saved before committing."
-            )
-        return self.git_backend(
-            project_manager.currentProject
-        ).commit(message)
+        return loaded
 
     def create_tag(self, project_file, revision, name):
         return self.git_backend(project_file).create_tag(

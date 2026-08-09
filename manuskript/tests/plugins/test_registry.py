@@ -66,6 +66,40 @@ def test_registry_rejects_cross_plugin_ids_without_partial_install():
     ] == ["example.fb2"]
 
 
+def test_a_plugin_may_reinstall_over_its_own_contributions():
+    """Reinstalling replaces a plugin's records, so its own IDs are not
+    conflicts -- only somebody else already holding one is.
+    """
+    registry = PluginRegistry()
+    first = registry.registrar("example.first")
+    first.register_exporter(exporter("example.fb2"))
+    registry.install("example.first", first.contributions)
+
+    again = registry.registrar("example.first")
+    again.register_exporter(exporter("example.fb2"))
+    registry.install("example.first", again.contributions)
+
+    assert [
+        contribution.descriptor.id
+        for contribution in registry.exporters
+    ] == ["example.fb2"]
+
+
+@pytest.mark.parametrize("bad_id", [
+    "flat",              # no namespace at all
+    "dotted.but bad",    # whitespace
+    ".leading",          # boundary characters must be alphanumeric
+    "trailing.",
+    "sneaky:colon.name",
+])
+def test_extension_ids_must_be_dotted_names(bad_id):
+    """Extension IDs are addressed globally -- by routing selections, by
+    other plugins -- so they carry their namespace with them.
+    """
+    with pytest.raises(ValueError, match="Invalid extension ID"):
+        ExtensionDescriptor(id=bad_id, name="Bad")
+
+
 def test_registry_exposes_editor_workspaces_by_capability():
     registry = PluginRegistry()
     registrar = registry.registrar("example.comparison")

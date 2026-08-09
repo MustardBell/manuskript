@@ -13,6 +13,8 @@ from PyQt5.QtGui import QBrush, QIcon, QPainter, QColor, QImage, QPixmap
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import qApp, QFileDialog
 
+from manuskript.domain.text import as_text
+
 import logging
 LOGGER = logging.getLogger(__name__)
 
@@ -87,10 +89,13 @@ def toFloat(text):
 
 
 def toString(text):
-    if text in [None, "None"]:
-        return ""
-    else:
-        return str(text)
+    """A stored value as text. One definition of that, in the domain.
+
+    Kept as a name here because a hundred call sites use it, but the rule
+    it applies is not the interface's to make: importing this module pulls
+    in Qt widgets, which is why the layer underneath could not share it.
+    """
+    return as_text(text)
 
 
 def drawProgress(painter, rect, progress, radius=0):

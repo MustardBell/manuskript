@@ -20,7 +20,9 @@ def test_text_editor_context_refreshes_all_current_editors():
     first = MagicMock()
     second = MagicMock()
     window.findChildren.return_value = [first, second]
-    context = text_editor_context_for(window, MagicMock())
+    context = text_editor_context_for(
+        window, MagicMock(), MagicMock(),
+    )
 
     context.reload_fonts()
 
@@ -33,15 +35,16 @@ def test_text_editor_context_creates_and_selects_character():
     settings = MagicMock()
     character = MagicMock()
     character.ID.return_value = "alice"
-    window.mdlCharacter.addCharacter.return_value = character
+    models = MagicMock()
+    models.characters.addCharacter.return_value = character
     item = MagicMock()
     window.lstCharacters.getItemByID.return_value = item
-    context = text_editor_context_for(window, settings)
+    context = text_editor_context_for(window, settings, models)
 
     context.create_character("Alice")
 
     window.tabMain.setCurrentIndex.assert_called_once_with(window.TabPersos)
-    window.mdlCharacter.addCharacter.assert_called_once_with(name="Alice")
+    models.characters.addCharacter.assert_called_once_with(name="Alice")
     window.lstCharacters.getItemByID.assert_called_once_with("alice")
     window.lstCharacters.setCurrentItem.assert_called_once_with(item)
     assert context.settings is settings
@@ -49,7 +52,8 @@ def test_text_editor_context_creates_and_selects_character():
 
 def test_text_editor_context_creates_plot_and_world_item():
     window = make_window()
-    context = text_editor_context_for(window, MagicMock())
+    models = MagicMock()
+    context = text_editor_context_for(window, MagicMock(), models)
 
     context.create_plot("Quest")
     context.create_world_item("City")
@@ -60,17 +64,19 @@ def test_text_editor_context_creates_plot_and_world_item():
     assert window.tabMain.setCurrentIndex.call_args_list[1].args == (
         window.TabWorld,
     )
-    window.mdlPlots.addPlot.assert_called_once_with("Quest")
+    models.plots.addPlot.assert_called_once_with("Quest")
     window.worldController.add_item.assert_called_once_with(title="City")
 
 
 def test_text_editor_context_routes_typed_outline_command():
     window = make_window()
-    context = text_editor_context_for(window, MagicMock())
+    context = text_editor_context_for(
+        window, MagicMock(), MagicMock(),
+    )
 
     context.invoke_outline_command(DocumentCommand.MOVE_DOWN)
 
-    window.treeRedacOutline.moveDown.assert_called_once_with()
+    window.corePanels.project_tree.tree.moveDown.assert_called_once_with()
 
 
 def test_text_editor_routes_rename_as_typed_command():

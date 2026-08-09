@@ -14,10 +14,19 @@ class TextEditorContext:
     invoke_outline_command: Callable[[DocumentCommand], None]
     markup_profiles: Optional[object] = None
     page_types: Optional[object] = None
+    #: The project's text buffers, so two views of one document are two
+    #: viewports on one text rather than two copies of it.
+    document_buffers: Optional[object] = None
 
 
-def text_editor_context_for(window, settings):
-    """Adapt the main UI to the text editor action boundary."""
+def text_editor_context_for(window, settings, models, buffers=None):
+    """Adapt the main UI to the text editor action boundary.
+
+    Takes the project's models rather than reading them off the window.
+    The window is here because this adapts one -- switching tabs, finding
+    widgets -- but the models belong to the project, and reaching through
+    a window for them is what let a window answer any question at all.
+    """
     def reload_fonts():
         from manuskript.ui.views.textEditView import textEditView
 
@@ -26,13 +35,13 @@ def text_editor_context_for(window, settings):
 
     def create_character(name):
         window.tabMain.setCurrentIndex(window.TabPersos)
-        character = window.mdlCharacter.addCharacter(name=name)
+        character = models.characters.addCharacter(name=name)
         item = window.lstCharacters.getItemByID(character.ID())
         window.lstCharacters.setCurrentItem(item)
 
     def create_plot(name):
         window.tabMain.setCurrentIndex(window.TabPlots)
-        window.mdlPlots.addPlot(name)
+        models.plots.addPlot(name)
 
     def create_world_item(name):
         window.tabMain.setCurrentIndex(window.TabWorld)
@@ -40,12 +49,17 @@ def text_editor_context_for(window, settings):
 
     def invoke_outline_command(command):
         command = DocumentCommand(command)
-        handler = getattr(window.treeRedacOutline, command.value, None)
+        handler = getattr(
+            window.corePanels.project_tree.tree,
+            command.value,
+            None,
+        )
         if callable(handler):
             handler()
 
     return TextEditorContext(
         settings=settings,
+        document_buffers=buffers,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,

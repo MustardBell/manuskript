@@ -22,3 +22,7 @@ class ViewConfigurationController:
     def set_view_setting(self, category, part, value, _checked=False):
         self.settings.viewSettings[category][part] = value
         self.view.refresh_category(category)
+
+    def dispose(self):
+        self.view = None
+        self.settings = None

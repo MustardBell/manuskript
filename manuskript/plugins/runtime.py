@@ -7,14 +7,30 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from manuskript.plugins.api import PLUGIN_API_VERSION
+from manuskript.plugins.api import (
+    PLUGIN_API_VERSION,
+    PluginActivationContext,
+)
+from manuskript.plugins.capabilities import (
+    PluginCapabilityContext,
+    grant,
+)
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
     PluginLoadError,
     PluginManifestError,
+    PluginRegistrationError,
+)
+from manuskript.media_types import (
+    PROMISES,
+    MediaTypeError,
+    core_registry,
 )
 from manuskript.plugins.manifest import PluginManifest
-from manuskript.plugins.registry import PluginRegistry
+from manuskript.plugins.registry import (
+    PluginRegistry,
+    contribution_media_types,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -24,6 +40,8 @@ class PluginStatus(str, Enum):
     DISABLED = "disabled"
     LOADED = "loaded"
     INCOMPATIBLE = "incompatible"
+    #: Sound plugin, but it asked for a service core does not provide.
+    UNSATISFIED = "unsatisfied"
     FAILED = "failed"
 
 
@@ -52,11 +70,15 @@ class PluginRuntime:
         preferences,
         registry=None,
         api_version=PLUGIN_API_VERSION,
+        media_types=None,
     ):
         self.roots = tuple(Path(root).resolve() for root in roots)
         self.preferences = preferences
         self.registry = registry or PluginRegistry()
         self.api_version = api_version
+        self.mediaTypes = (
+            media_types if media_types is not None else core_registry()
+        )
         self.records = {}
         self.discovery_issues = []
 
@@ -132,7 +154,43 @@ class PluginRuntime:
 
         self.records = discovered
         self.discovery_issues = issues
+        self._declare_media_types(discovered.values())
         return tuple(self.records.values())
+
+    def _declare_media_types(self, records):
+        """Put every discovered plugin's vocabulary into the registry.
+
+        Declaring happens at discovery, not at load, and for disabled
+        plugins too. Load order is arbitrary, so a format registered while
+        running would exist or not depending on which plugin came first;
+        read from the manifest it is there for everyone. It also means the
+        inspector can show who has an interest in a format without anyone's
+        code having run.
+        """
+        for record in records:
+            manifest = record.manifest
+            for media_type in manifest.media_types:
+                try:
+                    self.mediaTypes.declare(media_type, manifest.id)
+                except MediaTypeError as error:
+                    LOGGER.warning(
+                        "Plugin %s declared media type %s that cannot be "
+                        "used: %s",
+                        manifest.id,
+                        media_type.id,
+                        error,
+                    )
+            for kind in PROMISES:
+                for name in getattr(manifest, kind, ()):
+                    try:
+                        self.mediaTypes.promise(name, kind, manifest.id)
+                    except MediaTypeError as error:
+                        LOGGER.warning(
+                            "Plugin %s promise about %s ignored: %s",
+                            manifest.id,
+                            name,
+                            error,
+                        )
 
     def load_enabled(self):
         if not self.records:
@@ -177,19 +235,45 @@ class PluginRuntime:
             record.error = str(error)
             return record
 
-        registrar = self.registry.registrar(plugin_id)
+        # Negotiate before anything of the plugin's runs. A plugin whose
+        # requirements core cannot meet is refused, not half-started.
+        capabilities, missing = grant(
+            manifest.requires, self.capabilityContext()
+        )
+        if missing:
+            record.status = PluginStatus.UNSATISFIED
+            record.error = (
+                "Plugin {} requires {} which this Manuskript does not "
+                "provide.".format(
+                    manifest.id,
+                    ", ".join(missing),
+                )
+            )
+            return record
+
+        registrar = self.registry.registrar(
+            plugin_id,
+            capabilities=capabilities,
+        )
         module_prefix = self._module_prefix(manifest)
+        handle = None
         try:
             entry = self._load_entry_point(
                 manifest,
                 module_prefix,
             )
             handle = entry(registrar)
+            self._require_promised(manifest, registrar.contributions)
             self.registry.install(
                 plugin_id,
                 registrar.contributions,
             )
+            self._activate_handle(plugin_id, handle, registrar)
         except Exception as error:
+            # The entry point already ran and may have connected signals or
+            # started timers. Whatever it started has to be told to stop,
+            # and while its modules are still importable.
+            self._deactivate_handle(plugin_id, handle)
             self.registry.remove_plugin(plugin_id)
             self._remove_modules(module_prefix)
             failure = PluginLoadError(
@@ -209,6 +293,33 @@ class PluginRuntime:
         record.status = PluginStatus.LOADED
         record.error = ""
         return record
+
+    @staticmethod
+    def _require_promised(manifest, contributions):
+        """Contributions may only work with formats the manifest promised.
+
+        The manifest says what a plugin does with a format; the code has to
+        agree. Registration is atomic, so one contribution naming an
+        unpromised format installs none of them rather than leaving the
+        plugin half-present.
+        """
+        promised = set(manifest.promised_media_types)
+        for record in contributions:
+            named = contribution_media_types(
+                record.kind,
+                record.contribution,
+            )
+            unpromised = sorted(named - promised)
+            if unpromised:
+                raise PluginRegistrationError(
+                    "{} {} works with {}, which plugin {} did not promise "
+                    "to produce, consume or transform.".format(
+                        record.kind.value,
+                        record.id,
+                        ", ".join(unpromised),
+                        manifest.id,
+                    )
+                )
 
     def _load_entry_point(self, manifest, module_prefix):
         package = types.ModuleType(module_prefix)
@@ -234,6 +345,51 @@ class PluginRuntime:
             )
         return entry
 
+    def capabilityContext(self):
+        """What a capability may be built from, beyond nothing.
+
+        A service that has to see what other plugins contributed cannot come
+        from a plain factory, and reaching a runtime through a global to get
+        it would be the service locator this codebase has been removing. So
+        the runtime hands over what it has, and the catalogue says which
+        capabilities want it.
+
+        The registry is passed live rather than as a snapshot: a plugin
+        enabled later contributes to conversions performed later, which is
+        what enabling a plugin is expected to mean.
+        """
+        # Imported here, not at module scope: the conversion service reads
+        # the plugin API, which is this package, so importing it from here
+        # makes the two modules import each other. Whichever is imported
+        # first then decides whether either works at all.
+        from manuskript.converters.conversion_service import (
+            conversion_service,
+        )
+
+        return PluginCapabilityContext(
+            registry=self.registry,
+            conversion_service=lambda: conversion_service(
+                registry=self.registry,
+            ),
+        )
+
+    def declares(self, plugin_id, capability):
+        """Whether this plugin asked for a capability in its manifest.
+
+        The one place that answers it. Two hosts hand services over -- the
+        settings panel and the editor workspace -- and each used to read
+        the manifest itself, which is two chances to disagree about what a
+        declaration is.
+
+        A plugin core has no record of has declared nothing. That is the
+        honest answer rather than a cautious one: contributions arrive from
+        loaded plugins, and a loaded plugin has a manifest.
+        """
+        record = self.records.get(plugin_id)
+        if record is None:
+            return False
+        return capability in record.manifest.requires
+
     def _record(self, plugin_id):
         if plugin_id not in self.records:
             raise KeyError("Unknown plugin {!r}.".format(plugin_id))
@@ -242,18 +398,39 @@ class PluginRuntime:
     def _deactivate_record(self, record):
         plugin_id = record.manifest.id
         self.registry.remove_plugin(plugin_id)
-        handle = record.handle
-        if handle is not None and hasattr(handle, "deactivate"):
-            try:
-                handle.deactivate()
-            except Exception:
-                LOGGER.exception(
-                    "Plugin %s failed while deactivating.",
-                    plugin_id,
-                )
+        self._deactivate_handle(plugin_id, record.handle)
         self._remove_modules(record.module_prefix)
         record.handle = None
         record.module_prefix = ""
+
+    @staticmethod
+    def _activate_handle(plugin_id, handle, registrar):
+        """Run the handle's side effects, now that refusal is behind us.
+
+        An activate that raises unwinds the whole load: the plugin is
+        deactivated, uninstalled and reported FAILED, exactly as if the
+        install itself had been refused.
+        """
+        if handle is None or not hasattr(handle, "activate"):
+            return
+        handle.activate(PluginActivationContext(
+            plugin_id=plugin_id,
+            capability=registrar.capability,
+        ))
+
+    @staticmethod
+    def _deactivate_handle(plugin_id, handle):
+        """Let a handle undo its side effects, and never let that call
+        mask whatever brought us here."""
+        if handle is None or not hasattr(handle, "deactivate"):
+            return
+        try:
+            handle.deactivate()
+        except Exception:
+            LOGGER.exception(
+                "Plugin %s failed while deactivating.",
+                plugin_id,
+            )
 
     @staticmethod
     def _module_prefix(manifest):

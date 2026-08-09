@@ -7,6 +7,7 @@ from manuskript.plugins.api import (
     ConversionContribution,
     EditorWorkspaceContribution,
     ExportContribution,
+    ConversionAugmentationContribution,
     ImportContribution,
     IndexCardStyleContribution,
     MarkupContribution,
@@ -14,9 +15,13 @@ from manuskript.plugins.api import (
     PageTypeContribution,
     PluginSettingsContribution,
     ProjectPanelContribution,
+    TransformContribution,
     contribution_descriptor,
 )
-from manuskript.plugins.errors import PluginRegistrationError
+from manuskript.plugins.errors import (
+    PluginRegistrationError,
+    PluginScopeError,
+)
 
 
 class ContributionKind(str, Enum):
@@ -30,6 +35,8 @@ class ContributionKind(str, Enum):
     PAGE_TYPE = "page_type"
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
+    TRANSFORM = "transform"
+    CONVERSION_AUGMENTATION = "conversion_augmentation"
 
 
 CONTRIBUTION_TYPES = {
@@ -43,7 +50,36 @@ CONTRIBUTION_TYPES = {
     ContributionKind.PAGE_TYPE: PageTypeContribution,
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
+    ContributionKind.TRANSFORM: TransformContribution,
+    ContributionKind.CONVERSION_AUGMENTATION: (
+        ConversionAugmentationContribution
+    ),
 }
+
+
+#: Where each kind of contribution names the media types it works with.
+#:
+#: ExportContribution is deliberately absent: its ``output_format`` falls
+#: back to the descriptor ID, so it doubles as an identifier and cannot be
+#: read as a media type without guessing which one it is.
+MEDIA_TYPE_FIELDS = {
+    ContributionKind.CONVERTER: ("source_formats", "target_formats"),
+    ContributionKind.PAGE_RENDERER: ("target_formats",),
+    ContributionKind.TRANSFORM: ("media_type",),
+}
+
+
+def contribution_media_types(kind, contribution):
+    """Every media type one contribution names."""
+    names = set()
+    for attribute in MEDIA_TYPE_FIELDS.get(ContributionKind(kind), ()):
+        value = getattr(contribution, attribute, ())
+        if isinstance(value, str):
+            if value:
+                names.add(value)
+        else:
+            names.update(str(entry) for entry in value)
+    return names
 
 
 @dataclass(frozen=True)
@@ -60,9 +96,24 @@ class RegisteredContribution:
 class PluginRegistrar:
     """Stage one plugin's contributions before atomically installing them."""
 
-    def __init__(self, plugin_id):
+    def __init__(self, plugin_id, capabilities=None):
         self.plugin_id = plugin_id
         self._contributions = []
+        self._capabilities = dict(capabilities or {})
+
+    def capability(self, name):
+        """A service this plugin declared and core granted.
+
+        Refuses anything undeclared rather than returning it, so a plugin
+        cannot quietly widen the surface its manifest advertises.
+        """
+        try:
+            return self._capabilities[name]
+        except KeyError:
+            raise PluginScopeError(
+                "Plugin {} did not declare capability {!r} in its "
+                "manifest.".format(self.plugin_id, name)
+            ) from None
 
     @property
     def contributions(self):
@@ -97,6 +148,12 @@ class PluginRegistrar:
 
     def register_markup(self, contribution):
         self._add(ContributionKind.MARKUP, contribution)
+
+    def register_transform(self, contribution):
+        self._add(ContributionKind.TRANSFORM, contribution)
+
+    def register_conversion_augmentation(self, contribution):
+        self._add(ContributionKind.CONVERSION_AUGMENTATION, contribution)
 
     def _add(self, kind, contribution):
         expected = CONTRIBUTION_TYPES[kind]
@@ -135,8 +192,8 @@ class PluginRegistry:
         self._by_kind = defaultdict(dict)
         self._by_plugin = defaultdict(list)
 
-    def registrar(self, plugin_id):
-        return PluginRegistrar(plugin_id)
+    def registrar(self, plugin_id, capabilities=None):
+        return PluginRegistrar(plugin_id, capabilities=capabilities)
 
     def install(self, plugin_id, contributions):
         contributions = tuple(contributions)
@@ -148,7 +205,11 @@ class PluginRegistry:
         collisions = [
             (record.kind.value, record.id)
             for record in contributions
+            # A plugin's own records are about to be replaced, so only
+            # somebody else holding the ID is a conflict: reinstalling a
+            # plugin over itself must not refuse the plugin.
             if record.id in self._by_kind[record.kind]
+            and self._by_kind[record.kind][record.id].plugin_id != plugin_id
         ]
         if collisions:
             kind, contribution_id = collisions[0]
@@ -235,3 +296,14 @@ class PluginRegistry:
     @property
     def markup(self):
         return self.contributions(ContributionKind.MARKUP)
+
+    @property
+    def transforms(self):
+        return self.contributions(ContributionKind.TRANSFORM)
+
+    @property
+    def conversion_augmentations(self):
+        return self.contributions(
+            ContributionKind.CONVERSION_AUGMENTATION
+        )
+

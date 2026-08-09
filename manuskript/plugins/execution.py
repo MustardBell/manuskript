@@ -8,6 +8,10 @@ from manuskript.plugins.api import (
 )
 from manuskript.plugins.errors import PluginError
 
+import logging
+
+LOGGER = logging.getLogger(__name__)
+
 
 class PluginExecutionError(PluginError):
     pass
@@ -181,6 +185,58 @@ def run_page_parser(contribution, source):
             )
         )
     return operation(source)
+
+
+def run_transform(contribution, content, options=None):
+    """One middleware pass over content already in its media type."""
+    engine = contribution.engine_factory()
+    operation = getattr(engine, "transform", None)
+    if not callable(operation):
+        raise PluginExecutionError(
+            "Transform {} has no transform(content, media_type, options) "
+            "method.".format(contribution.descriptor.id)
+        )
+    result = operation(
+        content,
+        contribution.media_type,
+        normalize_options(contribution.options, options),
+    )
+    if not isinstance(result, str):
+        raise PluginExecutionError(
+            "Transform {} returned {}, expected str: a transform takes "
+            "and returns {}.".format(
+                contribution.descriptor.id,
+                type(result).__name__,
+                contribution.media_type,
+            )
+        )
+    return result
+
+
+def run_transforms(contributions, content, option_store=None):
+    """Every middleware over one media type, in the order it runs.
+
+    A transform that fails is skipped rather than allowed to lose the
+    content: it adds to a result somebody else produced, so the result
+    without it is still the document.
+    """
+    for contribution in contributions:
+        options = (
+            option_store.load(
+                contribution.descriptor.id,
+                contribution.options,
+            )
+            if option_store is not None
+            else None
+        )
+        try:
+            content = run_transform(contribution, content, options)
+        except Exception:
+            LOGGER.exception(
+                "Transform %s failed; leaving the content untransformed.",
+                contribution.descriptor.id,
+            )
+    return content
 
 
 def run_page_format_renderer(

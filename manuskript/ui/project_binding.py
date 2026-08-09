@@ -1,6 +1,4 @@
 from manuskript.ui.connections import SignalConnectionRegistry
-from manuskript.ui.project_context_binding import ProjectContextBinding
-from manuskript.ui.project_feature_binding import ProjectFeatureBinding
 from manuskript.ui.project_view_binding import (
     DebugProjectBinding,
     FlatDataProjectBinding,
@@ -11,22 +9,38 @@ from manuskript.ui.project_view_binding import (
 class ProjectBinding:
     """Own the complete UI binding lifecycle for one active project."""
 
-    def __init__(self, window):
+    def __init__(self, views, runtime, features, contexts_factory):
+        # The views name only the widgets each binding owns; the runtime
+        # resolves the model set afresh whenever a project is bound.
         self.connections = SignalConnectionRegistry()
-        self.flat_data = FlatDataProjectBinding(window)
-        self.features = ProjectFeatureBinding(window)
-        self.contexts = ProjectContextBinding(window)
-        self.outline_selection = OutlineSelectionProjectBinding(window)
-        self.debug_views = DebugProjectBinding(window)
+        self.flat_data = FlatDataProjectBinding(views.flat_data, runtime)
+        self.features = features
+        self.outline_selection = OutlineSelectionProjectBinding(
+            views.outline_selection,
+        )
+        self.debug_views = DebugProjectBinding(views.debug, runtime)
+        # Built at bind time, because a window has no models to bind
+        # until a project is open -- and injectable, so what the context
+        # binding is given is one decision made in one place.
+        self.contextsFactory = contexts_factory
+        self.contexts = None
         self.bound = False
 
     @property
     def reference_service(self):
-        return self.contexts.reference_service
+        return (
+            self.contexts.reference_service
+            if self.contexts is not None
+            else None
+        )
 
     @property
     def text_editor_context(self):
-        return self.contexts.text_editor_context
+        return (
+            self.contexts.text_editor_context
+            if self.contexts is not None
+            else None
+        )
 
     def bind(self):
         if self.bound or self.connections:
@@ -39,6 +53,7 @@ class ProjectBinding:
         try:
             self.flat_data.bind(connect)
             self.features.bind(connect)
+            self.contexts = self.contextsFactory()
             contexts_started = True
             self.contexts.bind(connect)
             self.outline_selection.bind(connect)
@@ -57,6 +72,19 @@ class ProjectBinding:
 
         # Stop callbacks before clearing the objects they depend on.
         self.connections.disconnect_all()
-        self.contexts.unbind()
+        if self.contexts is not None:
+            self.contexts.unbind()
         self.features.unbind()
         self.bound = False
+
+    def dispose(self):
+        """Release stable workspace views after their project unbinds."""
+        self.unbind()
+        self.connections.disconnect_all()
+        self.flat_data.views = None
+        self.outline_selection.views = None
+        self.debug_views.views = None
+        self.features.dispose()
+        self.features = None
+        self.contexts = None
+        self.contextsFactory = None

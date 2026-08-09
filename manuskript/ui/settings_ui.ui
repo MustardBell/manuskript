@@ -548,6 +548,26 @@
         </layout>
        </item>
        <item>
+        <widget class="QLabel" name="lblRevisionStatus">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnInitGitRepository">
+         <property name="text">
+          <string>Create a Git repository here…</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="grpGitRevisionOptions">
          <property name="title">
           <string>Git revisions</string>

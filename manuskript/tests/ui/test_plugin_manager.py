@@ -4,8 +4,20 @@ from manuskript.plugins.runtime import PluginRuntime, PluginStatus
 from manuskript.services.plugin_preferences import (
     InMemoryPluginPreferences,
 )
+from manuskript.services.plugin_contributions import (
+    PluginContributionService,
+)
 from manuskript.tests.plugins.test_runtime import create_plugin
 from manuskript.ui.plugins.manager import PluginManagerDialog
+
+
+def contributions(runtime):
+    """What the dialog changes the plugin set through.
+
+    Enabling goes through the service so that every window hears about
+    it, not only the one the dialog was opened from.
+    """
+    return PluginContributionService(runtime)
 
 
 def test_manager_discovers_disabled_plugin_without_loading_it(tmp_path):
@@ -15,7 +27,7 @@ def test_manager_discovers_disabled_plugin_without_loading_it(tmp_path):
         InMemoryPluginPreferences(),
     )
 
-    dialog = PluginManagerDialog(runtime)
+    dialog = PluginManagerDialog(contributions(runtime))
 
     assert dialog.pluginList.topLevelItemCount() == 1
     assert (
@@ -32,14 +44,17 @@ def test_manager_enables_and_disables_selected_plugin(
         [tmp_path],
         InMemoryPluginPreferences(),
     )
-    dialog = PluginManagerDialog(runtime)
+    service = contributions(runtime)
+    dialog = PluginManagerDialog(service)
     monkeypatch.setattr(
         dialog,
         "_confirm_enable",
         lambda _plugin_id: True,
     )
+    # The announcement belongs to the service, not to this dialog: every
+    # window subscribes to it, so a change made here reaches all of them.
     changes = []
-    dialog.pluginsChanged.connect(lambda: changes.append(True))
+    service.changed.connect(lambda: changes.append(True))
 
     dialog.enable_selected()
 
@@ -77,7 +92,7 @@ def test_manager_reports_invalid_manifests(tmp_path):
         InMemoryPluginPreferences(),
     )
 
-    dialog = PluginManagerDialog(runtime)
+    dialog = PluginManagerDialog(contributions(runtime))
 
     assert "Discovery problems" in dialog.discoveryLabel.text()
     assert "Invalid plugin ID" in dialog.discoveryLabel.text()

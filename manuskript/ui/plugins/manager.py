@@ -1,6 +1,6 @@
 import html
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -23,17 +23,31 @@ from manuskript.plugins.runtime import PluginStatus
 
 
 class PluginManagerDialog(QDialog):
-    """Inspect, trust, enable, disable, and diagnose application plugins."""
+    """Inspect, trust, enable, disable, and diagnose application plugins.
 
-    pluginsChanged = pyqtSignal()
+    Changes the set of contributions through the contribution service
+    rather than the runtime directly, so that every window hears about a
+    plugin being enabled -- not only whichever window this dialog was
+    opened from.
+    """
 
     def __init__(
-            self, runtime, parent=None, option_store=None,
-            settings_context_provider=None):
+            self, contributions, parent=None, option_store=None,
+            settings_context_provider=None, media_types=None):
         super().__init__(parent)
-        self.runtime = runtime
-        self.option_store = option_store
+        self.contributions = contributions
+        self.runtime = contributions.runtime
+        self.option_store = (
+            option_store
+            if option_store is not None
+            else contributions.optionStore
+        )
         self.settingsContextProvider = settings_context_provider
+        self.mediaTypes = (
+            media_types
+            if media_types is not None
+            else contributions.mediaTypes
+        )
         self.pluginPanels = {}
         self.setWindowTitle(self.tr("Manage Plugins"))
         self.resize(960, 700)
@@ -59,7 +73,7 @@ class PluginManagerDialog(QDialog):
             ).format(
                 "<br>".join(
                     html.escape(str(root))
-                    for root in runtime.roots
+                    for root in self.runtime.roots
                 )
             )
         )
@@ -153,10 +167,8 @@ class PluginManagerDialog(QDialog):
 
     def refresh(self):
         selected_id = self.selected_plugin_id()
-        self.runtime.discover()
-        self.runtime.load_enabled()
+        self.contributions.rediscover()
         self._populate(selected_id)
-        self.pluginsChanged.emit()
 
     def selected_plugin_id(self):
         item = self.pluginList.currentItem()
@@ -166,17 +178,15 @@ class PluginManagerDialog(QDialog):
         plugin_id = self.selected_plugin_id()
         if plugin_id is None or not self._confirm_enable(plugin_id):
             return
-        self.runtime.enable(plugin_id)
+        self.contributions.enable(plugin_id)
         self._populate(plugin_id)
-        self.pluginsChanged.emit()
 
     def disable_selected(self):
         plugin_id = self.selected_plugin_id()
         if plugin_id is None:
             return
-        self.runtime.disable(plugin_id)
+        self.contributions.disable(plugin_id)
         self._populate(plugin_id)
-        self.pluginsChanged.emit()
 
     def _confirm_enable(self, plugin_id):
         record = self.runtime.records[plugin_id]
@@ -287,6 +297,15 @@ class PluginManagerDialog(QDialog):
                 html.escape(str(manifest.root))
             )
         )
+        overridden = self._overridden_media_types(manifest)
+        if overridden:
+            # Findable outside the developer tool on purpose: somebody who
+            # remaps a format in March cannot otherwise explain a broken
+            # export in July.
+            metadata.append(self.tr(
+                "<b>{} media type(s) this plugin declares are overridden: "
+                "{}</b>"
+            ).format(len(overridden), html.escape(", ".join(overridden))))
         self.metadataLabel.setText("<br>".join(metadata))
         self.errorLabel.setText(
             (
@@ -391,11 +410,22 @@ class PluginManagerDialog(QDialog):
             )
         )
 
+    def _overridden_media_types(self, manifest):
+        """Formats this plugin declared that the user has remapped."""
+        if self.mediaTypes is None:
+            return ()
+        return tuple(
+            media_id
+            for media_id in manifest.declared_media_type_ids
+            if self.mediaTypes.override(media_id)
+        )
+
     def _status_text(self, status):
         return {
             PluginStatus.DISABLED: self.tr("Disabled"),
             PluginStatus.LOADED: self.tr("Enabled"),
             PluginStatus.INCOMPATIBLE: self.tr("Incompatible"),
+            PluginStatus.UNSATISFIED: self.tr("Unsatisfied"),
             PluginStatus.FAILED: self.tr("Failed"),
         }[status]
 

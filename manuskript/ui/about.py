@@ -14,7 +14,7 @@ import os
 
 
 class aboutDialog(QWidget, Ui_about):
-    def __init__(self, parent=None, mw=None):
+    def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.populateFields()
