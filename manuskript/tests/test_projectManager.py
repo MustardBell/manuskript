@@ -10,6 +10,14 @@ from manuskript.projectManager import ProjectManager
 from manuskript.services.project_view_registry import ProjectViewRegistry
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
+from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
+
+
+def lifecycle_for(window):
+    return ProjectLifecycleView(
+        window.projectRuntime,
+        ProjectLifecycleViews.for_window(window),
+    )
 
 
 class TestProjectManager(unittest.TestCase):
@@ -27,7 +35,7 @@ class TestProjectManager(unittest.TestCase):
         self.status_reporter = MagicMock()
         self.autosave = MagicMock()
         self.last_project_store = MagicMock()
-        self.lifecycle_view = ProjectLifecycleView(self.window)
+        self.lifecycle_view = lifecycle_for(self.window)
         self.lifecycle_view.show_save_failures = MagicMock()
         self.lifecycle_view.show_load_failures = MagicMock()
         self.project_manager = ProjectManager(
@@ -406,7 +414,7 @@ class TestSaveFlushesPendingText(unittest.TestCase):
         self.window.projectRuntime.settingsManager = settings_manager
         self.window.settingsManager = settings_manager
         self.storage = MagicMock()
-        self.view = ProjectLifecycleView(self.window)
+        self.view = lifecycle_for(self.window)
         self.view.flush_pending_edits = MagicMock()
         self.view.capture_project_state = MagicMock()
         self.view.show_save_failures = MagicMock()

@@ -37,7 +37,10 @@ class reopened:
     def __exit__(self, *_exception):
         window = self.window
         window.windowRegistry.register(window)
-        window.projectRuntime.attach(window.projectLifecycleView)
+        window.projectRuntime.attach(
+            window.projectLifecycleView,
+            workspace=window,
+        )
         return False
 
 

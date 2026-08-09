@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from manuskript.domain.persistence import ProjectSaveResult
 from manuskript.projectManager import ProjectManager
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
+from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 
 
 class TestProjectManagerAutosave(unittest.TestCase):
@@ -15,8 +16,12 @@ class TestProjectManagerAutosave(unittest.TestCase):
         self.storage.save.return_value = ProjectSaveResult()
         self.autosave = MagicMock()
         self.last_project_store = MagicMock()
+        lifecycle_view = ProjectLifecycleView(
+            self.window.projectRuntime,
+            ProjectLifecycleViews.for_window(self.window),
+        )
         self.project_manager = ProjectManager(
-            ProjectLifecycleView(self.window),
+            lifecycle_view,
             self.window.projectRuntime.settingsManager,
             self.window.projectRuntime.modelParent,
             storage=self.storage,

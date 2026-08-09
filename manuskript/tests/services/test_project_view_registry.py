@@ -109,10 +109,12 @@ def test_a_remark_lands_in_the_window_being_worked_in():
     first window's status bar.
     """
     first, second = MagicMock(), MagicMock()
+    first_workspace, second_workspace = object(), object()
     registry = ProjectViewRegistry(
-        [first, second],
-        active_window_source=lambda: second.window,
+        active_window_source=lambda: second_workspace,
     )
+    registry.register(first, workspace=first_workspace)
+    registry.register(second, workspace=second_workspace)
 
     registry.show_status("Saved.", 3000, 0)
 
@@ -138,13 +140,16 @@ def test_the_speaking_view_is_resolved_per_call_not_captured():
     into it.
     """
     first, second = MagicMock(), MagicMock()
-    active = [first.window]
+    first_workspace, second_workspace = object(), object()
+    active = [first_workspace]
     registry = ProjectViewRegistry(
-        [first, second], active_window_source=lambda: active[0]
+        active_window_source=lambda: active[0]
     )
+    registry.register(first, workspace=first_workspace)
+    registry.register(second, workspace=second_workspace)
 
     registry.show_status("one")
-    active[0] = second.window
+    active[0] = second_workspace
     registry.unregister(first)
     registry.show_status("two")
 

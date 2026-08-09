@@ -69,9 +69,8 @@ class ProjectRuntime(QObject):
         self.projectManager = None
         self._projectHistory = project_history
 
-    def attach(self, view):
-        """Register a window's view side, building the manager on the
-        first one.
+    def attach(self, view, workspace=None):
+        """Register a workspace's view side, building the manager once.
 
         The manager is deferred because the runtime is composed before
         any window exists; later windows join a project already running.
@@ -81,12 +80,16 @@ class ProjectRuntime(QObject):
         call -- a reporter captured here would be the first window's for
         the life of the project, including after it closed.
 
+        ``workspace`` is identity, not a source of capabilities. It lets
+        the registry match the application's active window to the right
+        view without requiring that view to expose its whole window.
+
         The settings and the model parent are handed over here, from what
         this runtime owns. They used to be read back out of the joining
         window, which made the project's own facts reachable only through
         something that displays them.
         """
-        self.views.register(view)
+        self.views.register(view, workspace=workspace)
         if self.projectManager is None:
             self.projectManager = ProjectManager(
                 self.views,

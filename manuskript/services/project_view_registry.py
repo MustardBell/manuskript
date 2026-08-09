@@ -30,21 +30,27 @@ class ProjectViewRegistry:
     """The project's views, addressable as one."""
 
     def __init__(self, views=(), active_window_source=None):
-        self._views = list(views)
+        self._views = []
+        self._workspaces = {}
+        for view in views:
+            self.register(view)
         # A callable, not a window registry: this is project scope and
         # has no business knowing the type of thing that tracks windows.
         # Absent one, the primary view answers, which is what a single
         # window has always meant.
         self._active_window_source = active_window_source
 
-    def register(self, view):
+    def register(self, view, workspace=None):
         if view not in self._views:
             self._views.append(view)
+        if workspace is not None:
+            self._workspaces[view] = workspace
         return view
 
     def unregister(self, view):
         if view in self._views:
             self._views.remove(view)
+        self._workspaces.pop(view, None)
 
     @property
     def views(self):
@@ -74,7 +80,7 @@ class ProjectViewRegistry:
         window = source() if source is not None else None
         if window is not None:
             for view in self._views:
-                if getattr(view, "window", None) is window:
+                if self._workspaces.get(view) is window:
                     return view
         return self.primary
 

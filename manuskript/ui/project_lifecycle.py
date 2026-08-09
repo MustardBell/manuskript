@@ -1,3 +1,5 @@
+import os
+
 from PyQt5.QtCore import QSize
 from PyQt5.QtWidgets import QListWidgetItem, QMessageBox
 
@@ -5,28 +7,22 @@ from manuskript import timing
 from manuskript.domain.project import CloseDecision
 from manuskript.enums import Outline
 from manuskript.ui.listDialog import ListDialog
-from manuskript.ui.views.textEditView import textEditView
 
 
 class ProjectLifecycleView:
-    """Adapt project lifecycle events to concrete main-window widgets."""
+    """Adapt project lifecycle events to explicit workspace capabilities."""
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, runtime, views):
+        self.runtime = runtime
+        self.views = views
 
     @property
     def settings(self):
-        """The project's settings, read to configure this window's widgets.
-
-        A window reading its project is the ordinary direction. What used
-        to also live here -- the parent the models hang off -- was here
-        only so the project manager could reach it back through a window,
-        and goes from the runtime to the manager directly now.
-        """
-        return self.window.projectRuntime.settingsManager
+        """The runtime-owned settings used to configure this workspace."""
+        return self.runtime.settingsManager
 
     def translate(self, text):
-        return self.window.tr(text)
+        return self.views.dialogs.translate(text)
 
     def show_status(self, message, duration=5000, importance=1):
         """Put a remark in this window's own status bar.
@@ -35,128 +31,115 @@ class ProjectLifecycleView:
         the manager holds no reference to any one window's presenter and
         a closed window cannot be reported into.
         """
-        self.window.statusPresenter.show(message, duration, importance)
+        self.views.show_status(message, duration, importance)
 
     def project_name(self):
-        return self.window.projectName()
+        name = os.path.basename(self.runtime.currentProject or "")
+        return name[:-4] if name.endswith(".msk") else name
 
     @property
     def models(self):
         """The project's models, from the runtime that owns them."""
-        return self.window.projectRuntime.models
+        return self.runtime.models
 
     def sync_to_state(self, project_open):
-        for item in [self.window.actOpen, self.window.menuRecents]:
+        commands = self.views.commands
+        for item in commands.closed_only:
             item.setEnabled(not project_open)
-        for item in [
-            self.window.actSave,
-            self.window.actSaveAs,
-            self.window.actGitRevisions,
-            self.window.actCloseProject,
-            self.window.menuEdit,
-            self.window.menuView,
-            self.window.menuOrganize,
-            self.window.menuNavigate,
-            self.window.menuHelp,
-            self.window.actImport,
-            self.window.actCompile,
-            self.window.actSettings,
-        ]:
+        for item in commands.open_only:
             item.setEnabled(project_open)
-        for action in self.window.menuTools.actions():
-            if (
-                self.window.pluginUi is not None
-                and action in self.window.pluginUi.globalActions
-            ):
+        global_actions = commands.global_tool_actions()
+        for action in commands.tools_menu.actions():
+            if action in global_actions:
                 action.setEnabled(True)
             else:
                 action.setEnabled(project_open)
-        self.window.menuTools.setEnabled(True)
+        commands.tools_menu.setEnabled(True)
 
     def connect_project(self):
-        self.window.makeConnections()
+        self.views.workspace.connect_project()
 
     def apply_loaded_settings(self):
         settings = self.settings
+        views = self.views.loaded_settings
         # This window's own view of the project first -- which documents
         # were open and which tab it was on. Two windows are two places
         # to be working, and both taking the project's single answer
         # would make them the same place. What this window never recorded
         # falls back to the project's.
         with timing.span("settings.reopen_documents"):
-            self.window.windowState.restore_view_state(
+            views.view_state.restore_view_state(
                 documents=settings.openIndexes,
                 main_tab=settings.lastTab,
             )
         with timing.span("settings.view_menu"):
-            self.window.generateViewMenu()
-        self.window.mainEditor.sldCorkSizeFactor.setValue(
+            views.rebuild_view_menu()
+        views.editor.sldCorkSizeFactor.setValue(
             settings.corkSizeFactor
         )
         with timing.span("settings.spellcheck"):
-            self.window.actSpellcheck.setChecked(settings.spellcheck)
-            self.window.toggleSpellcheck(settings.spellcheck)
+            views.spellcheck_action.setChecked(settings.spellcheck)
+            views.set_spellcheck(settings.spellcheck)
         with timing.span("settings.dictionary"):
-            self.window.updateMenuDict()
-            self.window.setDictionary()
+            views.rebuild_dictionary_menu()
+            views.set_dictionary()
 
         icon_size = settings.viewSettings["Tree"]["iconSize"]
-        self.window.corePanels.project_tree.tree.setIconSize(
+        views.project_tree.setIconSize(
             QSize(icon_size, icon_size)
         )
         with timing.span("settings.folder_view"):
-            self.window.mainEditor.setFolderView(settings.folderView)
-            self.window.mainEditor.updateFolderViewButtons(
+            views.editor.setFolderView(settings.folderView)
+            views.editor.updateFolderViewButtons(
                 settings.folderView
             )
-            self.window.mainEditor.tabSplitter.updateStyleSheet()
-            self.window.mainEditor.updateCorkBackground()
+            views.editor.tabSplitter.updateStyleSheet()
+            views.editor.updateCorkBackground()
         with timing.span("settings.view_mode"):
             if settings.viewMode == "simple":
-                self.window.setViewModeSimple()
+                views.set_simple_mode()
             else:
-                self.window.setViewModeFiction()
+                views.set_fiction_mode()
 
     def project_opened(self):
-        settings = self.settings
+        workspace = self.views.workspace
         # The tab this window actually landed on, which is its own where
         # it recorded one and the project's otherwise.
-        self.window.tabMain.currentChanged.emit(
-            self.window.tabMain.currentIndex()
+        workspace.tabs.currentChanged.emit(
+            workspace.tabs.currentIndex()
         )
         word_count = self.models.outline.rootItem.data(
             Outline.wordCount
         )
-        self.window.sessionStartWordCount = (
+        workspace.set_session_start_word_count(
             int(word_count) if word_count != "" else 0
         )
-        self.window.setWindowTitle(
-            self.window.projectName()
+        workspace.set_window_title(
+            self.project_name()
             + " - "
-            + self.window.tr("Manuskript")
+            + self.translate("Manuskript")
         )
-        self.window.history.reset()
-        if self.window.pluginUi is not None:
-            self.window.pluginUi.project_opened()
-        self.window.switchToProject()
+        workspace.reset_history()
+        workspace.notify_plugins_opened()
+        workspace.show_project()
         # The window's own arrangement is current again, so anything
         # remembered from the last close is stale.
-        self.window.windowState.forget_captured_layout()
+        workspace.view_state.forget_captured_layout()
         # Only now is there a project for extra windows to show; a
         # workspace window without one is just a welcome screen.
-        self.window.restoreWorkspaceWindows()
+        workspace.restore_workspace_windows()
 
     def confirm_unsaved_changes(self):
         message = QMessageBox(
             QMessageBox.Question,
-            self.window.tr("Save project?"),
+            self.translate("Save project?"),
             "<p><b>"
-            + self.window.tr(
+            + self.translate(
                 'Save changes to project "{}" before closing?'
-            ).format(self.window.projectName())
+            ).format(self.project_name())
             + "</b></p>"
             + "<p>"
-            + self.window.tr(
+            + self.translate(
                 "Your changes will be lost if you don't save them."
             )
             + "</p>",
@@ -173,8 +156,8 @@ class ProjectLifecycleView:
 
     def show_save_failures(self, files):
         self._show_file_failures(
-            self.window.tr("Files not saved"),
-            self.window.tr(
+            self.translate("Files not saved"),
+            self.translate(
                 "The following files were not saved and appear "
                 "to be open in another program"
             ),
@@ -183,8 +166,8 @@ class ProjectLifecycleView:
 
     def show_load_failures(self, files):
         self._show_file_failures(
-            self.window.tr("Files not loaded"),
-            self.window.tr(
+            self.translate("Files not loaded"),
+            self.translate(
                 "The following files were not loaded and appear "
                 "to be open in another program"
             ),
@@ -192,7 +175,7 @@ class ProjectLifecycleView:
         )
 
     def _show_file_failures(self, title, message, files):
-        dialog = ListDialog(self.window)
+        dialog = ListDialog(self.views.dialogs.parent)
         dialog.setModal(True)
         dialog.setWindowTitle(title)
         dialog.label.setText(message)
@@ -204,17 +187,17 @@ class ProjectLifecycleView:
         # Before anything is torn down: this window's view of the project
         # and the arrangement of its panels are only knowable while it
         # still has them.
-        self.window.windowState.capture_layout()
-        if self.window.pluginUi is not None:
-            self.window.pluginUi.prepare_project_close()
+        workspace = self.views.workspace
+        workspace.view_state.capture_layout()
+        workspace.notify_plugins_closing()
         # Structure history belongs to one project. Undoing a deletion from
         # the previous manuscript into a newly opened one would reinsert
         # items that never belonged to it.
-        undo_stack = getattr(self.window, "undoStack", None)
+        undo_stack = workspace.undo_stack
         if undo_stack is not None:
             undo_stack.clear()
-        self.window.mainEditor.close()
-        self.window.mainEditor.closeAllTabs()
+        workspace.editor.close()
+        workspace.editor.closeAllTabs()
 
     def flush_pending_edits(self):
         """Write out this window's own unsubmitted text.
@@ -225,7 +208,7 @@ class ProjectLifecycleView:
         here is the text no shared buffer stands for: a character's notes,
         a multiple selection, anything an editor holds privately.
         """
-        for editor in self.window.findChildren(textEditView):
+        for editor in self.views.workspace.private_text_editors():
             editor.submit()
 
     def prepare_model_replacement(self):
@@ -234,15 +217,17 @@ class ProjectLifecycleView:
 
     def capture_project_state(self):
         """Copy project-scoped view state into persisted settings."""
-        self.settings.lastTab = self.window.tabMain.currentIndex()
+        workspace = self.views.workspace
+        self.settings.lastTab = workspace.tabs.currentIndex()
         self.settings.openIndexes = (
-            self.window.mainEditor.tabSplitter.openIndexes()
+            workspace.editor.tabSplitter.openIndexes()
         )
 
     def disconnect_project(self):
-        self.window.breakConnections()
+        self.views.workspace.disconnect_project()
 
     def project_closed(self):
-        self.window.setWindowTitle(self.window.tr("Manuskript"))
-        self.window.welcome.updateValues()
-        self.window.switchToWelcome()
+        workspace = self.views.workspace
+        workspace.set_window_title(self.translate("Manuskript"))
+        workspace.update_welcome()
+        workspace.show_welcome()

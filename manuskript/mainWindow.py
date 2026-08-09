@@ -74,6 +74,7 @@ from manuskript.ui.project_binding_views import ProjectBindingViews
 from manuskript.ui.project_context_binding import ProjectContextBinding
 from manuskript.ui.project_feature_binding import ProjectFeatureBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
+from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.targets import TargetsDialog
@@ -284,7 +285,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.buildDeveloperMenu()
         self.buildWorkspaceMenu()
-        self.projectLifecycleView = ProjectLifecycleView(self)
+        self.projectLifecycleView = ProjectLifecycleView(
+            self.projectRuntime,
+            ProjectLifecycleViews.for_window(self),
+        )
         self.externalProcessRunner = ExternalProcessRunner()
         self.externalToolPaths = ExternalToolPaths()
         self.themeRepository = ThemeRepository()
@@ -294,7 +298,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # itself: the project is the runtime's, the view is the
         # window's.
         self.projectManager = self.projectRuntime.attach(
-            self.projectLifecycleView
+            self.projectLifecycleView,
+            workspace=self,
         )
         # Project bindings receive stable, grouped widget contracts. Models
         # remain runtime-owned and are resolved only when a project binds,
