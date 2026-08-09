@@ -17,6 +17,10 @@ class TextEditorContext:
     #: The project's text buffers, so two views of one document are two
     #: viewports on one text rather than two copies of it.
     document_buffers: Optional[object] = None
+    #: Report a real editor focus event to its workspace. QApplication's
+    #: global focusChanged signal is not delivered consistently by every Qt
+    #: platform plugin, especially for viewport clicks in headless sessions.
+    focus_received: Optional[Callable[[object], None]] = None
 
 
 def text_editor_context_for(window, settings, models, buffers=None):
@@ -57,9 +61,16 @@ def text_editor_context_for(window, settings, models, buffers=None):
         if callable(handler):
             handler()
 
+    def focus_received(editor):
+        # Use the same registry path as QApplication.focusChanged so this
+        # workspace becomes active and its focus controller is notified.
+        # Duplicate delivery from the global signal is idempotent.
+        window.windowRegistry.focus_changed(None, editor)
+
     return TextEditorContext(
         settings=settings,
         document_buffers=buffers,
+        focus_received=focus_received,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,

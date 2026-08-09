@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Any, Tuple
 from weakref import WeakMethod, ref
 
+from PyQt5 import sip
+
 from manuskript.ui.views.MDEditView import MDEditView
 
 
@@ -44,7 +46,7 @@ class WorkspaceFocusController:
 
     @property
     def markup_target(self):
-        return self._markup_target
+        return self._live_target("_markup_target")
 
     def current_document_target(self):
         """Return the endpoint used by document command routing."""
@@ -52,11 +54,28 @@ class WorkspaceFocusController:
 
     def current_markup_target(self):
         """Return the endpoint used by markup command routing."""
-        return self._markup_target
+        return self._live_target("_markup_target")
 
     @property
     def focused_widget(self):
-        return self._focused_widget
+        return self._live_target("_focused_widget")
+
+    def _live_target(self, attribute):
+        target = getattr(self, attribute)
+        if target is None:
+            return None
+        try:
+            deleted = sip.isdeleted(target)
+        except TypeError:
+            # Unit-test doubles and non-QObject command roots are alive by
+            # ordinary Python ownership rather than by a SIP wrapper.
+            deleted = False
+        if not deleted:
+            return target
+        setattr(self, attribute, None)
+        if attribute == "_focused_widget":
+            self._markup_target = None
+        return None
 
     def subscribe(self, listener):
         """Observe this workspace's focus without retaining the receiver."""
@@ -77,6 +96,11 @@ class WorkspaceFocusController:
         self._listeners = remaining
 
     def focus_changed(self, _old, new):
+        # A native focus event reports synchronously through the editor port;
+        # QApplication may then publish the same transition globally. One
+        # transition must not notify pane/history listeners twice.
+        if new is not None and self.focused_widget is new:
+            return
         self._focused_widget = new
         self._markup_target = self._find_markdown_editor(new)
 

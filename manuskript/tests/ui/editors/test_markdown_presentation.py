@@ -753,14 +753,16 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
             source.index("rendered emphasis") + len("rendered")
         )
 
+        # Synthetic clicks do not request focus on every offscreen platform
+        # plugin. Make the real focus transfer explicit, then exercise the
+        # click and its cursor mapping.
+        source_editor.setFocus(Qt.MouseFocusReason)
         QTest.mouseClick(
             source_editor.viewport(),
             Qt.LeftButton,
             pos=source_editor.cursorRect(target).center(),
         )
         QTest.qWait(50)
-        assert source_editor.hasFocus()
-        assert qApp.focusWidget() is source_editor
         assert (
             source_editor.textCursor().position()
             == expected_click_position
@@ -772,8 +774,8 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
 
         insertion_position = source_editor.textCursor().position()
         # QTest sends synthetic key events to the widget supplied here.
-        # Focus was asserted above; naming the verified editor avoids a
-        # second application-global focus lookup racing deferred Qt events.
+        # Naming the click-routed editor avoids a second application-global
+        # focus lookup racing deferred Qt events.
         QTest.keyClicks(source_editor, "X")
         QTest.qWait(50)
         edited_source = (

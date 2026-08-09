@@ -79,6 +79,18 @@ def test_text_editor_context_routes_typed_outline_command():
     window.corePanels.project_tree.tree.moveDown.assert_called_once_with()
 
 
+def test_text_editor_context_reports_focus_through_window_registry():
+    window = make_window()
+    editor = MagicMock()
+    context = text_editor_context_for(
+        window, MagicMock(), MagicMock(),
+    )
+
+    context.focus_received(editor)
+
+    window.windowRegistry.focus_changed.assert_called_once_with(None, editor)
+
+
 def test_text_editor_routes_rename_as_typed_command():
     context = MagicMock()
     context.settings = MagicMock()

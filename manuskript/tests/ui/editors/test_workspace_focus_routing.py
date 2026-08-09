@@ -65,14 +65,15 @@ def test_split_pane_replaces_and_releases_workspace_focus_source():
 def test_real_focus_switches_the_active_split_pane(MWEmptyProject):
     from PyQt5.QtCore import Qt
     from PyQt5.QtTest import QTest
-    from PyQt5.QtWidgets import qApp
-
     from manuskript.models.outlineItem import outlineItem
 
     window = MWEmptyProject
     was_visible = window.isVisible()
     window.resize(1000, 700)
     window.show()
+    window.raise_()
+    window.activateWindow()
+    assert QTest.qWaitForWindowActive(window)
     window.tabMain.setCurrentIndex(window.TabRedac)
     root = window.mainEditor.tabSplitter
     model = window.projectRuntime.models.outline
@@ -95,13 +96,18 @@ def test_real_focus_switches_the_active_split_pane(MWEmptyProject):
         first_editor = root.tab.currentWidget().txtRedacText
         second_editor = root.secondTab.tab.currentWidget().txtRedacText
 
+        # Offscreen Qt plugins disagree on whether a synthetic viewport
+        # click also performs the window-system focus transfer. Request it,
+        # then verify the editor's click port makes routing deterministic.
+        first_editor.setFocus(Qt.MouseFocusReason)
         QTest.mouseClick(first_editor.viewport(), Qt.LeftButton)
-        qApp.processEvents()
+        QTest.qWait(20)
         assert root.focusTab == 1
         assert window.mainEditor.currentEditor().txtRedacText is first_editor
 
+        second_editor.setFocus(Qt.MouseFocusReason)
         QTest.mouseClick(second_editor.viewport(), Qt.LeftButton)
-        qApp.processEvents()
+        QTest.qWait(20)
         assert root.focusTab == 2
         assert window.mainEditor.currentEditor().txtRedacText is second_editor
     finally:
