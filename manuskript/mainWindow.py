@@ -13,7 +13,10 @@ from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
-from manuskript.commands import DocumentCommandRouter
+from manuskript.commands import (
+    DocumentCommandRouter,
+    MarkupCommandRouter,
+)
 from manuskript.domain.writing_session import WritingSessionProgress
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
@@ -168,6 +171,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._previousSelectionEmpty = True
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
+        )
+        self.markupCommands = MarkupCommandRouter(
+            lambda: self._lastMDEditView
         )
         # The project layer. A window is one view of it and never its
         # owner, so this is always something it was handed.
@@ -884,36 +890,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def _gitRevisionDialogClosed(self):
         self.gitRevisionDialog = None
-
-    # Formats
-    def callLastMDEditView(self, functionName, params=()):
-        """
-        If last focused widget was MDEditView, call the given function.
-        """
-        if self._lastMDEditView:
-            function = getattr(self._lastMDEditView, functionName)
-            function(*params)
-    def formatSetext1(self): self.callLastMDEditView("titleSetext", [1])
-    def formatSetext2(self): self.callLastMDEditView("titleSetext", [2])
-    def formatAtx1(self): self.callLastMDEditView("titleATX", [1])
-    def formatAtx2(self): self.callLastMDEditView("titleATX", [2])
-    def formatAtx3(self): self.callLastMDEditView("titleATX", [3])
-    def formatAtx4(self): self.callLastMDEditView("titleATX", [4])
-    def formatAtx5(self): self.callLastMDEditView("titleATX", [5])
-    def formatAtx6(self): self.callLastMDEditView("titleATX", [6])
-    def formatBold(self): self.callLastMDEditView("bold")
-    def formatItalic(self): self.callLastMDEditView("italic")
-    def formatUnderline(self): self.callLastMDEditView("underline")
-    def formatStrike(self): self.callLastMDEditView("strike")
-    def formatVerbatim(self): self.callLastMDEditView("verbatim")
-    def formatSuperscript(self): self.callLastMDEditView("superscript")
-    def formatSubscript(self): self.callLastMDEditView("subscript")
-    def formatCommentLines(self): self.callLastMDEditView("commentLine")
-    def formatList(self): self.callLastMDEditView("unorderedList")
-    def formatOrderedList(self): self.callLastMDEditView("orderedList")
-    def formatBlockquote(self): self.callLastMDEditView("blockquote")
-    def formatCommentBlock(self): self.callLastMDEditView("comment")
-    def formatClear(self): self.callLastMDEditView("clearFormat")
 
     def setMarkdownPresentationMode(self, mode):
         if self._markdownPresentationState is not None:

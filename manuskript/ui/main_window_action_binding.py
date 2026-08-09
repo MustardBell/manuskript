@@ -3,7 +3,7 @@ from functools import partial
 from PyQt5.QtWidgets import QActionGroup
 
 from manuskript import functions as F
-from manuskript.commands import DocumentCommand
+from manuskript.commands import DocumentCommand, MarkupCommand
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -108,45 +108,47 @@ class MainWindowActionBinding:
 
     def _bind_format_actions(self):
         window = self._window
-        for action, slot in [
-            (window.actHeaderSetextL1, window.formatSetext1),
-            (window.actHeaderSetextL2, window.formatSetext2),
-            (window.actHeaderAtxL1, window.formatAtx1),
-            (window.actHeaderAtxL2, window.formatAtx2),
-            (window.actHeaderAtxL3, window.formatAtx3),
-            (window.actHeaderAtxL4, window.formatAtx4),
-            (window.actHeaderAtxL5, window.formatAtx5),
-            (window.actHeaderAtxL6, window.formatAtx6),
-            (window.actFormatBold, window.formatBold),
-            (window.actFormatItalic, window.formatItalic),
-            (window.actFormatUnderline, window.formatUnderline),
-            (window.actFormatStrike, window.formatStrike),
-            (window.actFormatVerbatim, window.formatVerbatim),
+        for action, command in [
+            (window.actHeaderSetextL1, MarkupCommand.HEADING_SETEXT_1),
+            (window.actHeaderSetextL2, MarkupCommand.HEADING_SETEXT_2),
+            (window.actHeaderAtxL1, MarkupCommand.HEADING_ATX_1),
+            (window.actHeaderAtxL2, MarkupCommand.HEADING_ATX_2),
+            (window.actHeaderAtxL3, MarkupCommand.HEADING_ATX_3),
+            (window.actHeaderAtxL4, MarkupCommand.HEADING_ATX_4),
+            (window.actHeaderAtxL5, MarkupCommand.HEADING_ATX_5),
+            (window.actHeaderAtxL6, MarkupCommand.HEADING_ATX_6),
+            (window.actFormatBold, MarkupCommand.BOLD),
+            (window.actFormatItalic, MarkupCommand.ITALIC),
+            (window.actFormatUnderline, MarkupCommand.UNDERLINE),
+            (window.actFormatStrike, MarkupCommand.STRIKE),
+            (window.actFormatVerbatim, MarkupCommand.VERBATIM),
             (
                 window.actFormatSuperscript,
-                window.formatSuperscript,
+                MarkupCommand.SUPERSCRIPT,
             ),
-            (window.actFormatSubscript, window.formatSubscript),
+            (window.actFormatSubscript, MarkupCommand.SUBSCRIPT),
             (
                 window.actFormatCommentLines,
-                window.formatCommentLines,
+                MarkupCommand.COMMENT_LINES,
             ),
-            (window.actFormatList, window.formatList),
+            (window.actFormatList, MarkupCommand.UNORDERED_LIST),
             (
                 window.actFormatOrderedList,
-                window.formatOrderedList,
+                MarkupCommand.ORDERED_LIST,
             ),
             (
                 window.actFormatBlockquote,
-                window.formatBlockquote,
+                MarkupCommand.BLOCKQUOTE,
             ),
             (
                 window.actFormatCommentBlock,
-                window.formatCommentBlock,
+                MarkupCommand.COMMENT_BLOCK,
             ),
-            (window.actFormatClear, window.formatClear),
+            (window.actFormatClear, MarkupCommand.CLEAR_FORMAT),
         ]:
-            action.triggered.connect(slot)
+            action.triggered.connect(
+                partial(window.markupCommands.dispatch, command)
+            )
 
     def _bind_organize_actions(self):
         window = self._window

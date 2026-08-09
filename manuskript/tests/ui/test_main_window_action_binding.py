@@ -2,8 +2,11 @@ import importlib
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt5.QtGui import QTextCursor
 
-from manuskript.commands import DocumentCommand
+from manuskript.commands import DocumentCommand, MarkupCommand
+from manuskript.enums import Outline
+from manuskript.models.outlineItem import outlineItem
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -61,6 +64,11 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.documentCommands.dispatch.assert_called_once_with(
         DocumentCommand.COPY
     )
+    bold_slot = window.actFormatBold.triggered.connect.call_args.args[0]
+    bold_slot()
+    window.markupCommands.dispatch.assert_called_once_with(
+        MarkupCommand.BOLD
+    )
     live_preview_slot = (
         window.actMarkdownLivePreview.triggered.connect.call_args.args[0]
     )
@@ -111,3 +119,24 @@ def test_main_window_action_binding_rejects_duplicate_install():
         binding.bind()
         with pytest.raises(RuntimeError, match="only be bound once"):
             binding.bind()
+
+
+def test_format_action_reaches_the_active_markup_editor(MWEmptyProject):
+    window = MWEmptyProject
+    item = outlineItem(title="Command routing", _type="md")
+    item.setData(Outline.text, "select me")
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
+    window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    editor = window.mainEditor.currentEditor().txtRedacText
+    try:
+        cursor = editor.textCursor()
+        cursor.select(QTextCursor.Document)
+        editor.setTextCursor(cursor)
+        window.focusChanged(None, editor)
+
+        window.actFormatBold.trigger()
+
+        assert editor.toPlainText() == "**select me**"
+    finally:
+        window.mainEditor.closeAllTabs()
