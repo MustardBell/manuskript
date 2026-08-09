@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
+from PyQt5.QtTest import QTest
 
 from manuskript.commands import DocumentCommand
 from manuskript.ui.views.textEditView import textEditView
@@ -79,7 +81,7 @@ def test_text_editor_context_routes_typed_outline_command():
     window.corePanels.project_tree.tree.moveDown.assert_called_once_with()
 
 
-def test_text_editor_context_reports_focus_through_window_registry():
+def test_text_editor_context_reports_focus_to_its_known_workspace():
     window = make_window()
     editor = MagicMock()
     context = text_editor_context_for(
@@ -88,7 +90,22 @@ def test_text_editor_context_reports_focus_through_window_registry():
 
     context.focus_received(editor)
 
-    window.windowRegistry.focus_changed.assert_called_once_with(None, editor)
+    window.windowRegistry.activate.assert_called_once_with(window)
+    window.workspaceFocus.focus_changed.assert_called_once_with(None, editor)
+
+
+def test_text_editor_click_reports_workspace_focus():
+    context = MagicMock()
+    context.settings = MagicMock()
+    editor = textEditView(spellcheck=False)
+    editor.set_text_editor_context(context)
+    editor.setEnabled(True)
+    editor.show()
+
+    QTest.mouseClick(editor.viewport(), Qt.LeftButton)
+
+    context.focus_received.assert_called_with(editor)
+    editor.close()
 
 
 def test_text_editor_routes_rename_as_typed_command():

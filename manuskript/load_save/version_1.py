@@ -6,7 +6,7 @@
 # (except for some elements), allowing collaborative work
 # versioning and third-party editing.
 
-import os
+import posixpath
 import re
 import string
 from collections import OrderedDict
@@ -212,7 +212,7 @@ def saveProject(
     # Characters
     # In a character folder
 
-    path = os.path.join("characters", "{name}.txt")
+    path = posixpath.join("characters", "{name}.txt")
     mdl = context.models.characters
 
     # Review characters
@@ -417,7 +417,7 @@ def exportOutlineItem(root):
 
     k = 0
     for child in root.children():
-        spath = os.path.join(*outlineItemPath(child))
+        spath = posixpath.join(*outlineItemPath(child))
 
         k += 1
 
@@ -433,7 +433,7 @@ def exportOutlineItem(root):
 
         # Generating content
         if child.type() == "folder":
-            fpath = os.path.join(spath, "folder.txt")
+            fpath = posixpath.join(spath, "folder.txt")
             content = outlineToMMD(child)
             files.append((fpath, content))
 
@@ -455,7 +455,8 @@ def exportOutlineItem(root):
 def outlineItemPath(item):
     """
     Returns the outlineItem file path (like the path where it will be written on the disk). As a list of folder's
-    name. To be joined by os.path.join.
+    name. To be joined by posixpath.join because these are serialized names,
+    not paths on the host filesystem.
     @param item: outlineItem
     @return: list of folder's names
     """
@@ -737,7 +738,7 @@ def loadProject(
 
     # We create a structure of imbricated OrderedDict to store the whole tree.
     for f in paths:
-        split = f.split(os.path.sep)[1:]
+        split = f.split("/")[1:]
         # LOGGER.debug("* %s", split)
 
         last = ""
@@ -746,7 +747,7 @@ def loadProject(
         for i in split:
             if last:
                 parent = parent[last]
-                parentLastPath = os.path.join(parentLastPath, last)
+                parentLastPath = posixpath.join(parentLastPath, last)
             last = i
 
             if not i in parent:
@@ -759,7 +760,7 @@ def loadProject(
                     parent[i] = files[f]
 
                 # We store f to add it later as lastPath
-                parent[i + ":lastPath"] = os.path.join(parentLastPath, i)
+                parent[i + ":lastPath"] = posixpath.join(parentLastPath, i)
 
 
 
