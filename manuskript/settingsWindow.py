@@ -12,9 +12,7 @@ from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListW
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
-from manuskript.domain.revisions import RevisionBackendKind
 from manuskript.services.git_revisions import (
-    GitCommandRunner,
     inspect_git_availability,
 )
 from manuskript.services.application_preferences import (
@@ -33,6 +31,10 @@ from manuskript.functions import findBackground, themeIcon
 from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
+)
+from manuskript.ui.revision_settings_controller import (
+    RevisionSettingsController,
+    RevisionSettingsViews,
 )
 from manuskript.ui.settings_ui import Ui_Settings
 from manuskript.ui import style as S
@@ -178,62 +180,18 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkAutoLoad.setChecked(autoLoad)
         self.chkAutoLoad.stateChanged.connect(self.saveSettingsChanged)
 
-        # Revisions
-        opt = self.settings.revisions
-        self.chkRevisionsKeep.setChecked(opt["keep"])
-        self.cmbRevisionBackend.clear()
-        self.cmbRevisionBackend.addItem(
-            self.tr("Git project history"),
-            RevisionBackendKind.GIT.value,
+        # Revisions are one settings feature with their own state and
+        # commands. The dialog exposes compatibility methods below, but no
+        # longer coordinates Git availability and ten controls itself.
+        self.revisionSettings = RevisionSettingsController(
+            RevisionSettingsViews.for_dialog(self),
+            self.settings,
+            current_project=self.views.project.current_file,
+            show_history=self.views.project.show_revision_history,
+            availability=lambda: self.gitAvailability(),
+            translate=self.tr,
         )
-        self.cmbRevisionBackend.addItem(
-            self.tr("Internal snapshots (legacy, unstable)"),
-            RevisionBackendKind.INTERNAL.value,
-        )
-        backend_index = self.cmbRevisionBackend.findData(
-            opt.get(
-                "backend",
-                RevisionBackendKind.GIT.value,
-            )
-        )
-        self.cmbRevisionBackend.setCurrentIndex(
-            max(0, backend_index)
-        )
-        self.chkRevisionRemove.setChecked(opt["smartremove"])
-        git_options = opt.get("git") or {}
-        self.chkGitAutoCommit.setChecked(
-            bool(git_options.get("autoCommit", False))
-        )
-        self.chkGitTaggedOnly.setChecked(
-            bool(git_options.get("taggedOnly", True))
-        )
-        self.spnRevisions10Mn.setValue(int(60 / opt["rules"][10 * 60]))
-        self.spnRevisionsHour.setValue(int(60 * 10 / opt["rules"][60 * 60]))
-        self.spnRevisionsDay.setValue(int(60 * 60 / opt["rules"][60 * 60 * 24]))
-        self.spnRevisionsMonth.setValue(int(60 * 60 * 24 / opt["rules"][60 * 60 * 24 * 30]))
-        self.spnRevisionsEternity.setValue(int(60 * 60 * 24 * 7 / opt["rules"][None]))
-        for signal in [
-            self.chkRevisionsKeep.stateChanged,
-            self.cmbRevisionBackend.currentIndexChanged,
-            self.chkRevisionRemove.toggled,
-            self.chkGitAutoCommit.toggled,
-            self.chkGitTaggedOnly.toggled,
-            self.spnRevisions10Mn.valueChanged,
-            self.spnRevisionsHour.valueChanged,
-            self.spnRevisionsDay.valueChanged,
-            self.spnRevisionsMonth.valueChanged,
-            self.spnRevisionsEternity.valueChanged,
-        ]:
-            signal.connect(self.revisionsSettingsChanged)
-        self.btnManageGitRevisions.clicked.connect(
-            lambda _checked=False: (
-                self.views.project.show_revision_history(self)
-            )
-        )
-        self.btnInitGitRepository.clicked.connect(
-            lambda _checked=False: self.initGitRepository()
-        )
-        self.updateRevisionBackendUi()
+        self.revisionSettings.install()
 
         # Views
         self.tabViews.setCurrentIndex(0)
@@ -475,115 +433,20 @@ class settingsWindow(QWidget, Ui_Settings):
     #                                           REVISION                                               #
     ####################################################################################################
 
-    def revisionsSettingsChanged(self):
-        opt = self.settings.revisions
-        opt["keep"] = True if self.chkRevisionsKeep.checkState() else False
-        opt["backend"] = self.cmbRevisionBackend.currentData()
-        opt["smartremove"] = self.chkRevisionRemove.isChecked()
-        git_options = opt.setdefault("git", {})
-        git_options["autoCommit"] = self.chkGitAutoCommit.isChecked()
-        git_options["taggedOnly"] = self.chkGitTaggedOnly.isChecked()
-        opt["rules"][10 * 60] = 60 / self.spnRevisions10Mn.value()
-        opt["rules"][60 * 60] = 60 * 10 / self.spnRevisionsHour.value()
-        opt["rules"][60 * 60 * 24] = 60 * 60 / self.spnRevisionsDay.value()
-        opt["rules"][60 * 60 * 24 * 30] = 60 * 60 * 24 / self.spnRevisionsMonth.value()
-        opt["rules"][None] = 60 * 60 * 24 * 7 / self.spnRevisionsEternity.value()
-        self.updateRevisionBackendUi()
+    def revisionsSettingsChanged(self, *_args):
+        self.revisionSettings.save()
 
     def gitAvailability(self):
         return inspect_git_availability(self.views.project.current_file())
 
     def updateRevisionBackendUi(self):
-        enabled = self.chkRevisionsKeep.isChecked()
-        backend = self.cmbRevisionBackend.currentData()
-        internal = backend == RevisionBackendKind.INTERNAL.value
-        git = backend == RevisionBackendKind.GIT.value
-        availability = self.gitAvailability()
-
-        # Turning revisions off and falling back to the legacy backend must
-        # stay reachable even when Git cannot be used at all, or the writer
-        # is stuck with a setting they cannot change.
-        self.chkRevisionsKeep.setEnabled(True)
-        self.cmbRevisionBackend.setEnabled(enabled)
-
-        self.chkRevisionRemove.setVisible(internal)
-        self.chkRevisionRemove.setEnabled(enabled and internal)
-        self.label_revisionDeprecation.setVisible(internal)
-
-        self.grpGitRevisionOptions.setVisible(git)
-        # Git may be selected without being usable. The options are shown so
-        # the choice is not hidden, but nothing pretends to be configurable.
-        self.grpGitRevisionOptions.setEnabled(
-            enabled and git and availability.git_installed
-        )
-        self.btnManageGitRevisions.setEnabled(
-            enabled and git and availability.usable
-        )
-        self.btnInitGitRepository.setVisible(
-            git and availability.needs_repository
-        )
-        self.btnInitGitRepository.setEnabled(
-            enabled and bool(self.views.project.current_file())
-        )
-        self.lblRevisionStatus.setVisible(git and not availability.usable)
-        self.lblRevisionStatus.setText(
-            self.revisionStatusMessage(availability)
-        )
+        self.revisionSettings.update()
 
     def revisionStatusMessage(self, availability):
-        if not availability.git_installed:
-            return self.tr(
-                "Git is not installed, so Git history cannot record "
-                "anything. Install Git, or turn revisions off, or switch "
-                "to the legacy internal snapshots."
-            )
-        if availability.needs_repository:
-            if not self.views.project.current_file():
-                return self.tr(
-                    "Open a project to see whether it is kept in a Git "
-                    "repository."
-                )
-            return self.tr(
-                "This project is not inside a Git repository, so no "
-                "history is being recorded. Create one to start keeping "
-                "revisions."
-            )
-        return ""
+        return self.revisionSettings.status_message(availability)
 
     def initGitRepository(self):
-        """Offer to put the project under Git so revisions start working."""
-        project = self.views.project.current_file()
-        if not project:
-            return
-        directory = os.path.dirname(os.path.abspath(project)) or os.curdir
-        confirmed = QMessageBox.question(
-            self,
-            self.tr("Create a Git repository?"),
-            self.tr(
-                "<p>Manuskript will run <code>git init</code> in:</p>"
-                "<p><code>{}</code></p>"
-                "<p>Nothing is committed and no existing file is changed. "
-                "You can remove the repository later by deleting its "
-                "<code>.git</code> directory.</p>"
-            ).format(directory),
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
-        )
-        if confirmed != QMessageBox.Yes:
-            return
-        runner = GitCommandRunner()
-        if not runner.available:
-            self.updateRevisionBackendUi()
-            return
-        result = runner.execute(("-C", directory, "init"))
-        if result.return_code:
-            QMessageBox.warning(
-                self,
-                self.tr("Could not create the repository"),
-                result.stderr.decode("utf-8", errors="replace").strip()
-                or self.tr("git init failed."),
-            )
-        self.updateRevisionBackendUi()
+        return self.revisionSettings.initialize_git_repository()
 
     ####################################################################################################
     #                                           VIEWS                                                  #
