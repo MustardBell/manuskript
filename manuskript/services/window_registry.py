@@ -74,6 +74,10 @@ class WindowRegistry:
         """The workspace window commands are routed to."""
         return self._active
 
+    def get_active(self):
+        """Return the active workspace when a callable port is required."""
+        return self._active
+
     def activate(self, window):
         if window in self._windows:
             self._active = window
@@ -153,5 +157,4 @@ class WindowRegistry:
     @staticmethod
     def _close(window):
         """Close one window, reporting whether it agreed to go."""
-        window.close()
-        return not window.isVisible()
+        return bool(window.close())

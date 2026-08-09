@@ -120,9 +120,13 @@ def test_closing_one_of_several_windows_leaves_the_project_open(
     with reopened(MWNoProject), patch.object(
         MWNoProject.projectManager,
         "closeProject",
-    ) as close_project, patch.object(MWNoProject.windowState, "save"):
+    ) as close_project, patch.object(
+        MWNoProject.projectLifecycleView,
+        "flush_pending_edits",
+    ) as flush, patch.object(MWNoProject.windowState, "save"):
         MWNoProject.closeEvent(QCloseEvent())
         close_project.assert_not_called()
+        flush.assert_called_once_with()
         assert MWNoProject not in registry.workspace_windows
 
     registry.unregister(other)
@@ -178,8 +182,7 @@ def test_quit_closes_every_workspace_asking_once():
 
     def window(name, closes=True):
         entry = MagicMock()
-        entry.isVisible.return_value = not closes
-        entry.close.side_effect = lambda: order.append(name)
+        entry.close.side_effect = lambda: order.append(name) or closes
         return entry
 
     primary = window("primary")
@@ -197,9 +200,9 @@ def test_a_cancelled_prompt_aborts_the_rest_of_the_quit():
     """
     registry = WindowRegistry()
     primary = MagicMock()
-    primary.isVisible.return_value = True   # refused to close
+    primary.close.return_value = True
     second = MagicMock()
-    second.isVisible.return_value = True    # refused to close
+    second.close.return_value = False
     registry.register(primary)
     registry.register(second)
 

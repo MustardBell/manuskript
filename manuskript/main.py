@@ -261,7 +261,7 @@ def prepare(arguments, tests=False):
     project_runtime = ProjectRuntime(
         settings_manager=settings_manager,
         project_history=ProjectHistory(),
-        active_window_source=window_registry.active,
+        active_window_source=window_registry.get_active,
     )
 
     # Everything composed above, gathered into the one thing a window is

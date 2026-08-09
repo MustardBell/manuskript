@@ -153,7 +153,7 @@ def test_close_all_reports_success_when_every_window_goes():
     registry = WindowRegistry()
     for _ in range(3):
         window = MagicMock()
-        window.isVisible.return_value = False
+        window.close.return_value = True
         registry.register(window)
 
     assert registry.close_all() is True
@@ -195,7 +195,7 @@ def test_a_quit_asks_about_unsaved_changes_once():
     windows = []
     for _ in range(3):
         window = MagicMock()
-        window.isVisible.return_value = False
+        window.close.return_value = True
         registry.register(window)
         windows.append(window)
     windows[0].projectManager.settleBeforeClosing.return_value = True
@@ -216,9 +216,8 @@ def test_the_project_is_settled_before_any_window_is_closed():
     windows = []
     for number in range(2):
         window = MagicMock()
-        window.isVisible.return_value = False
         window.close.side_effect = (
-            lambda number=number: order.append("close%d" % number)
+            lambda number=number: order.append("close%d" % number) or True
         )
         registry.register(window)
         windows.append(window)
@@ -235,9 +234,26 @@ def test_the_project_is_settled_before_any_window_is_closed():
 def test_a_quit_with_no_project_manager_still_closes():
     """A window that never opened a project has nothing to settle."""
     registry = WindowRegistry()
-    window = MagicMock(spec=["close", "isVisible"])
-    window.isVisible.return_value = False
+    window = MagicMock(spec=["close"])
+    window.close.return_value = True
     registry.register(window)
 
     assert registry.close_all() is True
     window.close.assert_called_once_with()
+
+
+def test_a_hidden_window_that_rejects_close_aborts_quit():
+    """Visibility is not evidence that a close event was accepted."""
+    registry = WindowRegistry()
+    primary = MagicMock()
+    primary.close.return_value = True
+    rejected = MagicMock()
+    rejected.close.return_value = False
+    rejected.isVisible.return_value = False
+    registry.register(primary)
+    registry.register(rejected)
+
+    assert registry.close_all() is False
+
+    rejected.close.assert_called_once_with()
+    primary.close.assert_not_called()

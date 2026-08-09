@@ -552,7 +552,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         that view away; the project goes when its last window does, and
         that is the only close that may ask about unsaved changes.
         """
-        if self.windowRegistry.is_last(self):
+        is_last = self.windowRegistry.is_last(self)
+        if is_last:
             if not self.projectManager.closeProject():
                 event.ignore()
                 return
@@ -562,6 +563,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.windowState.store.set_open_windows(
                     self.workspaceWindows.open_ids()
                 )
+        else:
+            # These editors are private to this view and disappear when its
+            # bindings are disconnected.  Shared document buffers outlive a
+            # workspace, but character notes and other panel editors do not.
+            self.projectLifecycleView.flush_pending_edits()
         # Before the tool windows go, because closing them takes the
         # plugin docks out of the layout and QMainWindow.saveState can
         # only record docks that are still there. The last window comes

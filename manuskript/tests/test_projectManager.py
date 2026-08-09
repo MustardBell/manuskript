@@ -458,6 +458,23 @@ class TestSaveFlushesPendingText(unittest.TestCase):
 
         self.view.flush_pending_edits.assert_called_once_with()
 
+    def test_close_flushes_before_deciding_whether_project_is_dirty(self):
+        """A delayed private edit must participate in the close decision."""
+        self.manager.session.open("project.msk")
+        self.manager.settings.saveOnQuit = False
+        self.view.flush_pending_edits.side_effect = (
+            self.manager.session.mark_dirty
+        )
+        with patch.object(
+            self.view,
+            "confirm_unsaved_changes",
+            return_value=CloseDecision.CANCEL,
+        ) as confirm:
+            self.assertFalse(self.manager.settleBeforeClosing())
+
+        self.view.flush_pending_edits.assert_called_once_with()
+        confirm.assert_called_once_with()
+
 
 #: Everything a lifecycle view is asked to do, and nothing else. The list
 #: is the contract: a view shows a project and answers for its window. It

@@ -6,16 +6,18 @@ closing is not the project's closing. Each window keeps its own
 selection, its own open documents and its own panels.
 """
 
+import inspect
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import patch
 from weakref import ref
 
 import pytest
 from PyQt5.QtCore import QSettings, Qt
-from PyQt5.QtWidgets import QPlainTextEdit
+from PyQt5.QtWidgets import QPlainTextEdit, qApp
 
-import inspect
+from manuskript.enums import Character
 
 from manuskript.panels import PanelContext, PanelDescriptor
 from manuskript.panels.core import METADATA, PROJECT_TREE, STORYLINE
@@ -220,6 +222,67 @@ def test_closing_the_second_window_leaves_the_project_open(
     assert not other.projectBinding.bound
     # The first window is alone again, so its close is the project's.
     assert window.windowRegistry.is_last(window)
+
+
+def test_closing_a_secondary_flushes_and_primary_save_persists_private_edit(
+        MWEmptyProject):
+    """Closing a view cannot destroy text still waiting in its editor."""
+    window = MWEmptyProject
+    manager = window.projectManager
+    characters = window.projectRuntime.models.characters
+    character = characters.addCharacter(name="Pending character")
+    other = window.workspaceWindows.open()
+    note = "Written in the secondary immediately before it closed."
+    try:
+        tree_item = other.lstCharacters.getItemByID(character.ID())
+        assert tree_item is not None
+        other.lstCharacters.setCurrentItem(tree_item)
+        qApp.processEvents()
+        model_index = character.index(Character.notes)
+        assert other.txtPersoNotes.isEnabled()
+
+        other.txtPersoNotes.setPlainText(note)
+        assert model_index.data() != note
+
+        assert other.close()
+        assert model_index.data() == note
+        assert manager.saveDatas()
+
+        project_directory = Path(window.currentProject).with_suffix("")
+        character_file = (
+            project_directory
+            / "characters"
+            / ("{}-Pending_character.txt".format(character.ID()))
+        )
+        assert note in character_file.read_text(encoding="utf-8")
+    finally:
+        if other in window.windowRegistry.workspace_windows:
+            other.close()
+        # Do not let the shared empty-project fixture reuse this manuscript.
+        manager.session.mark_dirty()
+
+
+def test_composed_runtime_reports_status_to_the_active_workspace(
+        MWEmptyProject):
+    """Exercise the production composition root, not a hand-built registry."""
+    window = MWEmptyProject
+    other = window.workspaceWindows.open()
+    try:
+        with patch.object(
+            window.projectLifecycleView,
+            "show_status",
+        ) as primary_status, patch.object(
+            other.projectLifecycleView,
+            "show_status",
+        ) as secondary_status:
+            window.windowRegistry.activate(other)
+
+            window.projectRuntime.views.show_status("Saved here")
+
+        secondary_status.assert_called_once_with("Saved here", 5000, 1)
+        primary_status.assert_not_called()
+    finally:
+        other.close()
 
 
 def test_closing_a_secondary_disconnects_application_plugin_updates(

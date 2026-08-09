@@ -188,6 +188,11 @@ class ProjectManager:
         """
         if not self.session.is_open:
             return True
+        # A delayed editor submit is not represented by the session's dirty
+        # flag yet.  Flush every project view before asking whether there is
+        # anything to save; otherwise quit can decide that a clean project is
+        # settled and destroy text that was still private to a window.
+        self.flushPendingEdits()
         if self.settings.saveOnQuit:
             settled = self.saveDatas()
         else:
