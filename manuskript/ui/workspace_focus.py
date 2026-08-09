@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any, Tuple
+from weakref import WeakMethod, ref
 
 from manuskript.ui.views.MDEditView import MDEditView
 
@@ -34,6 +35,8 @@ class WorkspaceFocusController:
         self._views = views
         self._document_target = None
         self._markup_target = None
+        self._focused_widget = None
+        self._listeners = []
 
     @property
     def document_target(self):
@@ -51,7 +54,30 @@ class WorkspaceFocusController:
         """Return the endpoint used by markup command routing."""
         return self._markup_target
 
+    @property
+    def focused_widget(self):
+        return self._focused_widget
+
+    def subscribe(self, listener):
+        """Observe this workspace's focus without retaining the receiver."""
+        if any(item() == listener for item in self._listeners):
+            return
+        try:
+            listener_ref = WeakMethod(listener)
+        except TypeError:
+            listener_ref = ref(listener)
+        self._listeners.append(listener_ref)
+
+    def unsubscribe(self, listener):
+        remaining = []
+        for listener_ref in self._listeners:
+            callback = listener_ref()
+            if callback is not None and callback != listener:
+                remaining.append(listener_ref)
+        self._listeners = remaining
+
     def focus_changed(self, _old, new):
+        self._focused_widget = new
         self._markup_target = self._find_markdown_editor(new)
 
         candidate = new
@@ -60,6 +86,17 @@ class WorkspaceFocusController:
                 self._document_target = candidate
                 break
             candidate = candidate.parent()
+
+        listeners = []
+        callbacks = []
+        for listener_ref in self._listeners:
+            listener = listener_ref()
+            if listener is not None:
+                listeners.append(listener_ref)
+                callbacks.append(listener)
+        self._listeners = listeners
+        for listener in callbacks:
+            listener(_old, new)
 
     @staticmethod
     def _find_markdown_editor(widget):
@@ -76,4 +113,6 @@ class WorkspaceFocusController:
     def dispose(self):
         self._document_target = None
         self._markup_target = None
+        self._focused_widget = None
+        self._listeners.clear()
         self._views = WorkspaceFocusViews(())

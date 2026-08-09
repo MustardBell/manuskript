@@ -80,6 +80,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._contentStack.addWidget(self.tabSplitter)
         self.verticalLayout.insertWidget(0, self._contentStack, 1)
         self._pluginWorkspace = None
+        self._focus_source = None
         self._nativeFooterWidgets = (
             self.btnGoUp,
             self.btnRedacFolderText,
@@ -147,6 +148,10 @@ class mainEditor(QWidget, Ui_mainEditor):
         for btn in [self.btnRedacFolderCork, self.btnRedacFolderText, self.btnRedacFolderOutline]:
             btn.setToolTip(btn.text())
             btn.setText("")
+
+    def set_focus_source(self, focus_source):
+        self._focus_source = focus_source
+        self.tabSplitter.set_focus_source(focus_source)
 
     def set_context(self, context):
         self.editor_context = context
@@ -353,7 +358,11 @@ class mainEditor(QWidget, Ui_mainEditor):
             newTab = True
 
         if newTab or not tabWidget.count():
-            editor = editorWidget(self, self.editor_context)
+            editor = editorWidget(
+                self,
+                self.editor_context,
+                focus_source=self._focus_source,
+            )
             editor.setCurrentModelIndex(index)
             editor._tabWidget = tabWidget
             i = tabWidget.addTab(editor, editor.ellidedTitle(title))

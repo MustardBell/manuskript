@@ -221,6 +221,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 WorkspaceFocusViews.for_window(self)
             )
         )
+        self.mainEditor.set_focus_source(self.workspaceFocus)
         self.documentCommands = DocumentCommandRouter(
             self.workspaceFocus.current_document_target
         )

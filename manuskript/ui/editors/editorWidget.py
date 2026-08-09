@@ -3,7 +3,7 @@
 from PyQt5.QtCore import pyqtSignal, QModelIndex
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QWidget, QFrame, QSpacerItem, QSizePolicy
-from PyQt5.QtWidgets import QVBoxLayout, qApp, QStyle
+from PyQt5.QtWidgets import QVBoxLayout, QStyle
 
 from manuskript.commands import DocumentCommand
 from manuskript.functions import AUC
@@ -65,7 +65,7 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
 
     _maxTabTitleLength = 24
 
-    def __init__(self, parent, editor_context=None):
+    def __init__(self, parent, editor_context=None, focus_source=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.horizontalLayout_2.removeWidget(self.txtRedacText)
@@ -94,7 +94,11 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
             self,
         )
         self.markdownModeButton.resize(38, OVERLAY_HEIGHT)
-        self.textHistory = EditorTextHistory(self, parent=self)
+        self.textHistory = EditorTextHistory(
+            self,
+            focus_source=focus_source,
+            parent=self,
+        )
         self.undoButton = HistoryToolButton(self.textHistory, False, self)
         self.redoButton = HistoryToolButton(self.textHistory, True, self)
         for button in (self.undoButton, self.redoButton):
@@ -172,6 +176,9 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # def setModel(self, model):
         # self._model = model
         # self.setView()
+
+    def dispose(self):
+        self.textHistory.dispose()
 
     def set_context(self, editor_context):
         self.editor_context = editor_context

@@ -5,7 +5,7 @@ import locale, os
 from PyQt5.QtCore import QModelIndex, QRect, QPoint, Qt, QObject, QSize
 from PyQt5.QtGui import QIcon, QPalette
 from PyQt5.QtGui import QDropEvent, QDragEnterEvent
-from PyQt5.QtWidgets import QWidget, QPushButton, qApp
+from PyQt5.QtWidgets import QWidget, QPushButton
 
 from manuskript.functions import appPath
 from manuskript.ui import style
@@ -47,6 +47,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         QWidget.__init__(self, parent)
         self.setupUi(self)
         self.editor_context = editor_context
+        self._focus_source = None
         self.settings = (
             editor_context.text_editor.settings
             if editor_context is not None
@@ -98,9 +99,31 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
         self.tab.tabCloseRequested.connect(self.closeTab)
         self.tab.currentChanged.connect(self.mainEditor.tabChanged)
-        qApp.focusChanged.connect(self.focusChanged)
 
         self.setAcceptDrops(True)
+
+    def set_focus_source(self, focus_source):
+        """Use the owning workspace's focus stream for pane activation."""
+        if focus_source is self._focus_source:
+            return
+        if self._focus_source is not None:
+            self._focus_source.unsubscribe(self.focusChanged)
+        self._focus_source = focus_source
+        if focus_source is not None:
+            focus_source.subscribe(self.focusChanged)
+        for child in self.children_areas():
+            child.set_focus_source(focus_source)
+
+    def dispose(self):
+        """Release focus consumers in a pane subtree being discarded."""
+        self.set_focus_source(None)
+        for index in range(self.tab.count()):
+            editor = self.tab.widget(index)
+            dispose = getattr(editor, "dispose", None)
+            if callable(dispose):
+                dispose()
+        for child in self.children_areas():
+            child.dispose()
 
     def set_context(self, context):
         self.editor_context = context
@@ -165,6 +188,9 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         w = self.tab.widget(index)
         self.tab.removeTab(index)
         w.setCurrentModelIndex(QModelIndex())
+        dispose = getattr(w, "dispose", None)
+        if callable(dispose):
+            dispose()
         w.deleteLater()
         self.collapseIfEmpty()
 
@@ -445,6 +471,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             mainEditor=self.mainEditor,
             editor_context=self.editor_context,
         )
+        child.set_focus_source(self._focus_source)
         child.setObjectName(self.objectName() + "/1")
         child.splitter.setObjectName(self.splitter.objectName() + "/1")
         # The documents move with the side they were on.
@@ -475,7 +502,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             self.tab.addTab(widget, title)
         self.firstTab = None
         child.setParent(None)
-        qApp.focusChanged.disconnect(child.focusChanged)
+        child.set_focus_source(None)
         child.deleteLater()
         self.tab.show()
 
@@ -484,6 +511,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             mainEditor=self.mainEditor,
             editor_context=self.editor_context,
         )
+        self.secondTab.set_focus_source(self._focus_source)
         self.secondTab.setObjectName(self.objectName() + "_")
         self.secondTab.splitter.setObjectName(self.splitter.objectName() + "_")
 
@@ -544,7 +572,7 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
         for st in reversed(l):
             st.setParent(None)
-            qApp.focusChanged.disconnect(st.focusChanged)
+            st.dispose()
             st.deleteLater()
 
         self.focusTab = 1

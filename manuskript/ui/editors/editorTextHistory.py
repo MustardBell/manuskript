@@ -7,7 +7,6 @@ impossible to know what a click was about to reverse.
 """
 
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
-from PyQt5.QtWidgets import qApp
 
 
 class EditorTextHistory(QObject):
@@ -20,10 +19,12 @@ class EditorTextHistory(QObject):
 
     changed = pyqtSignal()
 
-    def __init__(self, owner, parent=None):
+    def __init__(self, owner, focus_source=None, parent=None):
         super().__init__(parent)
         self._owner = owner
-        qApp.focusChanged.connect(self._focusChanged)
+        self._focus_source = focus_source
+        if focus_source is not None:
+            focus_source.subscribe(self._focusChanged)
 
     # ------------------------------------------------------------------
 
@@ -55,7 +56,11 @@ class EditorTextHistory(QObject):
             pass
 
     def activeEditor(self):
-        focused = qApp.focusWidget()
+        focused = (
+            self._focus_source.focused_widget
+            if self._focus_source is not None
+            else None
+        )
         editors = self.editors()
         while focused is not None:
             if focused in editors:
@@ -114,3 +119,9 @@ class EditorTextHistory(QObject):
 
     def _emitChanged(self, *_args):
         self.changed.emit()
+
+    def dispose(self):
+        if self._focus_source is not None:
+            self._focus_source.unsubscribe(self._focusChanged)
+        self._focus_source = None
+        self._owner = None
