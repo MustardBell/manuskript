@@ -27,11 +27,12 @@ IMPORTANCE = 2
 class PanelFailureReporter:
     """Where one window says a panel could not be built."""
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, translate, fallback_reporter=None):
+        self._translate = translate
+        self._fallback_reporter = fallback_reporter
 
     def report(self, descriptor, error, context=None):
-        message = self.window.tr(
+        message = self._translate(
             "The {} panel could not be opened: {}"
         ).format(descriptor.title, error)
         LOGGER.warning(
@@ -51,5 +52,4 @@ class PanelFailureReporter:
         show_status = getattr(context, "show_status", None)
         if show_status is not None:
             return show_status
-        presenter = getattr(self.window, "statusPresenter", None)
-        return presenter.show if presenter is not None else None
+        return self._fallback_reporter

@@ -24,6 +24,7 @@ from manuskript.ui.panels import (
     PanelInstanceDirectory,
     host as host_module,
 )
+from manuskript.ui.panels.window_port import PanelWindow
 
 
 def label_factory(context, parent):
@@ -40,7 +41,7 @@ def test_a_host_is_in_the_directory_it_was_given():
     directory = PanelInstanceDirectory()
     window = QMainWindow()
 
-    host = PanelHost(window, PanelRegistry(), directory)
+    host = PanelHost(PanelWindow.for_window(window), PanelRegistry(), directory)
 
     assert host in directory.hosts
     assert host.directory is directory
@@ -59,8 +60,8 @@ def test_the_holder_of_a_panel_is_never_the_host_asking():
     ))
     directory = PanelInstanceDirectory()
     first_window, second_window = QMainWindow(), QMainWindow()
-    first = PanelHost(first_window, registry, directory)
-    second = PanelHost(second_window, registry, directory)
+    first = PanelHost(PanelWindow.for_window(first_window), registry, directory)
+    second = PanelHost(PanelWindow.for_window(second_window), registry, directory)
 
     assert first.open("vendor.only-one", PanelContext()) is not None
 
@@ -84,8 +85,16 @@ def test_two_directories_are_two_applications():
         widget_factory=label_factory,
     ))
     first_window, second_window = QMainWindow(), QMainWindow()
-    first = PanelHost(first_window, registry, PanelInstanceDirectory())
-    second = PanelHost(second_window, registry, PanelInstanceDirectory())
+    first = PanelHost(
+        PanelWindow.for_window(first_window),
+        registry,
+        PanelInstanceDirectory(),
+    )
+    second = PanelHost(
+        PanelWindow.for_window(second_window),
+        registry,
+        PanelInstanceDirectory(),
+    )
 
     assert first.open("vendor.only-one", PanelContext()) is not None
     # Refused nothing: as far as this host's application is concerned,
@@ -103,7 +112,7 @@ def test_a_closed_window_stops_being_findable():
     """
     directory = PanelInstanceDirectory()
     window = QMainWindow()
-    host = PanelHost(window, PanelRegistry(), directory)
+    host = PanelHost(PanelWindow.for_window(window), PanelRegistry(), directory)
 
     assert len(directory.hosts) == 1
 
@@ -117,7 +126,7 @@ def test_a_closed_window_stops_being_findable():
 def test_a_host_removed_from_the_directory_is_no_longer_asked():
     directory = PanelInstanceDirectory()
     window = QMainWindow()
-    host = PanelHost(window, PanelRegistry(), directory)
+    host = PanelHost(PanelWindow.for_window(window), PanelRegistry(), directory)
 
     directory.remove(host)
 

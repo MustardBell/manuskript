@@ -35,6 +35,7 @@ from manuskript.plugins.conversion_augmentations import (
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
+from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
@@ -192,7 +193,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # application's one directory.
         self.panelDirectory = services.panel_directory
         self.panelHost = PanelHost(
-            self,
+            PanelWindow.for_window(self),
             self.panelRegistry,
             self.panelDirectory,
         )

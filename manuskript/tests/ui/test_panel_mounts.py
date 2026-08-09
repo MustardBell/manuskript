@@ -28,6 +28,7 @@ from manuskript.panels import (
 )
 from manuskript.ui.panels import host as host_module
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
+from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.panels.mounts import (
     DockMount,
     SplitterMount,
@@ -46,7 +47,9 @@ def a_host(descriptor):
     registry = PanelRegistry()
     registry.register(descriptor)
     return PanelHost(
-        window, registry, PanelInstanceDirectory(),
+        PanelWindow.for_window(window),
+        registry,
+        PanelInstanceDirectory(),
     ), window
 
 
@@ -77,7 +80,7 @@ def test_a_splitter_mount_puts_a_panel_in_the_slot_it_names():
         placement=SPLITTER_SLOT,
         slot=SplitterSlot("splitterTest", 1),
     )
-    mount = SplitterMount(window)
+    mount = SplitterMount(PanelWindow.for_window(window))
 
     parent, container = mount.prepare(descriptor)
     widget = QLabel("mine", parent)
@@ -99,7 +102,7 @@ def test_a_splitter_this_window_has_not_got_says_so():
         placement=SPLITTER_SLOT,
         slot=SplitterSlot("splitterAbsent", 0),
     )
-    mount = SplitterMount(QMainWindow())
+    mount = SplitterMount(PanelWindow.for_window(QMainWindow()))
 
     assert mount.find(descriptor) is None
     with pytest.raises(LookupError, match="splitterAbsent"):
@@ -110,7 +113,7 @@ def test_a_dock_panel_is_in_no_splitter():
     """Asked merely to find out, so it answers rather than raising: two
     callers want to know whether a panel sits in a splitter at all.
     """
-    mount = SplitterMount(QMainWindow())
+    mount = SplitterMount(PanelWindow.for_window(QMainWindow()))
 
     assert mount.find(PanelDescriptor(id="core.docked", title="D")) is None
 
@@ -119,7 +122,7 @@ def test_a_dock_mount_makes_the_container_the_widget_is_built_into():
     window = QMainWindow()
     window.setCentralWidget(QLabel("body"))
     descriptor = PanelDescriptor(id="core.notes", title="Notes")
-    mount = DockMount(window)
+    mount = DockMount(PanelWindow.for_window(window))
 
     parent, container = mount.prepare(descriptor)
     widget = QLabel("mine", parent)
@@ -139,7 +142,7 @@ def test_a_floating_dock_keeps_the_name_it_has_when_docked():
     """
     window = QMainWindow()
     descriptor = PanelDescriptor(id="core.notes", title="Notes")
-    mount = DockMount(window)
+    mount = DockMount(PanelWindow.for_window(window))
 
     _parent, container = mount.prepare(descriptor)
     mount.install_floating(descriptor, QLabel("mine"), container)
@@ -151,7 +154,7 @@ def test_a_floating_dock_keeps_the_name_it_has_when_docked():
 
 def test_a_window_can_mount_every_placement_a_panel_may_declare():
     """A placement with no mount would be a panel nothing could open."""
-    mounts = mounts_for(QMainWindow())
+    mounts = mounts_for(PanelWindow.for_window(QMainWindow()))
 
     from manuskript.panels import PLACEMENTS
 

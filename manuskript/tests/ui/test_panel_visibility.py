@@ -15,6 +15,7 @@ from manuskript.panels import PanelDescriptor
 from manuskript.ui.panels import host as host_module
 from manuskript.ui.panels.host import PanelInstance
 from manuskript.ui.panels.visibility import PanelVisibility
+from manuskript.ui.panels.window_port import PanelWindow
 
 
 def a_panel(default_visible=True):
@@ -22,6 +23,12 @@ def a_panel(default_visible=True):
         id="core.notes",
         title="Notes",
         default_visible=default_visible,
+    )
+
+
+def visibility_for(window):
+    return PanelVisibility(
+        PanelWindow.for_window(window).create_action
     )
 
 
@@ -35,7 +42,7 @@ def test_a_toggle_drives_the_dock_a_panel_lives_in():
         descriptor=a_panel(), widget=widget, container=dock,
     )
 
-    action = PanelVisibility(window).bind(instance)
+    action = visibility_for(window).bind(instance)
 
     assert PanelVisibility.shown_thing(instance) is dock
     action.setChecked(False)
@@ -51,7 +58,7 @@ def test_a_toggle_drives_the_widget_where_there_is_no_dock():
     widget = QLabel("body", window)
     instance = PanelInstance(descriptor=a_panel(), widget=widget)
 
-    action = PanelVisibility(window).bind(instance)
+    action = visibility_for(window).bind(instance)
 
     assert PanelVisibility.shown_thing(instance) is widget
     action.setChecked(False)
@@ -66,7 +73,7 @@ def test_a_panel_starts_as_its_descriptor_says():
         descriptor=a_panel(default_visible=False), widget=widget,
     )
 
-    action = PanelVisibility(window).bind(instance)
+    action = visibility_for(window).bind(instance)
 
     assert action.isChecked() is False
     assert widget.isHidden()
@@ -81,7 +88,7 @@ def test_a_released_toggle_drives_nothing():
     window = QMainWindow()
     widget = QLabel("body", window)
     instance = PanelInstance(descriptor=a_panel(), widget=widget)
-    visibility = PanelVisibility(window)
+    visibility = visibility_for(window)
     action = visibility.bind(instance)
 
     visibility.unbind(instance)
@@ -100,7 +107,7 @@ def test_unbinding_twice_is_not_an_error():
     instance = PanelInstance(
         descriptor=a_panel(), widget=QLabel("body", window),
     )
-    visibility = PanelVisibility(window)
+    visibility = visibility_for(window)
     visibility.bind(instance)
 
     visibility.unbind(instance)
@@ -121,7 +128,7 @@ def test_closing_a_floating_dock_unchecks_its_toggle():
     instance = PanelInstance(
         descriptor=a_panel(), widget=dock.widget(), container=dock,
     )
-    action = PanelVisibility(window).bind(instance)
+    action = visibility_for(window).bind(instance)
 
     dock.visibilityChanged.emit(False)
 
@@ -143,7 +150,7 @@ def test_a_panel_tabbed_behind_a_neighbour_is_not_put_away():
     instance = PanelInstance(
         descriptor=a_panel(), widget=dock.widget(), container=dock,
     )
-    action = PanelVisibility(window).bind(instance)
+    action = visibility_for(window).bind(instance)
 
     dock.visibilityChanged.emit(False)
 
@@ -160,7 +167,7 @@ def test_showing_a_panel_goes_through_its_own_action():
     instance = PanelInstance(
         descriptor=a_panel(default_visible=False), widget=widget,
     )
-    visibility = PanelVisibility(window)
+    visibility = visibility_for(window)
     visibility.bind(instance)
 
     visibility.set_visible(instance, True)

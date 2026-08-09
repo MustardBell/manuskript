@@ -15,17 +15,42 @@ from manuskript.panels import (
     PanelRegistry,
 )
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
+from manuskript.ui.panels.window_port import PanelWindow
 
 
 def make_host(descriptor):
     window = QMainWindow()
     registry = PanelRegistry()
     registry.register(descriptor)
-    return PanelHost(window, registry, PanelInstanceDirectory()), window
+    return (
+        PanelHost(
+            PanelWindow.for_window(window),
+            registry,
+            PanelInstanceDirectory(),
+        ),
+        window,
+    )
 
 
 def label_factory(context, parent):
     return QLabel("panel body", parent)
+
+
+def test_panel_infrastructure_has_no_main_window_service_locator():
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        widget_factory=label_factory,
+    ))
+    try:
+        assert not hasattr(host, "window")
+        assert not hasattr(host.views, "window")
+        assert not hasattr(host.visibility, "window")
+        assert not hasattr(host.failures, "window")
+        for mount in host._mounts.values():
+            assert not hasattr(mount, "window")
+    finally:
+        window.close()
 
 
 def test_a_dock_panel_keeps_its_declared_object_name():
@@ -152,7 +177,7 @@ def test_a_dock_is_restored_by_name_before_being_placed():
         title="Notes",
         widget_factory=label_factory,
     ))
-    host = PanelHost(later, registry, PanelInstanceDirectory())
+    host = PanelHost(PanelWindow.for_window(later), registry, PanelInstanceDirectory())
 
     instance = host.open("vendor.notes", PanelContext())
 
@@ -172,7 +197,7 @@ def test_a_dock_the_layout_never_saw_goes_to_its_default_area():
         title="Fresh",
         widget_factory=label_factory,
     ))
-    host = PanelHost(window, registry, PanelInstanceDirectory())
+    host = PanelHost(PanelWindow.for_window(window), registry, PanelInstanceDirectory())
 
     instance = host.open("vendor.fresh", PanelContext())
 
@@ -202,8 +227,8 @@ def test_a_singleton_panel_is_refused_a_second_window():
     # One directory: two windows of one application. Two would be two
     # applications, and the panel would be nobody else's business.
     directory = PanelInstanceDirectory()
-    first = PanelHost(first_window, registry, directory)
-    second = PanelHost(second_window, registry, directory)
+    first = PanelHost(PanelWindow.for_window(first_window), registry, directory)
+    second = PanelHost(PanelWindow.for_window(second_window), registry, directory)
 
     assert first.open("vendor.only-one", PanelContext()) is not None
 
@@ -230,8 +255,8 @@ def test_a_per_window_panel_is_built_once_per_window():
     # One directory: two windows of one application. Two would be two
     # applications, and the panel would be nobody else's business.
     directory = PanelInstanceDirectory()
-    first = PanelHost(first_window, registry, directory)
-    second = PanelHost(second_window, registry, directory)
+    first = PanelHost(PanelWindow.for_window(first_window), registry, directory)
+    second = PanelHost(PanelWindow.for_window(second_window), registry, directory)
 
     mine = first.open("vendor.each", PanelContext())
     theirs = second.open("vendor.each", PanelContext())
@@ -264,9 +289,11 @@ def test_a_place_is_kept_while_a_panel_is_away():
     # A session in which the panel exists, moved off its default area.
     present = QMainWindow()
     present.setCentralWidget(QLabel("body"))
-    instance = PanelHost(present, registry, PanelInstanceDirectory()).open(
-        "vendor.away", PanelContext(),
-    )
+    instance = PanelHost(
+        PanelWindow.for_window(present),
+        registry,
+        PanelInstanceDirectory(),
+    ).open("vendor.away", PanelContext())
     present.addDockWidget(Qt.LeftDockWidgetArea, instance.container)
     blob = present.saveState()
 
@@ -282,9 +309,11 @@ def test_a_place_is_kept_while_a_panel_is_away():
     returned = QMainWindow()
     returned.setCentralWidget(QLabel("body"))
     returned.restoreState(blob)
-    again = PanelHost(returned, registry, PanelInstanceDirectory()).open(
-        "vendor.away", PanelContext(),
-    )
+    again = PanelHost(
+        PanelWindow.for_window(returned),
+        registry,
+        PanelInstanceDirectory(),
+    ).open("vendor.away", PanelContext())
 
     assert returned.dockWidgetArea(again.container) == (
         Qt.LeftDockWidgetArea

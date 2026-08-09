@@ -21,14 +21,11 @@ this away" would close a panel merely tabbed behind its neighbour.
 
 from functools import partial
 
-from PyQt5.QtWidgets import QAction
-
-
 class PanelVisibility:
     """One window's panel toggles: what they drive and what drives them."""
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, create_action):
+        self._create_action = create_action
 
     @staticmethod
     def shown_thing(instance):
@@ -45,7 +42,7 @@ class PanelVisibility:
         """
         descriptor = instance.descriptor
         target = self.shown_thing(instance)
-        action = QAction(self.window.tr(descriptor.title), self.window)
+        action = self._create_action(descriptor.title)
         action.setCheckable(True)
         action.setChecked(descriptor.default_visible)
         action.toggled.connect(target.setVisible)

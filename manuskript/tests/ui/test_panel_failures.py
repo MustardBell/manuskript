@@ -19,18 +19,22 @@ from manuskript.ui.panels import host as host_module
 from manuskript.ui.panels.failures import (
     DURATION,
     IMPORTANCE,
-    PanelFailureReporter,
 )
+from manuskript.ui.panels.window_port import PanelWindow
 
 
 BROKEN = PanelDescriptor(id="core.notes", title="Notes")
+
+
+def reporter_for(window):
+    return PanelWindow.for_window(window).failures
 
 
 def test_whoever_asked_for_the_panel_is_told():
     said = []
     window = QMainWindow()
 
-    message = PanelFailureReporter(window).report(
+    message = reporter_for(window).report(
         BROKEN,
         RuntimeError("no widget today"),
         PanelContext(show_status=lambda *args: said.append(args)),
@@ -49,7 +53,7 @@ def test_the_window_says_it_when_the_asker_cannot():
     window = QMainWindow()
     window.statusPresenter = MagicMock()
 
-    message = PanelFailureReporter(window).report(
+    message = reporter_for(window).report(
         BROKEN, RuntimeError("no widget today"), PanelContext(),
     )
 
@@ -65,7 +69,7 @@ def test_the_asker_is_preferred_to_the_window():
     window = QMainWindow()
     window.statusPresenter = MagicMock()
 
-    PanelFailureReporter(window).report(
+    reporter_for(window).report(
         BROKEN,
         RuntimeError("no widget today"),
         PanelContext(show_status=lambda *args: said.append(args)),
@@ -79,7 +83,7 @@ def test_the_asker_is_preferred_to_the_window():
 def test_nowhere_to_say_it_is_not_a_reason_to_raise():
     window = QMainWindow()
 
-    message = PanelFailureReporter(window).report(
+    message = reporter_for(window).report(
         BROKEN, RuntimeError("no widget today"), None,
     )
 
@@ -94,7 +98,7 @@ def test_it_is_always_written_down(caplog):
     window = QMainWindow()
 
     with caplog.at_level(logging.WARNING):
-        PanelFailureReporter(window).report(
+        reporter_for(window).report(
             BROKEN, RuntimeError("no widget today"), PanelContext(),
         )
 

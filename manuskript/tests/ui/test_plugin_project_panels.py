@@ -11,6 +11,7 @@ from manuskript.plugins.api import (
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.panels import PanelRegistry
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
+from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.plugins.project_panels import (
     ProjectPanelHost,
     RawPluginDataDialog,
@@ -33,7 +34,9 @@ class PanelTestWindow(QMainWindow):
         # nothing builds a host for a window that has none.
         self.panelRegistry = PanelRegistry()
         self.panelHost = PanelHost(
-            self, self.panelRegistry, PanelInstanceDirectory(),
+            PanelWindow.for_window(self),
+            self.panelRegistry,
+            PanelInstanceDirectory(),
         )
 
     @property
@@ -154,12 +157,16 @@ def test_two_hosts_declare_one_panel_and_open_their_own():
     first = ProjectPanelHost(
         first_window, runtime,
         panel_registry=registry,
-        panel_host=PanelHost(first_window, registry, directory),
+        panel_host=PanelHost(
+            PanelWindow.for_window(first_window), registry, directory,
+        ),
     )
     second = ProjectPanelHost(
         second_window, runtime,
         panel_registry=registry,
-        panel_host=PanelHost(second_window, registry, directory),
+        panel_host=PanelHost(
+            PanelWindow.for_window(second_window), registry, directory,
+        ),
     )
 
     # Declared once, application scope: what exists, not who shows it.
@@ -207,7 +214,9 @@ def test_the_declaration_does_not_keep_the_declaring_window_alive():
     first = ProjectPanelHost(
         first_window, runtime,
         panel_registry=registry,
-        panel_host=PanelHost(first_window, registry, directory),
+        panel_host=PanelHost(
+            PanelWindow.for_window(first_window), registry, directory,
+        ),
     )
     assert "plugin.example.notes.example.notes.panel" in registry
 
@@ -243,14 +252,18 @@ def test_a_second_window_builds_through_no_other_window():
     first = ProjectPanelHost(
         first_window, runtime,
         panel_registry=registry,
-        panel_host=PanelHost(first_window, registry, directory),
+        panel_host=PanelHost(
+            PanelWindow.for_window(first_window), registry, directory,
+        ),
     )
     second_window = PanelTestWindow()
     second_window.currentProject = "/project/second.msk"
     second = ProjectPanelHost(
         second_window, runtime,
         panel_registry=registry,
-        panel_host=PanelHost(second_window, registry, directory),
+        panel_host=PanelHost(
+            PanelWindow.for_window(second_window), registry, directory,
+        ),
     )
 
     # The first host goes away entirely before the second one builds.

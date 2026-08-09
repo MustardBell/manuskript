@@ -26,7 +26,6 @@ from typing import Any, Optional
 from PyQt5.QtWidgets import QWidget
 
 from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
-from manuskript.ui.panels.failures import PanelFailureReporter
 from manuskript.ui.panels.mounts import mounts_for
 from manuskript.ui.panels.visibility import PanelVisibility
 
@@ -60,8 +59,8 @@ class PanelInstance:
 class PanelHost:
     """Build, track and close the panels of a single window."""
 
-    def __init__(self, window, registry, directory):
-        self.window = window
+    def __init__(self, views, registry, directory):
+        self.views = views
         self.registry = registry
         # Where the application's other hosts are. Given rather than
         # reached for: it used to be a class attribute every host added
@@ -71,12 +70,12 @@ class PanelHost:
         self._instances = {}
         # One mount per way of fastening a panel, looked up by placement.
         # The host asks a mount to do it and never asks which kind it is.
-        self._mounts = mounts_for(window)
+        self._mounts = mounts_for(views)
         # What shows and hides a mounted panel, whichever thing it
         # turns out to be sitting in.
-        self.visibility = PanelVisibility(window)
+        self.visibility = PanelVisibility(views.create_action)
         # Where a panel that could not be built is reported.
-        self.failures = PanelFailureReporter(window)
+        self.failures = views.failures
         directory.add(self)
 
     def instance(self, panel_id):
@@ -240,14 +239,17 @@ class PanelHost:
         instance.container = None
         if container is not None:
             container.setWidget(None)
-        widget.setParent(self.window if keep else None)
+        if keep:
+            self.views.park_widget(widget)
+        else:
+            widget.setParent(None)
         widget.hide()
         if container is not None:
             # Emptied and out of the layout, then left to die with the
             # window that owns it. Scheduling deletion instead would
             # leave it pending until an event loop runs, which in a
             # test there may never be.
-            self.window.removeDockWidget(container)
+            self.views.remove_dock(container)
         instance.host = None
         return instance
 

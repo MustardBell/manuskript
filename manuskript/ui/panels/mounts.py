@@ -23,8 +23,6 @@ than asking which kind it has.
 """
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDockWidget, QSplitter
-
 from manuskript.panels import DOCK, SPLITTER_SLOT
 
 
@@ -42,8 +40,8 @@ class SplitterMount:
 
     placement = SPLITTER_SLOT
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, views):
+        self.views = views
 
     def find(self, descriptor):
         """The splitter this panel belongs in, or None if it is not there.
@@ -54,7 +52,7 @@ class SplitterMount:
         """
         if descriptor.placement != SPLITTER_SLOT or descriptor.slot is None:
             return None
-        return self.window.findChild(QSplitter, descriptor.slot.splitter)
+        return self.views.find_splitter(descriptor.slot.splitter)
 
     def prepare(self, descriptor):
         """The splitter itself is what a new widget is built into."""
@@ -86,15 +84,12 @@ class DockMount:
 
     placement = DOCK
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, views):
+        self.views = views
 
     def prepare(self, descriptor):
         """A dock, which is both the widget's parent and its container."""
-        dock = QDockWidget(
-            self.window.tr(descriptor.title),
-            self.window,
-        )
+        dock = self.views.create_dock(descriptor.title)
         dock.setObjectName(dock_name(descriptor))
         dock.setAttribute(Qt.WA_DeleteOnClose, True)
         return dock, dock
@@ -128,7 +123,6 @@ class DockMount:
         created later asks to be restored by name, and falls back to the
         default area when the layout has never seen it.
         """
-        window = self.window
         # Asked for by name before being put anywhere. Adding it to an
         # area first commits it there and makes the restore silently do
         # nothing -- it still reports success, which is how this looked
@@ -142,17 +136,17 @@ class DockMount:
         # restored to the same area when it came back. No placeholder
         # dock scheme is required, and building one would put a widget
         # on screen to solve a problem Qt has already solved.
-        if window.restoreDockWidget(dock):
+        if self.views.restore_dock(dock):
             return True
         # A dock the saved layout has never seen: it goes where panels
         # of its kind go.
-        window.addDockWidget(default_area, dock)
+        self.views.add_dock(default_area, dock)
         return False
 
 
-def mounts_for(window):
-    """Every way this window can fasten a panel, by placement."""
+def mounts_for(views):
+    """Every way this workspace can fasten a panel, by placement."""
     return {
         mount.placement: mount
-        for mount in (SplitterMount(window), DockMount(window))
+        for mount in (SplitterMount(views), DockMount(views))
     }
