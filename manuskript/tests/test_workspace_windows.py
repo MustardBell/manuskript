@@ -6,6 +6,9 @@ closing is not the project's closing. Each window keeps its own
 selection, its own open documents and its own panels.
 """
 
+from weakref import ref
+
+import pytest
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtWidgets import QPlainTextEdit
 
@@ -68,6 +71,8 @@ def test_a_second_window_has_its_own_id_and_nothing_else_of_its_own(
         assert other.applicationPreferences is window.applicationPreferences
         assert other.mediaTypes is window.mediaTypes
         assert other.pluginContributions is window.pluginContributions
+        assert other.testAttribute(Qt.WA_DeleteOnClose)
+        assert not window.testAttribute(Qt.WA_DeleteOnClose)
     finally:
         other.close()
 
@@ -425,7 +430,9 @@ def test_a_moved_panel_is_the_same_widget_in_the_other_window(
             panel.widget.setPlainText("half-written note")
             original = panel.widget
 
-            moved = window.movePanelTo(NOTES, other)
+            moved = window.panelPlacement.move_to(
+                NOTES, other.panelPlacement,
+            )
 
             assert moved.widget is original
             assert moved.widget.toPlainText() == "half-written note"
@@ -441,7 +448,9 @@ def test_a_moved_panel_is_mounted_in_its_new_window(MWEmptyProject):
     other = window.openWorkspaceWindow()
     try:
         with movable_panel(window):
-            moved = window.movePanelTo(NOTES, other)
+            moved = window.panelPlacement.move_to(
+                NOTES, other.panelPlacement,
+            )
 
             assert moved.container is not None
             assert other.dockWidgetArea(moved.container) == (
@@ -462,7 +471,9 @@ def test_a_moved_panel_is_toggled_from_its_new_window(MWEmptyProject):
         with movable_panel(window) as panel:
             old_action = panel.action
 
-            moved = window.movePanelTo(NOTES, other)
+            moved = window.panelPlacement.move_to(
+                NOTES, other.panelPlacement,
+            )
 
             assert moved.action is not old_action
             assert moved.action.parent() is other
@@ -503,7 +514,9 @@ def test_a_dock_panel_is_put_away_whole_wherever_it_was_mounted(
             assert not panel.container.isHidden()
 
             # As adopted by another window.
-            moved = window.movePanelTo(NOTES, other)
+            moved = window.panelPlacement.move_to(
+                NOTES, other.panelPlacement,
+            )
             moved.action.setChecked(False)
             assert moved.container.isHidden()
             moved.action.setChecked(True)
@@ -557,7 +570,9 @@ def test_the_toolbar_button_travels_with_the_panel(MWEmptyProject):
         with movable_panel(window):
             assert NOTES in window.toolbar._panelToggles
 
-            window.movePanelTo(NOTES, other)
+            window.panelPlacement.move_to(
+                NOTES, other.panelPlacement,
+            )
 
             assert NOTES not in window.toolbar._panelToggles
             assert NOTES in other.toolbar._panelToggles
@@ -574,11 +589,44 @@ def test_a_refused_move_leaves_the_panel_where_it_was(MWEmptyProject):
     try:
         instance = window.panelHost.instance(METADATA)
 
-        assert window.movePanelTo(METADATA, other) is None
+        assert window.panelPlacement.move_to(
+            METADATA, other.panelPlacement,
+        ) is None
 
         assert window.panelHost.instance(METADATA) is instance
         assert instance.widget is not None
         assert instance.action is not None
+    finally:
+        other.close()
+
+
+def test_a_failed_adoption_rolls_the_living_panel_back(
+        MWEmptyProject, monkeypatch):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        with movable_panel(window) as panel:
+            original = panel.widget
+
+            def fail_adoption(_instance):
+                raise RuntimeError("destination mount failed")
+
+            monkeypatch.setattr(other.panelHost, "adopt", fail_adoption)
+            with pytest.raises(
+                RuntimeError,
+                match="destination mount failed",
+            ):
+                window.panelPlacement.move_to(
+                    NOTES,
+                    other.panelPlacement,
+                )
+
+            restored = window.panelHost.instance(NOTES)
+            assert restored.widget is original
+            assert restored.host is window.panelHost
+            assert other.panelHost.instance(NOTES) is None
+            assert NOTES in window.toolbar._panelToggles
+            assert NOTES not in other.toolbar._panelToggles
     finally:
         other.close()
 
@@ -588,8 +636,33 @@ def test_moving_a_panel_to_its_own_window_changes_nothing(
     window = MWEmptyProject
     instance = window.panelHost.instance(METADATA)
 
-    assert window.movePanelTo(METADATA, window) is instance
+    assert window.panelPlacement.move_to(
+        METADATA, window.panelPlacement,
+    ) is instance
     assert window.panelHost.instance(METADATA) is instance
+
+
+def test_panel_placement_receives_explicit_workspace_ports(
+        MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    try:
+        controller = window.panelPlacement
+
+        assert controller.target.host is window.panelHost
+        assert controller.views.targets() == (
+            other.panelPlacement.target,
+        )
+        assert not hasattr(controller, "window")
+        assert not hasattr(controller, "mw")
+        assert not hasattr(window, "movePanelTo")
+        assert not hasattr(window, "togglePanelFloating")
+        assert not hasattr(window, "buildPanelMoveMenu")
+        assert not hasattr(window, "buildPanelFloatMenu")
+        assert not hasattr(window, "menuMovePanel")
+        assert not hasattr(window, "menuFloatPanel")
+    finally:
+        other.close()
 
 
 def test_the_move_menu_offers_only_panels_that_can_move(MWEmptyProject):
@@ -598,15 +671,15 @@ def test_the_move_menu_offers_only_panels_that_can_move(MWEmptyProject):
     other = window.openWorkspaceWindow()
     try:
         with movable_panel(window):
-            window.buildPanelMoveMenu()
+            window.panelPlacement.build_move_menu()
 
             titles = [
                 action.menu().title()
-                for action in window.menuMovePanel.actions()
+                for action in window.panelPlacement.move_menu.actions()
                 if action.menu() is not None
             ]
             assert titles == ["Movable notes"]
-            targets = window.menuMovePanel.actions()[0].menu()
+            targets = window.panelPlacement.move_menu.actions()[0].menu()
             assert len(targets.actions()) == 1
     finally:
         other.close()
@@ -616,9 +689,9 @@ def test_the_move_menu_says_when_nothing_can_move(MWEmptyProject):
     window = MWEmptyProject
     other = window.openWorkspaceWindow()
     try:
-        window.buildPanelMoveMenu()
+        window.panelPlacement.build_move_menu()
 
-        entries = window.menuMovePanel.actions()
+        entries = window.panelPlacement.move_menu.actions()
         assert len(entries) == 1
         assert "No panel can move" in entries[0].text()
         assert not entries[0].isEnabled()
@@ -630,12 +703,24 @@ def test_the_move_menu_says_when_there_is_nowhere_to_move(
         MWEmptyProject):
     window = MWEmptyProject
 
-    window.buildPanelMoveMenu()
+    window.panelPlacement.build_move_menu()
 
-    entries = window.menuMovePanel.actions()
+    entries = window.panelPlacement.move_menu.actions()
     assert len(entries) == 1
     assert "No other window" in entries[0].text()
     assert not entries[0].isEnabled()
+
+
+def test_a_move_menu_does_not_retain_a_closed_target(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    with movable_panel(window):
+        window.panelPlacement.build_move_menu()
+        destination = ref(other.panelPlacement.target)
+
+        other.close()
+
+        assert destination() is None
 
 
 # ------------------------------------------------- tearing a panel off
@@ -647,7 +732,7 @@ def test_a_torn_off_panel_floats_free_of_the_layout(MWEmptyProject):
     window = MWEmptyProject
     original = window.panelHost.instance(METADATA).widget
     try:
-        floated = window.togglePanelFloating(METADATA)
+        floated = window.panelPlacement.toggle_floating(METADATA)
 
         assert floated.widget is original
         assert floated.container is not None
@@ -655,7 +740,7 @@ def test_a_torn_off_panel_floats_free_of_the_layout(MWEmptyProject):
         assert METADATA in window.panelHost.floating()
         assert window.splitterRedacH.indexOf(original) == -1
     finally:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
 
 def test_a_floating_panel_is_not_a_workspace_window(MWEmptyProject):
@@ -664,7 +749,7 @@ def test_a_floating_panel_is_not_a_workspace_window(MWEmptyProject):
     """
     window = MWEmptyProject
     try:
-        floated = window.togglePanelFloating(METADATA)
+        floated = window.panelPlacement.toggle_floating(METADATA)
 
         assert floated.container not in (
             window.windowRegistry.workspace_windows
@@ -672,7 +757,7 @@ def test_a_floating_panel_is_not_a_workspace_window(MWEmptyProject):
         assert window.windowRegistry.is_last(window)
         assert len(window.windowRegistry.workspace_windows) == 1
     finally:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
 
 def test_redocking_returns_the_panel_to_its_slot(MWEmptyProject):
@@ -681,9 +766,9 @@ def test_redocking_returns_the_panel_to_its_slot(MWEmptyProject):
     """
     window = MWEmptyProject
     original = window.panelHost.instance(METADATA).widget
-    window.togglePanelFloating(METADATA)
+    window.panelPlacement.toggle_floating(METADATA)
 
-    redocked = window.togglePanelFloating(METADATA)
+    redocked = window.panelPlacement.toggle_floating(METADATA)
 
     assert redocked.widget is original
     assert window.panelHost.floating() == ()
@@ -700,7 +785,7 @@ def test_a_torn_off_panel_keeps_its_model_bindings(MWEmptyProject):
     before = panel.properties.txtTitle._model
     assert before is window.projectRuntime.models.outline
     try:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
         assert panel.properties.txtTitle._model is before
         assert (
@@ -708,14 +793,14 @@ def test_a_torn_off_panel_keeps_its_model_bindings(MWEmptyProject):
             is window.projectRuntime.models.outline
         )
     finally:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
 
 def test_a_torn_off_panel_is_still_toggled_from_the_toolbar(
         MWEmptyProject):
     window = MWEmptyProject
     try:
-        floated = window.togglePanelFloating(METADATA)
+        floated = window.panelPlacement.toggle_floating(METADATA)
 
         assert METADATA in window.toolbar._panelToggles
         floated.action.setChecked(False)
@@ -723,26 +808,26 @@ def test_a_torn_off_panel_is_still_toggled_from_the_toolbar(
         floated.action.setChecked(True)
         assert not floated.container.isHidden()
     finally:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
 
 def test_the_float_menu_marks_what_is_already_floating(MWEmptyProject):
     window = MWEmptyProject
     try:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
-        window.buildPanelFloatMenu()
+        window.panelPlacement.build_float_menu()
 
         # By panel id, not by the text on the entry: the interface is
         # translated, and this test should not depend on the locale.
         checked = {
             action.data(): action.isChecked()
-            for action in window.menuFloatPanel.actions()
+            for action in window.panelPlacement.floating_menu.actions()
         }
         assert checked[METADATA] is True
         assert checked[STORYLINE] is False
     finally:
-        window.togglePanelFloating(METADATA)
+        window.panelPlacement.toggle_floating(METADATA)
 
 
 def test_tearing_off_twice_is_not_two_floats(MWEmptyProject):
@@ -771,9 +856,9 @@ def test_redocking_does_not_steal_space_from_the_editor(MWEmptyProject):
     before = splitter.sizes()
     assert len(before) == 3
 
-    window.togglePanelFloating(METADATA)
+    window.panelPlacement.toggle_floating(METADATA)
     assert len(splitter.sizes()) == 2
-    window.togglePanelFloating(METADATA)
+    window.panelPlacement.toggle_floating(METADATA)
 
     # Exactly the arrangement it had, rather than whatever Qt would
     # redistribute -- the returning panel took its space from the editor

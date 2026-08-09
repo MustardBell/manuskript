@@ -8,6 +8,31 @@ import os
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def flush_deferred_qt_deletions():
+    """Let synchronous Qt tests finish close-time object deletion.
+
+    A real event loop consumes DeferredDelete events after a widget with
+    WA_DeleteOnClose accepts its close.  Tests otherwise move straight into
+    constructing the next large widget tree, leaving Python's cyclic
+    collector to encounter stale wrappers at an arbitrary allocation.
+    """
+    yield
+    from PyQt5.QtCore import QCoreApplication, QEvent, Qt
+    from PyQt5.QtWidgets import QMainWindow, qApp
+
+    for widget in tuple(qApp.topLevelWidgets()):
+        if (
+            isinstance(widget, QMainWindow)
+            and not widget.isVisible()
+            and widget.testAttribute(Qt.WA_DeleteOnClose)
+        ):
+            QCoreApplication.sendPostedEvents(
+                widget,
+                QEvent.DeferredDelete,
+            )
+
+
 def closeProjectDiscardingChanges(MW):
     """Close a test project without persisting fixture mutations."""
     if MW.projectManager.session.is_dirty:

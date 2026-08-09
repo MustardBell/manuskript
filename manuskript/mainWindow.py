@@ -3,8 +3,6 @@
 import importlib
 import os
 
-from functools import partial
-
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
                           QRegExp, QUrl, QSize)
 from PyQt5.QtGui import QIcon, QColor
@@ -34,6 +32,10 @@ from manuskript.panels import PanelContext
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
+from manuskript.ui.panels.placement import (
+    PanelPlacementController,
+    PanelPlacementViews,
+)
 from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.panels.core import (
     CorePanelViewSet,
@@ -144,6 +146,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         layout is filed.
         """
         QMainWindow.__init__(self)
+        if window_id != WORKSPACE_PRIMARY:
+            # A secondary workspace has no application-lifetime owner.  If
+            # close merely hides it, its large parented Qt tree is eventually
+            # destroyed by Python's cyclic collector, which SIP cannot do
+            # safely once C++-owned child wrappers are involved.
+            self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
         #: Kept whole so another window can be opened from this one
         #: without naming the services one at a time.
@@ -446,6 +454,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.windowState.capture_layout()
         self.closeToolWindows()
         self.windowState.save()
+        if self.testAttribute(Qt.WA_DeleteOnClose):
+            self.panelPlacement.dispose()
         self.projectRuntime.detach(self.projectLifecycleView)
         self.windowRegistry.unregister(self)
         super().closeEvent(event)
@@ -466,133 +476,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         before = self.menuView.actions()
         anchor = before[0] if before else None
         self.menuView.insertAction(anchor, self.actNewWindow)
-
-        self.menuFloatPanel = QMenu(self.tr("&Float Panel"), self)
-        self.menuFloatPanel.setObjectName("menuFloatPanel")
-        self.menuFloatPanel.aboutToShow.connect(self.buildPanelFloatMenu)
-        self.menuView.insertMenu(anchor, self.menuFloatPanel)
-
-        self.menuMovePanel = QMenu(self.tr("Move &Panel To"), self)
-        self.menuMovePanel.setObjectName("menuMovePanel")
-        self.menuMovePanel.aboutToShow.connect(self.buildPanelMoveMenu)
-        self.menuView.insertMenu(anchor, self.menuMovePanel)
-        self.menuView.insertSeparator(anchor)
-
-    def movePanelTo(self, panel_id, target):
-        """Hand one of this window's panels to another window.
-
-        The panel changes owner: the same widget, still bound to the
-        same project models, mounted in the target and toggled from
-        there. Nothing is rebuilt, so nothing it was showing is lost.
-        """
-        if target is self:
-            return self.panelHost.instance(panel_id)
-        if target.panelHost.instance(panel_id) is not None:
-            # Checked before releasing: a refused adoption after a
-            # release would leave the panel belonging to nobody.
-            return None
-        instance = self.panelHost.release(panel_id)
-        if instance is None:
-            return None
-        adopted = target.panelHost.adopt(instance)
-        self.toolbar.removePanelToggle(panel_id)
-        target.toolbar.addPanelToggle(
-            adopted.action,
-            adopted.widget,
-            adopted.descriptor.group,
-            panel_id=panel_id,
+        self.panelPlacement = PanelPlacementController(
+            PanelPlacementViews.for_window(self, anchor=anchor)
         )
-        return adopted
-
-    def togglePanelFloating(self, panel_id):
-        """Float a docked panel, or put a floating one back."""
-        instance = self.panelHost.instance(panel_id)
-        if instance is None:
-            return None
-        if panel_id in self.panelHost.floating():
-            moved = self.panelHost.redock(panel_id)
-        else:
-            moved = self.panelHost.tear_off(panel_id)
-        if moved is not None:
-            self.toolbar.removePanelToggle(panel_id)
-            self.toolbar.addPanelToggle(
-                moved.action,
-                moved.widget,
-                moved.descriptor.group,
-                panel_id=panel_id,
-            )
-        return moved
-
-    def buildPanelFloatMenu(self):
-        """Offer each panel of this window a float or a re-dock."""
-        self.menuFloatPanel.clear()
-        floating = set(self.panelHost.floating())
-        for panel_id, instance in sorted(
-            self.panelHost.instances.items()
-        ):
-            action = self.menuFloatPanel.addAction(
-                self.tr(instance.descriptor.title)
-            )
-            # Carries which panel it acts on, so nothing has to read it
-            # back off a translated label.
-            action.setData(panel_id)
-            action.setCheckable(True)
-            action.setChecked(panel_id in floating)
-            action.triggered.connect(
-                partial(self.togglePanelFloating, panel_id)
-            )
-        if not self.panelHost.instances:
-            action = self.menuFloatPanel.addAction(
-                self.tr("No panel in this window")
-            )
-            action.setEnabled(False)
-
-    def buildPanelMoveMenu(self):
-        """Offer each of this window's panels to each other window.
-
-        Rebuilt when shown rather than kept current: which windows exist
-        changes underneath it, and a stale entry would move a panel into
-        a window that has gone.
-        """
-        self.menuMovePanel.clear()
-        others = [
-            window
-            for window in self.windowRegistry.workspace_windows
-            if window is not self
-        ]
-        offered = 0
-        for panel_id, instance in sorted(
-            self.panelHost.instances.items()
-        ):
-            # Only windows that do not already show this panel can take
-            # it. Every window builds its own core panels, so those have
-            # nowhere to go -- tearing one off is the move that makes
-            # sense for them.
-            targets = [
-                window
-                for window in others
-                if window.panelHost.instance(panel_id) is None
-            ]
-            if not targets:
-                continue
-            submenu = self.menuMovePanel.addMenu(
-                self.tr(instance.descriptor.title)
-            )
-            submenu.menuAction().setData(panel_id)
-            offered += 1
-            for window in targets:
-                action = submenu.addAction(window.windowTitle())
-                action.setData(panel_id)
-                action.triggered.connect(
-                    partial(self.movePanelTo, panel_id, window)
-                )
-        if not offered:
-            action = self.menuMovePanel.addAction(
-                self.tr("No panel can move to another window")
-                if others
-                else self.tr("No other window open")
-            )
-            action.setEnabled(False)
 
     def nextWorkspaceId(self):
         """An identifier no open window is already filing state under.
