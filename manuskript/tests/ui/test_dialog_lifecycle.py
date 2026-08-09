@@ -33,3 +33,18 @@ def test_destroying_replaced_dialog_cannot_forget_current_dialog():
 
     assert lifecycle.current("transfer") is second
     lifecycle.close_all()
+
+
+def test_close_all_disconnects_late_destroyed_callbacks():
+    lifecycle = NamedDialogLifecycle(lambda _dialog: None)
+    dialog = QWidget()
+    lifecycle.register("transfer", dialog)
+    callback = lifecycle._callbacks["transfer"]
+
+    lifecycle.close_all()
+
+    assert lifecycle.current("transfer") is None
+    # The callback is no longer retained by the native QObject and remains
+    # harmless if an already queued delivery invokes it directly.
+    callback()
+    assert lifecycle.current("transfer") is None

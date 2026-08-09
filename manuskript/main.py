@@ -41,11 +41,14 @@ LOGGER = logging.getLogger(__name__)
 
 def prepare(arguments, tests=False):
     # Qt WebEngine demands this attribute be set _before_ we create our QApplication object.
-    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
+    if QApplication.instance() is None:
+        QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 
     # Create the foundation that provides our Qt application with its event loop.
     with timing.span("startup.qt"):
-        app = QApplication(sys.argv)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
     app.setOrganizationName("manuskript" + ("_tests" if tests else ""))
     app.setOrganizationDomain("www.theologeek.ch")
     app.setApplicationName("manuskript" + ("_tests" if tests else ""))

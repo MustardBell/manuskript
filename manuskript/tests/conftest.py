@@ -8,31 +8,6 @@ import os
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def flush_deferred_qt_deletions():
-    """Let synchronous Qt tests finish close-time object deletion.
-
-    A real event loop consumes DeferredDelete events after a widget with
-    WA_DeleteOnClose accepts its close.  Tests otherwise move straight into
-    constructing the next large widget tree, leaving Python's cyclic
-    collector to encounter stale wrappers at an arbitrary allocation.
-    """
-    yield
-    from PyQt5.QtCore import QCoreApplication, QEvent, Qt
-    from PyQt5.QtWidgets import QMainWindow, qApp
-
-    for widget in tuple(qApp.topLevelWidgets()):
-        if (
-            isinstance(widget, QMainWindow)
-            and not widget.isVisible()
-            and widget.testAttribute(Qt.WA_DeleteOnClose)
-        ):
-            QCoreApplication.sendPostedEvents(
-                widget,
-                QEvent.DeferredDelete,
-            )
-
-
 def closeProjectDiscardingChanges(MW):
     """Close a test project without persisting fixture mutations."""
     if MW.projectManager.session.is_dirty:
@@ -40,20 +15,23 @@ def closeProjectDiscardingChanges(MW):
     assert MW.projectManager.closeProject()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def closeProjectAfterTests():
-    """Leave Qt with a closed project so teardown cannot show a save dialog."""
-    yield
-    from manuskript.tests import MW as window
+@pytest.fixture(scope="session")
+def test_application():
+    """Own the GUI only for tests that request a workspace fixture."""
+    from manuskript.tests import prepare_test_application
+
+    application = prepare_test_application()
+    yield application
+    _app, window = application
     closeProjectDiscardingChanges(window)
 
 
-@pytest.fixture
-def MW():
+@pytest.fixture(scope="session")
+def MW(test_application):
     """
     Returns the mainWindow
     """
-    from manuskript.tests import MW as window
+    _app, window = test_application
     return window
 
 @pytest.fixture

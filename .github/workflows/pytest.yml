@@ -19,6 +19,7 @@ jobs:
   test:
     name: pytest ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       # One platform failing should not hide the result on the others.
       fail-fast: false

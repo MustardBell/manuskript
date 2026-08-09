@@ -15,6 +15,7 @@ jobs:
   linux_build:
     name: Building for Linux 3.9 on ubuntu-22.04
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
 
     steps:
     - name: Checkout repository

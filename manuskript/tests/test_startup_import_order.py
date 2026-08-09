@@ -129,3 +129,21 @@ def test_the_guard_would_notice_the_regression():
     loaded = imported_by("manuskript.exporter.page_routes")
 
     assert "manuskript.ui.style" in loaded
+
+
+def test_importing_test_support_does_not_compose_the_application_window():
+    """Pure tests pay for QApplication, not the complete Manuskript UI."""
+    program = (
+        "import manuskript.tests\n"
+        "from PyQt5.QtWidgets import QApplication\n"
+        "assert QApplication.instance() is not None\n"
+        "assert QApplication.topLevelWidgets() == []\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
