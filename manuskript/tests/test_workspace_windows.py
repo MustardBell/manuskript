@@ -80,7 +80,10 @@ def test_a_second_window_edits_the_same_project(MWEmptyProject):
         assert other.projectRuntime is window.projectRuntime
         assert other.projectManager is window.projectManager
         assert other.settingsManager is window.settingsManager
-        assert other.undoStack is window.undoStack
+        assert (
+            other.projectRuntime.undoStack
+            is window.projectRuntime.undoStack
+        )
         # And so are the models: editing in one window is editing the
         # project, which is the whole point.
         assert (

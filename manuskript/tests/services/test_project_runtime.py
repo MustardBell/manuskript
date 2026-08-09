@@ -87,20 +87,17 @@ def test_project_facts_read_through_to_the_manager():
 
 
 def test_a_window_shares_the_runtime_it_is_given(MWEmptyProject):
-    """The window's attributes point at the runtime's objects rather
-    than copies, so a second window pointed at the same runtime edits
-    the same project.
-    """
+    """Project services remain runtime-owned, not window aliases."""
     window = MWEmptyProject
     runtime = window.projectRuntime
 
     assert window.settingsManager is runtime.settingsManager
-    assert window.undoStack is runtime.undoStack
     assert window.projectManager is runtime.projectManager
-    assert window.revisionCoordinator is runtime.revisionCoordinator
     assert window.projectManager.model_parent is runtime.modelParent
     assert window.projectManager.settings is runtime.settingsManager
     for legacy_alias in (
+        "undoStack",
+        "revisionCoordinator",
         "mdlFlatData",
         "mdlCharacter",
         "mdlLabels",

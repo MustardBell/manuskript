@@ -92,7 +92,7 @@ class MainWindowActionBinding:
         it themselves, scoped to the widget.
         """
         window = self._window
-        stack = getattr(window, "undoStack", None)
+        stack = getattr(window.projectRuntime, "undoStack", None)
         if stack is None:
             return
         window.actUndo = stack.createUndoAction(

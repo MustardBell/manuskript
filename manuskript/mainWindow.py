@@ -182,8 +182,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # these by attribute. They retire as callers learn to ask the
         # runtime; what they name has moved, not what it does.
         self.settingsManager = self.projectRuntime.settingsManager
-        self.undoStack = self.projectRuntime.undoStack
-        self.revisionCoordinator = self.projectRuntime.revisionCoordinator
         # Which windows are workspaces. Registering makes this one count
         # towards "the last window", and towards where commands go.
         self.windowRegistry = services.window_registry
@@ -870,7 +868,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.gitRevisionDialog = GitRevisionDialog(
                 self.projectManager,
                 self.settingsManager,
-                self.revisionCoordinator,
+                self.projectRuntime.revisionCoordinator,
                 host,
             )
             self.gitRevisionDialog.setAttribute(

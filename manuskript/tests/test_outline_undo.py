@@ -147,14 +147,14 @@ def test_outline_views_delete_through_the_undo_stack(MWEmptyProject):
         tree.removeSelection()
 
         assert "Deleted from the tree" not in titles(model.rootItem)
-        assert window.undoStack.canUndo()
+        assert window.projectRuntime.undoStack.canUndo()
 
-        window.undoStack.undo()
+        window.projectRuntime.undoStack.undo()
 
         assert "Deleted from the tree" in titles(model.rootItem)
     finally:
         settings.dontShowDeleteWarning = previous
-        window.undoStack.clear()
+        window.projectRuntime.undoStack.clear()
 
 
 def test_undo_is_scoped_to_the_outline_not_the_whole_window(MWEmptyProject):
@@ -186,13 +186,13 @@ def test_closing_a_project_forgets_its_history(MWEmptyProject):
     window = MWEmptyProject
     model = window.projectRuntime.models.outline
     item = scene(model, "Belongs to this project")
-    window.undoStack.push(RemoveOutlineItemsCommand(
+    window.projectRuntime.undoStack.push(RemoveOutlineItemsCommand(
         model, [model.indexFromItem(item)]))
-    assert window.undoStack.canUndo()
+    assert window.projectRuntime.undoStack.canUndo()
 
     window.projectLifecycleView.prepare_close()
 
-    assert not window.undoStack.canUndo()
+    assert not window.projectRuntime.undoStack.canUndo()
 
 
 def test_the_editor_buttons_undo_typing_not_the_outline(MWEmptyProject):
@@ -214,7 +214,7 @@ def test_the_editor_buttons_undo_typing_not_the_outline(MWEmptyProject):
 
         # A structure change must NOT light up the editor's buttons.
         other = scene(model, "Elsewhere")
-        window.undoStack.push(RemoveOutlineItemsCommand(
+        window.projectRuntime.undoStack.push(RemoveOutlineItemsCommand(
             model, [model.indexFromItem(other)]))
         qApp.processEvents()
 
@@ -239,7 +239,7 @@ def test_the_editor_buttons_undo_typing_not_the_outline(MWEmptyProject):
 
         assert "gggggg" in editor.txtRedacText.toPlainText()
     finally:
-        window.undoStack.clear()
+        window.projectRuntime.undoStack.clear()
         window.mainEditor.closeAllTabs()
 
 

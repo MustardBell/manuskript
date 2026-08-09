@@ -143,7 +143,7 @@ class ProjectLifecycleViews:
                 restore_workspace_windows=window.restoreWorkspaceWindows,
                 connect_project=window.makeConnections,
                 disconnect_project=window.breakConnections,
-                undo_stack=window.undoStack,
+                undo_stack=window.projectRuntime.undoStack,
                 editor=window.mainEditor,
                 private_text_editors=partial(
                     window.findChildren,
