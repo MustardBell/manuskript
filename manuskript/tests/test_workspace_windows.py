@@ -105,6 +105,27 @@ def test_a_second_window_edits_the_same_project(MWEmptyProject):
         other.close()
 
 
+def test_each_workspace_owns_only_its_tool_dialogs(MWEmptyProject):
+    window = MWEmptyProject
+    other = window.openWorkspaceWindow()
+    first = window.workspaceDialogs.show_targets()
+    second = other.workspaceDialogs.show_targets()
+    try:
+        assert window.workspaceDialogs is not other.workspaceDialogs
+        assert not first.isHidden()
+        assert not second.isHidden()
+
+        window.closeToolWindows()
+
+        assert first.isHidden()
+        assert not second.isHidden()
+        assert window.workspaceDialogs.targets_dialog is None
+        assert other.workspaceDialogs.targets_dialog is second
+    finally:
+        other.workspaceDialogs.close_all()
+        other.close()
+
+
 def test_both_windows_are_workspaces_and_neither_is_last(
         MWEmptyProject):
     window = MWEmptyProject

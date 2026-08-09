@@ -39,10 +39,16 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         window.projectManager.saveDatas
     )
     window.actGitRevisions.triggered.connect.assert_called_once_with(
-        window.showGitRevisions
+        window.workspaceDialogs.show_revision_history
     )
     window.actBack.triggered.connect.assert_called_once_with(
         window.navigationController.back
+    )
+    window.actSettings.triggered.connect.assert_called_once_with(
+        window.workspaceDialogs.show_settings
+    )
+    window.actToolTargets.triggered.connect.assert_called_once_with(
+        window.workspaceDialogs.show_targets
     )
     window.generateViewMenu.assert_called_once_with()
     (

@@ -1,21 +1,21 @@
 def test_about_dialog_is_owned_by_its_workspace(MWEmptyProject):
     window = MWEmptyProject
 
-    window.about()
+    dialog = window.workspaceDialogs.show_about()
     try:
-        assert window.dialog.parent() is window
+        assert dialog.parent() is window.centralWidget()
     finally:
-        window.dialog.close()
+        dialog.close()
 
 
 def test_targets_dialog_is_owned_without_receiving_main_window_authority(
         MWEmptyProject):
     window = MWEmptyProject
 
-    window.sessionTargets()
+    dialog = window.workspaceDialogs.show_targets()
     try:
-        assert window.td.parent() is window
-        assert not hasattr(window.td, "mw")
-        assert window.td.context.writing_session is window.writingSession
+        assert dialog.parent() is window.centralWidget()
+        assert not hasattr(dialog, "mw")
+        assert dialog.context.writing_session is window.writingSession
     finally:
-        window.td.close()
+        dialog.close()

@@ -70,7 +70,7 @@ class SettingsWindowViews:
     editors: SettingsEditorViews
 
     @classmethod
-    def for_window(cls, window):
+    def for_window(cls, window, parent=None):
         runtime = window.projectRuntime
         manager = window.projectManager
         history = window.projectHistory
@@ -78,12 +78,18 @@ class SettingsWindowViews:
         project_tree = window.corePanels.project_tree.tree
 
         return cls(
-            parent=window,
+            parent=(
+                parent
+                if parent is not None
+                else (window.centralWidget() or window)
+            ),
             project=SettingsProjectViews(
                 models=lambda: runtime.models,
                 current_file=lambda: runtime.currentProject,
                 reconfigure_autosave=manager.reconfigureAutosave,
-                show_revision_history=window.showGitRevisions,
+                show_revision_history=(
+                    window.workspaceDialogs.show_revision_history
+                ),
             ),
             startup=SettingsStartupViews(
                 auto_load_values=history.auto_load_values,

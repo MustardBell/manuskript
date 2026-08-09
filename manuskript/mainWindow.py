@@ -44,9 +44,6 @@ from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
 )
-from manuskript.ui.tools.media_type_inspector import (
-    MediaTypeInspector,
-)
 from manuskript.functions import wordCount, appPath, openURL, showInFolder
 from manuskript import timing
 import manuskript.functions as F
@@ -59,14 +56,11 @@ from manuskript.exporter.context import ExportContext
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.theme_repository import ThemeRepository
-from manuskript.settingsWindow import settingsWindow
 from manuskript.ui import style
-from manuskript.ui.about import aboutDialog
 from manuskript.ui.collapsibleDockWidgets import collapsibleDockWidgets
 from manuskript.ui.importers.importer import importerDialog
 from manuskript.ui.importers.import_context import ImportContext
 from manuskript.ui.exporters.exporter import exporterDialog
-from manuskript.ui.git_revision_dialog import GitRevisionDialog
 from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.main_window_action_binding import (
@@ -81,8 +75,6 @@ from manuskript.ui.project_feature_binding import ProjectFeatureBinding
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
-from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
-from manuskript.ui.tools.targets import TargetsContext, TargetsDialog
 from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -93,7 +85,10 @@ from manuskript.ui.status_presenter import (
     StatusPresenter,
     StatusPresenterViews,
 )
-from manuskript.ui.settings_window_views import SettingsWindowViews
+from manuskript.ui.workspace_dialogs import (
+    WorkspaceDialogController,
+    WorkspaceDialogViews,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -292,7 +287,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.pluginContributions is not None
             else None
         )
-        self.buildDeveloperMenu()
         self.buildWorkspaceMenu()
         self.projectLifecycleView = ProjectLifecycleView(
             self.projectRuntime,
@@ -327,6 +321,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ),
         )
         self.projectHistory = self.projectManager.last_project_store
+        self.workspaceDialogs = WorkspaceDialogController(
+            WorkspaceDialogViews.for_window(self)
+        )
+        self.buildDeveloperMenu()
         self.welcome.set_context(
             welcome_context_for(
                 self,
@@ -384,10 +382,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             },
             self,
         )
-
-        # Tools non-modal windows
-        self.td = None  # Targets Dialog
-        self.fw = None  # Frequency Window
 
         self.characterController.capture_tabs()
 
@@ -701,9 +695,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         not ours to shut, which is what walking every top-level widget
         used to do.
         """
-        for window in (self.td, self.fw, self.gitRevisionDialog):
-            if window is not None:
-                window.close()
+        self.workspaceDialogs.close_all()
         if self.pluginUi is not None:
             self.pluginUi.projectPanels.close_all()
 
@@ -856,35 +848,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         searchTextInput.setFocus()
         searchTextInput.selectAll()
 
-    def showGitRevisions(self, parent=None):
-        if not self.projectManager.session.is_open:
-            return
-        host = parent if isinstance(parent, QWidget) else self
-        if self.gitRevisionDialog is None:
-            self.gitRevisionDialog = GitRevisionDialog(
-                self.projectManager,
-                self.projectRuntime.settingsManager,
-                self.projectRuntime.revisionCoordinator,
-                host,
-            )
-            self.gitRevisionDialog.setAttribute(
-                Qt.WA_DeleteOnClose,
-            )
-            self.gitRevisionDialog.destroyed.connect(
-                self._gitRevisionDialogClosed
-            )
-        elif self.gitRevisionDialog.parentWidget() is not host:
-            # A child window of an application-modal Settings window
-            # remains interactive; a sibling window is blocked by it.
-            self.gitRevisionDialog.hide()
-            self.gitRevisionDialog.setParent(host, Qt.Dialog)
-        self.gitRevisionDialog.show()
-        self.gitRevisionDialog.raise_()
-        self.gitRevisionDialog.activateWindow()
-
-    def _gitRevisionDialogClosed(self):
-        self.gitRevisionDialog = None
-
     def setMarkdownPresentationMode(self, mode):
         if self._markdownPresentationState is not None:
             self._markdownPresentationState.set_mode(mode)
@@ -1028,13 +991,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     QMessageBox.Ok).exec()
 
 
-    def about(self):
-        self.dialog = aboutDialog(parent=self)
-        self.dialog.setFixedSize(self.dialog.size())
-        self.dialog.show()
-        # Center about dialog
-        self.centerChildWindow(self.dialog)
-
     ###############################################################################
     # GENERAL AKA UNSORTED
     ###############################################################################
@@ -1112,8 +1068,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actCloseProject,
             self.actGitRevisions,
         )
-        self.gitRevisionDialog = None
-
         # Hides navigation dock title bar
         self.dckNavigation.setTitleBarWidget(QWidget(None))
 
@@ -1328,57 +1282,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                    Qt.FindChildrenRecursively):
             w.toggleSpellcheck(val)
 
-    ###############################################################################
-    # SETTINGS
-    ###############################################################################
-
-    def settingsLabel(self):
-        self.settingsWindow(3)
-
-    def settingsStatus(self):
-        self.settingsWindow(4)
-
-    def settingsWindow(self, tab=None):
-        self.sw = settingsWindow(
-            SettingsWindowViews.for_window(self),
-            self.projectRuntime.settingsManager,
-            theme_repository=self.themeRepository,
-            theme_preview_renderer=self.themePreviewRenderer,
-            application_preferences=self.applicationPreferences,
-            card_styles=self.cardStyles,
-        )
-        self.sw.hide()
-        self.sw.setWindowModality(Qt.ApplicationModal)
-        self.sw.setWindowFlags(Qt.Dialog)
-        self.centerChildWindow(self.sw)
-        if tab:
-            self.sw.setTab(tab)
-        self.sw.show()
-
-    ###############################################################################
-    # TOOLS
-    ###############################################################################
-
-    def frequencyAnalyzer(self):
-        self.fw = frequencyAnalyzer(
-            self.projectRuntime.models.outline,
-            self.projectRuntime.settingsManager,
-            parent=self,
-        )
-        self.fw.show()
-        self.centerChildWindow(self.fw)
-
-    def sessionTargets(self):
-        self.td = TargetsDialog(
-            TargetsContext.for_runtime(
-                self.projectRuntime,
-                self.writingSession,
-            ),
-            parent=self,
-        )
-        self.td.show()
-        self.centerChildWindow(self.td)
-
     def buildDeveloperMenu(self):
         """Tools that inspect Manuskript rather than the manuscript.
 
@@ -1395,17 +1298,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "Inspect export formats, and declare ones Manuskript does "
             "not know"
         ))
-        self.actMediaTypes.triggered.connect(self.mediaTypeInspector)
-        self.menuDeveloper.addAction(self.actMediaTypes)
-
-    def mediaTypeInspector(self):
-        self.mediaTypeWindow = MediaTypeInspector(
-            self.mediaTypes,
-            self.mediaTypePreferences,
-            parent=self,
+        self.actMediaTypes.triggered.connect(
+            self.workspaceDialogs.show_media_types
         )
-        self.mediaTypeWindow.show()
-        self.centerChildWindow(self.mediaTypeWindow)
+        self.menuDeveloper.addAction(self.actMediaTypes)
 
     ###############################################################################
     # VIEW MENU

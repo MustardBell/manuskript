@@ -193,8 +193,7 @@ def test_changing_the_setting_repaints_with_the_new_style(MWEmptyProject):
     qApp.processEvents()
     assert isinstance(editor.corkView.cork_delegate.style, RuledCardStyle)
 
-    window.settingsWindow()
-    dialog = window.sw
+    dialog = window.workspaceDialogs.show_settings()
     try:
         dialog.cmbCorkStyle.setCurrentIndex(
             dialog.cmbCorkStyle.findData(PLAIN))
@@ -247,8 +246,7 @@ def test_settings_dropdown_lists_styles_and_persists_the_choice(
     window = MWEmptyProject
     settings = window.projectRuntime.settingsManager
     previous = settings.indexCardStyle
-    window.settingsWindow()
-    dialog = window.sw
+    dialog = window.workspaceDialogs.show_settings()
 
     try:
         listed = {
@@ -272,8 +270,7 @@ def test_settings_dropdown_survives_an_uninstalled_style(MWEmptyProject):
     previous = settings.indexCardStyle
     settings.indexCardStyle = "gone.away"
 
-    window.settingsWindow()
-    dialog = window.sw
+    dialog = window.workspaceDialogs.show_settings()
 
     try:
         # Falls back to the default rather than showing an empty combo,

@@ -143,19 +143,15 @@ def test_a_window_closes_its_own_tool_windows_only(MWNoProject):
     """Walking every top-level widget would shut another workspace's
     dialogs too; a window closes what it opened.
     """
-    targets = MagicMock()
-    frequency = MagicMock()
     stranger = MagicMock()
-    MWNoProject.td = targets
-    MWNoProject.fw = frequency
+    with patch.object(
+        MWNoProject.workspaceDialogs,
+        "close_all",
+    ) as close_all:
+        MWNoProject.closeToolWindows()
 
-    MWNoProject.closeToolWindows()
-
-    targets.close.assert_called_once_with()
-    frequency.close.assert_called_once_with()
+    close_all.assert_called_once_with()
     stranger.close.assert_not_called()
-    MWNoProject.td = None
-    MWNoProject.fw = None
 
 
 def test_quit_closes_every_workspace_asking_once():

@@ -2,10 +2,11 @@ def test_frequency_analyzer_receives_project_dependencies(
         MWEmptyProject):
     window = MWEmptyProject
 
-    window.frequencyAnalyzer()
+    window.workspaceDialogs.show_frequency()
 
-    assert window.fw.outline_model is window.projectRuntime.models.outline
-    assert window.fw.settings is window.projectRuntime.settingsManager
-    assert window.fw.parent() is window
+    dialog = window.workspaceDialogs.frequency_dialog
+    assert dialog.outline_model is window.projectRuntime.models.outline
+    assert dialog.settings is window.projectRuntime.settingsManager
+    assert dialog.parent() is window.centralWidget()
 
-    window.fw.close()
+    dialog.close()

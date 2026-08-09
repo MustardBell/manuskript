@@ -722,7 +722,10 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
         assert window._lastMDEditView is source_editor
 
         insertion_position = source_editor.textCursor().position()
-        QTest.keyClicks(qApp.focusWidget(), "X")
+        # QTest sends synthetic key events to the widget supplied here.
+        # Focus was asserted above; naming the verified editor avoids a
+        # second application-global focus lookup racing deferred Qt events.
+        QTest.keyClicks(source_editor, "X")
         QTest.qWait(50)
         edited_source = (
             source[:insertion_position]

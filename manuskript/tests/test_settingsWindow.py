@@ -28,8 +28,7 @@ def test_git_history_opened_from_modal_settings_is_interactive(
     from manuskript.services.git_revisions import GitAvailability
 
     window = MWSampleProject
-    window.settingsWindow()
-    settings = window.sw
+    settings = window.workspaceDialogs.show_settings()
     settings.chkRevisionsKeep.setChecked(True)
     settings.cmbRevisionBackend.setCurrentIndex(
         settings.cmbRevisionBackend.findData("git")
@@ -46,7 +45,7 @@ def test_git_history_opened_from_modal_settings_is_interactive(
     settings.btnManageGitRevisions.click()
     QTest.qWait(50)
 
-    dialog = window.gitRevisionDialog
+    dialog = window.workspaceDialogs.revision_dialog
     assert dialog is not None
     assert dialog.parentWidget() is settings
     assert dialog.isVisible()
@@ -59,7 +58,7 @@ def test_git_history_opened_from_modal_settings_is_interactive(
     )
     QTest.qWait(50)
 
-    assert window.gitRevisionDialog is None
+    assert window.workspaceDialogs.revision_dialog is None
     assert settings.isVisible()
     settings.close()
 
@@ -67,10 +66,9 @@ def test_git_history_opened_from_modal_settings_is_interactive(
 def test_settings_window_uses_explicit_workspace_capabilities(
         MWSampleProject):
     window = MWSampleProject
-    window.settingsWindow()
-    settings = window.sw
+    settings = window.workspaceDialogs.show_settings()
     try:
-        assert settings.parentWidget() is window
+        assert settings.parentWidget() is window.centralWidget()
         assert "mw" not in settings.__dict__
         assert "window" not in settings.__dict__
         assert settings._models() is window.projectRuntime.models
@@ -86,18 +84,21 @@ def test_general(MWSampleProject):
 
     # Loading from mainWindow
     MW.actSettings.triggered.emit()
-    assert MW.sw.isVisible()
-    assert MW.sw.settings is MW.projectRuntime.settingsManager
-    MW.sw.close()
+    assert MW.workspaceDialogs.settings_dialog.isVisible()
+    assert (
+        MW.workspaceDialogs.settings_dialog.settings
+        is MW.projectRuntime.settingsManager
+    )
+    MW.workspaceDialogs.settings_dialog.close()
     MW.actLabels.triggered.emit()
-    assert MW.sw.isVisible()
-    MW.sw.close()
+    assert MW.workspaceDialogs.settings_dialog.isVisible()
+    MW.workspaceDialogs.settings_dialog.close()
     MW.actStatus.triggered.emit()
-    assert MW.sw.isVisible()
-    MW.sw.hide()
-    MW.sw.setTab("General")
+    assert MW.workspaceDialogs.settings_dialog.isVisible()
+    MW.workspaceDialogs.settings_dialog.hide()
+    MW.workspaceDialogs.settings_dialog.setTab("General")
 
-    SW = MW.sw
+    SW = MW.workspaceDialogs.settings_dialog
 
     # Imports
     from PyQt5.QtWidgets import qApp, QStyleFactory

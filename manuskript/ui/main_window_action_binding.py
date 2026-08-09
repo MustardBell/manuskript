@@ -49,7 +49,10 @@ class MainWindowActionBinding:
             (window.actOpen, window.welcome.openFile),
             (window.actSave, window.projectManager.saveDatas),
             (window.actSaveAs, window.welcome.saveAsFile),
-            (window.actGitRevisions, window.showGitRevisions),
+            (
+                window.actGitRevisions,
+                window.workspaceDialogs.show_revision_history,
+            ),
             (window.actImport, window.doImport),
             (window.actCompile, window.doCompile),
             (
@@ -77,9 +80,9 @@ class MainWindowActionBinding:
             )
         for action, slot in [
             (window.actSearch, window.doSearch),
-            (window.actLabels, window.settingsLabel),
-            (window.actStatus, window.settingsStatus),
-            (window.actSettings, window.settingsWindow),
+            (window.actLabels, window.workspaceDialogs.show_labels),
+            (window.actStatus, window.workspaceDialogs.show_statuses),
+            (window.actSettings, window.workspaceDialogs.show_settings),
         ]:
             action.triggered.connect(slot)
 
@@ -219,11 +222,14 @@ class MainWindowActionBinding:
     def _bind_tool_actions(self):
         window = self._window
         for action, slot in [
-            (window.actToolFrequency, window.frequencyAnalyzer),
-            (window.actToolTargets, window.sessionTargets),
+            (
+                window.actToolFrequency,
+                window.workspaceDialogs.show_frequency,
+            ),
+            (window.actToolTargets, window.workspaceDialogs.show_targets),
             (window.actSupport, window.support),
             (window.actLocateLog, window.locateLogFile),
-            (window.actAbout, window.about),
+            (window.actAbout, window.workspaceDialogs.show_about),
         ]:
             action.triggered.connect(slot)
 
