@@ -122,9 +122,11 @@ class ProjectLifecycleViews:
                 rebuild_view_menu=window.generateViewMenu,
                 editor=window.mainEditor,
                 spellcheck_action=window.actSpellcheck,
-                set_spellcheck=window.toggleSpellcheck,
-                rebuild_dictionary_menu=window.updateMenuDict,
-                set_dictionary=window.setDictionary,
+                set_spellcheck=window.spellcheck.set_enabled,
+                rebuild_dictionary_menu=(
+                    window.spellcheck.rebuild_dictionary_menu
+                ),
+                set_dictionary=window.spellcheck.apply_dictionary,
                 project_tree=window.corePanels.project_tree.tree,
                 set_simple_mode=window.setViewModeSimple,
                 set_fiction_mode=window.setViewModeFiction,

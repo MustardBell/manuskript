@@ -4,10 +4,22 @@ import importlib
 import os
 
 from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
-                          QRegExp, QUrl, QSize)
+                          QUrl, QSize)
 from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QActionGroup, QAction, QStyle, QListWidgetItem, \
-    QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QDockWidget,
+    QLabel,
+    QLineEdit,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QTableView,
+    QTextEdit,
+    QTreeView,
+    QWidget,
+)
 
 from manuskript.commands import (
     DocumentCommandRouter,
@@ -78,6 +90,10 @@ from manuskript.ui.status_presenter import (
     StatusPresenter,
     StatusPresenterViews,
 )
+from manuskript.ui.spellcheck_controller import (
+    SpellcheckController,
+    SpellcheckViews,
+)
 from manuskript.ui.workspace_dialogs import (
     WorkspaceDialogController,
     WorkspaceDialogViews,
@@ -98,8 +114,6 @@ from manuskript.ui.plugins.index_card_styles import (
 )
 from manuskript.ui.welcome_context import welcome_context_for
 
-# Spellcheck support
-from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.view_configuration import (
     MainViewConfiguration,
     ViewConfigurationViews,
@@ -113,8 +127,6 @@ from manuskript.ui.workspace_state_controller import (
     WorkspaceStateController,
     WorkspaceStateViews,
 )
-from manuskript.functions import Spellchecker
-
 import logging
 LOGGER = logging.getLogger(__name__)
 
@@ -209,6 +221,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # meant to split exists.
         with timing.span("window.panels"):
             self.setupMoreUi()
+        self.spellcheck = self.workspaceLifetime.own(
+            SpellcheckController(
+                SpellcheckViews.for_window(self),
+                self.projectRuntime.settingsManager,
+            )
+        )
         self.windowState = self.workspaceLifetime.own(
             WorkspaceStateController(
                 WorkspaceStateViews.for_window(self),
@@ -995,119 +1013,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             widget.layout().insertWidget(pos, label)
 
         self.actShowHelp.setChecked(False)
-
-        # Spellcheck
-        if Spellchecker.isInstalled():
-            self.menuDict = QMenu(self.tr("Dictionary"))
-            self.menuDictGroup = QActionGroup(self)
-            self.updateMenuDict()
-            self.menuTools.addMenu(self.menuDict)
-
-            self.actSpellcheck.toggled.connect(self.toggleSpellcheck, F.AUC)
-            # self.dictChanged.connect(self.mainEditor.setDict, F.AUC)
-            # self.dictChanged.connect(self.outlineItemEditor.setDict, F.AUC)
-
-        else:
-            # No Spell check support
-            self.actSpellcheck.setVisible(False)
-            for lib, requirement in Spellchecker.supportedLibraries().items():
-                a = QAction(self.tr("Install {}{} to use spellcheck").format(lib, requirement or ""), self)
-                a.setIcon(self.style().standardIcon(QStyle.SP_MessageBoxWarning))
-                # Need to bound the lib argument otherwise the lambda uses the same lib value across all calls
-                def gen_slot_cb(l):
-                    return lambda: self.openSpellcheckWebPage(l)
-                a.triggered.connect(gen_slot_cb(lib), F.AUC)
-                self.menuTools.addAction(a)
-
-
-    ###############################################################################
-    # SPELLCHECK
-    ###############################################################################
-
-    def updateMenuDict(self):
-
-        if not Spellchecker.isInstalled():
-            return
-
-        self.menuDict.clear()
-        dictionaries = Spellchecker.availableDictionaries()
-
-        # Set first run dictionary
-        settings = self.projectRuntime.settingsManager
-        if settings.dict is None:
-            settings.dict = Spellchecker.getDefaultDictionary()
-
-        # Check if project dict is unavailable on this machine
-        dict_available = False
-        for lib, dicts in dictionaries.items():
-            if dict_available:
-                break
-            for i in dicts:
-                if Spellchecker.normalizeDictName(lib, i) == settings.dict:
-                    dict_available = True
-                    break
-        # Reset dict to default one if it's unavailable
-        if not dict_available:
-            settings.dict = Spellchecker.getDefaultDictionary()
-
-        for lib, dicts in dictionaries.items():
-            if len(dicts) > 0:
-                a = QAction(lib, self)
-            else:
-                a = QAction(self.tr("{} has no installed dictionaries").format(lib), self)
-            a.setEnabled(False)
-            self.menuDict.addAction(a)
-            for i in dicts:
-                a = QAction(i, self)
-                a.data = lib
-                a.setCheckable(True)
-                if Spellchecker.normalizeDictName(lib, i) == settings.dict:
-                    a.setChecked(True)
-                a.triggered.connect(self.setDictionary, F.AUC)
-                self.menuDictGroup.addAction(a)
-                self.menuDict.addAction(a)
-            self.menuDict.addSeparator()
-
-        # If a new dictionary was chosen, apply the change and re-enable spellcheck if it was enabled.
-        if not dict_available:
-            self.setDictionary()
-            self.toggleSpellcheck(settings.spellcheck)
-
-        for lib, requirement in Spellchecker.supportedLibraries().items():
-            if lib not in dictionaries:
-                a = QAction(self.tr("{}{} is not installed").format(lib, requirement or ""), self)
-                a.setEnabled(False)
-                self.menuDict.addAction(a)
-                self.menuDict.addSeparator()
-
-    def setDictionary(self):
-        if not Spellchecker.isInstalled():
-            return
-
-        for i in self.menuDictGroup.actions():
-            if i.isChecked():
-                # self.dictChanged.emit(i.text().replace("&", ""))
-                settings = self.projectRuntime.settingsManager
-                settings.dict = Spellchecker.normalizeDictName(
-                    i.data,
-                    i.text().replace("&", ""),
-                )
-
-                # Find all textEditView from self, and toggle spellcheck
-                for w in self.findChildren(textEditView, QRegExp(".*"),
-                                           Qt.FindChildrenRecursively):
-                    w.setDict(settings.dict)
-
-    def openSpellcheckWebPage(self, lib):
-        F.openURL(Spellchecker.getLibraryURL(lib))
-
-    def toggleSpellcheck(self, val):
-        self.projectRuntime.settingsManager.spellcheck = val
-
-        # Find all textEditView from self, and toggle spellcheck
-        for w in self.findChildren(textEditView, QRegExp(".*"),
-                                   Qt.FindChildrenRecursively):
-            w.toggleSpellcheck(val)
 
     def buildDeveloperMenu(self):
         """Tools that inspect Manuskript rather than the manuscript.
