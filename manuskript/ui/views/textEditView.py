@@ -956,6 +956,13 @@ class textEditView(QTextEdit):
         if callable(focus_received):
             focus_received(self)
 
+    def releaseWorkspaceFocus(self):
+        """Stop routing workspace commands here before native teardown."""
+        context = self.text_editor_context
+        focus_released = getattr(context, "focus_released", None)
+        if callable(focus_released):
+            focus_released(self)
+
     def focusOutEvent(self, event):
         """Submit changes just before focusing out."""
         QTextEdit.focusOutEvent(self, event)

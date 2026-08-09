@@ -178,6 +178,11 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # self.setView()
 
     def dispose(self):
+        editors = (self.txtRedacText, *getattr(self, "txtEdits", ()))
+        for editor in editors:
+            release_focus = getattr(editor, "releaseWorkspaceFocus", None)
+            if callable(release_focus):
+                release_focus()
         self.textHistory.dispose()
 
     def set_context(self, editor_context):

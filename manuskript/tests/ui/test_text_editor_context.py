@@ -94,6 +94,32 @@ def test_text_editor_context_reports_focus_to_its_known_workspace():
     window.workspaceFocus.focus_changed.assert_called_once_with(None, editor)
 
 
+def test_text_editor_context_releases_only_its_active_editor():
+    window = make_window()
+    editor = MagicMock()
+    context = text_editor_context_for(
+        window, MagicMock(), MagicMock(),
+    )
+    window.workspaceFocus.focused_widget = editor
+
+    context.focus_released(editor)
+
+    window.workspaceFocus.focus_changed.assert_called_once_with(editor, None)
+
+
+def test_text_editor_context_leaves_an_unrelated_focus_target_alone():
+    window = make_window()
+    context = text_editor_context_for(
+        window, MagicMock(), MagicMock(),
+    )
+    window.workspaceFocus.focused_widget = object()
+    window.workspaceFocus.markup_target = object()
+
+    context.focus_released(MagicMock())
+
+    window.workspaceFocus.focus_changed.assert_not_called()
+
+
 def test_text_editor_click_reports_workspace_focus():
     context = MagicMock()
     context.settings = MagicMock()
@@ -106,6 +132,17 @@ def test_text_editor_click_reports_workspace_focus():
 
     context.focus_received.assert_called_with(editor)
     editor.close()
+
+
+def test_text_editor_releases_workspace_focus_explicitly():
+    context = MagicMock()
+    context.settings = MagicMock()
+    editor = textEditView(spellcheck=False)
+    editor.set_text_editor_context(context)
+
+    editor.releaseWorkspaceFocus()
+
+    context.focus_released.assert_called_once_with(editor)
 
 
 def test_text_editor_routes_rename_as_typed_command():

@@ -21,6 +21,8 @@ class TextEditorContext:
     #: global focusChanged signal is not delivered consistently by every Qt
     #: platform plugin, especially for viewport clicks in headless sessions.
     focus_received: Optional[Callable[[object], None]] = None
+    #: Release a disappearing editor before its native widget is destroyed.
+    focus_released: Optional[Callable[[object], None]] = None
 
 
 def text_editor_context_for(window, settings, models, buffers=None):
@@ -70,10 +72,19 @@ def text_editor_context_for(window, settings, models, buffers=None):
         window.windowRegistry.activate(window)
         window.workspaceFocus.focus_changed(None, editor)
 
+    def focus_released(editor):
+        focus = window.workspaceFocus
+        if (
+            focus.focused_widget is editor
+            or focus.markup_target is editor
+        ):
+            focus.focus_changed(editor, None)
+
     return TextEditorContext(
         settings=settings,
         document_buffers=buffers,
         focus_received=focus_received,
+        focus_released=focus_released,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,
