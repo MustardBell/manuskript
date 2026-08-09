@@ -25,19 +25,23 @@ def test_references(MWSampleProject):
     Tests references using sample project.
     """
     from manuskript.models import references as Ref
+    from manuskript.services.reference_service import ReferenceService
     from manuskript.ui.reference_navigation import reference_navigation_for
+    from manuskript.ui.reference_presentation import ReferenceHtmlPresenter
 
     MW = MWSampleProject
-    references = Ref.ReferenceService(
-        Ref.ReferenceModels(
-            outline=MW.projectRuntime.models.outline,
-            characters=MW.projectRuntime.models.characters,
-            plots=MW.projectRuntime.models.plots,
-            world=MW.projectRuntime.models.world,
-            statuses=MW.projectRuntime.models.statuses,
-            labels=MW.projectRuntime.models.labels,
-        ),
+    reference_models = Ref.ReferenceModels(
+        outline=MW.projectRuntime.models.outline,
+        characters=MW.projectRuntime.models.characters,
+        plots=MW.projectRuntime.models.plots,
+        world=MW.projectRuntime.models.world,
+        statuses=MW.projectRuntime.models.statuses,
+        labels=MW.projectRuntime.models.labels,
+    )
+    references = ReferenceService(
+        reference_models,
         reference_navigation_for(MW, MW.projectRuntime.models),
+        ReferenceHtmlPresenter(reference_models),
     )
 
     # References

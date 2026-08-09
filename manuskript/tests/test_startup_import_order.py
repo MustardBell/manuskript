@@ -85,11 +85,13 @@ def test_the_preferences_migration_stays_clear_of_the_exporter_package():
 STANDS_ALONE = (
     "manuskript.converters.conversion_service",
     "manuskript.models.reference_identity",
+    "manuskript.models.references",
     "manuskript.plugins",
     "manuskript.plugins.runtime",
     "manuskript.plugins.capabilities",
     "manuskript.media_types",
     "manuskript.preferences_migrations",
+    "manuskript.services.reference_service",
 )
 
 

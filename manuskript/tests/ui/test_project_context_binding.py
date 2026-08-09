@@ -204,10 +204,12 @@ def test_the_reference_service_is_built_from_the_projects_models():
             binding_module.ReferenceService.call_args[0][1]
             is views.navigation
         )
+        presentation = binding_module.ReferenceService.call_args[0][2]
 
     assert binding.reference_service is service
     assert reference_models.outline is views.models.outline
     assert reference_models.labels is views.models.labels
+    assert presentation.models is reference_models
     # Both areas that resolve references got the one service.
     views.reference_panels.storyline.setModels.assert_called_once()
     assert service in (

@@ -12,13 +12,15 @@ work lives in :mod:`manuskript.ui.project_contexts`, and each of those
 bindings is handed only its own views.
 """
 
-from manuskript.models.references import ReferenceModels, ReferenceService
+from manuskript.models.references import ReferenceModels
+from manuskript.services.reference_service import ReferenceService
 from manuskript.ui.project_contexts import (
     EditorBinding,
     MetadataBinding,
     ReferencePanelBinding,
     SearchBinding,
 )
+from manuskript.ui.reference_presentation import ReferenceHtmlPresenter
 
 
 class ProjectContextBinding:
@@ -51,9 +53,11 @@ class ProjectContextBinding:
         # The reference service before any area: two of them resolve
         # references through it, and it is made of models rather than of
         # any window's widgets.
+        reference_models = ReferenceModels.for_project(self.views.models)
         self.reference_service = ReferenceService(
-            ReferenceModels.for_project(self.views.models),
+            reference_models,
             self.views.navigation,
+            ReferenceHtmlPresenter(reference_models),
         )
         # Editors before the rest, as before: a widget taking its models
         # can emit, and what it emits reaches whatever is bound already.
