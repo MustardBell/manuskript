@@ -18,6 +18,9 @@ from manuskript.ui.plugins.routing_panel import ExportRoutingService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
 from manuskript.ui.plugins.project_panel_views import ProjectPanelViews
 from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
+from manuskript.ui.plugins.editor_workspace_views import (
+    EditorWorkspaceViews,
+)
 
 
 class PluginUiController:
@@ -100,7 +103,7 @@ class PluginUiController:
             menu=self.menu,
         )
         self.editorWorkspaces = EditorWorkspaceHost(
-            window,
+            EditorWorkspaceViews.for_window(window),
             self.runtime,
             menu=self.menu,
         )

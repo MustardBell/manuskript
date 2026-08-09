@@ -548,9 +548,9 @@ class EditorWorkspaceShell(QFrame):
 class EditorWorkspaceHost(QObject):
     """Own plugin workspace actions and project-scoped lifecycles."""
 
-    def __init__(self, window, runtime, menu, parent=None):
-        super().__init__(parent or window)
-        self.window = window
+    def __init__(self, views, runtime, menu, parent=None):
+        super().__init__(parent or views.editor_host)
+        self.views = views
         self.runtime = runtime
         self.menu = menu
         self.actions = {}
@@ -628,21 +628,21 @@ class EditorWorkspaceHost(QObject):
         self._install_services()
         context = EditorWorkspaceContext(
             plugin_id=record.plugin_id,
-            project_file=self.window.currentProject or "",
+            project_file=self.views.project.current_file(),
             selected_item_ids=selected_ids,
-            files=self.window.projectRuntime.models.plugin_data.namespace(
+            files=self.views.project.plugin_data().namespace(
                 record.plugin_id,
-                on_change=self.window.projectManager.startTimerNoChanges,
+                on_change=self.views.project.mark_changed,
             ),
             outline=self._granted_outline(record.plugin_id),
             editors=self._granted_editors(record.plugin_id),
-            show_status=self.window.statusPresenter.show,
+            show_status=self.views.project.show_status,
             close_workspace=self.close_workspace,
         )
         try:
             workspace = contribution.workspace_factory(
                 context,
-                self.window.mainEditor,
+                self.views.editor_host,
             )
             if not isinstance(workspace, QWidget):
                 raise TypeError(
@@ -657,11 +657,11 @@ class EditorWorkspaceHost(QObject):
             contribution.descriptor.description,
             workspace,
             self.close_workspace,
-            parent=self.window.mainEditor,
+            parent=self.views.editor_host,
         )
         self._active_id = contribution_id
         self._active_plugin_id = record.plugin_id
-        self.window.mainEditor.showPluginWorkspace(self._shell)
+        self.views.editor_host.showPluginWorkspace(self._shell)
         return self._shell
 
     def close_workspace(self):
@@ -672,7 +672,7 @@ class EditorWorkspaceHost(QObject):
             try:
                 prepare_close()
             except Exception as error:
-                self.window.statusPresenter.show(
+                self.views.project.show_status(
                     self.tr("Plugin workspace cleanup failed: {}").format(
                         error
                     ),
@@ -684,7 +684,7 @@ class EditorWorkspaceHost(QObject):
         self._shell = None
         self._active_id = None
         self._active_plugin_id = None
-        self.window.mainEditor.closePluginWorkspace()
+        self.views.editor_host.closePluginWorkspace()
         if shell is not None:
             shell.deleteLater()
 
@@ -702,15 +702,13 @@ class EditorWorkspaceHost(QObject):
         in a test run stops it with nobody to press the button -- the same
         fault the panel host had, with the same fix.
         """
-        message = self.window.tr(
+        message = self.views.translate(
             "The {} workspace could not be opened: {}"
         ).format(descriptor.name, error)
         LOGGER.warning(
             "Editor workspace %s failed to open: %s", descriptor.id, error,
         )
-        presenter = getattr(self.window, "statusPresenter", None)
-        if presenter is not None:
-            presenter.show(message, 8000, 2)
+        self.views.project.show_status(message, 8000, 2)
         return message
 
     def _granted_outline(self, plugin_id):
@@ -741,7 +739,7 @@ class EditorWorkspaceHost(QObject):
     def _install_services(self):
         if self._outline is not None:
             return
-        context = self.window.mainEditor.editor_context
+        context = self.views.editor_host.editor_context
         if context is None:
             return
         self._outline = WorkspaceOutlineGateway(

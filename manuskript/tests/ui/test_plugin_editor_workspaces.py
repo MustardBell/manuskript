@@ -28,6 +28,14 @@ PLUGIN_ID = "example.variant-workspace"
 CONTRIBUTION_ID = "example.variant-workspace.compare"
 
 
+def test_editor_workspace_host_has_no_main_window_service_locator(
+        MWEmptyProject):
+    host = MWEmptyProject.pluginUi.editorWorkspaces
+
+    assert not hasattr(host, "window")
+    assert not hasattr(host.views, "window")
+
+
 def test_endpoint_destruction_cleanup_needs_no_live_qobject_owner():
     """Late QWidget destruction operates on plain state, not a dead factory."""
     endpoint = object()
