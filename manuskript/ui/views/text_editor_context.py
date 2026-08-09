@@ -62,10 +62,13 @@ def text_editor_context_for(window, settings, models, buffers=None):
             handler()
 
     def focus_received(editor):
-        # Use the same registry path as QApplication.focusChanged so this
-        # workspace becomes active and its focus controller is notified.
-        # Duplicate delivery from the global signal is idempotent.
-        window.windowRegistry.focus_changed(None, editor)
+        # This context already names the owning workspace, so do not ask Qt
+        # to rediscover it through QWidget.window(). Platform plugins can
+        # report a transient native top-level while a window is being shown.
+        # The later application-global delivery is coalesced by the focus
+        # controller.
+        window.windowRegistry.activate(window)
+        window.workspaceFocus.focus_changed(None, editor)
 
     return TextEditorContext(
         settings=settings,
