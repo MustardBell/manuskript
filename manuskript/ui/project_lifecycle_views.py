@@ -44,7 +44,7 @@ class ProjectWorkspaceViews:
     """Capabilities used while a workspace enters or leaves a project."""
 
     tabs: Any
-    set_session_start_word_count: Callable[[int], None]
+    writing_session: Any
     set_window_title: Callable[[str], None]
     reset_history: Callable[[], None]
     notify_plugins_opened: Callable[[], None]
@@ -97,9 +97,6 @@ class ProjectLifecycleViews:
             if plugin_ui is not None:
                 plugin_ui.prepare_project_close()
 
-        def set_session_start_word_count(value):
-            window.sessionStartWordCount = value
-
         return cls(
             commands=ProjectCommandViews(
                 closed_only=(window.actOpen, window.menuRecents),
@@ -134,9 +131,7 @@ class ProjectLifecycleViews:
             ),
             workspace=ProjectWorkspaceViews(
                 tabs=window.tabMain,
-                set_session_start_word_count=(
-                    set_session_start_word_count
-                ),
+                writing_session=window.writingSession,
                 set_window_title=window.setWindowTitle,
                 reset_history=window.history.reset,
                 notify_plugins_opened=notify_plugins_opened,

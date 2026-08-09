@@ -111,7 +111,7 @@ class ProjectLifecycleView:
         word_count = self.models.outline.rootItem.data(
             Outline.wordCount
         )
-        workspace.set_session_start_word_count(
+        workspace.writing_session.reset(
             int(word_count) if word_count != "" else 0
         )
         workspace.set_window_title(

@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QActionGroup, QAct
     QLabel, QDockWidget, QWidget, QMessageBox, QLineEdit, QTextEdit, QTreeView, QTableView
 
 from manuskript.commands import DocumentCommandRouter
+from manuskript.domain.writing_session import WritingSessionProgress
 from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.plot_controller import PlotController
@@ -78,7 +79,7 @@ from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
-from manuskript.ui.tools.targets import TargetsDialog
+from manuskript.ui.tools.targets import TargetsContext, TargetsDialog
 from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -162,7 +163,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                             # value. In manuskript.main.
         self._autoLoadProject = None  # Used to load a command line project
         self._restoredWorkspaceWindows = False
-        self.sessionStartWordCount = 0  # Used to track session targets
+        self.writingSession = WritingSessionProgress()
         self._previousSelectionEmpty = True
         self.documentCommands = DocumentCommandRouter(
             lambda: self._lastFocus
@@ -1057,7 +1058,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     def about(self):
-        self.dialog = aboutDialog(mw=self)
+        self.dialog = aboutDialog(parent=self)
         self.dialog.setFixedSize(self.dialog.size())
         self.dialog.show()
         # Center about dialog
@@ -1392,7 +1393,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.centerChildWindow(self.fw)
 
     def sessionTargets(self):
-        self.td = TargetsDialog(self)
+        self.td = TargetsDialog(
+            TargetsContext.for_runtime(
+                self.projectRuntime,
+                self.writingSession,
+            ),
+            parent=self,
+        )
         self.td.show()
         self.centerChildWindow(self.td)
 
