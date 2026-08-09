@@ -399,25 +399,57 @@ class WorkspaceEditorEndpoint(QObject):
         return self.editor.cursorForPosition(QPoint(1, 1)).blockNumber()
 
     @property
+    def first_visible_block_fraction(self):
+        """How far the viewport top sits through its first visible block.
+
+        A block number says which paragraph a reader is on but not where
+        between two of them they are, which is the difference between panes
+        that step paragraph by paragraph and panes that scroll together.
+        """
+        document = self.editor.document()
+        block = document.findBlockByNumber(self.first_visible_block)
+        if not block.isValid():
+            return 0.0
+        bounds = document.documentLayout().blockBoundingRect(block)
+        if bounds.height() <= 0:
+            return 0.0
+        return max(0.0, min(
+            (self.scroll_value - bounds.top()) / bounds.height(),
+            1.0,
+        ))
+
+    @property
     def block_count(self):
         return self.editor.document().blockCount()
 
-    def scroll_to_block(self, block_number):
-        block = self.editor.document().findBlockByNumber(
+    def scroll_value_for_block(self, block_number, fraction=0.0):
+        """The scroll value that puts a point inside a block at the top."""
+        document = self.editor.document()
+        block = document.findBlockByNumber(
             max(0, min(int(block_number), self.block_count - 1))
         )
         if not block.isValid():
-            return
-        layout = self.editor.document().documentLayout()
-        block_top = layout.blockBoundingRect(block).top()
-        self.set_scroll_value(round(block_top))
+            return self.scroll_value
+        bounds = document.documentLayout().blockBoundingRect(block)
+        fraction = max(0.0, min(float(fraction), 1.0))
+        return round(bounds.top() + fraction * bounds.height())
 
-    def scroll_to_text_offset(self, offset):
+    def scroll_value_for_text_offset(self, offset):
+        """The scroll value that puts the block holding an offset at the top."""
         block = self.editor.document().findBlock(
             max(0, min(int(offset), len(self.text())))
         )
-        if block.isValid():
-            self.scroll_to_block(block.blockNumber())
+        if not block.isValid():
+            return self.scroll_value
+        return self.scroll_value_for_block(block.blockNumber())
+
+    def scroll_to_block(self, block_number, fraction=0.0):
+        self.set_scroll_value(
+            self.scroll_value_for_block(block_number, fraction)
+        )
+
+    def scroll_to_text_offset(self, offset):
+        self.set_scroll_value(self.scroll_value_for_text_offset(offset))
 
     def close(self):
         self.submit()

@@ -186,6 +186,19 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
         assert endpoint.selection_range() == selection
         assert endpoint.first_visible_block >= 0
 
+        # Where a pane sits between two paragraphs, so a workspace can carry
+        # a scroll across without rounding it to the nearest paragraph.
+        tops = [
+            endpoint.scroll_value_for_block(number)
+            for number in range(endpoint.block_count)
+        ]
+        assert tops == sorted(tops)
+        assert tops[1] <= endpoint.scroll_value_for_block(1, 0.5) <= tops[2]
+        assert endpoint.scroll_value_for_block(-5) == tops[0]
+        assert endpoint.scroll_value_for_block(9999) == tops[-1]
+        assert endpoint.scroll_value_for_text_offset(0) == tops[0]
+        assert 0.0 <= endpoint.first_visible_block_fraction <= 1.0
+
         endpoint.set_maximum_text_width(520)
         assert endpoint.widget.effectiveMaximumWidth == 520
         endpoint.clear_maximum_text_width()

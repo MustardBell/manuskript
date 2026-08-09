@@ -362,6 +362,37 @@ the truth and calling one raises `AttributeError` naming what you called.
 workspace was opened on, the argument of the call rather than a view of the
 manuscript.
 
+### What an editor pane is
+
+`context.editors.create(item_id, parent=None, editing_locked=False)` answers
+with an endpoint: one native Markdown editor, and no way to reach the editor
+itself. `endpoint.widget` is a `QWidget` to put in your layout.
+
+| you call | you get |
+|---|---|
+| `text()`, `selected_text()`, `selection_range()` | what the pane holds |
+| `set_cursor_position(position, anchor=None)`, `cursor_position`, `cursor_block` | the caret |
+| `insert_at_cursor(text)`, `replace_text(text)`, `submit()` | writing, which raises `PermissionError` while the pane is locked |
+| `editing_locked`, `set_editing_locked(locked)` | whether it may be written to |
+| `set_presentation_mode(mode)` | `"source"` or `"formatted-source"` |
+| `set_maximum_text_width(width)`, `clear_maximum_text_width()`, `viewport_width` | the width of the text column |
+| `scroll_value`, `scroll_maximum`, `set_scroll_value(value)` | the scrollbar |
+| `first_visible_block`, `first_visible_block_fraction`, `block_count` | where the reader is |
+| `scroll_value_for_block(block, fraction=0.0)`, `scroll_value_for_text_offset(offset)` | where a place in the document would put the scrollbar |
+| `scroll_to_block(block, fraction=0.0)`, `scroll_to_text_offset(offset)` | going there |
+| `scrolled`, `cursorChanged`, `selectionChanged`, `textChanged` | signals |
+
+Positions come in three currencies and they are not interchangeable:
+**text offsets** are characters, **blocks** are paragraphs, and **scroll
+values** are what the scrollbar carries. The `scroll_value_for_…` pair
+converts the first two into the third, which is the only one that can
+express a position *between* two paragraphs — as can the `fraction`
+arguments, where `0.0` is the top of a block and `1.0` the top of the next.
+Panes synchronised by whole paragraphs step behind a smoothly scrolling
+neighbour; a workspace that would rather they kept pace reads
+`first_visible_block_fraction` and scrolls the others to the matching
+fraction.
+
 Ask for the least you need. What a plugin may touch is shown to the reader
 who installs it, and a workspace that only compares scenes should not be
 able to rewrite the book.
