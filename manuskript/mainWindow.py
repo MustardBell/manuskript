@@ -116,6 +116,9 @@ from manuskript.ui.workspace_search import (
     WorkspaceSearchController,
     WorkspaceSearchViews,
 )
+from manuskript.ui.workspace_project_binding import (
+    WorkspaceProjectBinding,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -369,6 +372,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.pluginContributions is not None
             else None
         )
+        # Project bindings receive stable, grouped widget contracts. Models
+        # remain runtime-owned and are resolved only when a project binds,
+        # because opening another project replaces the entire model set.
+        self.projectBinding = self.workspaceLifetime.own(
+            ProjectBinding(
+                ProjectBindingViews.for_window(self),
+                self.projectRuntime,
+                ProjectFeatureBinding(
+                    self.characterController,
+                    self.plotController,
+                    self.worldController,
+                    self.projectRuntime.settingsManager,
+                ),
+                contexts_factory=lambda: ProjectContextBinding(
+                    ProjectViewSet.for_window(self)
+                ),
+            )
+        )
+        self.workspaceProject = self.workspaceLifetime.own(
+            WorkspaceProjectBinding(
+                self.projectBinding,
+                self.markdownMenu,
+            )
+        )
         self.projectLifecycleView = self.workspaceLifetime.own(
             ProjectLifecycleView(
                 self.projectRuntime,
@@ -390,24 +417,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.projectManager = self.projectRuntime.attach(
             self.projectLifecycleView,
             workspace=self,
-        )
-        # Project bindings receive stable, grouped widget contracts. Models
-        # remain runtime-owned and are resolved only when a project binds,
-        # because opening another project replaces the entire model set.
-        self.projectBinding = self.workspaceLifetime.own(
-            ProjectBinding(
-                ProjectBindingViews.for_window(self),
-                self.projectRuntime,
-                ProjectFeatureBinding(
-                    self.characterController,
-                    self.plotController,
-                    self.worldController,
-                    self.projectRuntime.settingsManager,
-                ),
-                contexts_factory=lambda: ProjectContextBinding(
-                    ProjectViewSet.for_window(self)
-                ),
-            )
         )
         self.projectHistory = self.projectManager.last_project_store
         self.workspaceDialogs = self.workspaceLifetime.own(
@@ -551,7 +560,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # project manager will not broadcast disconnect_project for it.  Its
         # own runtime-model signals must still be released before the Qt tree
         # goes away.  On the last workspace this is an idempotent second call.
-        self.breakConnections()
+        self.workspaceProject.disconnect()
         self.windowState.save()
         self.projectRuntime.detach(self.projectLifecycleView)
         self.windowRegistry.unregister(self)
@@ -594,18 +603,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
     # GENERAL / UI STUFF
     ###############################################################################
-
-    def makeConnections(self):
-        self.projectBinding.bind()
-        self.referenceService = self.projectBinding.reference_service
-        self.textEditorContext = self.projectBinding.text_editor_context
-
-    def breakConnections(self):
-        """Release every signal connection owned by the current project."""
-        self.projectBinding.unbind()
-        self.markdownMenu.attach(None)
-        self.textEditorContext = None
-        self.referenceService = None
 
     ###############################################################################
     # HELP

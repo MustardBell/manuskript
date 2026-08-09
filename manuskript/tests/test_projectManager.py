@@ -72,8 +72,7 @@ class TestProjectManager(unittest.TestCase):
         
         # Mock the loading methods to avoid complex setup
         with patch.object(self.project_manager, 'loadEmptyDatas'), \
-             patch.object(self.project_manager, 'loadDatas', return_value=True), \
-             patch.object(self.window, 'makeConnections'):
+             patch.object(self.project_manager, 'loadDatas', return_value=True):
             
             result = self.project_manager.loadProject("existing_project.msk")
             

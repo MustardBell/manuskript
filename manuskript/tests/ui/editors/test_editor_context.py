@@ -35,7 +35,7 @@ def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
     assert window.lstOutlinePlots.settings is settings
     assert (
         editor.txtRedacText.text_editor_context
-        is window.textEditorContext
+        is window.workspaceProject.text_editor_context
     )
     assert (
         window.mainEditor.tabSplitter.editor_context
@@ -78,7 +78,7 @@ def test_full_screen_editor_receives_existing_editor_context(
     full_screen.assert_called_once_with(
         index,
         settings=window.projectRuntime.settingsManager,
-        text_editor_context=window.textEditorContext,
+        text_editor_context=window.workspaceProject.text_editor_context,
         screenNumber=0,
         presentation_mode=(
             window.mainEditor.currentEditor().markdownPresentation.mode

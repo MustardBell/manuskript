@@ -41,7 +41,9 @@ def editor_on(window, index):
         window,
         settings=window.projectRuntime.settingsManager,
     )
-    view.set_text_editor_context(window.textEditorContext)
+    view.set_text_editor_context(
+        window.workspaceProject.text_editor_context
+    )
     view.setCurrentModelIndex(index)
     return view
 
@@ -202,7 +204,9 @@ def test_a_model_that_cannot_name_a_document_shares_nothing(
         window,
         settings=window.projectRuntime.settingsManager,
     )
-    editor.set_text_editor_context(window.textEditorContext)
+    editor.set_text_editor_context(
+        window.workspaceProject.text_editor_context
+    )
     try:
         editor.setCurrentModelIndex(index)
 
