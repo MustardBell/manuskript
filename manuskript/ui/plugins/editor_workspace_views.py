@@ -15,9 +15,9 @@ class EditorWorkspaceViews:
     project: PluginProjectData
 
     @classmethod
-    def for_window(cls, window):
+    def for_window(cls, window, project=None):
         return cls(
             editor_host=window.mainEditor,
             translate=window.tr,
-            project=PluginProjectData.for_window(window),
+            project=project or PluginProjectData.for_window(window),
         )

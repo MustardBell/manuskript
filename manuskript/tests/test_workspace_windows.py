@@ -835,6 +835,13 @@ def test_each_window_owns_its_plugin_user_interface(MWEmptyProject):
         other.close()
 
 
+def test_plugin_ui_has_no_main_window_service_locator(MWEmptyProject):
+    controller = MWEmptyProject.pluginUi
+
+    assert not hasattr(controller, "window")
+    assert not hasattr(controller.views, "window")
+
+
 def test_application_scope_plugin_services_are_shared(MWEmptyProject):
     """State every window reads must be one object. A window with its
     own plugin runtime or option store would enable a plugin nobody

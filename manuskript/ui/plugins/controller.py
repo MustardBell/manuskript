@@ -2,7 +2,7 @@ from functools import partial
 
 from PyQt5.QtWidgets import QAction
 
-from manuskript.media_types import MediaTypeView, core_registry
+from manuskript.media_types import MediaTypeView
 from manuskript.plugins.capabilities import (
     CAPABILITY_MEDIA_REGISTRY,
     CAPABILITY_UI_EXPORT_ROUTING,
@@ -16,11 +16,7 @@ from manuskript.ui.plugins.page_routing import PageRoutingGateway
 from manuskript.ui.plugins.page_types import PageTypeService
 from manuskript.ui.plugins.routing_panel import ExportRoutingService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
-from manuskript.ui.plugins.project_panel_views import ProjectPanelViews
 from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
-from manuskript.ui.plugins.editor_workspace_views import (
-    EditorWorkspaceViews,
-)
 
 
 class PluginUiController:
@@ -49,9 +45,9 @@ class PluginUiController:
         "contributions", "runtime", "option_store", "mediaTypes",
     )
 
-    def __init__(self, window, contributions, option_store=None,
+    def __init__(self, views, contributions, option_store=None,
                  media_types=None):
-        self.window = window
+        self.views = views
         self.contributions = contributions
         self.runtime = contributions.runtime
         self.option_store = (
@@ -70,50 +66,53 @@ class PluginUiController:
         contributions.changed.connect(self.refresh_contributions)
         self.markupProfiles = MarkupProfileService(
             contributions.registry,
-            report_error=window.statusPresenter.show,
-            parent=window,
+            report_error=views.show_status,
+            parent=views.object_parent,
         )
         self.pageTypes = PageTypeService(
             contributions.registry,
             option_store=self.option_store,
             media_types=self.mediaTypes,
-            report_error=window.statusPresenter.show,
+            report_error=views.show_status,
             source_provider=self._page_source,
-            parent=window,
+            parent=views.object_parent,
         )
         self.manager = None
 
-        window.menuTools.addSeparator()
-        self.menu = window.menuTools.addMenu(window.tr("Plugins"))
+        views.tools_menu.addSeparator()
+        self.menu = views.tools_menu.addMenu(
+            views.translate("Plugins")
+        )
         self.menu.setObjectName("menuPlugins")
         self.manageAction = QAction(
-            window.tr("Manage Plugins…"),
-            window,
+            views.translate("Manage Plugins…"),
+            views.object_parent,
         )
         self.manageAction.setObjectName("actPlugins")
         self.manageAction.setStatusTip(
-            window.tr("Manage installed Manuskript plugins")
+            views.translate("Manage installed Manuskript plugins")
         )
         self.menu.addAction(self.manageAction)
         self.manageAction.triggered.connect(self.show_manager)
         self.globalActions = (self.menu.menuAction(),)
         self.projectPanels = ProjectPanelHost(
-            ProjectPanelViews.for_window(window),
+            views.project_panels,
             self.runtime,
             menu=self.menu,
         )
         self.editorWorkspaces = EditorWorkspaceHost(
-            EditorWorkspaceViews.for_window(window),
+            views.editor_workspaces,
             self.runtime,
             menu=self.menu,
         )
 
     def _page_source(self, item):
-        current = self.window.mainEditor.currentEditor()
+        editor_host = self.views.editor_host
+        current = editor_host.currentEditor()
         editors = [current] if current is not None else []
         editors.extend(
             editor
-            for editor in self.window.mainEditor.allAllTabs()
+            for editor in editor_host.allAllTabs()
             if editor is not current
         )
         for editor in editors:
@@ -132,7 +131,7 @@ class PluginUiController:
         if self.manager is None:
             self.manager = PluginManagerDialog(
                 self.contributions,
-                self.window,
+                self.views.dialog_parent,
                 option_store=self.option_store,
                 settings_context_provider=self._settings_context,
                 media_types=self.mediaTypes,
@@ -153,7 +152,7 @@ class PluginUiController:
             plugin_id=plugin_id,
             option_store=self.option_store,
             edit_options=partial(self._edit_options, plugin_id),
-            show_status=self.window.statusPresenter.show,
+            show_status=self.views.show_status,
             capability=partial(self._settings_capability, plugin_id),
         )
 
@@ -184,7 +183,7 @@ class PluginUiController:
                 self.pageTypes,
                 export_routes_provider=self._export_routes,
                 edit_options=partial(self._edit_options, plugin_id),
-                show_status=self.window.statusPresenter.show,
+                show_status=self.views.show_status,
             )
         )
 
@@ -212,7 +211,7 @@ class PluginUiController:
         dialog = PluginOptionsDialog(
             contribution,
             self.option_store,
-            parent if parent is not None else self.window,
+            parent if parent is not None else self.views.dialog_parent,
         )
         return dialog.exec()
 
@@ -223,7 +222,7 @@ class PluginUiController:
         )
 
         exporters = exporter.create_exporters(
-            self.window.exportContext(),
+            self.views.export_context(),
             plugin_runtime=self.runtime,
             plugin_option_store=self.option_store,
         )
@@ -239,9 +238,7 @@ class PluginUiController:
         self.editorWorkspaces.refresh()
         self.markupProfiles.refresh()
         self.pageTypes.refresh()
-        cardStyles = getattr(self.window, "cardStyles", None)
-        if cardStyles is not None:
-            cardStyles.refresh()
+        self.views.refresh_card_styles()
 
     def project_opened(self):
         self.projectPanels.project_opened()

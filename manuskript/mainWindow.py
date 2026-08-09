@@ -87,6 +87,7 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import StatusPresenter
 from manuskript.ui.plugins.controller import PluginUiController
+from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
 )
@@ -276,7 +277,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pluginContributions = services.plugin_contributions
         self.pluginUi = (
             PluginUiController(
-                self,
+                PluginUiViews.for_window(self),
                 self.pluginContributions,
                 option_store=self.pluginOptionStore,
                 media_types=self.mediaTypes,

@@ -62,7 +62,7 @@ class ProjectPanelViews:
     project: PluginProjectData
 
     @classmethod
-    def for_window(cls, window):
+    def for_window(cls, window, project=None):
         """Inventory capabilities once; do not hand over MainWindow."""
 
         def create_plugins_menu():
@@ -74,5 +74,5 @@ class ProjectPanelViews:
             create_plugins_menu=create_plugins_menu,
             translate=window.tr,
             dialog_parent=window.centralWidget() or window,
-            project=PluginProjectData.for_window(window),
+            project=project or PluginProjectData.for_window(window),
         )
