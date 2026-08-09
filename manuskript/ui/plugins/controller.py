@@ -16,6 +16,7 @@ from manuskript.ui.plugins.page_routing import PageRoutingGateway
 from manuskript.ui.plugins.page_types import PageTypeService
 from manuskript.ui.plugins.routing_panel import ExportRoutingService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
+from manuskript.ui.plugins.project_panel_views import ProjectPanelViews
 from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
 
 
@@ -94,7 +95,7 @@ class PluginUiController:
         self.manageAction.triggered.connect(self.show_manager)
         self.globalActions = (self.menu.menuAction(),)
         self.projectPanels = ProjectPanelHost(
-            window,
+            ProjectPanelViews.for_window(window),
             self.runtime,
             menu=self.menu,
         )

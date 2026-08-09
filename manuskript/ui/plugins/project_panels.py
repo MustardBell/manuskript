@@ -82,14 +82,14 @@ class ProjectPanelHost:
     """
 
     def __init__(
-            self, window, runtime, menu=None,
+            self, views, runtime, menu=None,
             panel_registry=None, panel_host=None):
-        self.window = window
+        self.views = views
         self.runtime = runtime
         self.panelRegistry = (
             panel_registry
             if panel_registry is not None
-            else getattr(window, "panelRegistry", None) or PanelRegistry()
+            else views.panel_registry or PanelRegistry()
         )
         # The window's own host, never one of this class's making. Two
         # hosts for one window would each hold half its panels, and each
@@ -97,7 +97,7 @@ class ProjectPanelHost:
         # declared to exist once would be refused to the window that
         # already had it.
         self.panels = (
-            panel_host if panel_host is not None else window.panelHost
+            panel_host if panel_host is not None else views.panel_host
         )
         self.actions = {}
         self._panelIds = {}
@@ -106,9 +106,7 @@ class ProjectPanelHost:
         self._menuEntries = []
 
         self._ownsMenu = menu is None
-        self.menu = menu or window.menuTools.addMenu(
-            window.tr("Plugins")
-        )
+        self.menu = menu or views.create_plugins_menu()
         if self._ownsMenu:
             self.menu.setObjectName("menuPlugins")
         self.refresh()
@@ -148,11 +146,11 @@ class ProjectPanelHost:
             self.actions[contribution_id] = action
 
         self.rawDataAction = self.menu.addAction(
-            self.window.tr("Raw Plugin Data…")
+            self.views.translate("Raw Plugin Data…")
         )
         self._menuEntries.append(self.rawDataAction)
         self.rawDataAction.setStatusTip(
-            self.window.tr(
+            self.views.translate(
                 "View or edit portable raw files owned by project plugins"
             )
         )
@@ -248,24 +246,24 @@ class ProjectPanelHost:
         if panel_id is None:
             return None
         instance = self.panels.open(panel_id, PanelContext(
-            translate=self.window.tr,
-            show_status=self.window.statusPresenter.show,
+            translate=self.views.translate,
+            show_status=self.views.project.show_status,
             plugin_project=self._plugin_project_context,
         ))
         return instance.container if instance is not None else None
 
     def _plugin_project_context(self, plugin_id, default_file):
         """The project authority a plugin panel is allowed to receive."""
-        window = self.window
+        project = self.views.project
         return PluginProjectContext(
             plugin_id=plugin_id,
-            project_file=window.currentProject,
-            files=window.projectRuntime.models.plugin_data.namespace(
+            project_file=project.current_file(),
+            files=project.plugin_data().namespace(
                 plugin_id,
-                on_change=window.projectManager.startTimerNoChanges,
+                on_change=project.mark_changed,
             ),
             default_file=default_file,
-            show_status=window.statusPresenter.show,
+            show_status=project.show_status,
         )
 
     def close_panel(self, contribution_id):
@@ -294,9 +292,9 @@ class ProjectPanelHost:
             return
         if self.rawDataDialog is None:
             self.rawDataDialog = RawPluginDataDialog(
-                self.window.projectRuntime.models.plugin_data,
-                on_change=self.window.projectManager.startTimerNoChanges,
-                parent=self.window,
+                self.views.project.plugin_data(),
+                on_change=self.views.project.mark_changed,
+                parent=self.views.dialog_parent,
             )
             self.rawDataDialog.finished.connect(
                 self._raw_data_closed
@@ -311,11 +309,7 @@ class ProjectPanelHost:
         self.rawDataDialog = None
 
     def _project_is_open(self):
-        manager = getattr(self.window, "projectManager", None)
-        return bool(
-            manager is not None
-            and manager.session.is_open
-        )
+        return self.views.project.is_open()
 
 
 class RawPluginDataDialog(QDialog):

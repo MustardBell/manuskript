@@ -16,6 +16,7 @@ from manuskript.ui.plugins.project_panels import (
     ProjectPanelHost,
     RawPluginDataDialog,
 )
+from manuskript.ui.plugins.project_panel_views import ProjectPanelViews
 
 
 class PanelTestWindow(QMainWindow):
@@ -71,7 +72,9 @@ def test_project_panel_receives_scoped_raw_file_context():
 
     window = PanelTestWindow()
     runtime = panel_runtime(factory)
-    host = ProjectPanelHost(window, runtime)
+    host = ProjectPanelHost(
+        ProjectPanelViews.for_window(window), runtime,
+    )
 
     dock = host.open_panel("example.notes.panel")
 
@@ -93,12 +96,28 @@ def test_project_panel_receives_scoped_raw_file_context():
     host.close_all()
 
 
+def test_project_panel_host_has_no_main_window_service_locator():
+    window = PanelTestWindow()
+    host = ProjectPanelHost(
+        ProjectPanelViews.for_window(window),
+        panel_runtime(lambda _context, parent: QPlainTextEdit(parent)),
+    )
+    try:
+        assert not hasattr(host, "window")
+        assert not hasattr(host.views, "window")
+    finally:
+        host.close_all()
+        window.close()
+
+
 def test_refresh_closes_panel_when_contribution_disappears():
     window = PanelTestWindow()
     runtime = panel_runtime(
         lambda _context, parent: QPlainTextEdit(parent)
     )
-    host = ProjectPanelHost(window, runtime)
+    host = ProjectPanelHost(
+        ProjectPanelViews.for_window(window), runtime,
+    )
     host.open_panel("example.notes.panel")
 
     runtime.registry.remove_plugin("example.notes")
@@ -155,14 +174,14 @@ def test_two_hosts_declare_one_panel_and_open_their_own():
     first_window = PanelTestWindow()
     second_window = PanelTestWindow()
     first = ProjectPanelHost(
-        first_window, runtime,
+        ProjectPanelViews.for_window(first_window), runtime,
         panel_registry=registry,
         panel_host=PanelHost(
             PanelWindow.for_window(first_window), registry, directory,
         ),
     )
     second = ProjectPanelHost(
-        second_window, runtime,
+        ProjectPanelViews.for_window(second_window), runtime,
         panel_registry=registry,
         panel_host=PanelHost(
             PanelWindow.for_window(second_window), registry, directory,
@@ -212,7 +231,7 @@ def test_the_declaration_does_not_keep_the_declaring_window_alive():
     )
     first_window = PanelTestWindow()
     first = ProjectPanelHost(
-        first_window, runtime,
+        ProjectPanelViews.for_window(first_window), runtime,
         panel_registry=registry,
         panel_host=PanelHost(
             PanelWindow.for_window(first_window), registry, directory,
@@ -250,7 +269,7 @@ def test_a_second_window_builds_through_no_other_window():
     runtime = panel_runtime(factory)
     first_window = PanelTestWindow()
     first = ProjectPanelHost(
-        first_window, runtime,
+        ProjectPanelViews.for_window(first_window), runtime,
         panel_registry=registry,
         panel_host=PanelHost(
             PanelWindow.for_window(first_window), registry, directory,
@@ -259,7 +278,7 @@ def test_a_second_window_builds_through_no_other_window():
     second_window = PanelTestWindow()
     second_window.currentProject = "/project/second.msk"
     second = ProjectPanelHost(
-        second_window, runtime,
+        ProjectPanelViews.for_window(second_window), runtime,
         panel_registry=registry,
         panel_host=PanelHost(
             PanelWindow.for_window(second_window), registry, directory,
