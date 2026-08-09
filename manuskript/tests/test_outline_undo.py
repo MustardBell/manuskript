@@ -26,7 +26,7 @@ def titles(item):
 
 
 def test_deleting_a_top_level_item_can_be_undone(MWEmptyProject):
-    model = MWEmptyProject.mdlOutline
+    model = MWEmptyProject.projectRuntime.models.outline
     item = scene(model, "Chapter One")
     before = titles(model.rootItem)
     stack = QUndoStack()
@@ -51,7 +51,7 @@ def test_deleting_a_top_level_item_can_be_undone(MWEmptyProject):
 
 
 def test_undo_restores_position_not_just_presence(MWEmptyProject):
-    model = MWEmptyProject.mdlOutline
+    model = MWEmptyProject.projectRuntime.models.outline
     made = [scene(model, name) for name in ("A", "B", "C")]
     before = titles(model.rootItem)
     stack = QUndoStack()
@@ -67,7 +67,7 @@ def test_undo_restores_position_not_just_presence(MWEmptyProject):
 def test_a_folder_and_its_child_are_restored_in_the_right_order(
         MWEmptyProject):
     """The hard case: the parent must exist again before the child returns."""
-    model = MWEmptyProject.mdlOutline
+    model = MWEmptyProject.projectRuntime.models.outline
     folder = outlineItem(model, title="Act", _type="folder")
     model.appendItem(folder)
     child = scene(model, "Scene in act", model.indexFromItem(folder))
@@ -88,7 +88,7 @@ def test_a_folder_and_its_child_are_restored_in_the_right_order(
 
 
 def test_deleting_several_siblings_restores_all_of_them(MWEmptyProject):
-    model = MWEmptyProject.mdlOutline
+    model = MWEmptyProject.projectRuntime.models.outline
     folder = outlineItem(model, title="Bulk", _type="folder")
     model.appendItem(folder)
     parent_index = model.indexFromItem(folder)
@@ -109,7 +109,7 @@ def test_deleting_several_siblings_restores_all_of_them(MWEmptyProject):
 
 
 def test_the_command_names_what_it_deleted(MWEmptyProject):
-    model = MWEmptyProject.mdlOutline
+    model = MWEmptyProject.projectRuntime.models.outline
     item = scene(model, "Nameable")
 
     single = RemoveOutlineItemsCommand(
@@ -125,7 +125,7 @@ def test_the_command_names_what_it_deleted(MWEmptyProject):
 
 
 def test_an_empty_selection_produces_nothing_to_undo(MWEmptyProject):
-    model = MWEmptyProject.mdlOutline
+    model = MWEmptyProject.projectRuntime.models.outline
 
     command = RemoveOutlineItemsCommand(model, [])
 
@@ -135,7 +135,7 @@ def test_an_empty_selection_produces_nothing_to_undo(MWEmptyProject):
 def test_outline_views_delete_through_the_undo_stack(MWEmptyProject):
     """The view path, not just the command in isolation."""
     window = MWEmptyProject
-    model = window.mdlOutline
+    model = window.projectRuntime.models.outline
     item = scene(model, "Deleted from the tree")
     tree = window.corePanels.project_tree.tree
     tree.setCurrentIndex(model.indexFromItem(item))
@@ -184,7 +184,7 @@ def test_undo_is_scoped_to_the_outline_not_the_whole_window(MWEmptyProject):
 def test_closing_a_project_forgets_its_history(MWEmptyProject):
     """Undo must not reach across projects."""
     window = MWEmptyProject
-    model = window.mdlOutline
+    model = window.projectRuntime.models.outline
     item = scene(model, "Belongs to this project")
     window.undoStack.push(RemoveOutlineItemsCommand(
         model, [model.indexFromItem(item)]))
@@ -202,7 +202,7 @@ def test_the_editor_buttons_undo_typing_not_the_outline(MWEmptyProject):
     not silently reverse a change to the book's structure instead.
     """
     window = MWEmptyProject
-    model = window.mdlOutline
+    model = window.projectRuntime.models.outline
     item = scene(model, "Typed in", text="Original text.")
     window.mainEditor.setCurrentModelIndex(
         model.indexFromItem(item), newTab=True)
@@ -245,7 +245,7 @@ def test_the_editor_buttons_undo_typing_not_the_outline(MWEmptyProject):
 
 def test_undo_buttons_sit_left_of_the_view_controls(MWEmptyProject):
     window = MWEmptyProject
-    model = window.mdlOutline
+    model = window.projectRuntime.models.outline
     item = scene(model, "Placed")
     window.mainEditor.setCurrentModelIndex(
         model.indexFromItem(item), newTab=True)

@@ -17,8 +17,8 @@ main_editor_module = importlib.import_module(
 def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
     window = MWEmptyProject
     item = outlineItem(title="Chapter")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
 
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     editor = window.mainEditor.currentEditor()
@@ -28,7 +28,7 @@ def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
     assert editor.corkView.outline_context is editor.outline_context
     assert editor.outlineView.outline_context is editor.outline_context
     assert editor.settings is window.settingsManager
-    assert window.mdlOutline.settings is window.settingsManager
+    assert window.projectRuntime.models.outline.settings is window.settingsManager
     assert item.settings is window.settingsManager
     assert window.lstPlots.settings is window.settingsManager
     assert window.lstOutlinePlots.settings is window.settingsManager
@@ -59,8 +59,8 @@ def test_full_screen_editor_receives_existing_editor_context(
         MWEmptyProject):
     window = MWEmptyProject
     item = outlineItem(title="Chapter", _type="md")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
 
     with patch.object(
@@ -93,8 +93,8 @@ def test_active_editor_selection_sync_refreshes_main_editor(
         MWEmptyProject):
     window = MWEmptyProject
     item = outlineItem(title="Chapter")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     editor = window.mainEditor.currentEditor()
 
@@ -108,8 +108,8 @@ def test_active_editor_selection_sync_refreshes_main_editor(
 def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     window = MWEmptyProject
     item = outlineItem(title="Chapter")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     manuscript_editor = window.mainEditor.currentEditor().txtRedacText
     selector = window.mainEditor.cmbMarkdownMode
@@ -166,8 +166,8 @@ def test_max_width_centers_the_shared_markdown_host(MWEmptyProject):
         Outline.text,
         "A paragraph long enough to make the editor geometry visible.",
     )
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     try:
         window.mainEditor.setCurrentModelIndex(index, newTab=True)
         editor = window.mainEditor.currentEditor()
@@ -209,8 +209,8 @@ def test_workspace_width_override_preserves_editor_preference(MWEmptyProject):
     old_max_width = window.settingsManager.textEditor["maxWidth"]
     window.settingsManager.textEditor["maxWidth"] = 640
     item = outlineItem(title="Comparable page", _type="md")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     try:
         window.mainEditor.setCurrentModelIndex(index, newTab=True)
         host = window.mainEditor.currentEditor().markdownEditorHost
@@ -232,10 +232,10 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
     window = MWEmptyProject
     first_item = outlineItem(title="First")
     second_item = outlineItem(title="Second")
-    window.mdlOutline.appendItem(first_item)
-    window.mdlOutline.appendItem(second_item)
-    first_index = window.mdlOutline.indexFromItem(first_item)
-    second_index = window.mdlOutline.indexFromItem(second_item)
+    window.projectRuntime.models.outline.appendItem(first_item)
+    window.projectRuntime.models.outline.appendItem(second_item)
+    first_index = window.projectRuntime.models.outline.indexFromItem(first_item)
+    second_index = window.projectRuntime.models.outline.indexFromItem(second_item)
 
     window.mainEditor.setCurrentModelIndex(first_index, newTab=True)
     first_editor = window.mainEditor.currentEditor()
@@ -300,8 +300,8 @@ def test_markdown_mode_is_independent_between_split_leaves(
         "First paragraph with *rendered emphasis*.\n\n"
         "Second paragraph stays independent.",
     )
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     first_editor = window.mainEditor.currentEditor()
     first_editor.markdownPresentation.set_mode(
@@ -352,10 +352,10 @@ def test_markdown_mode_is_independent_between_split_leaves(
 def test_mode_button_always_renders_an_icon(MWEmptyProject):
     """The icon is the whole control: a null one is an invisible target."""
     window = MWEmptyProject
-    item = outlineItem(window.mdlOutline, title="Iconned", _type="md")
-    window.mdlOutline.appendItem(item)
+    item = outlineItem(window.projectRuntime.models.outline, title="Iconned", _type="md")
+    window.projectRuntime.models.outline.appendItem(item)
     window.mainEditor.setCurrentModelIndex(
-        window.mdlOutline.indexFromItem(item), newTab=True
+        window.projectRuntime.models.outline.indexFromItem(item), newTab=True
     )
     editor = window.mainEditor.currentEditor()
 
@@ -375,10 +375,10 @@ def test_mode_button_always_renders_an_icon(MWEmptyProject):
 def test_overlay_buttons_do_not_sit_on_top_of_the_text(MWEmptyProject):
     """Reserved strip keeps the first line clear of the floating buttons."""
     window = MWEmptyProject
-    item = outlineItem(window.mdlOutline, title="Spaced", _type="md")
-    window.mdlOutline.appendItem(item)
+    item = outlineItem(window.projectRuntime.models.outline, title="Spaced", _type="md")
+    window.projectRuntime.models.outline.appendItem(item)
     window.mainEditor.setCurrentModelIndex(
-        window.mdlOutline.indexFromItem(item), newTab=True
+        window.projectRuntime.models.outline.indexFromItem(item), newTab=True
     )
     editor = window.mainEditor.currentEditor()
 

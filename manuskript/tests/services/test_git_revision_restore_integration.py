@@ -82,7 +82,7 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
     })
     before_restore = [
         item.text()
-        for item in MWNoProject.mdlOutline.searchableItems()
+        for item in MWNoProject.projectRuntime.models.outline.searchableItems()
     ]
     assert any("RESTORE-INTEGRATION-MARKER" in text
                for text in before_restore)
@@ -101,7 +101,7 @@ def test_git_revision_restore_replaces_live_project_without_checkout(
     assert MWNoProject.currentProject == str(project_file)
     after_restore = [
         item.text()
-        for item in MWNoProject.mdlOutline.searchableItems()
+        for item in MWNoProject.projectRuntime.models.outline.searchableItems()
     ]
     assert not any("RESTORE-INTEGRATION-MARKER" in text
                    for text in after_restore)

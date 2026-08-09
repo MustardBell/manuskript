@@ -175,13 +175,13 @@ def test_changing_the_setting_repaints_with_the_new_style(MWEmptyProject):
     from manuskript.models.outlineItem import outlineItem
 
     window = MWEmptyProject
-    folder = outlineItem(window.mdlOutline, title="Act", _type="folder")
-    window.mdlOutline.appendItem(folder)
-    scene = outlineItem(window.mdlOutline, title="Scene", _type="md")
-    window.mdlOutline.appendItem(
-        scene, window.mdlOutline.indexFromItem(folder))
+    folder = outlineItem(window.projectRuntime.models.outline, title="Act", _type="folder")
+    window.projectRuntime.models.outline.appendItem(folder)
+    scene = outlineItem(window.projectRuntime.models.outline, title="Scene", _type="md")
+    window.projectRuntime.models.outline.appendItem(
+        scene, window.projectRuntime.models.outline.indexFromItem(folder))
     window.mainEditor.setCurrentModelIndex(
-        window.mdlOutline.indexFromItem(folder), newTab=True)
+        window.projectRuntime.models.outline.indexFromItem(folder), newTab=True)
     editor = window.mainEditor.currentEditor()
     editor.setFolderView("cork")
     previous = window.settingsManager.indexCardStyle
@@ -220,10 +220,10 @@ def test_an_uninstalled_style_still_draws(MWEmptyProject):
     from manuskript.models.outlineItem import outlineItem
 
     window = MWEmptyProject
-    folder = outlineItem(window.mdlOutline, title="Act", _type="folder")
-    window.mdlOutline.appendItem(folder)
+    folder = outlineItem(window.projectRuntime.models.outline, title="Act", _type="folder")
+    window.projectRuntime.models.outline.appendItem(folder)
     window.mainEditor.setCurrentModelIndex(
-        window.mdlOutline.indexFromItem(folder), newTab=True)
+        window.projectRuntime.models.outline.indexFromItem(folder), newTab=True)
     editor = window.mainEditor.currentEditor()
     editor.setFolderView("cork")
     previous = window.settingsManager.indexCardStyle

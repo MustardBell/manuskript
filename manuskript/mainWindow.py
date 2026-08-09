@@ -628,14 +628,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         A first window reaches a project by loading one; a later window
         finds it already loaded and only has to catch its own widgets
-        up -- models installed, signals connected, saved view settings
-        applied.
+        up -- signals connected and saved view settings applied. Models
+        stay in the shared runtime; a window never owns or installs them.
         """
         runtime = self.projectRuntime
         if not runtime.isOpen:
             return False
         view = self.projectLifecycleView
-        view.install_models(runtime.models)
         view.sync_to_state(True)
         view.connect_project()
         view.apply_loaded_settings()

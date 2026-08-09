@@ -15,12 +15,12 @@ def test_references(MWSampleProject):
     MW = MWSampleProject
     references = Ref.ReferenceService(
         Ref.ReferenceModels(
-            outline=MW.mdlOutline,
-            characters=MW.mdlCharacter,
-            plots=MW.mdlPlots,
-            world=MW.mdlWorld,
-            statuses=MW.mdlStatus,
-            labels=MW.mdlLabels,
+            outline=MW.projectRuntime.models.outline,
+            characters=MW.projectRuntime.models.characters,
+            plots=MW.projectRuntime.models.plots,
+            world=MW.projectRuntime.models.world,
+            statuses=MW.projectRuntime.models.statuses,
+            labels=MW.projectRuntime.models.labels,
         ),
         reference_navigation_for(MW, MW.projectRuntime.models),
     )
@@ -43,7 +43,7 @@ def test_references(MWSampleProject):
     assert ref1 in ref2
 
     # Plots
-    mdlPlots = MW.mdlPlots
+    mdlPlots = MW.projectRuntime.models.plots
     plotsImp = mdlPlots.getPlotsByImportance()
     plots = []
     [plots.extend(i) for i in plotsImp]
@@ -57,7 +57,7 @@ def test_references(MWSampleProject):
     assert references.short_infos("<invalidref>") == -1
 
     # Character
-    mdlChar = MW.mdlCharacter
+    mdlChar = MW.projectRuntime.models.characters
     IDs = [mdlChar.ID(r) for r in range(mdlChar.rowCount())]
     assert len(IDs) == 6  # Peter, Paul, Philip, Stephen, Barnabas, Herod
     charID = IDs[0]
@@ -68,7 +68,7 @@ def test_references(MWSampleProject):
     assert references.short_infos("<invalidref>") == -1
 
     # Texts
-    mdlOutline = MW.mdlOutline
+    mdlOutline = MW.projectRuntime.models.outline
     assert mdlOutline.rowCount() == 3  # Jerusalem, Samaria, Extremities
     root = mdlOutline.rootItem
     textID = root.child(0).ID()
@@ -80,7 +80,7 @@ def test_references(MWSampleProject):
     assert references.short_infos("<invalidref>") == -1
 
     # World
-    mdlWorld = MW.mdlWorld
+    mdlWorld = MW.projectRuntime.models.world
     assert mdlWorld.rowCount() == 3  # Places, Culture, Travel
     worldID = mdlWorld.itemID(mdlWorld.item(2).child(1))
 

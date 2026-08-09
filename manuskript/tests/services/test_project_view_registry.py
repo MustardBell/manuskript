@@ -1,7 +1,7 @@
 """Announcements reach every window; questions reach one.
 
 The split is the whole point. A project with four windows open must
-still ask about unsaved changes once, and must still update four sets of
+still ask about unsaved changes once, and must still prepare four sets of
 widgets when its models are replaced.
 """
 
@@ -16,15 +16,14 @@ from manuskript.services.project_view_registry import (
 def test_announcements_reach_every_registered_view():
     first, second = MagicMock(), MagicMock()
     registry = ProjectViewRegistry([first, second])
-    models = MagicMock()
 
-    registry.install_models(models)
+    registry.prepare_model_replacement()
     registry.project_opened()
     registry.sync_to_state(True)
     registry.project_closed()
 
     for view in (first, second):
-        view.install_models.assert_called_once_with(models)
+        view.prepare_model_replacement.assert_called_once_with()
         view.project_opened.assert_called_once_with()
         view.sync_to_state.assert_called_once_with(True)
         view.project_closed.assert_called_once_with()

@@ -20,7 +20,7 @@ from manuskript.ui.editors.document_area_layout import restore_area
 
 def documents(window, count):
     """Fresh outline items to open, returning their ids."""
-    root = window.mdlOutline.rootItem
+    root = window.projectRuntime.models.outline.rootItem
     before = len(root.children())
     for number in range(count):
         outlineItem(title="Scene {}".format(number), parent=root)
@@ -86,7 +86,7 @@ def test_documents_move_with_the_half_they_were_in(MWEmptyProject):
         editor.split(state=1)
         for document in opened:
             window.mainEditor.setCurrentModelIndex(
-                window.mdlOutline.getIndexByID(document),
+                window.projectRuntime.models.outline.getIndexByID(document),
                 newTab=True,
                 tabWidget=editor.tab,
             )
@@ -131,7 +131,7 @@ def test_unsplitting_takes_every_document_back(MWEmptyProject):
     opened = documents(window, 1)
     for document in opened:
         window.mainEditor.setCurrentModelIndex(
-            window.mdlOutline.getIndexByID(document),
+            window.projectRuntime.models.outline.getIndexByID(document),
             newTab=True,
             tabWidget=editor.tab,
         )
@@ -194,7 +194,7 @@ def test_working_area_follows_a_split_into_the_new_half(MWEmptyProject):
         # phantom tab from a stale restore stood in for it.
         opened = documents(window, 1)
         window.mainEditor.setCurrentModelIndex(
-            window.mdlOutline.getIndexByID(opened[0]),
+            window.projectRuntime.models.outline.getIndexByID(opened[0]),
             newTab=True,
         )
         editor.split(state=1)

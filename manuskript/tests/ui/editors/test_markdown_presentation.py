@@ -683,8 +683,8 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
     )
     item = outlineItem(title="Click safety", _type="md")
     item.setData(Outline.text, source)
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     source_editor = window.mainEditor.currentEditor().txtRedacText
     source_editor.setPresentationMode(

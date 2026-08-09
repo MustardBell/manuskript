@@ -109,8 +109,8 @@ def test_close_then_open_rebinds_outline_models_without_stale_delegates(
         MWEmptyProject, tmp_path):
     window = MWEmptyProject
     item = outlineItem(title="Scene", _type="md")
-    window.mdlOutline.appendItem(item)
-    old_model = window.mdlOutline
+    window.projectRuntime.models.outline.appendItem(item)
+    old_model = window.projectRuntime.models.outline
     old_index = old_model.indexFromItem(item)
     pov_index = old_index.sibling(old_index.row(), Outline.POV)
     old_delegate = window.treeOutlineOutline.itemDelegateForColumn(
@@ -131,11 +131,17 @@ def test_close_then_open_rebinds_outline_models_without_stale_delegates(
     qApp.processEvents()
 
     assert window.currentProject == str(next_project)
-    assert window.treeOutlineOutline.model() is window.mdlOutline
-    assert window.corePanels.project_tree.tree.model() is window.mdlOutline
+    assert (
+        window.treeOutlineOutline.model()
+        is window.projectRuntime.models.outline
+    )
+    assert (
+        window.corePanels.project_tree.tree.model()
+        is window.projectRuntime.models.outline
+    )
     assert (
         window.treeOutlineOutline.itemDelegateForColumn(
             Outline.POV
         ).mdlCharacter
-        is window.mdlCharacter
+        is window.projectRuntime.models.characters
     )

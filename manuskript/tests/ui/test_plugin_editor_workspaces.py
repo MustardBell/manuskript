@@ -118,8 +118,8 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
     endpoints = []
     item = outlineItem(title="Original", _type="md")
     item.setData(Outline.text, "Original paragraph.")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.corePanels.project_tree.tree.selectionModel().setCurrentIndex(
         index,
         QItemSelectionModel.ClearAndSelect
@@ -148,7 +148,7 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
         assert duplicate.title == "Translation"
         assert duplicate.text == "Original paragraph."
         assert not duplicate.compile
-        assert window.mdlOutline.getItemByID(duplicate.id) is not None
+        assert window.projectRuntime.models.outline.getItemByID(duplicate.id) is not None
 
         endpoint = endpoints[0]
         assert endpoint.editing_locked
@@ -187,7 +187,7 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
         )
 
         received[0].files.write("groups.json", "{}")
-        assert window.projectPluginData.namespace(PLUGIN_ID).read(
+        assert window.projectRuntime.models.plugin_data.namespace(PLUGIN_ID).read(
             "groups.json"
         ) == "{}"
 
@@ -213,8 +213,8 @@ def _open_with(window, requires):
 
     item = outlineItem(title="Scene", _type="md")
     item.setData(Outline.text, "A paragraph.")
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.corePanels.project_tree.tree.selectionModel().setCurrentIndex(
         index,
         QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
@@ -288,7 +288,7 @@ def test_declaring_outline_read_grants_reading_and_not_writing(
         # Watching the manuscript change is reading it.
         seen = []
         outline.documentChanged.connect(seen.append)
-        window.mdlOutline.getItemByID(item.ID()).setData(
+        window.projectRuntime.models.outline.getItemByID(item.ID()).setData(
             Outline.text, "Changed elsewhere.",
         )
         qApp.processEvents()
@@ -346,9 +346,9 @@ def test_a_workspace_that_falls_over_does_not_wait_for_anybody(
         return context.outline.documents()
 
     item = outlineItem(title="Scene", _type="md")
-    window.mdlOutline.appendItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
     window.corePanels.project_tree.tree.selectionModel().setCurrentIndex(
-        window.mdlOutline.indexFromItem(item),
+        window.projectRuntime.models.outline.indexFromItem(item),
         QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
     )
     _declare(window, ())

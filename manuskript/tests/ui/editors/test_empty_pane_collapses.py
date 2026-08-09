@@ -20,7 +20,7 @@ def documents(window, count):
     """Fresh outline items to open, returning their ids."""
     from manuskript.models.outlineItem import outlineItem
 
-    root = window.mdlOutline.rootItem
+    root = window.projectRuntime.models.outline.rootItem
     before = len(root.children())
     for number in range(count):
         outlineItem(title="Scene {}".format(number), parent=root)
@@ -29,7 +29,7 @@ def documents(window, count):
 
 def open_in(window, pane, document):
     window.mainEditor.setCurrentModelIndex(
-        window.mdlOutline.getIndexByID(document),
+        window.projectRuntime.models.outline.getIndexByID(document),
         newTab=True,
         tabWidget=pane.tab,
     )

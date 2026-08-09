@@ -176,22 +176,22 @@ def test_general(MWSampleProject):
     SW.updateAllWidgets()
 
     # Labels
-    assert SW.updateLabelColor(MW.mdlLabels.item(1).index()) == None
-    rc = MW.mdlLabels.rowCount()
+    assert SW.updateLabelColor(MW.projectRuntime.models.labels.item(1).index()) == None
+    rc = MW.projectRuntime.models.labels.rowCount()
     SW.addLabel()
     SW.lstLabels.setCurrentIndex(
-        MW.mdlLabels.item(MW.mdlLabels.rowCount() - 1).index())
+        MW.projectRuntime.models.labels.item(MW.projectRuntime.models.labels.rowCount() - 1).index())
     SW.removeLabel()
-    assert MW.mdlLabels.rowCount() == rc
+    assert MW.projectRuntime.models.labels.rowCount() == rc
     # setLabelColor # Same problem as above
 
     # Status
-    rc = MW.mdlStatus.rowCount()
+    rc = MW.projectRuntime.models.statuses.rowCount()
     SW.addStatus()
     SW.lstStatus.setCurrentIndex(
-        MW.mdlStatus.item(MW.mdlStatus.rowCount() - 1).index())
+        MW.projectRuntime.models.statuses.item(MW.projectRuntime.models.statuses.rowCount() - 1).index())
     SW.removeStatus()
-    assert MW.mdlStatus.rowCount() == rc
+    assert MW.projectRuntime.models.statuses.rowCount() == rc
 
     # Fullscreen
     # self.lstThemes.currentItemChanged.connect(self.themeSelected)

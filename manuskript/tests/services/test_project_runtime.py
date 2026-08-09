@@ -100,11 +100,22 @@ def test_a_window_shares_the_runtime_it_is_given(MWEmptyProject):
     assert window.revisionCoordinator is runtime.revisionCoordinator
     assert window.projectManager.model_parent is runtime.modelParent
     assert window.projectManager.settings is runtime.settingsManager
+    for legacy_alias in (
+        "mdlFlatData",
+        "mdlCharacter",
+        "mdlLabels",
+        "mdlStatus",
+        "mdlPlots",
+        "mdlOutline",
+        "mdlWorld",
+        "projectPluginData",
+    ):
+        assert not hasattr(window, legacy_alias), legacy_alias
     # QObject.parent explicitly: an item model's own parent() takes an
     # index and answers about the tree, not about ownership.
     assert (
-        QObject.parent(window.mdlOutline) is runtime.modelParent
+        QObject.parent(runtime.models.outline) is runtime.modelParent
     )
     assert (
-        QObject.parent(window.mdlCharacter) is runtime.modelParent
+        QObject.parent(runtime.models.characters) is runtime.modelParent
     )

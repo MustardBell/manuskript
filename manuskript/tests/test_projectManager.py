@@ -240,7 +240,9 @@ class TestProjectManager(unittest.TestCase):
             self.window.projectRuntime.modelParent,
             self.window.projectRuntime.settingsManager,
         )
-        models.install_on.assert_called_once_with(self.window)
+        # Returning the graph is the whole operation. Views discover it
+        # through the shared runtime; the manager does not install aliases
+        # on whichever window happened to trigger creation.
 
     def test_save_permission_failures_are_presented_by_lifecycle_view(self):
         self.project_manager.session.open("project.msk")
@@ -457,7 +459,6 @@ LIFECYCLE_VIEW_METHODS = [
     "translate",
     "show_status",
     "project_name",
-    "install_models",
     "sync_to_state",
     "connect_project",
     "apply_loaded_settings",
@@ -574,7 +575,6 @@ class TestTheProjectIsNotReadThroughAWindow(unittest.TestCase):
             self.settings,
         )
         self.assertIs(models, self.model_factory.create.return_value)
-        self.view.install_models.assert_called_once_with(models)
 
     def test_a_save_finds_the_settings_without_asking_a_window(self):
         self.manager.session.open("book.msk")

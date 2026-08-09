@@ -14,37 +14,37 @@ def test_loadImportWiget(MWSampleProject):
     Simply tests that import widget loads properly.
     """
     MW = MWSampleProject
-    selected = MW.mdlOutline.index(0, 0, QModelIndex())
+    selected = MW.projectRuntime.models.outline.index(0, 0, QModelIndex())
     MW.corePanels.project_tree.tree.setCurrentIndex(selected)
 
     # Loading from mainWindow
     MW.doImport()
     I = MW.dialog
     assert I.isVisible()
-    assert I.context.outline_model is MW.mdlOutline
-    assert I.context.character_model is MW.mdlCharacter
-    assert I.context.label_model is MW.mdlLabels
-    assert I.context.status_model is MW.mdlStatus
+    assert I.context.outline_model is MW.projectRuntime.models.outline
+    assert I.context.character_model is MW.projectRuntime.models.characters
+    assert I.context.label_model is MW.projectRuntime.models.labels
+    assert I.context.status_model is MW.projectRuntime.models.statuses
 
     settings = I.settingsWidget
     proxy = settings.treeGeneralParent.model()
     assert proxy.mapToSource(settings.getParentIndex()) == selected
     settings.chkGeneralParent.setChecked(True)
-    assert settings.importUnderID() == MW.mdlOutline.ID(selected)
+    assert settings.importUnderID() == MW.projectRuntime.models.outline.ID(selected)
 
     status = MagicMock()
     I.context = replace(I.context, show_status=status)
     with patch.object(I, "startImport") as start_import:
         I.doImport()
 
-    start_import.assert_called_once_with(MW.mdlOutline)
+    start_import.assert_called_once_with(MW.projectRuntime.models.outline)
     status.assert_called_once_with("Import complete!", 5000)
     assert not I.isVisible()
 
 
 def test_import_batches_aggregate_word_count_updates(
         MWSampleProject):
-    model = MWSampleProject.mdlOutline
+    model = MWSampleProject.projectRuntime.models.outline
     MWSampleProject.doImport()
     dialog = MWSampleProject.dialog
     dialog.fileName = "import.md"

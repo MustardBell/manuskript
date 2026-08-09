@@ -16,9 +16,9 @@ from manuskript.ui.views.textEditView import textEditView
 
 def document(window, title="Scene"):
     """A fresh outline item, and the index of its text."""
-    root = window.mdlOutline.rootItem
+    root = window.projectRuntime.models.outline.rootItem
     item = outlineItem(title=title, parent=root)
-    index = window.mdlOutline.getIndexByID(item.ID())
+    index = window.projectRuntime.models.outline.getIndexByID(item.ID())
     return item, index.sibling(index.row(), Outline.text)
 
 
@@ -110,7 +110,7 @@ def test_a_change_from_elsewhere_does_not_eat_what_is_being_typed(
 
         # Something other than this editor writes to the model, which is
         # what used to replace the editor's contents mid-word.
-        window.mdlOutline.setData(index, "Something else entirely.")
+        window.projectRuntime.models.outline.setData(index, "Something else entirely.")
 
         assert editor.toPlainText() == "What I am still typ"
     finally:
@@ -194,9 +194,9 @@ def test_a_model_that_cannot_name_a_document_shares_nothing(
     notion, so those keep the private buffer they always had.
     """
     window = MWEmptyProject
-    window.mdlCharacter.addCharacter(name="Someone")
-    index = window.mdlCharacter.index(0, 0)
-    assert not hasattr(window.mdlCharacter, "getIndexByID")
+    window.projectRuntime.models.characters.addCharacter(name="Someone")
+    index = window.projectRuntime.models.characters.index(0, 0)
+    assert not hasattr(window.projectRuntime.models.characters, "getIndexByID")
 
     editor = textEditView(window, settings=window.settingsManager)
     editor.set_text_editor_context(window.textEditorContext)

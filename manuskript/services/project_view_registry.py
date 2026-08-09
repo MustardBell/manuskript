@@ -7,8 +7,9 @@ shape the manager already expects.
 Two kinds of call, and the difference is what makes this correct rather
 than merely convenient:
 
-* **Announcements** -- models installed, project opened, project closed
-  -- go to every window, because each has its own widgets to update.
+* **Announcements** -- project opened, project closed, model bindings
+  changing -- go to every window, because each has its own widgets to
+  update.
 * **Questions** -- save before closing? which project name? -- go to the
   primary view alone. Asking four windows whether to save would ask the
   person four times, and state shared by all of them would be captured
@@ -84,10 +85,6 @@ class ProjectViewRegistry:
             view.show_status(message, duration, importance)
 
     # ------------------------------------------------- announcements
-
-    def install_models(self, models):
-        for view in self.views:
-            view.install_models(models)
 
     def sync_to_state(self, project_open):
         for view in self.views:

@@ -26,10 +26,6 @@ WINDOW_NAMES = frozenset({
 #: may legitimately own a field whose historic name begins with ``mdl``.
 SELF_IS_WINDOW = frozenset({"mainWindow.py"})
 
-#: Where the window attributes are still deliberately written, until the
-#: tests that read them are migrated too.
-ALLOWED = ("project_model_factory.py",)
-
 MODEL_ATTRIBUTES = ("mdl", "projectPluginData")
 
 
@@ -38,7 +34,7 @@ def production_modules():
     root = pathlib.Path(__file__).resolve().parents[1]
     for path in sorted(root.rglob("*.py")):
         text = str(path)
-        if "/tests/" in text or text.endswith(ALLOWED):
+        if "/tests/" in text:
             continue
         yield path
 

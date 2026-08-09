@@ -83,9 +83,18 @@ def test_a_second_window_edits_the_same_project(MWEmptyProject):
         assert other.undoStack is window.undoStack
         # And so are the models: editing in one window is editing the
         # project, which is the whole point.
-        assert other.mdlOutline is window.mdlOutline
-        assert other.mdlCharacter is window.mdlCharacter
-        assert other.projectPluginData is window.projectPluginData
+        assert (
+            other.projectRuntime.models.outline
+            is window.projectRuntime.models.outline
+        )
+        assert (
+            other.projectRuntime.models.characters
+            is window.projectRuntime.models.characters
+        )
+        assert (
+            other.projectRuntime.models.plugin_data
+            is window.projectRuntime.models.plugin_data
+        )
     finally:
         other.close()
 
@@ -640,12 +649,15 @@ def test_a_torn_off_panel_keeps_its_model_bindings(MWEmptyProject):
     window = MWEmptyProject
     panel = window.panelHost.instance(METADATA).widget
     before = panel.properties.txtTitle._model
-    assert before is window.mdlOutline
+    assert before is window.projectRuntime.models.outline
     try:
         window.togglePanelFloating(METADATA)
 
         assert panel.properties.txtTitle._model is before
-        assert panel.properties.txtGoal._model is window.mdlOutline
+        assert (
+            panel.properties.txtGoal._model
+            is window.projectRuntime.models.outline
+        )
     finally:
         window.togglePanelFloating(METADATA)
 

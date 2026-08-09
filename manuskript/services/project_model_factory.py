@@ -43,18 +43,6 @@ class ProjectModels:
             self.labels,
         )
 
-    def install_on(self, window):
-        """Expose the model graph through the legacy window attributes."""
-        window.mdlFlatData = self.flat_data
-        window.mdlCharacter = self.characters
-        window.mdlLabels = self.labels
-        window.mdlStatus = self.statuses
-        window.mdlPlots = self.plots
-        window.mdlOutline = self.outline
-        window.mdlWorld = self.world
-        window.projectPluginData = self.plugin_data
-
-
 class ProjectModelFactory:
     """Build a complete, internally connected project model graph."""
 

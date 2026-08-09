@@ -40,9 +40,6 @@ class ProjectLifecycleView:
     def project_name(self):
         return self.window.projectName()
 
-    def install_models(self, models):
-        models.install_on(self.window)
-
     @property
     def models(self):
         """The project's models, from the runtime that owns them."""

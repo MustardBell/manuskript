@@ -358,7 +358,6 @@ class ProjectManager:
             self.model_parent,
             self.settings,
         )
-        self.ui.install_models(self.models)
         return self.models
 
     def restoreRevision(self, revision):
@@ -492,7 +491,6 @@ class ProjectManager:
         )
         self._adoptLiveSettings(models)
         self.models = models
-        self.ui.install_models(models)
         self.ui.connect_project()
         self.ui.apply_loaded_settings()
         self._connectModelChanges()
