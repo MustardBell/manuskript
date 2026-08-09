@@ -5,24 +5,43 @@
 
 import pytest
 
+
+def test_reference_identity_round_trips_without_a_view():
+    from manuskript.models.reference_identity import (
+        ReferenceIdentity,
+        make_reference,
+    )
+
+    for kind in ("C", "T", "P", "W"):
+        complete = make_reference(kind, 42, label="Readable title")
+        assert complete == "{{{}:42:Readable title}}".format(kind)
+        assert ReferenceIdentity.parse(complete) == ReferenceIdentity(kind, "42")
+        assert make_reference(kind, 42, searchable=True) == "{{{}:42:".format(kind)
+
+    assert ReferenceIdentity.parse("not a reference") is None
+
 def test_references(MWSampleProject):
     """
     Tests references using sample project.
     """
     from manuskript.models import references as Ref
+    from manuskript.services.reference_service import ReferenceService
     from manuskript.ui.reference_navigation import reference_navigation_for
+    from manuskript.ui.reference_presentation import ReferenceHtmlPresenter
 
     MW = MWSampleProject
-    references = Ref.ReferenceService(
-        Ref.ReferenceModels(
-            outline=MW.mdlOutline,
-            characters=MW.mdlCharacter,
-            plots=MW.mdlPlots,
-            world=MW.mdlWorld,
-            statuses=MW.mdlStatus,
-            labels=MW.mdlLabels,
-        ),
-        reference_navigation_for(MW),
+    reference_models = Ref.ReferenceModels(
+        outline=MW.projectRuntime.models.outline,
+        characters=MW.projectRuntime.models.characters,
+        plots=MW.projectRuntime.models.plots,
+        world=MW.projectRuntime.models.world,
+        statuses=MW.projectRuntime.models.statuses,
+        labels=MW.projectRuntime.models.labels,
+    )
+    references = ReferenceService(
+        reference_models,
+        reference_navigation_for(MW, MW.projectRuntime.models),
+        ReferenceHtmlPresenter(reference_models),
     )
 
     # References
@@ -43,7 +62,7 @@ def test_references(MWSampleProject):
     assert ref1 in ref2
 
     # Plots
-    mdlPlots = MW.mdlPlots
+    mdlPlots = MW.projectRuntime.models.plots
     plotsImp = mdlPlots.getPlotsByImportance()
     plots = []
     [plots.extend(i) for i in plotsImp]
@@ -57,7 +76,7 @@ def test_references(MWSampleProject):
     assert references.short_infos("<invalidref>") == -1
 
     # Character
-    mdlChar = MW.mdlCharacter
+    mdlChar = MW.projectRuntime.models.characters
     IDs = [mdlChar.ID(r) for r in range(mdlChar.rowCount())]
     assert len(IDs) == 6  # Peter, Paul, Philip, Stephen, Barnabas, Herod
     charID = IDs[0]
@@ -68,7 +87,7 @@ def test_references(MWSampleProject):
     assert references.short_infos("<invalidref>") == -1
 
     # Texts
-    mdlOutline = MW.mdlOutline
+    mdlOutline = MW.projectRuntime.models.outline
     assert mdlOutline.rowCount() == 3  # Jerusalem, Samaria, Extremities
     root = mdlOutline.rootItem
     textID = root.child(0).ID()
@@ -80,7 +99,7 @@ def test_references(MWSampleProject):
     assert references.short_infos("<invalidref>") == -1
 
     # World
-    mdlWorld = MW.mdlWorld
+    mdlWorld = MW.projectRuntime.models.world
     assert mdlWorld.rowCount() == 3  # Places, Culture, Travel
     worldID = mdlWorld.itemID(mdlWorld.item(2).child(1))
 

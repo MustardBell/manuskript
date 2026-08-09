@@ -267,10 +267,7 @@ class GitRevisionDialog(QDialog):
             return
         try:
             QApplication.setOverrideCursor(Qt.WaitCursor)
-            commit_id = self.coordinator.manual_commit(
-                self.project_manager,
-                message,
-            )
+            commit_id = self.project_manager.commitRevision(message)
         except Exception as error:
             self._showError(error)
             return
@@ -330,10 +327,7 @@ class GitRevisionDialog(QDialog):
             return
         try:
             QApplication.setOverrideCursor(Qt.WaitCursor)
-            restored = self.coordinator.restore(
-                self.project_manager,
-                commit_id,
-            )
+            restored = self.project_manager.restoreRevision(commit_id)
         except Exception as error:
             self._showError(error)
             return

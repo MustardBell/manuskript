@@ -4,7 +4,7 @@ import re, textwrap
 
 from PyQt5.Qt import QApplication
 from PyQt5.QtCore import QTimer, QModelIndex, Qt, QEvent, pyqtSignal, QLocale, QPersistentModelIndex, QMutex
-from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QFont, QColor, QIcon, QMouseEvent, QTextCursor
+from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QTextDocument, QFont, QColor, QIcon, QMouseEvent, QTextCursor
 from PyQt5.QtWidgets import (
     QAction,
     QMenu,
@@ -20,6 +20,7 @@ from manuskript.enums import Outline, World, Character, Plot
 from manuskript import functions as F
 from manuskript.models import outlineModel, outlineItem
 from manuskript.ui.highlighters import BasicHighlighter
+from manuskript.domain.text import plain_text
 from manuskript.ui import style as S
 from manuskript.functions import Spellchecker
 from manuskript.models.characterModel import Character, CharacterInfo
@@ -31,10 +32,12 @@ from manuskript.ui.views.text_editor_settings import (
 import logging
 LOGGER = logging.getLogger(__name__)
 
-# See implementation of QTextDocument::toPlainText()
-PLAIN_TRANSLATION_TABLE = {0x2028: "\n", 0x2029: "\n", 0xfdd0: "\n", 0xfdd1: "\n"}
-
 class textEditView(QTextEdit):
+
+    #: Emitted when this view starts showing a different QTextDocument.
+    #: Qt has no such signal, and swapping a document silently leaves
+    #: anything watching the old one watching nothing at all.
+    documentReplaced = pyqtSignal()
 
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
                  highlighting=False, dict="", autoResize=False,
@@ -47,6 +50,12 @@ class textEditView(QTextEdit):
         self._placeholderText = self.placeholderText()
         self._updating = QMutex()
         self._item = None
+        #: The project's buffer for this document, once bound to one. Views
+        #: sharing it are viewports on one text rather than copies of it.
+        self._buffer = None
+        #: This view's own highlighter, used only while it is not
+        #: sharing a buffer. Read through the highlighter property.
+        self._ownHighlighter = None
         self._highlighting = highlighting
         self._textFormat = "text"
         self.setAcceptRichText(False)
@@ -106,6 +115,34 @@ class textEditView(QTextEdit):
             self.highlighter = self._highlighterClass(self)
             self.highlighter.setDefaultBlockFormat(self._defaultBlockFormat)
 
+    @property
+    def highlighter(self):
+        """The one highlighter painting the text this editor shows.
+
+        Resolved every time, never cached. Where this view shares a
+        project buffer the highlighter belongs to that buffer, because a
+        QTextDocument can only carry one set of character formats and two
+        highlighters on it would overwrite each other's per-block state.
+        A stored reference went stale as soon as the buffer replaced or
+        released it, and then something as ordinary as toggling
+        spellcheck -- which walks every editor in the window -- reached
+        into a deleted C++ object.
+        """
+        buffer = getattr(self, "_buffer", None)
+        if buffer is not None:
+            return buffer.highlighter
+        return self._ownHighlighter
+
+    @highlighter.setter
+    def highlighter(self, value):
+        buffer = getattr(self, "_buffer", None)
+        if buffer is not None:
+            # Built for this view, owned by the document it paints.
+            buffer.highlighter = value
+            self._ownHighlighter = None
+            return
+        self._ownHighlighter = value
+
     def set_text_editor_context(self, context):
         self.text_editor_context = context
         if context is not None:
@@ -139,6 +176,7 @@ class textEditView(QTextEdit):
 
     def setCurrentModelIndex(self, index):
         self._indexes = None
+        self._releaseSharedBuffer()
         if index.isValid():
             self.setEnabled(True)
             if index.column() != self._column:
@@ -150,15 +188,108 @@ class textEditView(QTextEdit):
             if not self._model:
                 self.setModel(index.model())
 
+            shared = self._attachSharedBuffer()
             self.setupEditorForIndex(self._index)
             self.loadFontSettings()
-            self.updateText()
+            if shared:
+                # Only when this view is the first to show the document:
+                # a second window opening it must not wipe the undo
+                # history of the person already working in the first.
+                if len(self._buffer.views) == 1:
+                    self._buffer.settle()
+            else:
+                self.updateText()
 
         else:
             self._index = QModelIndex()
 
             self.setPlainText("")
             self.setEnabled(False)
+
+    # ------------------------------------------------- the shared buffer
+
+    @property
+    def _bufferRegistry(self):
+        """The project's buffers, if this editor is bound to a project."""
+        return getattr(self.text_editor_context, "document_buffers", None)
+
+    def _documentIdentity(self):
+        """What two views would both call this document, or None.
+
+        Only the outline names its documents in a way two views can agree
+        on, and only its text is the thing two windows are expected to be
+        editing at once. Read through the model rather than through
+        internalPointer(), which is a Python item here and raw C++
+        internals in the QStandardItemModel-based models.
+        """
+        model = self._model
+        index = self._index
+        if model is None or index is None or not index.isValid():
+            return None
+        if not hasattr(model, "getIndexByID"):
+            return None
+        value = model.data(index.sibling(index.row(), Outline.ID))
+        return str(value) if value else None
+
+    def _attachSharedBuffer(self):
+        """Become a viewport onto the project's one buffer for this
+        document, rather than keeping private text of my own.
+
+        Answers whether that happened. It does not for editors the sharing
+        does not apply to -- a multiple selection, a character's notes, a
+        read-only html view -- and those keep the private document and the
+        private timer they always had.
+        """
+        registry = self._bufferRegistry
+        if registry is None:
+            return False
+        buffer = registry.buffer_for(
+            self._model, self._index, self._column,
+            self._documentIdentity(),
+            view=self,
+        )
+        if buffer is None:
+            return False
+        # The buffer owns the timer now. Leaving this view's own connected
+        # would mean two things submitting the same text.
+        self.disconnectDocument()
+        # Let go of any highlighter of my own before the swap. setDocument
+        # deletes a document the editor created, and a highlighter left
+        # pointing at a deleted document takes the interpreter down later,
+        # during a garbage collection with no stack that names this code.
+        if self._ownHighlighter is not None:
+            self._ownHighlighter.setDocument(None)
+            self._ownHighlighter.deleteLater()
+            self._ownHighlighter = None
+        self._buffer = buffer
+        self.setDocument(buffer.document)
+        # The highlighter itself is built by setupEditorForIndex, which
+        # runs straight after this and now writes into the buffer, so the
+        # document ends up with exactly one however many views show it.
+        buffer.focused(self)
+        self.documentReplaced.emit()
+        return True
+
+    def _releaseSharedBuffer(self):
+        """Stop showing a shared buffer, without taking it from others.
+
+        Text of my own first, then let go. setDocument does not take
+        ownership of a document somebody else parented, so a buffer
+        released while this editor was still displaying its document would
+        take the document with it and leave the editor pointing at nothing.
+        """
+        buffer = getattr(self, "_buffer", None)
+        if buffer is None:
+            return
+        self._buffer = None
+        self._ownHighlighter = None
+        self.disconnectDocument()
+        self.setDocument(QTextDocument(self))
+        self.reconnectDocument()
+        self.documentReplaced.emit()
+        registry = self._bufferRegistry
+        if registry is not None:
+            registry.detach(self, buffer)
 
     def currentIndex(self):
         """
@@ -345,13 +476,24 @@ class textEditView(QTextEdit):
         self.updateTimerConnection = self.document().contentsChanged.connect(self.updateTimer.start, F.AUC)
 
     def toIdealText(self):
-        """QTextDocument::toPlainText() replaces NBSP with spaces, which we don't want.
-        QTextDocument::toRawText() replaces nothing, but that leaves fancy paragraph and line separators that users would likely complain about.
-        This reimplements toPlainText(), except without the NBSP destruction."""
-        return self.document().toRawText().translate(PLAIN_TRANSLATION_TABLE)
+        """The text of this editor's document, NBSP and all.
+
+        The one definition of that, in manuskript.domain.text, so that the
+        buffer this editor may be sharing answers identically -- comparing
+        two spellings of the same text is how undo history got thrown away
+        once already.
+        """
+        return plain_text(self.document())
     toPlainText = toIdealText
 
     def updateText(self):
+        if self._buffer is not None:
+            # The buffer decides. It knows whether what it holds is newer
+            # than what the model is offering, which one view cannot know
+            # on behalf of the others reading the same text.
+            self._buffer.load(F.toString(self._index.data()))
+            return
+
         self._updating.lock()
 
         # LOGGER.debug("Updating %s", self.objectName())
@@ -389,6 +531,12 @@ class textEditView(QTextEdit):
         self._updating.unlock()
 
     def submit(self):
+        if self._buffer is not None:
+            # One buffer, one write. Every view submitting its own copy of
+            # the same text was the duplication in the first place.
+            self._buffer.flush()
+            return
+
         if self.updateTimer:
             self.updateTimer.stop()
 
@@ -448,19 +596,40 @@ class textEditView(QTextEdit):
         # Based on http://john.nachtimwald.com/2009/08/22/qplaintextedit-with-in-line-spell-check/
 
     def setDict(self, d):
+        """Use a dictionary, repainting only if the spelling marks change.
+
+        Rehighlighting walks every block of the document. Opening a project
+        sets the dictionary on every editor in the window -- 62 of them, and
+        almost always to the dictionary they already had -- so this was 62
+        full repaints to arrive at the marks already on screen.
+        """
+        settled = self.currentDict == d and (not d or self._dict is not None)
         self.currentDict = d
         if d:
             self._dict = Spellchecker.getDictionary(d)
+        if settled:
+            return
         if self.highlighter:
             self.highlighter.rehighlight()
 
     def toggleSpellcheck(self, v):
+        """Turn spelling marks on or off, repainting only on a change.
+
+        Compared after the fact rather than before, because asking for
+        spellcheck without a dictionary does not get it: what decides
+        whether anything needs repainting is the state this leaves behind,
+        not the state that was requested.
+        """
+        was_checking = self.spellcheck
         self.spellcheck = v
         if self.spellcheck and not self._dict:
             self._dict = Spellchecker.getDictionary(self.currentDict)
 
         if not self._dict:
             self.spellcheck = False
+
+        if self.spellcheck == was_checking:
+            return
 
         if self.highlighter:
             self.highlighter.rehighlight()
@@ -762,6 +931,18 @@ class textEditView(QTextEdit):
     ###############################################################################
     # FORMATTING
     ###############################################################################
+
+    def focusInEvent(self, event):
+        """Claim the shared buffer's highlighter for this view.
+
+        Character formats live in the document, so the parts of
+        highlighting that read a cursor -- focus mode, and skipping the
+        word being typed while spellchecking -- can only follow one view.
+        The one being worked in is the right one.
+        """
+        QTextEdit.focusInEvent(self, event)
+        if self._buffer is not None:
+            self._buffer.focused(self)
 
     def focusOutEvent(self, event):
         """Submit changes just before focusing out."""

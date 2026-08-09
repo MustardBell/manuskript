@@ -66,7 +66,10 @@ class HTML(markdown):
         return t
 
     def output(self, settingsWidget):
-        html = MD.markdown(markdown.output(self, settingsWidget))
+        html = MD.markdown(
+            markdown.output(self, settingsWidget),
+            extensions=self.augmentations(),
+        )
         return html
 
     def preview(self, settingsWidget, previewWidget):
@@ -76,7 +79,7 @@ class HTML(markdown):
         settingsWidget.writeSettings()
 
         md = markdown.output(self, settingsWidget)
-        html = MD.markdown(md)
+        html = MD.markdown(md, extensions=self.augmentations())
         path = os.path.join(self.projectPath(), "dummy.html")
 
         self.preparesTextEditView(previewWidget.widget(0), settings["Preview"]["PreviewFont"])

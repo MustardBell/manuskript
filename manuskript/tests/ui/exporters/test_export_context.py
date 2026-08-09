@@ -6,7 +6,10 @@ import pytest
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
 
 from manuskript import exporter
-from manuskript.exporter.context import ExportContext
+from manuskript.exporter.context import (
+    ExportContext,
+    ExportContextProvider,
+)
 from manuskript.exporter.page_routes import page_renderer_routes
 from manuskript.exporter.pandoc import pandocExporter
 from manuskript.exporter.pandoc.abstractPlainText import pandocSettings
@@ -47,6 +50,44 @@ def test_export_context_resolves_project_directory():
     context = make_context("/work/novel/manuscript.msk")
 
     assert context.project_path == "/work/novel"
+
+
+def test_export_context_provider_resolves_live_project_sources():
+    first_models = SimpleNamespace(
+        outline=object(),
+        flat_data=object(),
+        labels=object(),
+        statuses=object(),
+    )
+    second_models = SimpleNamespace(
+        outline=object(),
+        flat_data=object(),
+        labels=object(),
+        statuses=object(),
+    )
+    state = {
+        "project": "/work/first.msk",
+        "models": first_models,
+        "page_types": object(),
+    }
+    provider = ExportContextProvider(
+        project_file=lambda: state["project"],
+        models=lambda: state["models"],
+        parent=object(),
+        page_types=lambda: state["page_types"],
+    )
+
+    first = provider.create()
+    state["project"] = "/work/second.msk"
+    state["models"] = second_models
+    state["page_types"] = object()
+    second = provider.create()
+
+    assert first.project_file == "/work/first.msk"
+    assert first.outline_model is first_models.outline
+    assert second.project_file == "/work/second.msk"
+    assert second.outline_model is second_models.outline
+    assert second.page_types is state["page_types"]
 
 
 def test_exporter_factory_builds_isolated_project_graphs():

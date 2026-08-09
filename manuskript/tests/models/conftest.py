@@ -13,7 +13,7 @@ def outlineModelBasic(MWEmptyProject):
       * Text
     """
     from manuskript.models import outlineItem
-    mdl = MWEmptyProject.mdlOutline
+    mdl = MWEmptyProject.projectRuntime.models.outline
 
     root = mdl.rootItem
     f = outlineItem(title="Folder", parent=root)

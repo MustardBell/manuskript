@@ -1,40 +1,85 @@
+from dataclasses import dataclass
 from functools import partial
+from types import MappingProxyType
+from typing import Any, Callable, Mapping, Tuple
 
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QAction, QActionGroup, QMenu
 
 from manuskript import functions as F
 from manuskript.enums import Outline
+from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.propertiesView import propertiesView
 
 
-class MainViewConfiguration:
-    """Adapt view-configuration operations to concrete main-window widgets."""
+@dataclass(frozen=True)
+class ViewConfigurationViews:
+    """Capabilities needed to apply view settings in one workspace."""
 
-    def __init__(self, window):
-        self.window = window
+    select_editor: Callable[[], None]
+    simple_action: Any
+    fiction_action: Any
+    set_navigation_visible: Callable[[bool], None]
+    properties: Callable[[], Tuple[Any, ...]]
+    outlines: Callable[[], Tuple[Any, ...]]
+    refreshers: Mapping[str, Callable[[], None]]
+
+    @classmethod
+    def for_window(cls, window):
+        toolbar = window.toolbar
+        navigation = window.dckNavigation
+        editor_tabs = window.tabMain
+        editor_index = window.TabRedac
+        main_editor = window.mainEditor
+        outline_tree = window.treeOutlineOutline
+        project_tree = window.corePanels.project_tree.tree
+
+        def refresh_outline():
+            main_editor.updateTreeView()
+            outline_tree.viewport().update()
+
+        return cls(
+            select_editor=lambda: editor_tabs.setCurrentIndex(editor_index),
+            simple_action=window.actModeSimple,
+            fiction_action=window.actModeFiction,
+            set_navigation_visible=lambda visible: (
+                toolbar.setDockVisibility(navigation, visible)
+            ),
+            properties=lambda: tuple(
+                window.findChildren(propertiesView)
+            ),
+            outlines=lambda: tuple(window.findChildren(outlineView)),
+            refreshers=MappingProxyType({
+                "Cork": main_editor.updateCorkView,
+                "Outline": refresh_outline,
+                "Tree": project_tree.viewport().update,
+            }),
+        )
+
+
+class MainViewConfiguration:
+    """Apply view configuration through explicit workspace capabilities."""
+
+    def __init__(self, views):
+        self.views = views
 
     def select_editor_tab(self):
-        self.window.tabMain.setCurrentIndex(self.window.TabRedac)
+        self.views.select_editor()
 
     def set_mode_checked(self, mode):
         if mode == "simple":
-            self.window.actModeSimple.setChecked(True)
+            self.views.simple_action.setChecked(True)
         else:
-            self.window.actModeFiction.setChecked(True)
+            self.views.fiction_action.setChecked(True)
 
     def set_fiction_features_visible(self, visible):
-        window = self.window
-        window.toolbar.setDockVisibility(
-            window.dckNavigation,
-            visible,
-        )
-        for properties in window.findChildren(propertiesView):
+        self.views.set_navigation_visible(visible)
+        for properties in self.views.properties():
             properties.lblPOV.setVisible(visible)
             properties.cmbPOV.setVisible(visible)
 
-        for outline in window.findChildren(outlineView):
+        for outline in self.views.outlines():
             outline.hideColumns()
             if not visible:
                 # Suppress POV in simple mode without losing the saved
@@ -42,64 +87,81 @@ class MainViewConfiguration:
                 outline.hideColumn(Outline.POV)
 
     def refresh_category(self, category):
-        window = self.window
-        if category == "Cork":
-            window.mainEditor.updateCorkView()
-        elif category == "Outline":
-            window.mainEditor.updateTreeView()
-            window.treeOutlineOutline.viewport().update()
-        elif category == "Tree":
-            window.treeRedacOutline.viewport().update()
+        refresh = self.views.refreshers.get(category)
+        if refresh is not None:
+            refresh()
+
+
+@dataclass(frozen=True)
+class ViewSettingsMenuViews:
+    """The menus and translation capability used by the menu builder."""
+
+    menu: Any
+    mode_menu: Any
+    markdown_menu: Any
+    translate: Callable[[str], str]
+
+    @classmethod
+    def for_window(cls, window):
+        return cls(
+            menu=window.menuView,
+            mode_menu=window.menuMode,
+            markdown_menu=window.menuMarkdownMode,
+            translate=window.tr,
+        )
 
 
 class ViewSettingsMenuBuilder:
     """Build the dynamic color-source menus for project views."""
 
-    def __init__(self, window, controller):
-        self.window = window
+    def __init__(self, views, controller):
+        self.views = views
         self.controller = controller
+        self.connections = SignalConnectionRegistry()
 
     def rebuild(self):
-        window = self.window
+        self.connections.disconnect_all()
+        views = self.views
+        tr = views.translate
         values = [
-            (window.tr("Nothing"), "Nothing"),
-            (window.tr("POV"), "POV"),
-            (window.tr("Label"), "Label"),
-            (window.tr("Progress"), "Progress"),
-            (window.tr("Compile"), "Compile"),
+            (tr("Nothing"), "Nothing"),
+            (tr("POV"), "POV"),
+            (tr("Label"), "Label"),
+            (tr("Progress"), "Progress"),
+            (tr("Compile"), "Compile"),
         ]
         menus = [
-            (window.tr("Tree"), "Tree", "view-list-tree"),
-            (window.tr("Index cards"), "Cork", "view-cards"),
-            (window.tr("Outline"), "Outline", "view-outline"),
+            (tr("Tree"), "Tree", "view-list-tree"),
+            (tr("Index cards"), "Cork", "view-cards"),
+            (tr("Outline"), "Outline", "view-outline"),
         ]
         submenus = {
             "Tree": [
-                (window.tr("Icon color"), "Icon"),
-                (window.tr("Text color"), "Text"),
-                (window.tr("Background color"), "Background"),
+                (tr("Icon color"), "Icon"),
+                (tr("Text color"), "Text"),
+                (tr("Background color"), "Background"),
             ],
             "Cork": [
-                (window.tr("Icon"), "Icon"),
-                (window.tr("Text"), "Text"),
-                (window.tr("Background"), "Background"),
-                (window.tr("Border"), "Border"),
-                (window.tr("Corner"), "Corner"),
+                (tr("Icon"), "Icon"),
+                (tr("Text"), "Text"),
+                (tr("Background"), "Background"),
+                (tr("Border"), "Border"),
+                (tr("Corner"), "Corner"),
             ],
             "Outline": [
-                (window.tr("Icon color"), "Icon"),
-                (window.tr("Text color"), "Text"),
-                (window.tr("Background color"), "Background"),
+                (tr("Icon color"), "Icon"),
+                (tr("Text color"), "Text"),
+                (tr("Background color"), "Background"),
             ],
         }
 
-        window.menuView.clear()
-        window.menuView.addMenu(window.menuMode)
-        window.menuView.addMenu(window.menuMarkdownMode)
-        window.menuView.addSeparator()
+        views.menu.clear()
+        views.menu.addMenu(views.mode_menu)
+        views.menu.addMenu(views.markdown_menu)
+        views.menu.addSeparator()
 
         for title, category, icon_name in menus:
-            menu = QMenu(title, window.menuView)
+            menu = QMenu(title, views.menu)
             menu.setIcon(QIcon.fromTheme(icon_name))
             for subtitle, part in submenus[category]:
                 submenu = QMenu(subtitle, menu)
@@ -113,7 +175,8 @@ class ViewSettingsMenuBuilder:
                         ][part]
                         == value
                     )
-                    action.triggered.connect(
+                    self.connections.connect_weak(
+                        action.triggered,
                         partial(
                             self.controller.set_view_setting,
                             category,
@@ -125,4 +188,9 @@ class ViewSettingsMenuBuilder:
                     action_group.addAction(action)
                     submenu.addAction(action)
                 menu.addMenu(submenu)
-            window.menuView.addMenu(menu)
+            views.menu.addMenu(menu)
+
+    def dispose(self):
+        self.connections.disconnect_all()
+        self.views = None
+        self.controller = None

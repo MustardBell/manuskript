@@ -15,6 +15,7 @@ from manuskript.models.outlineItem import outlineItem
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationBinding,
     MarkdownPresentationDefaults,
     MarkdownPresentationMode,
     MarkdownPresentationState,
@@ -39,6 +40,24 @@ def host_editor(editor, width=480, height=360):
     host = MarkdownEditorHost(editor)
     host.resize(width, height)
     return host
+
+
+def wait_until(condition, timeout=2000):
+    """Wait for a condition rather than for a fixed number of ms.
+
+    A keystroke delivered to a widget is processed through the event
+    loop, and how long that takes depends on what else the machine is
+    doing. A fixed wait passes on an idle machine and fails on a busy
+    one, which is a race in the test rather than a fault in the editor.
+    """
+    waited = 0
+    while waited < timeout:
+        qApp.processEvents()
+        if condition():
+            return True
+        QTest.qWait(10)
+        waited += 10
+    return condition()
 
 
 def format_at(editor, position):
@@ -101,6 +120,54 @@ def test_leaf_presentation_state_emits_only_real_transitions():
         MarkdownPresentationMode.SOURCE,
         MarkdownPresentationMode.READING,
     ]
+
+
+def test_presentation_binding_moves_one_control_surface_between_leaves():
+    enabled = []
+    attached = []
+    modes = []
+    allowed_modes = []
+    binding = MarkdownPresentationBinding(
+        set_enabled=enabled.append,
+        state_changed=attached.append,
+        sync_mode=modes.append,
+        sync_allowed_modes=allowed_modes.append,
+    )
+    first = MarkdownPresentationState()
+    second = MarkdownPresentationState(MarkdownPresentationMode.SOURCE)
+
+    binding.attach(first)
+    first.set_mode(MarkdownPresentationMode.READING)
+    binding.attach(second)
+    modes.clear()
+    first.set_mode(MarkdownPresentationMode.LIVE_PREVIEW)
+    second.set_mode(MarkdownPresentationMode.FORMATTED_SOURCE)
+
+    assert enabled == [True, True]
+    assert attached == [first, second]
+    assert modes == [MarkdownPresentationMode.FORMATTED_SOURCE]
+    assert allowed_modes[-1] == tuple(MarkdownPresentationMode)
+
+
+def test_presentation_binding_detaches_and_routes_mode_intent():
+    enabled = []
+    attached = []
+    binding = MarkdownPresentationBinding(
+        set_enabled=enabled.append,
+        state_changed=attached.append,
+        sync_mode=lambda _mode: None,
+        sync_allowed_modes=lambda _modes: None,
+    )
+    state = MarkdownPresentationState()
+    binding.attach(state)
+
+    binding.set_mode(MarkdownPresentationMode.LIVE_PREVIEW)
+    binding.dispose()
+    state.set_mode(MarkdownPresentationMode.READING)
+
+    assert state.mode is MarkdownPresentationMode.READING
+    assert enabled == [True, False]
+    assert attached == [state, None]
 
 
 def test_presentation_defaults_repair_an_unknown_persisted_value():
@@ -531,12 +598,16 @@ def test_live_preview_edits_the_canonical_source_and_preserves_undo():
         qApp.processEvents()
         assert host.currentWidget() is editor
         QTest.keyClicks(editor, "x")
-        QTest.qWait(50)
+        wait_until(
+            lambda: editor.toPlainText() == "**first**\nsecondx"
+        )
 
         assert editor.toPlainText() == "**first**\nsecondx"
 
         editor.undo()
-        qApp.processEvents()
+        wait_until(
+            lambda: editor.toPlainText() == "**first**\nsecond"
+        )
 
         assert editor.toPlainText() == "**first**\nsecond"
     finally:
@@ -661,8 +732,8 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
     )
     item = outlineItem(title="Click safety", _type="md")
     item.setData(Outline.text, source)
-    window.mdlOutline.appendItem(item)
-    index = window.mdlOutline.indexFromItem(item)
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     source_editor = window.mainEditor.currentEditor().txtRedacText
     source_editor.setPresentationMode(
@@ -697,10 +768,13 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
 
         assert source_editor.toPlainText() == source
         assert item.data(Outline.text) == source
-        assert window._lastMDEditView is source_editor
+        assert window.workspaceFocus.markup_target is source_editor
 
         insertion_position = source_editor.textCursor().position()
-        QTest.keyClicks(qApp.focusWidget(), "X")
+        # QTest sends synthetic key events to the widget supplied here.
+        # Focus was asserted above; naming the verified editor avoids a
+        # second application-global focus lookup racing deferred Qt events.
+        QTest.keyClicks(source_editor, "X")
         QTest.qWait(50)
         edited_source = (
             source[:insertion_position]

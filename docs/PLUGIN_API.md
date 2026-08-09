@@ -158,8 +158,25 @@ def register(api):
 Nothing you register takes effect until every contribution validates.
 Registration is atomic: one rejected contribution installs none of them.
 
-Returning an object with a `deactivate()` method gets that method called when
-the plugin is disabled.
+Every `ExtensionDescriptor` ID must be a dotted name — letters, digits,
+`.`, `_` and `-`, with at least one dot — and should start with your
+plugin's namespace: `vendor.notes.panel`, not `panel`. IDs are addressed
+globally (routing selections persist them, other plugins may name them),
+so two plugins claiming the same ID for the same kind of contribution is
+a conflict, and the second one to load is refused.
+
+Returning an object from your entry point gives the plugin a lifecycle.
+Both methods are optional, and returning nothing stays valid:
+
+- `activate(context)` runs once install has succeeded. Side effects —
+  connecting signals, starting timers, touching the world — belong here,
+  not in the entry point, which can still be refused after it runs. The
+  context carries `plugin_id` and the same `capability(name)` accessor
+  the registrar has. An activate that raises unwinds the whole load and
+  the plugin reports **Failed**.
+- `deactivate()` runs when the plugin is disabled or unloaded, and also
+  when a load fails after the entry point already ran — so it must be
+  safe to call whether or not `activate` ever happened.
 
 ### What you may register
 
@@ -171,6 +188,7 @@ the plugin is disabled.
 | `register_page_type` | `PageTypeContribution` |
 | `register_page_renderer` | `PageRendererContribution` |
 | `register_markup` | `MarkupContribution` |
+| `register_conversion_augmentation` | `ConversionAugmentationContribution` |
 | `register_project_panel` | `ProjectPanelContribution` |
 | `register_settings_panel` | `PluginSettingsContribution` |
 | `register_editor_workspace` | `EditorWorkspaceContribution` |
@@ -186,10 +204,18 @@ the plugin is disabled.
 | `markup.bbcode` | a `BBCodeConverter` | at registration |
 | `ui.export_routing` | an `ExportRoutingService` | in your settings panel |
 | `media.registry` | a read-only vocabulary view | in your settings panel |
+| `conversion` | a converter between two media types | at registration |
+| `outline.read` | a manuscript you can read | in your editor workspace |
+| `outline.write` | a manuscript you can change | in your editor workspace |
+| `editor.control` | an editor pane factory | in your editor workspace |
 
 `api.capability(name)` raises `PluginScopeError` for anything you did not
 declare, even a name core has. The surface you touch is the intersection of
 what core publishes and what your manifest advertises.
+
+The three workspace services are not asked for by name — they arrive as
+fields of your `EditorWorkspaceContext`, or arrive as `None`. Declaring is
+still what decides which.
 
 Some services arrive later than others. A UI service needs a running
 application and a plugin to be scoped to, and neither exists while plugins
@@ -301,7 +327,9 @@ draw nothing, so a style cannot skip one by accident.
 ## Widgets you provide
 
 Several contributions take a factory returning a `QWidget`. The host checks
-the type and reports a failure against your plugin rather than crashing:
+the type and reports a failure against your plugin rather than crashing —
+in the status bar and the log, never a dialog, so a panel that cannot be
+built costs the reader a line rather than blocking them:
 
 - `ProjectPanelContribution.widget_factory(context, parent)`
 - `PluginSettingsContribution.widget_factory(context, parent)`
@@ -312,10 +340,128 @@ The `context` objects (`PluginSettingsContext`, `EditorWorkspaceContext`) are
 capability-scoped by design: you receive your own file namespace, a guarded
 outline gateway, an editor factory — never the main window or raw models.
 
+### What an editor workspace is given
+
+`EditorWorkspaceContext.outline` and `.editors` are what your manifest asked
+for, and `None` otherwise. Registering the contribution is not the request.
+
+| you declare | `context.outline` | `context.editors` |
+|---|---|---|
+| nothing | `None` | `None` |
+| `outline.read` | reads only: `document`, `documents`, `selected_item_ids`, and the change signals | `None` |
+| `outline.write` | all of the above plus `set_text`, `set_title`, `set_compile`, `set_compile_many`, `create_text_document`, `duplicate_text_document` | `None` |
+| `editor.control` | as above | the editor pane factory |
+
+`outline.write` includes reading, so declare one or the other, not both.
+
+A read-only outline does not have the writing methods — they are absent
+rather than disabled, so `hasattr(context.outline, "set_text")` tells you
+the truth and calling one raises `AttributeError` naming what you called.
+
+`context.selected_item_ids` arrives whatever you declared: it is what your
+workspace was opened on, the argument of the call rather than a view of the
+manuscript.
+
+Ask for the least you need. What a plugin may touch is shown to the reader
+who installs it, and a workspace that only compares scenes should not be
+able to rewrite the book.
+
 `PluginSettingsContext.capability` is how a panel reaches a UI service, and
 what it hands back is scoped to you: routing exposes only the page types
 **you** registered and raises `PluginScopeError` for anyone else's. The
 scoping is enforced by the host rather than trusted to you.
+
+## `conversion` — converting markup
+
+```python
+def register(api):
+    convert = api.capability("conversion")          # declare it in requires
+    html = convert.convert(text, "text/markdown", "text/html")
+```
+
+Ask for a route, get the result. **Whatever other plugins have added to that
+conversion is applied for you**, so your rendering matches every other
+rendering of the same markup — and you never learn which plugins those were,
+or that any exist.
+
+That is the point of taking it rather than calling a Markdown library
+yourself. A renderer doing its own conversion silently opts out of every
+addition, and the same source then renders differently in your view than in
+an export.
+
+| call | answers |
+|---|---|
+| `convert(text, source, target, page_type=None)` | the converted text, or raises `UnknownRoute` |
+| `can_convert(source, target)` | whether that route exists |
+| `routes()` | every route this Manuskript performs |
+
+Which routes exist depends on the installation: a route whose library is not
+installed is not offered rather than offered and then failing, so
+`can_convert` is worth asking before you rely on one. Handle its absence the
+way you would handle a missing library yourself — show the source plainly,
+say the view is unavailable — rather than treating it as an error.
+
+If you own a format of your own — a DSL your page type parses — converting
+*that* into Markdown remains yours; nobody else knows it. Hand the Markdown
+over from there.
+
+## Conversion augmentations
+
+Something one format should additionally mean when it becomes another.
+
+```python
+registrar.register_conversion_augmentation(ConversionAugmentationContribution(
+    descriptor=ExtensionDescriptor(id="vendor.lists", name="Plain lists"),
+    source_format="text/markdown",
+    target_format="text/html",
+    augmentation_factory=PlainLists,
+))
+```
+
+**The route is data.** There is no contribution kind per destination, and no
+format is named anywhere in this contract — that would make one format
+privileged and every other reachable only through something more generic, so
+that plugins would face two classes of media type, native and not. Augmenting
+Markdown to BBCode is the same act, through the same kind, as augmenting
+Markdown to HTML.
+
+`augmentation_factory` returns whatever the engine performing that route
+accepts, and what that is belongs to the route rather than to this contract.
+For Markdown to HTML the conversion is python-markdown, so it is a
+`markdown.Extension`; your addition participates in the conversion rather
+than smuggling tags through the source.
+
+| field | means |
+|---|---|
+| `source_format` / `target_format` | the route, from the same vocabulary your manifest declares |
+| `augmentation_factory` | builds the addition, called once per rendering |
+| `page_types` | empty applies to every document; naming page types narrows it |
+| `priority` | higher runs first, for an addition that must see the source before another |
+| `applies_to(request)` | answers whether it belongs in that conversion — the route and the scope were both declared here, so the question is answered here |
+
+Whoever performs a conversion describes it as a `ConversionRequest` and asks
+what applies. An addition that will not build is reported in the status bar
+and skipped: your fault must not be the difference between an export
+happening and not.
+
+### One widget per window
+
+Manuskript can show one project in several windows at once. A project panel
+is **declared once** for the application and **built once per window**, so:
+
+- `widget_factory` is called once for every window that opens your panel.
+  Two calls means two widgets, both live, both showing the same project.
+- Keep per-widget state on the widget. Module-level or class-level state is
+  shared by every window and will read as one window changing another.
+- Your widget may be **reparented** after it is built: moved to another
+  window, or torn off into a floating dock. Do not assume the parent you
+  were given is the parent you keep, and do not cache `widget.window()`.
+- Both copies see the same models and the same file namespace, because those
+  belong to the project rather than to a window. Editing in one is editing
+  the project.
+
+Settings panels are built per plugin-manager dialog, and each window has its
+own dialog, so the same applies to them.
 
 ---
 

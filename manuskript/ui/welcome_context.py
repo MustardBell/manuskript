@@ -7,7 +7,7 @@ from manuskript.services.project_templates import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass
 class WelcomeContext:
     project_manager: object
     project_history: object
@@ -16,14 +16,30 @@ class WelcomeContext:
     set_window_title: Callable[[str], None]
     template_initializer: ProjectTemplateInitializer
 
+    def dispose(self):
+        self.project_manager = None
+        self.project_history = None
+        self.recent_menu = None
+        self.consume_auto_load_project = None
+        self.set_window_title = None
+        self.template_initializer = None
 
-def welcome_context_for(window, settings, project_history):
+
+def welcome_context_for(window, settings, project_history, runtime):
+    """Adapt the window to what the welcome screen needs.
+
+    Takes the project runtime for the models a new project is filled in
+    with. Read from it when asked rather than captured, because this is
+    built before any project exists and a template fills in whichever
+    models the next project brings.
+    """
     def current_template_models():
+        models = runtime.models
         return ProjectTemplateModels(
-            flat_data=window.mdlFlatData,
-            labels=window.mdlLabels,
-            statuses=window.mdlStatus,
-            outline=window.mdlOutline,
+            flat_data=models.flat_data,
+            labels=models.labels,
+            statuses=models.statuses,
+            outline=models.outline,
         )
 
     return WelcomeContext(

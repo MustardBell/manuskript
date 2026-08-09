@@ -36,7 +36,7 @@ from manuskript.media_types import (
 LOGGER = logging.getLogger(__name__)
 
 #: Bump when adding a migration, and append the step to MIGRATIONS.
-PREFERENCES_VERSION = 1
+PREFERENCES_VERSION = 2
 
 VERSION_KEY = "preferencesVersion"
 
@@ -62,6 +62,35 @@ LEGACY_MEDIA_TYPES = {
 
 #: The separator legacy route identifiers joined on.
 LEGACY_SEPARATOR = ":"
+
+#: The fixed keys one window's layout used to occupy, and where each
+#: belongs under the per-window shape. Spelled out rather than imported:
+#: a migration has to keep working after the new store is renamed.
+LEGACY_WINDOW_KEYS = {
+    "geometry": "workspace/windows/main/geometry",
+    "windowState": "workspace/windows/main/windowState",
+    "splitterRedacH":
+        "workspace/windows/main/splitters/splitterRedacH",
+    "splitterRedacV":
+        "workspace/windows/main/splitters/splitterRedacV",
+    "metadataState":
+        "workspace/windows/main/panelState/core.metadata",
+    "revisionsState":
+        "workspace/windows/main/panelState/core.metadata.revisions",
+}
+
+#: Dock visibility was one map under a single key.
+LEGACY_DOCKS_KEY = "docks"
+
+#: The panel titles the toolbar saved visibility against, and the panel
+#: ids they became. Matching on button text is what the new shape stops
+#: doing, so the last read of those titles happens here.
+LEGACY_PANEL_TITLES = {
+    "Book summary": "core.book-summary",
+    "Project tree": "core.project-tree",
+    "Metadata": "core.metadata",
+    "Story line": "core.storyline",
+}
 
 
 def _v0_to_v1(settings):
@@ -146,9 +175,72 @@ def _decode(value):
     return decoded if isinstance(decoded, dict) else {}
 
 
+def _v1_to_v2(settings):
+    """Window layout moves under the window it belongs to.
+
+    One window's layout used to occupy eight fixed keys, which a second
+    window would have written straight over. Everything found there is
+    filed under the primary window, so a layout arranged over years
+    survives the move.
+    """
+    for legacy, moved in LEGACY_WINDOW_KEYS.items():
+        if settings.contains(legacy):
+            settings.setValue(moved, settings.value(legacy))
+            settings.remove(legacy)
+
+    if settings.contains(LEGACY_DOCKS_KEY):
+        docks = _decode(settings.value(LEGACY_DOCKS_KEY))
+        for name, visible in docks.items():
+            settings.setValue(
+                "workspace/windows/main/docks/{}".format(name),
+                bool(visible),
+            )
+        settings.remove(LEGACY_DOCKS_KEY)
+
+    _migrate_panel_visibility(settings)
+    settings.setValue("workspace/version", 1)
+    return settings
+
+
+def _migrate_panel_visibility(settings):
+    """Toolbar entries become panel ids.
+
+    Visibility was stored as (group, button text, shown) triples and
+    matched back by text, so renaming or translating a panel lost it.
+    Titles are read one last time here and never again.
+    """
+    if not settings.contains("toolbar"):
+        return
+    raw = settings.value("toolbar")
+    settings.remove("toolbar")
+    for entry in raw if isinstance(raw, (list, tuple)) else ():
+        if not isinstance(entry, (list, tuple)) or len(entry) != 3:
+            continue
+        _group, title, shown = entry
+        panel_id = LEGACY_PANEL_TITLES.get(
+            str(title).replace("&", "")
+        )
+        if panel_id is None:
+            # A panel this Manuskript no longer has. Dropping it is
+            # right: nothing can show it, and keeping the row would
+            # only preserve a name.
+            continue
+        settings.setValue(
+            "workspace/windows/main/panels/{}".format(panel_id),
+            _as_bool(shown),
+        )
+
+
+def _as_bool(value):
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "0", "false", "no")
+    return bool(value)
+
+
 #: Ordered (from_version, callable) steps. Each upgrades in place.
 MIGRATIONS = (
     (0, _v0_to_v1),
+    (1, _v1_to_v2),
 )
 
 

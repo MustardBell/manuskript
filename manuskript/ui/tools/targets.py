@@ -1,6 +1,8 @@
 import locale
+from dataclasses import dataclass
+from typing import Any, Callable
 
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import QTimer
 
@@ -9,11 +11,26 @@ from manuskript.functions import appPath
 from manuskript.ui.tools.targets_ui import Ui_targets
 
 
+@dataclass(frozen=True)
+class TargetsContext:
+    """Project data and workspace session state shown by TargetsDialog."""
+
+    outline: Callable[[], Any]
+    writing_session: Any
+
+    @classmethod
+    def for_runtime(cls, runtime, writing_session):
+        return cls(
+            outline=lambda: runtime.models.outline,
+            writing_session=writing_session,
+        )
+
+
 class TargetsDialog(QWidget, Ui_targets):
 
-    def __init__(self, parent=None, mw=None):
-        QWidget.__init__(self)
-        self.mw = parent
+    def __init__(self, context, parent=None):
+        QWidget.__init__(self, parent)
+        self.context = context
         self.setupUi(self)
         iconPic = appPath("icons/Manuskript/icon-64px.png")
         self.setWindowIcon(QIcon(iconPic))
@@ -27,7 +44,7 @@ class TargetsDialog(QWidget, Ui_targets):
         self.timer.start(2000)
 
     def getDraftStats(self):
-        item = self.mw.mdlOutline.rootItem
+        item = self.context.outline().rootItem
 
         wc = item.data(Outline.wordCount)
         goal = item.data(Outline.goal)
@@ -41,7 +58,7 @@ class TargetsDialog(QWidget, Ui_targets):
 
     def resetSession(self):
         wc, _, _ = self.getDraftStats()
-        self.mw.sessionStartWordCount = wc 
+        self.context.writing_session.reset(wc)
         self.tick()
 
     @staticmethod
@@ -56,7 +73,7 @@ class TargetsDialog(QWidget, Ui_targets):
         # limit to 0-100 for display
         self.draft_progress_bar.setValue(self.progress_bar_value(progress))
 
-        session_wc = wc - int(self.mw.sessionStartWordCount)
+        session_wc = self.context.writing_session.words_written(wc)
 
         self.session_wc_label.setText(locale.format_string("%d", session_wc, grouping=True))
         if self.session_target.value() == 0:

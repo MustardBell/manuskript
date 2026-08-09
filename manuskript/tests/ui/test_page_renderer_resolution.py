@@ -114,22 +114,22 @@ def ids(candidates):
 
 def test_an_exact_match_outranks_anything_standing_in():
     subject = service(
-        renderer("stand-in", [MARKDOWN]),
-        renderer("exact", [BBCODE]),
+        renderer("vendor.stand-in", [MARKDOWN]),
+        renderer("vendor.exact", [BBCODE]),
     )
 
     assert ids(subject.renderers_for(PAGE_TYPE, BBCODE)) == [
-        "exact", "stand-in",
+        "vendor.exact", "vendor.stand-in",
     ]
 
 
 def test_priority_decides_between_equally_exact_renderers():
     subject = service(
-        renderer("low", [BBCODE], priority=1),
-        renderer("high", [BBCODE], priority=9),
+        renderer("vendor.low", [BBCODE], priority=1),
+        renderer("vendor.high", [BBCODE], priority=9),
     )
 
-    assert ids(subject.renderers_for(PAGE_TYPE, BBCODE))[0] == "high"
+    assert ids(subject.renderers_for(PAGE_TYPE, BBCODE))[0] == "vendor.high"
 
 
 def test_the_chain_is_walked_in_order():
@@ -139,22 +139,22 @@ def test_the_chain_is_walked_in_order():
         "vendor.sv",
     )
     subject = service(
-        renderer("generic-markdown", [MARKDOWN]),
-        renderer("generic-bbcode", [BBCODE]),
-        renderer("sv", ["text/vnd.sv+bbcode"]),
+        renderer("vendor.generic-markdown", [MARKDOWN]),
+        renderer("vendor.generic-bbcode", [BBCODE]),
+        renderer("vendor.sv", ["text/vnd.sv+bbcode"]),
         media_types=media_types,
     )
 
     # Its own type, then its declared base, then core's default.
     assert ids(subject.renderers_for(PAGE_TYPE, "text/vnd.sv+bbcode")) == [
-        "sv", "generic-bbcode", "generic-markdown",
+        "vendor.sv", "vendor.generic-bbcode", "vendor.generic-markdown",
     ]
 
 
 def test_a_renderer_appears_once_however_many_steps_match():
-    subject = service(renderer("both", [BBCODE, MARKDOWN]))
+    subject = service(renderer("vendor.both", [BBCODE, MARKDOWN]))
 
-    assert ids(subject.renderers_for(PAGE_TYPE, BBCODE)) == ["both"]
+    assert ids(subject.renderers_for(PAGE_TYPE, BBCODE)) == ["vendor.both"]
 
 
 # ------------------------------------------- nothing looks up a plugin
@@ -179,7 +179,7 @@ def test_no_producer_resolves_to_nothing_rather_than_raising():
     media_types.declare(
         MediaType(FB2, "FictionBook 2", textual=False), "vendor.fb2",
     )
-    subject = service(renderer("markdown", [MARKDOWN]), media_types=media_types)
+    subject = service(renderer("vendor.markdown", [MARKDOWN]), media_types=media_types)
 
     # FB2 is not textual, so nothing stands in for it, and nobody produces
     # it. That is a promise waiting on a plugin, not a failure.
@@ -192,7 +192,7 @@ def test_an_unassigned_route_includes_the_page_source_unrendered():
     media_types.declare(
         MediaType(FB2, "FictionBook 2", textual=False), "vendor.fb2",
     )
-    subject = service(renderer("markdown", [MARKDOWN]), media_types=media_types)
+    subject = service(renderer("vendor.markdown", [MARKDOWN]), media_types=media_types)
 
     document = subject.export_document(Item("raw page source"), FB2)
 
@@ -211,7 +211,7 @@ def test_a_page_type_with_no_renderer_at_all_is_not_an_error():
 # ------------------------------------------------------- the render format
 
 def test_a_stand_in_renderer_is_asked_for_what_it_can_make():
-    subject = service(renderer("markdown-only", [MARKDOWN]))
+    subject = service(renderer("vendor.markdown-only", [MARKDOWN]))
 
     _renderer, render_format = subject.resolve_renderer(PAGE_TYPE, HTML)
 
@@ -220,7 +220,7 @@ def test_a_stand_in_renderer_is_asked_for_what_it_can_make():
 
 
 def test_an_exact_renderer_is_asked_for_the_target():
-    subject = service(renderer("bbcode", [BBCODE, MARKDOWN]))
+    subject = service(renderer("vendor.bbcode", [BBCODE, MARKDOWN]))
 
     _renderer, render_format = subject.resolve_renderer(PAGE_TYPE, BBCODE)
 
@@ -278,11 +278,11 @@ def test_a_corrupted_fallback_loop_does_not_stop_an_export():
     # What a hand-edited preferences file could describe.
     registry._fallbacks[HTML] = BBCODE
     registry._fallbacks[BBCODE] = HTML
-    subject = service(renderer("html", [HTML]), media_types=registry)
+    subject = service(renderer("vendor.html", [HTML]), media_types=registry)
 
     # Reported, then the exact type is used alone rather than refusing.
     assert subject.fallback_chain(HTML) == (HTML,)
-    assert ids(subject.renderers_for(PAGE_TYPE, HTML)) == ["html"]
+    assert ids(subject.renderers_for(PAGE_TYPE, HTML)) == ["vendor.html"]
 
 
 # ------------------------------------------------------------- persistence

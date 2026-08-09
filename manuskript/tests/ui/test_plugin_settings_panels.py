@@ -12,6 +12,9 @@ from manuskript.services.plugin_preferences import (
     InMemoryPluginPreferences,
 )
 from manuskript.tests.plugins.test_runtime import create_plugin
+from manuskript.services.plugin_contributions import (
+    PluginContributionService,
+)
 from manuskript.ui.plugins.manager import PluginManagerDialog
 from manuskript.ui.plugins.page_routing import PageRoutingGateway
 from manuskript.ui.plugins.page_types import PageTypeService
@@ -159,7 +162,7 @@ def build_dialog(runtime, routes=ROUTES):
         )
 
     return PluginManagerDialog(
-        runtime,
+        PluginContributionService(runtime),
         option_store=store,
         settings_context_provider=context,
     )

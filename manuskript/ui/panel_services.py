@@ -1,0 +1,105 @@
+"""What a feature panel needs from the application around it.
+
+Panel controllers used to take the whole window, which made every one of
+them able to reach anything: models, any widget, navigation history,
+dialog parenting, translation. Two of those needs are shared by all of
+them and have nothing to do with any particular panel, so they are named
+here and passed in.
+
+Neither hides a window from view for its own sake. The point is that a
+controller given these can be read -- and tested -- without knowing what
+else a window happens to have.
+"""
+
+from PyQt5.QtWidgets import QColorDialog, QDialog, QMessageBox
+
+
+class PanelNavigation:
+    """Records where the person just went, for the history.
+
+    Talks to the workspace selection-history policy rather than to a window.
+    Whether a panel selection is empty is part of the event; the shared
+    policy decides whether the next stable selection replaces it.
+    """
+
+    def __init__(self, history):
+        self._history = history
+
+    def record(self, entry, selection_empty):
+        self._history.record_selection(entry, selection_empty)
+
+
+class PanelDialogs:
+    """Asks the person things, and translates what they are asked.
+
+    A window appeared throughout the controllers as nothing more than
+    something to parent a dialog to and something to call ``tr`` on.
+    Naming that keeps a controller from being handed everything else a
+    window can do.
+    """
+
+    def __init__(self, parent, translate):
+        self._parent = parent
+        self._translate = translate
+
+    @property
+    def parent(self):
+        """The widget dialogs belong to. Rarely what a caller wants."""
+        return self._parent
+
+    def translate(self, text):
+        return self._translate(text)
+
+    def confirm(self, title, text, default_no=False):
+        """Yes or no, defaulting to the safer answer where asked."""
+        arguments = {}
+        if default_no:
+            arguments["defaultButton"] = QMessageBox.No
+        return QMessageBox.warning(
+            self._parent,
+            self.translate(title),
+            self.translate(text),
+            QMessageBox.Yes | QMessageBox.No,
+            **arguments,
+        ) == QMessageBox.Yes
+
+    def warn(self, title, text):
+        QMessageBox.warning(
+            self._parent,
+            self.translate(title),
+            self.translate(text),
+        )
+
+    def inform(self, title, text):
+        QMessageBox.information(
+            self._parent,
+            self.translate(title),
+            self.translate(text),
+        )
+
+    def choose_color(self, initial):
+        """A colour, or None when the person did not choose one."""
+        color = QColorDialog.getColor(initial, self._parent)
+        return color if color.isValid() else None
+
+    def ask_name_and_value(self):
+        """A description and a value, or None if cancelled.
+
+        The dialog is here rather than in a controller because what it
+        needs from a window is only somewhere to belong.
+        """
+        from manuskript.ui import characterInfoDialog
+
+        dialog = QDialog(self._parent)
+        fields = characterInfoDialog.Ui_characterInfoDialog()
+        fields.setupUi(dialog)
+        if dialog.exec_() != QDialog.Accepted:
+            return None
+        return (
+            fields.descriptionLineEdit.text(),
+            fields.valueLineEdit.text(),
+        )
+
+    def dispose(self):
+        self._parent = None
+        self._translate = None

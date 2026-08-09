@@ -5,83 +5,70 @@ from manuskript.enums import Character, Plot
 class FlatDataProjectBinding:
     """Bind general-information and summary fields to flat project data."""
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, views, runtime):
+        self.views = views
+        self._runtime = runtime
+
+    @property
+    def models(self):
+        """The project's models, from the runtime that owns them."""
+        return self._runtime.models
 
     def bind(self, _connect):
-        window = self.window
-        for widget, column in [
-            (window.txtSummarySituation, 0),
-            (window.txtSummarySentence, 1),
-            (window.txtSummarySentence_2, 1),
-            (window.txtSummaryPara, 2),
-            (window.txtSummaryPara_2, 2),
-            (window.txtPlotSummaryPara, 2),
-            (window.txtSummaryPage, 3),
-            (window.txtSummaryPage_2, 3),
-            (window.txtPlotSummaryPage, 3),
-            (window.txtSummaryFull, 4),
-            (window.txtPlotSummaryFull, 4),
-        ]:
-            widget.setModel(window.mdlFlatData)
+        models = self.models
+        for widget, column in self.views.summary_fields:
+            widget.setModel(models.flat_data)
             widget.setColumn(column)
             widget.setCurrentModelIndex(
-                window.mdlFlatData.index(1, column)
+                models.flat_data.index(1, column)
             )
 
-        for widget, column in [
-            (window.txtGeneralTitle, 0),
-            (window.txtGeneralSubtitle, 1),
-            (window.txtGeneralSerie, 2),
-            (window.txtGeneralVolume, 3),
-            (window.txtGeneralGenre, 4),
-            (window.txtGeneralLicense, 5),
-            (window.txtGeneralAuthor, 6),
-            (window.txtGeneralEmail, 7),
-        ]:
-            widget.setModel(window.mdlFlatData)
+        for widget, column in self.views.general_fields:
+            widget.setModel(models.flat_data)
             widget.setColumn(column)
             widget.setCurrentModelIndex(
-                window.mdlFlatData.index(0, column)
+                models.flat_data.index(0, column)
             )
 
 
 class OutlineSelectionProjectBinding:
     """Route outline selections to their project-scoped consumers."""
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, views):
+        self.views = views
 
     def bind(self, connect):
-        window = self.window
+        views = self.views
+        outline_selection = views.outline_tree.selectionModel()
+        project_selection = views.project_tree.selectionModel()
         for signal, slot in [
             (
-                window.treeOutlineOutline.selectionModel().selectionChanged,
-                window.outlineChanged,
+                outline_selection.selectionChanged,
+                views.outline_changed,
             ),
             (
-                window.treeOutlineOutline.selectionModel().selectionChanged,
-                window.outlineItemEditor.selectionChanged,
+                outline_selection.selectionChanged,
+                views.outline_item_editor.selectionChanged,
             ),
             (
-                window.treeOutlineOutline.clicked,
-                window.outlineItemEditor.selectionChanged,
+                views.outline_tree.clicked,
+                views.outline_item_editor.selectionChanged,
             ),
             (
-                window.treeRedacOutline.selectionModel().selectionChanged,
-                window.redacOutlineChanged,
+                project_selection.selectionChanged,
+                views.project_tree_changed,
             ),
             (
-                window.treeRedacOutline.selectionModel().selectionChanged,
-                window.redacMetadata.selectionChanged,
+                project_selection.selectionChanged,
+                views.metadata.selectionChanged,
             ),
             (
-                window.treeRedacOutline.clicked,
-                window.redacMetadata.selectionChanged,
+                views.project_tree.clicked,
+                views.metadata.selectionChanged,
             ),
             (
-                window.treeRedacOutline.selectionModel().selectionChanged,
-                window.mainEditor.selectionChanged,
+                project_selection.selectionChanged,
+                views.document_area.selectionChanged,
             ),
         ]:
             connect(signal, slot, F.AUC)
@@ -90,64 +77,74 @@ class OutlineSelectionProjectBinding:
 class DebugProjectBinding:
     """Bind the optional debug views to the active project models."""
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, views, runtime):
+        self.views = views
+        self._runtime = runtime
+
+    @property
+    def models(self):
+        """The project's models, from the runtime that owns them."""
+        return self._runtime.models
 
     def bind(self, connect):
-        window = self.window
-        window.mdlFlatData.setVerticalHeaderLabels(
+        views = self.views
+        models = self.models
+        models.flat_data.setVerticalHeaderLabels(
             ["General info", "Summary"]
         )
-        window.tblDebugFlatData.setModel(window.mdlFlatData)
-        window.tblDebugPersos.setModel(window.mdlCharacter)
-        window.tblDebugPersosInfos.setModel(window.mdlCharacter)
+        views.flat_data.setModel(models.flat_data)
+        views.characters.setModel(models.characters)
+        views.character_info.setModel(models.characters)
         connect(
-            window.tblDebugPersos.selectionModel().currentChanged,
+            views.characters.selectionModel().currentChanged,
             self._show_current_character,
             F.AUC,
         )
 
-        window.tblDebugPlots.setModel(window.mdlPlots)
-        window.tblDebugPlotsPersos.setModel(window.mdlPlots)
-        window.tblDebugSubPlots.setModel(window.mdlPlots)
+        views.plots.setModel(models.plots)
+        views.plot_characters.setModel(models.plots)
+        views.plot_steps.setModel(models.plots)
         connect(
-            window.tblDebugPlots.selectionModel().currentChanged,
+            views.plots.selectionModel().currentChanged,
             self._show_current_plot_characters,
             F.AUC,
         )
         connect(
-            window.tblDebugPlots.selectionModel().currentChanged,
+            views.plots.selectionModel().currentChanged,
             self._show_current_plot_steps,
             F.AUC,
         )
-        window.treeDebugWorld.setModel(window.mdlWorld)
-        window.treeDebugOutline.setModel(window.mdlOutline)
-        window.lstDebugLabels.setModel(window.mdlLabels)
-        window.lstDebugStatus.setModel(window.mdlStatus)
+        views.world.setModel(models.world)
+        views.outline.setModel(models.outline)
+        views.labels.setModel(models.labels)
+        views.statuses.setModel(models.statuses)
 
     def _show_current_character(self, *_args):
-        window = self.window
-        window.tblDebugPersosInfos.setRootIndex(
-            window.mdlCharacter.index(
-                window.tblDebugPersos.selectionModel().currentIndex().row(),
+        views = self.views
+        models = self.models
+        views.character_info.setRootIndex(
+            models.characters.index(
+                views.characters.selectionModel().currentIndex().row(),
                 Character.name,
             )
         )
 
     def _show_current_plot_characters(self, *_args):
-        window = self.window
-        window.tblDebugPlotsPersos.setRootIndex(
-            window.mdlPlots.index(
-                window.tblDebugPlots.selectionModel().currentIndex().row(),
+        views = self.views
+        models = self.models
+        views.plot_characters.setRootIndex(
+            models.plots.index(
+                views.plots.selectionModel().currentIndex().row(),
                 Plot.characters,
             )
         )
 
     def _show_current_plot_steps(self, *_args):
-        window = self.window
-        window.tblDebugSubPlots.setRootIndex(
-            window.mdlPlots.index(
-                window.tblDebugPlots.selectionModel().currentIndex().row(),
+        views = self.views
+        models = self.models
+        views.plot_steps.setRootIndex(
+            models.plots.index(
+                views.plots.selectionModel().currentIndex().row(),
                 Plot.steps,
             )
         )

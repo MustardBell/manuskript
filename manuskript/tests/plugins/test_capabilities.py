@@ -10,7 +10,10 @@ import json
 import pytest
 
 from manuskript.plugins.capabilities import (
+    CAPABILITY_EDITOR_CONTROL,
     CAPABILITY_MARKUP_BBCODE,
+    CAPABILITY_OUTLINE_READ,
+    CAPABILITY_OUTLINE_WRITE,
     capability_catalogue,
     grant,
 )
@@ -78,6 +81,44 @@ def test_the_catalogue_describes_what_it_offers():
     assert entry.name == CAPABILITY_MARKUP_BBCODE
     assert entry.summary
     assert callable(entry.factory)
+
+
+def test_a_workspace_can_declare_what_it_touches():
+    """The three exist in the catalogue, or a plugin declaring one would be
+    refused at load for asking for something core does not have.
+    """
+    catalogue = capability_catalogue()
+
+    for name in (
+        CAPABILITY_OUTLINE_READ,
+        CAPABILITY_OUTLINE_WRITE,
+        CAPABILITY_EDITOR_CONTROL,
+    ):
+        assert name in catalogue, name
+        assert catalogue[name].summary
+        # Handed over by the workspace host, which is the only thing that
+        # can scope them to a window and a project.
+        assert catalogue[name].deferred
+
+    granted, missing = grant([CAPABILITY_OUTLINE_WRITE])
+
+    assert missing == ()
+    assert granted == {}
+
+
+def test_the_runtime_answers_what_a_plugin_declared(tmp_path):
+    """One place answers it: two hosts hand services over, and each used to
+    read the manifest itself.
+    """
+    write_plugin(tmp_path, requires=[CAPABILITY_MARKUP_BBCODE])
+    runtime = runtime_for(tmp_path, "needs.capability")
+
+    assert runtime.declares("needs.capability", CAPABILITY_MARKUP_BBCODE)
+    assert not runtime.declares(
+        "needs.capability", CAPABILITY_OUTLINE_WRITE,
+    )
+    # A plugin core has no record of has declared nothing.
+    assert not runtime.declares("never.heard.of.it", CAPABILITY_MARKUP_BBCODE)
 
 
 def test_granting_reports_what_is_missing_and_builds_nothing():

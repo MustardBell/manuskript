@@ -7,7 +7,13 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QBrush, QTextCursor, QColor, QFont, QSyntaxHighlighter
 from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat
 
-import manuskript.models.references as Ref
+from manuskript.models.reference_identity import (
+    CHARACTER_REFERENCE_KIND,
+    PLOT_REFERENCE_KIND,
+    REFERENCE_PATTERN,
+    TEXT_REFERENCE_KIND,
+    WORLD_REFERENCE_KIND,
+)
 import manuskript.ui.style as S
 from manuskript import functions as F
 
@@ -26,6 +32,20 @@ class BasicHighlighter(QSyntaxHighlighter):
         self.markupColor = QColor(S.textLight)
         self.linkColor = QColor(S.link)
         self.spellingErrorColor = QColor(Qt.red)
+        self.referenceHighlightColors = {
+            TEXT_REFERENCE_KIND: QColor(
+                F.mixColors(QColor(Qt.blue).name(), S.window, .3)
+            ),
+            CHARACTER_REFERENCE_KIND: QColor(
+                F.mixColors(QColor(Qt.yellow).name(), S.window, .3)
+            ),
+            PLOT_REFERENCE_KIND: QColor(
+                F.mixColors(QColor(Qt.red).name(), S.window, .3)
+            ),
+            WORLD_REFERENCE_KIND: QColor(
+                F.mixColors(QColor(Qt.green).name(), S.window, .3)
+            ),
+        }
 
         # Matches during checking can be separated by their type (all of them listed here):
         # https://languagetool.org/development/api/org/languagetool/rules/ITSIssueType.html
@@ -62,10 +82,14 @@ class BasicHighlighter(QSyntaxHighlighter):
         }
 
     def setDefaultBlockFormat(self, bf):
+        if bf == self._defaultBlockFormat:
+            return
         self._defaultBlockFormat = bf
         self.rehighlight()
 
     def setDefaultCharFormat(self, cf):
+        if cf == self._defaultCharFormat:
+            return
         self._defaultCharFormat = cf
         self.rehighlight()
 
@@ -150,19 +174,13 @@ class BasicHighlighter(QSyntaxHighlighter):
         """
 
         # References
-        for txt in re.finditer(Ref.RegEx, text):
+        for txt in re.finditer(REFERENCE_PATTERN, text):
             fmt = self.format(txt.start())
             fmt.setFontFixedPitch(True)
             fmt.setFontWeight(QFont.DemiBold)
-
-            if txt.group(1) == Ref.TextLetter:
-                fmt.setBackground(QBrush(Ref.TextHighlightColor))
-            elif txt.group(1) == Ref.CharacterLetter:
-                fmt.setBackground(QBrush(Ref.CharacterHighlightColor))
-            elif txt.group(1) == Ref.PlotLetter:
-                fmt.setBackground(QBrush(Ref.PlotHighlightColor))
-            elif txt.group(1) == Ref.WorldLetter:
-                fmt.setBackground(QBrush(Ref.WorldHighlightColor))
+            color = self.referenceHighlightColors.get(txt.group(1))
+            if color is not None:
+                fmt.setBackground(QBrush(color))
 
             self.setFormat(txt.start(),
                            txt.end() - txt.start(),

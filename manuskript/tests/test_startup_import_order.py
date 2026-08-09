@@ -79,6 +79,49 @@ def test_the_preferences_migration_stays_clear_of_the_exporter_package():
     ), sorted(name for name in loaded if name.startswith("manuskript."))
 
 
+#: Modules that must import on their own, as the first manuskript module a
+#: process loads. Add to this rather than relying on something else being
+#: imported first.
+STANDS_ALONE = (
+    "manuskript.converters.conversion_service",
+    "manuskript.models.reference_identity",
+    "manuskript.models.references",
+    "manuskript.plugins",
+    "manuskript.plugins.runtime",
+    "manuskript.plugins.capabilities",
+    "manuskript.media_types",
+    "manuskript.preferences_migrations",
+    "manuskript.services.reference_service",
+)
+
+
+def imports_alone(module):
+    """Whether a fresh interpreter can import ``module`` and nothing else
+    first, or the error it gives instead."""
+    result = subprocess.run(
+        [sys.executable, "-c", "import {}".format(module)],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0, result.stderr
+
+
+def test_no_module_needs_another_one_imported_before_it():
+    """A cycle between two modules is invisible while something else always
+    imports one of them first -- a test session, or the entry point -- and
+    then fails for whoever imports the other one directly. Two of these
+    reached each other: the conversion service reads the plugin API, and the
+    plugin runtime builds a conversion service.
+    """
+    failures = {}
+    for module in STANDS_ALONE:
+        ok, error = imports_alone(module)
+        if not ok:
+            failures[module] = error.strip().splitlines()[-1:]
+
+    assert not failures, failures
+
+
 def test_the_guard_would_notice_the_regression():
     # Proof the measurement works: this module really does reach ui.style,
     # so a passing result above is a fact about main rather than a fact

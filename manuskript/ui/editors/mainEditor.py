@@ -14,6 +14,7 @@ from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.fullScreenEditor import fullScreenEditor
 from manuskript.ui.editors.mainEditor_ui import Ui_mainEditor
 from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationBinding,
     MarkdownPresentationMode,
 )
 
@@ -23,6 +24,8 @@ except:
     pass
 
 import logging
+
+from manuskript import timing
 LOGGER = logging.getLogger(__name__)
 
 class mainEditor(QWidget, Ui_mainEditor):
@@ -77,6 +80,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._contentStack.addWidget(self.tabSplitter)
         self.verticalLayout.insertWidget(0, self._contentStack, 1)
         self._pluginWorkspace = None
+        self._focus_source = None
         self._nativeFooterWidgets = (
             self.btnGoUp,
             self.btnRedacFolderText,
@@ -93,12 +97,17 @@ class mainEditor(QWidget, Ui_mainEditor):
 
         self.editor_context = None
         self.settings = None
-        self._markdownPresentationState = None
         self._markdownModes = (
             MarkdownPresentationMode.SOURCE,
             MarkdownPresentationMode.FORMATTED_SOURCE,
             MarkdownPresentationMode.LIVE_PREVIEW,
             MarkdownPresentationMode.READING,
+        )
+        self._markdownPresentationBinding = MarkdownPresentationBinding(
+            set_enabled=self.cmbMarkdownMode.setEnabled,
+            state_changed=self._announceMarkdownPresentationState,
+            sync_mode=self.syncMarkdownPresentationMode,
+            sync_allowed_modes=self.syncMarkdownPresentationModes,
         )
         self.cmbMarkdownMode.setEnabled(False)
 
@@ -140,6 +149,10 @@ class mainEditor(QWidget, Ui_mainEditor):
             btn.setToolTip(btn.text())
             btn.setText("")
 
+    def set_focus_source(self, focus_source):
+        self._focus_source = focus_source
+        self.tabSplitter.set_focus_source(focus_source)
+
     def set_context(self, context):
         self.editor_context = context
         if context.text_editor is not None:
@@ -156,34 +169,10 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.editor_context = None
 
     def attachMarkdownPresentationState(self, state):
-        if state is self._markdownPresentationState:
-            return
-        if self._markdownPresentationState is not None:
-            try:
-                self._markdownPresentationState.modeChanged.disconnect(
-                    self.syncMarkdownPresentationMode
-                )
-                (
-                    self._markdownPresentationState
-                    .allowedModesChanged.disconnect(
-                        self.syncMarkdownPresentationModes
-                    )
-                )
-            except (RuntimeError, TypeError):
-                pass
+        self._markdownPresentationBinding.attach(state)
 
-        self._markdownPresentationState = state
-        self.cmbMarkdownMode.setEnabled(state is not None)
+    def _announceMarkdownPresentationState(self, state):
         self.activeMarkdownPresentationStateChanged.emit(state)
-        if state is None:
-            return
-
-        state.modeChanged.connect(self.syncMarkdownPresentationMode)
-        state.allowedModesChanged.connect(
-            self.syncMarkdownPresentationModes
-        )
-        self.syncMarkdownPresentationModes(state.allowed_modes)
-        self.syncMarkdownPresentationMode(state.mode)
 
     def _currentMarkdownPresentationState(self):
         editor = self.currentEditor()
@@ -194,12 +183,9 @@ class mainEditor(QWidget, Ui_mainEditor):
         )
 
     def setMarkdownPresentationMode(self, index):
-        if (
-            self._markdownPresentationState is None
-            or not 0 <= index < len(self._markdownModes)
-        ):
+        if not 0 <= index < len(self._markdownModes):
             return
-        self._markdownPresentationState.set_mode(
+        self._markdownPresentationBinding.set_mode(
             self._markdownModes[index]
         )
 
@@ -223,18 +209,27 @@ class mainEditor(QWidget, Ui_mainEditor):
     ###############################################################################
 
     def currentTabWidget(self):
-        """Returns the tabSplitter that has focus."""
-        ts = self.tabSplitter
-        while ts:
-            if ts.focusTab == 1:
-                return ts.tab
-            else:
-                ts = ts.secondTab
+        """The tab area the person is working in.
 
-        # No tabSplitter has focus, something is strange.
-        # But probably not important.
-        # Let's return self.tabSplitter.tab anyway.
-        return self.tabSplitter.tab
+        Found by asking which area actually holds the focused widget,
+        which works whatever shape the editor is in. Following the chain
+        of neighbours could only describe a comb, and reported a divided
+        half as though it held documents.
+        """
+        ts = self.tabSplitter
+        while ts is not None:
+            if ts.focusTab != 1 and ts.secondTab is not None:
+                ts = ts.secondTab
+                continue
+            if ts.firstTab is not None:
+                # Its own half is divided, so the answer is in there.
+                ts = ts.firstTab
+                continue
+            return ts.tab
+        # No area claims focus, which should not happen; the first one is
+        # where a single-area editor always is.
+        leaves = self.allTabSplitters()
+        return leaves[0].tab if leaves else self.tabSplitter.tab
 
     def currentEditor(self, tabWidget=None):
         if tabWidget == None:
@@ -291,12 +286,13 @@ class mainEditor(QWidget, Ui_mainEditor):
         return r
 
     def allTabSplitters(self):
-        r = []
-        ts = self.tabSplitter
-        while ts:
-            r.append(ts)
-            ts = ts.secondTab
-        return r
+        """Every area that holds documents, in the order they appear.
+
+        A walk of the tree rather than of a chain: an area whose own half
+        has been divided holds no documents itself, and the areas inside
+        that half would be missed entirely by following neighbours.
+        """
+        return self.tabSplitter.leaves()
 
     ###############################################################################
     # SELECTION AND UPDATES
@@ -336,6 +332,13 @@ class mainEditor(QWidget, Ui_mainEditor):
             return
 
         title = self.getIndexTitle(index)
+        # Opening a document is a blocking milestone of its own: reopening
+        # the tabs a session left behind is most of what applying settings
+        # costs, and it is one span per document that answers why.
+        with timing.span("editor.open_document"):
+            return self._openDocument(index, newTab, tabWidget, title)
+
+    def _openDocument(self, index, newTab, tabWidget, title):
 
         if tabWidget == None:
             # no tabWidget specified, update all tabs of views that are a target
@@ -355,7 +358,11 @@ class mainEditor(QWidget, Ui_mainEditor):
             newTab = True
 
         if newTab or not tabWidget.count():
-            editor = editorWidget(self, self.editor_context)
+            editor = editorWidget(
+                self,
+                self.editor_context,
+                focus_source=self._focus_source,
+            )
             editor.setCurrentModelIndex(index)
             editor._tabWidget = tabWidget
             i = tabWidget.addTab(editor, editor.ellidedTitle(title))

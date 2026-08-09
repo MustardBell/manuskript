@@ -10,43 +10,102 @@ binding_module = importlib.import_module(
 )
 
 
-def make_window():
-    window = MagicMock()
-    window.mdlWorld.columnCount.return_value = 2
-    return window
+def make_controllers():
+    """Controllers expose only their models and typed panel contracts."""
+    characters = MagicMock()
+    plots = MagicMock()
+    world = MagicMock()
+    characters.models = MagicMock()
+    plots.models = MagicMock()
+    world.models = MagicMock()
+    characters.panel.fields = tuple(MagicMock() for _ in range(10))
+    plots.panel.fields = tuple(MagicMock() for _ in range(4))
+    world.panel.fields = tuple(MagicMock() for _ in range(4))
+    world.models.world.columnCount.return_value = 2
+    return characters, plots, world
+
+
+def make_binding():
+    controllers = make_controllers()
+    settings = MagicMock()
+    return (
+        ProjectFeatureBinding(*controllers, settings),
+        controllers,
+        settings,
+    )
 
 
 def test_project_feature_binding_installs_all_feature_models():
-    window = make_window()
+    binding, controllers, settings = make_binding()
+    characters, plots, world = controllers
     connect = MagicMock()
 
     with patch.object(
         binding_module,
         "outlineCharacterDelegate",
-        return_value=MagicMock(),
+        side_effect=lambda model, _parent: MagicMock(
+            mdlCharacter=model,
+        ),
     ), patch.object(
         binding_module,
         "plotDelegate",
         return_value=MagicMock(),
     ):
-        binding = ProjectFeatureBinding(window)
         binding.bind(connect)
 
-    window.lstCharacters.setCharactersModel.assert_called_once_with(
-        window.mdlCharacter
+    characters.panel.characters.setCharactersModel.assert_called_once_with(
+        characters.models.characters
     )
-    window.lstPlots.setPlotModel.assert_called_once_with(
-        window.mdlPlots,
-        settings=window.settingsManager,
+    plots.panel.plots.setPlotModel.assert_called_once_with(
+        plots.models.plots,
+        settings=settings,
     )
-    window.treeWorld.setModel.assert_called_once_with(window.mdlWorld)
+    world.panel.tree.setModel.assert_called_once_with(world.models.world)
     assert binding.bound
     assert connect.call_count >= 10
 
 
+def test_feature_bindings_resolve_replaced_models_on_every_bind():
+    """A binding must not retain the model set of the previous project."""
+    binding, controllers, _settings = make_binding()
+    characters, plots, world = controllers
+    first = characters.models.characters
+
+    with patch.object(
+        binding_module,
+        "outlineCharacterDelegate",
+        side_effect=lambda model, _parent: MagicMock(
+            mdlCharacter=model,
+        ),
+    ), patch.object(
+        binding_module,
+        "plotDelegate",
+        return_value=MagicMock(),
+    ):
+        binding.bind(MagicMock())
+        binding.unbind()
+        replacement = MagicMock()
+        characters.models.characters = replacement
+        plots.models.characters = replacement
+        binding.bind(MagicMock())
+
+    assert (
+        characters.panel.characters.setCharactersModel.call_args_list[0]
+        .args[0]
+    ) is first
+    assert (
+        characters.panel.characters.setCharactersModel.call_args_list[1]
+        .args[0]
+    ) is replacement
+    assert binding.bindings[1]._character_delegate.mdlCharacter is (
+        replacement
+    )
+    # Keep the composite reusable for its real owner.
+    binding.unbind()
+
+
 def test_project_feature_binding_resets_features_in_reverse_lifecycle():
-    window = make_window()
-    binding = ProjectFeatureBinding(window)
+    binding, _controllers, _settings = make_binding()
     for feature in binding.bindings:
         feature.bind = MagicMock()
         feature.unbind = MagicMock()
@@ -61,8 +120,7 @@ def test_project_feature_binding_resets_features_in_reverse_lifecycle():
 
 
 def test_project_feature_binding_rejects_double_binding():
-    window = make_window()
-    binding = ProjectFeatureBinding(window)
+    binding, _controllers, _settings = make_binding()
     for feature in binding.bindings:
         feature.bind = MagicMock()
 
@@ -73,8 +131,7 @@ def test_project_feature_binding_rejects_double_binding():
 
 
 def test_project_feature_binding_rolls_back_partial_install():
-    window = make_window()
-    binding = ProjectFeatureBinding(window)
+    binding, _controllers, _settings = make_binding()
     first, second, third = binding.bindings
     for feature in binding.bindings:
         feature.bind = MagicMock()

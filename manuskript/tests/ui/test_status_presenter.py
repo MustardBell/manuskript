@@ -10,3 +10,10 @@ def test_status_presenter_renders_critical_message(MW):
     assert not MW.statusLabel.isHidden()
 
     MW.statusLabel.hide()
+
+
+def test_status_presenter_has_no_main_window_service_locator(MW):
+    presenter = MW.statusPresenter
+
+    assert not hasattr(presenter, "window")
+    assert not hasattr(presenter.views, "window")

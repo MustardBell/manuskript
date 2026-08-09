@@ -27,8 +27,7 @@ class StubRunner:
 
 
 def settings_window(window, availability):
-    window.settingsWindow()
-    dialog = window.sw
+    dialog = window.workspaceDialogs.show_settings()
     dialog.gitAvailability = lambda: availability
     return dialog
 

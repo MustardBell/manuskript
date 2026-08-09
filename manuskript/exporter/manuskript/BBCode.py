@@ -38,4 +38,4 @@ class BBCode(markdown):
 
     def processText(self, text, settings):
         transformed = plainText.processText(self, text, settings)
-        return markdown_to_bbcode(transformed)
+        return markdown_to_bbcode(transformed, self.augmentations())

@@ -215,6 +215,52 @@ class TestSettingsManager(unittest.TestCase):
             QColor("black").rgba(),
         )
 
+    def test_a_stylesheet_is_only_assigned_when_it_would_change(self):
+        """Qt re-polishes every widget in the application on assignment,
+        whether the sheet differs or not. Opening a project applies settings
+        twice -- the defaults, then the project's own -- so the first
+        assignment was superseded before anybody could see it.
+        """
+        self.settings.tooltipStyle[
+            "useSystemDefaultsForTooltips"
+        ] = False
+        self.settings.tooltipStyle["textColor"] = "#123456"
+        self.settings.tooltipStyle["backgroundColor"] = "#abcdef"
+        self.settings.tooltipStyle["borderColor"] = "#000000"
+
+        with patch("manuskript.settingsManager.qApp") as application:
+            # What Qt already has is what it is asked for the second time.
+            application.styleSheet.side_effect = ["", "#123456 sheet"]
+            application.setStyleSheet.side_effect = (
+                lambda sheet: application.styleSheet.configure_mock(
+                    side_effect=None, return_value=sheet,
+                )
+            )
+            self.settings.applyTooltipStyle()
+            first = application.setStyleSheet.call_count
+            self.settings.applyTooltipStyle()
+
+        self.assertEqual(first, 1)
+        self.assertEqual(application.setStyleSheet.call_count, 1)
+
+    def test_the_stylesheet_is_still_assigned_when_it_differs(self):
+        """The guard must not turn into a refusal to restyle."""
+        self.settings.tooltipStyle[
+            "useSystemDefaultsForTooltips"
+        ] = False
+        self.settings.tooltipStyle["textColor"] = "#123456"
+        self.settings.tooltipStyle["backgroundColor"] = "#abcdef"
+        self.settings.tooltipStyle["borderColor"] = "#000000"
+
+        with patch("manuskript.settingsManager.qApp") as application:
+            application.styleSheet.return_value = "something else"
+            self.settings.applyTooltipStyle()
+
+        application.setStyleSheet.assert_called_once()
+        assigned = application.setStyleSheet.call_args[0][0]
+        self.assertIn("#123456", assigned)
+        self.assertIn("#abcdef", assigned)
+
 
 if __name__ == '__main__':
     unittest.main()

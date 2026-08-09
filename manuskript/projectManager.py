@@ -6,6 +6,7 @@ from manuskript.domain.project import (
     ProjectSession,
 )
 from manuskript.logging import getLogFilePath
+from manuskript import timing
 from manuskript.services.project_autosave import (
     ProjectAutosaveScheduler,
 )
@@ -14,6 +15,7 @@ from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_persistence import (
     ProjectPersistenceContext,
 )
+from manuskript.services.git_revisions import GitRevisionError
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.services.revision_coordinator import (
     ProjectRevisionCoordinator,
@@ -25,16 +27,46 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ProjectManager:
+    """The project's own use cases: open it, save it, close it.
+
+    Takes the project's things -- its settings, the parent its models
+    hang off -- rather than reaching through a window for them. They
+    belong to the project either way, and a window only points at them;
+    but asking the view for them inverted the dependency, so the manager
+    could not create models or save a project without a window existing
+    to be asked. A headless save, a second window becoming the first, and
+    the moment between the last window closing and the project closing
+    were all shaped by that.
+
+    They arrive as plain parameters and not as one project-services
+    bundle. A bundle would be the same catalog one indirection further
+    out, and the thing this class needs least is another object that
+    answers every question about a project.
+    """
+
     def __init__(
-            self, lifecycle_view, storage=None, status_reporter=None,
-            model_factory=None, autosave=None, last_project_store=None,
-            revision_coordinator=None):
+            self, lifecycle_view, settings, model_parent, storage=None,
+            status_reporter=None, model_factory=None, autosave=None,
+            last_project_store=None, revision_coordinator=None,
+            document_buffers=None):
         self.ui = lifecycle_view
+        self.settings = settings
+        self.model_parent = model_parent
+        # Absent means a project with no live text on screen at all: a
+        # manager driven from a test or a script. Not a fallback to
+        # anything -- there is nowhere else the buffers could be found.
+        self.document_buffers = document_buffers
         self.storage = storage if storage is not None else ProjectStorage()
         self.model_factory = model_factory or ProjectModelFactory()
         self.models = None
-        self.status_reporter = status_reporter or (
-            lambda message, duration=5000, importance=1: None
+        # The view is asked to speak, rather than a window's presenter
+        # being handed over. Where the view is the registry of every
+        # window on the project, it resolves which one per call, so this
+        # never pins the window that happened to be first.
+        self.status_reporter = (
+            status_reporter
+            or getattr(lifecycle_view, "show_status", None)
+            or (lambda message, duration=5000, importance=1: None)
         )
         self.session = ProjectSession()
         self.modelConnections = SignalConnectionRegistry()
@@ -47,6 +79,9 @@ class ProjectManager:
         self.revision_coordinator = (
             revision_coordinator or ProjectRevisionCoordinator()
         )
+        #: Set when a quit has already asked about unsaved changes, so the
+        #: close that follows does not ask again.
+        self._closeSettled = False
 
     @property
     def currentProject(self):
@@ -85,29 +120,36 @@ class ProjectManager:
             )
             return False
 
-        if loadFromFile:
-            # Reset settings to defaults
-            self.ui.settings.reset_to_defaults()
+        with timing.span("project.open"):
+            if loadFromFile:
+                # Reset settings to defaults
+                self.settings.reset_to_defaults()
 
-            # Load data
-            self.loadEmptyDatas()
-            
-            if not self.loadDatas(project):
-                self.autosave.stop()
-                self.storage.clear_cache()
-                return False
+                # Load data
+                with timing.span("project.open.models"):
+                    self.loadEmptyDatas()
 
-        self.session.open(project)
-        self.ui.connect_project()
-        self.ui.apply_loaded_settings()
+                with timing.span("project.open.read"):
+                    loaded = self.loadDatas(project)
+                if not loaded:
+                    self.autosave.stop()
+                    self.storage.clear_cache()
+                    return False
 
-        self.reconfigureAutosave()
-        self._connectModelChanges()
+            self.session.open(project)
+            with timing.span("project.open.connect"):
+                self.ui.connect_project()
+            with timing.span("project.open.settings"):
+                self.ui.apply_loaded_settings()
 
-        self.syncUiToState()
-        self.last_project_store.remember_last_project(project)
-        self.ui.project_opened()
-        return True
+            self.reconfigureAutosave()
+            self._connectModelChanges()
+
+            self.syncUiToState()
+            self.last_project_store.remember_last_project(project)
+            with timing.span("project.open.announce"):
+                self.ui.project_opened()
+            return True
 
     def handleUnsavedChanges(self):
         """
@@ -130,20 +172,47 @@ class ProjectManager:
         return True
 
 
+    def settleBeforeClosing(self):
+        """Deal with unsaved changes without closing anything yet.
+
+        Answers whether closing may go ahead. Separate from closeProject so
+        that quitting can ask before any window has gone: the question used
+        to be asked by whichever window turned out to be the last one
+        standing, which meant the others were already shut by the time the
+        person saw it and pressed Cancel.
+
+        Records that it has been settled, so the close that follows does
+        not ask a second time. Discarding leaves the project dirty, and
+        without the record the next pass would take that as a fresh reason
+        to ask.
+        """
+        if not self.session.is_open:
+            return True
+        # A delayed editor submit is not represented by the session's dirty
+        # flag yet.  Flush every project view before asking whether there is
+        # anything to save; otherwise quit can decide that a clean project is
+        # settled and destroy text that was still private to a window.
+        self.flushPendingEdits()
+        if self.settings.saveOnQuit:
+            settled = self.saveDatas()
+        else:
+            settled = self.handleUnsavedChanges()
+        self._closeSettled = bool(settled)
+        return settled
+
     def closeProject(self):
 
         if not self.session.is_open:
             return True
 
-        # Make sure data is saved.
-        if self.ui.settings.saveOnQuit:
-            if not self.saveDatas():
-                return False
-        elif not self.handleUnsavedChanges():
+        # Make sure data is saved, unless a quit already settled it.
+        if not self._closeSettled and not self.settleBeforeClosing():
             return False  # user cancelled action
+        self._closeSettled = False
 
         # Close open tabs in editor
-        self.ui.prepare_close()
+        with timing.span("project.close.prepare"):
+            self.ui.prepare_close()
 
         self.session.close()
         self.last_project_store.clear_last_project()
@@ -187,6 +256,16 @@ class ProjectManager:
         In other words, it "saves as...".
         """
 
+        # What was typed in the last half second is part of the project.
+        # Editors hold their text and submit it into the models after a
+        # pause; the models are what gets written. A commit and a revision
+        # restore already asked for this, but an ordinary save, an autosave
+        # and a project close did not -- so a save could write the
+        # manuscript as it stood before the last few keystrokes, and on the
+        # close of the last window those keystrokes were simply gone.
+        with timing.span("project.save.flush"):
+            self.flushPendingEdits()
+
         previous_project = self.currentProject
         if projectName:
             try:
@@ -208,9 +287,10 @@ class ProjectManager:
             return False
 
         self.ui.capture_project_state()
-        result = self.storage.save(
-            self.persistence_context(self.currentProject)
-        )
+        with timing.span("project.save.write"):
+            result = self.storage.save(
+                self.persistence_context(self.currentProject)
+            )
         if result.failed_files:
             self.ui.show_save_failures(result.failed_files)
 
@@ -244,7 +324,7 @@ class ProjectManager:
         try:
             self.revision_coordinator.after_project_save(
                 self.currentProject,
-                self.ui.settings,
+                self.settings,
                 message=message,
             )
         except Exception as error:
@@ -260,13 +340,60 @@ class ProjectManager:
                 importance=2,
             )
 
+    def flushPendingEdits(self):
+        """Write every unsubmitted edit into the models.
+
+        The project's own text buffers first, and here rather than in each
+        window. One document open in three windows is one buffer, so the
+        windows were each flushing all of them -- the same work three
+        times, and answerable to none of them: a save with no window
+        registered flushed nothing at all, though the text was still
+        sitting in the project's buffers waiting to be written.
+
+        Then the windows, for the text no shared buffer stands for: a
+        character's notes, a multiple selection. That part is theirs
+        because those editors are.
+        """
+        if self.document_buffers is not None:
+            self.document_buffers.flush()
+        self.ui.flush_pending_edits()
+
     def loadEmptyDatas(self):
         self.models = self.model_factory.create(
-            self.ui.model_parent,
-            self.ui.settings,
+            self.model_parent,
+            self.settings,
         )
-        self.ui.install_models(self.models)
         return self.models
+
+    def restoreRevision(self, revision):
+        """Restore one Git revision through the normal save path.
+
+        The manager orchestrates its own restore; the coordinator only
+        supplies the validated snapshot. That way nothing outside this
+        class ever reaches through it to its models or settings.
+        """
+        loaded = self.revision_coordinator.load_snapshot(
+            self.currentProject,
+            revision,
+            self.settings,
+            parent=self.model_parent,
+        )
+        return self.restoreRevisionSnapshot(loaded)
+
+    def commitRevision(self, message):
+        """Save the project, then record it as a Git commit.
+
+        No flush of its own any more: saving does it, which is where the
+        guarantee belongs. This used to be one of the two places that
+        remembered, and every other way of saving forgot.
+        """
+        if not self.saveDatas(record_revision=False):
+            raise GitRevisionError(
+                "The project could not be saved before committing."
+            )
+        return self.revision_coordinator.git_backend(
+            self.currentProject
+        ).commit(message)
 
     def restoreRevisionSnapshot(self, snapshot):
         """Replace the project through validated models, never Git checkout."""
@@ -282,7 +409,8 @@ class ProjectManager:
             )
             return False
 
-        self.ui.flush_pending_edits()
+        # Saving flushes, so the pre-restore save below carries what was
+        # typed into the snapshot it takes first.
         if not self.saveDatas(
             revision_message="Before restoring revision {}".format(
                 snapshot.commit_id[:10]
@@ -295,7 +423,7 @@ class ProjectManager:
             return False
 
         previous_models = self.models
-        previous_settings = self.ui.settings.save()
+        previous_settings = self.settings.save()
         restored_settings = snapshot.settings.save()
         replacement_attempted = False
 
@@ -361,14 +489,13 @@ class ProjectManager:
         return True
 
     def _installProjectState(self, models, serialized_settings):
-        self.ui.settings.load(
+        self.settings.load(
             serialized_settings,
             fromString=True,
             protocol=0,
         )
         self._adoptLiveSettings(models)
         self.models = models
-        self.ui.install_models(models)
         self.ui.connect_project()
         self.ui.apply_loaded_settings()
         self._connectModelChanges()
@@ -410,11 +537,20 @@ class ProjectManager:
         outline = getattr(models, "outline", None)
         if outline is None:
             return
-        outline.settings = self.ui.settings
+        outline.settings = self.settings
         outline.rootItem.setModel(outline)
 
     def _connectModelChanges(self):
-        for model in self.ui.change_models():
+        """Watch the project's own models for edits that dirty it.
+
+        The models are asked which of them count. A window used to answer
+        that, which meant the list had to be taken from one nominated
+        window: connecting the same model once per window would have
+        marked the project dirty once per window for every edit.
+        """
+        if self.models is None:
+            return
+        for model in self.models.change_sources:
             self.modelConnections.connect(
                 model.dataChanged,
                 self.startTimerNoChanges,
@@ -480,7 +616,7 @@ class ProjectManager:
         self.storage.clear_cache()
 
     def reconfigureAutosave(self):
-        settings = self.ui.settings
+        settings = self.settings
         self.autosave.configure(
             periodic_enabled=settings.autoSave,
             periodic_delay_minutes=settings.autoSaveDelay,
@@ -494,5 +630,5 @@ class ProjectManager:
         return ProjectPersistenceContext(
             project_file=project_file,
             models=self.models,
-            settings=self.ui.settings,
+            settings=self.settings,
         )

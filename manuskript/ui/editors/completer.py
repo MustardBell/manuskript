@@ -5,7 +5,7 @@ from PyQt5.QtGui import QBrush, QFontMetrics, QPalette, QColor
 from PyQt5.QtWidgets import QWidget, QListWidgetItem, QStyledItemDelegate, QStyle
 
 from manuskript.ui.editors.completer_ui import Ui_completer
-from manuskript.models import references as Ref
+from manuskript.models.reference_identity import make_reference
 from manuskript.ui import style as S
 
 
@@ -50,7 +50,10 @@ class completer(QWidget, Ui_completer):
                 self.addCategory(cat[0])
                 for item in filtered:
                     i = QListWidgetItem(item[0])
-                    i.setData(Qt.UserRole, Ref.EmptyRef.format(cat[1], item[1], item[0]))
+                    i.setData(
+                        Qt.UserRole,
+                        make_reference(cat[1], item[1], label=item[0]),
+                    )
                     i.setData(Qt.UserRole + 1, item[2])
                     self.list.addItem(i)
 

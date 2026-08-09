@@ -7,6 +7,7 @@ from manuskript.plugins.api import (
     ConversionContribution,
     EditorWorkspaceContribution,
     ExportContribution,
+    ConversionAugmentationContribution,
     ImportContribution,
     IndexCardStyleContribution,
     MarkupContribution,
@@ -35,6 +36,7 @@ class ContributionKind(str, Enum):
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
     TRANSFORM = "transform"
+    CONVERSION_AUGMENTATION = "conversion_augmentation"
 
 
 CONTRIBUTION_TYPES = {
@@ -49,6 +51,9 @@ CONTRIBUTION_TYPES = {
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
     ContributionKind.TRANSFORM: TransformContribution,
+    ContributionKind.CONVERSION_AUGMENTATION: (
+        ConversionAugmentationContribution
+    ),
 }
 
 
@@ -147,6 +152,9 @@ class PluginRegistrar:
     def register_transform(self, contribution):
         self._add(ContributionKind.TRANSFORM, contribution)
 
+    def register_conversion_augmentation(self, contribution):
+        self._add(ContributionKind.CONVERSION_AUGMENTATION, contribution)
+
     def _add(self, kind, contribution):
         expected = CONTRIBUTION_TYPES[kind]
         if not isinstance(contribution, expected):
@@ -197,7 +205,11 @@ class PluginRegistry:
         collisions = [
             (record.kind.value, record.id)
             for record in contributions
+            # A plugin's own records are about to be replaced, so only
+            # somebody else holding the ID is a conflict: reinstalling a
+            # plugin over itself must not refuse the plugin.
             if record.id in self._by_kind[record.kind]
+            and self._by_kind[record.kind][record.id].plugin_id != plugin_id
         ]
         if collisions:
             kind, contribution_id = collisions[0]
@@ -289,16 +301,9 @@ class PluginRegistry:
     def transforms(self):
         return self.contributions(ContributionKind.TRANSFORM)
 
-    def transforms_for(self, media_type):
-        """Middleware over one media type, in the order it runs."""
-        return tuple(sorted(
-            (
-                contribution
-                for contribution in self.transforms
-                if contribution.media_type == media_type
-            ),
-            key=lambda value: (
-                -value.priority,
-                value.descriptor.id,
-            ),
-        ))
+    @property
+    def conversion_augmentations(self):
+        return self.contributions(
+            ContributionKind.CONVERSION_AUGMENTATION
+        )
+

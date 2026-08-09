@@ -49,6 +49,9 @@ class collapsibleDockWidgets(QToolBar):
 
         # Other widgets
         self.otherWidgets = []
+        #: Panel id -> its toolbar entry, so a panel that moves to
+        #: another window can take its button away with it.
+        self._panelToggles = {}
         self.currentGroup = None
 
         self.setStyleSheet(style.toolBarSS())
@@ -62,6 +65,10 @@ class collapsibleDockWidgets(QToolBar):
     def addCustomWidget(self, text, widget, group=None, defaultVisibility=True):
         """
         Adds a custom widget to the toolbar.
+
+        Kept for widgets that own nothing but their toggle. Panels have
+        their action made by the panel host; use `addPanelToggle` for
+        those so every button mirrors the one action.
 
         `text` is the name that will displayed on the button to switch visibility.
         `widget` is the widget to control from the toolbar.
@@ -85,6 +92,34 @@ class collapsibleDockWidgets(QToolBar):
         #b.setChecked(widget.isVisible())
         a2 = self.addWidget(b)
         self.otherWidgets.append((b, a2, widget, group))
+
+    def addPanelToggle(self, action, widget, group=None, panel_id=None):
+        """Show a panel's own toggle action as a vertical button.
+
+        The action already controls the widget's visibility; the button
+        only mirrors it, so toggling from anywhere keeps every view of
+        the panel's state in agreement.
+        """
+        b = verticalButton(self)
+        b.setDefaultAction(action)
+        entry = self.addWidget(b)
+        self.otherWidgets.append((b, entry, widget, group))
+        if panel_id is not None:
+            self._panelToggles[panel_id] = (b, entry, widget, group)
+        if group is not None and self.currentGroup is not None:
+            entry.setVisible(group == self.currentGroup)
+
+    def removePanelToggle(self, panel_id):
+        """Take away the button for a panel this window no longer has."""
+        found = self._panelToggles.pop(panel_id, None)
+        if found is None:
+            return
+        button, entry, _widget, _group = found
+        if found in self.otherWidgets:
+            self.otherWidgets.remove(found)
+        self.removeAction(entry)
+        button.setParent(None)
+        button.deleteLater()
 
         # def eventFilter(self, widget, event):
         # if event.type() in [QEvent.Show, QEvent.Hide]:

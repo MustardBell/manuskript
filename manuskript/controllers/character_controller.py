@@ -1,66 +1,68 @@
 from PyQt5.QtCore import Qt, QSignalBlocker
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
-from PyQt5.QtWidgets import (
-    QColorDialog,
-    QDialog,
-    QMessageBox,
-    QWidget,
-)
+from PyQt5.QtWidgets import QWidget
 
 from manuskript.functions import iconColor
-from manuskript.ui import characterInfoDialog
 from manuskript.ui.bulkInfoManager import Ui_BulkInfoManager
 
 
 class CharacterController:
-    """Coordinate character models, widgets, and character-specific dialogs."""
+    """Coordinate character models, widgets, and character-specific dialogs.
 
-    def __init__(self, window):
-        self.window = window
+    Takes the panel it drives, the models it edits, and the two services
+    every panel needs, rather than a window that can answer anything.
+    """
+
+    def __init__(self, models, panel, navigation, dialogs):
+        self.models = models
+        self.panel = panel
+        self.navigation = navigation
+        self.dialogs = dialogs
         self.bulk_ui = None
         self.bulk_affected_characters = []
         self._tabs = []
 
     def capture_tabs(self):
+        tabs = self.panel.tabs
         self._tabs = [
             {
-                "widget": self.window.tabPersos.widget(index),
-                "title": self.window.tabPersos.tabText(index),
+                "widget": tabs.widget(index),
+                "title": tabs.tabText(index),
             }
-            for index in range(self.window.tabPersos.count())
+            for index in range(tabs.count())
         ]
 
     def restore_tabs(self):
         for tab in self._tabs:
-            self.window.tabPersos.addTab(tab["widget"], tab["title"])
+            self.panel.tabs.addTab(tab["widget"], tab["title"])
 
     def reset(self):
         """Release temporary character UI state between projects."""
         self.set_bulk_mode(False)
 
     def record_current_selection(self):
-        characters = list(filter(None, self.window.lstCharacters.currentCharacters()))
-        if not characters:
-            self.window.pushHistory(("character", None))
-            self.window._previousSelectionEmpty = True
-            return
-        self.window.pushHistory(("character", characters[0].ID()))
-        self.window._previousSelectionEmpty = False
+        characters = self._selected_characters()
+        self.navigation.record(
+            ("character", characters[0].ID() if characters else None),
+            selection_empty=not characters,
+        )
 
     def handle_selection_changed(self):
-        selected_characters = list(
-            filter(None, self.window.lstCharacters.currentCharacters())
-        )
+        selected_characters = self._selected_characters()
         if not selected_characters:
-            self.window.pushHistory(("character", None))
-            self.window.tabPersos.setEnabled(False)
-            self.window._previousSelectionEmpty = True
+            self.navigation.record(
+                ("character", None),
+                selection_empty=True,
+            )
+            self.panel.tabs.setEnabled(False)
             return
 
         character = selected_characters[0]
         self.change_current_character(character)
-        self.window.pushHistory(("character", character.ID()))
-        self.window._previousSelectionEmpty = False
+        self.navigation.record(
+            ("character", character.ID()),
+            selection_empty=False,
+        )
 
         if len(selected_characters) > 1:
             self.set_bulk_mode(True)
@@ -71,20 +73,20 @@ class CharacterController:
                 )
                 table_model = self.bulk_ui.tableView.model()
                 if table_model.rowCount() > 0:
-                    confirm = QMessageBox.warning(
-                        self.window,
-                        self.window.tr("Un-applied data!"),
-                        self.window.tr(
-                            "There are un-applied entries in this tab. "
-                            "Discard them?"
-                        ),
-                        QMessageBox.Yes | QMessageBox.No,
-                        defaultButton=QMessageBox.No,
-                    )
-                    if confirm != QMessageBox.Yes:
+                    if not self.dialogs.confirm(
+                        "Un-applied data!",
+                        "There are un-applied entries in this tab. "
+                        "Discard them?",
+                        default_no=True,
+                    ):
                         return
             self.set_bulk_mode(False)
-        self.window.tabPersos.setEnabled(True)
+        self.panel.tabs.setEnabled(True)
+
+    def _selected_characters(self):
+        return list(
+            filter(None, self.panel.characters.currentCharacters())
+        )
 
     def set_bulk_mode(self, enabled):
         if enabled and self.bulk_ui is None:
@@ -95,15 +97,17 @@ class CharacterController:
 
             model = QStandardItemModel()
             model.setColumnCount(2)
-            model.setHorizontalHeaderLabels(
-                [self.window.tr("Name"), self.window.tr("Value")]
-            )
+            model.setHorizontalHeaderLabels([
+                self.dialogs.translate("Name"),
+                self.dialogs.translate("Value"),
+            ])
             self.configure_info_view(bulk_ui.tableView)
             bulk_ui.tableView.setModel(model)
 
-            self.window.tabPersos.clear()
-            self.window.tabPersos.addTab(
-                bulk_widget, self.window.tr("Bulk Info Manager")
+            self.panel.tabs.clear()
+            self.panel.tabs.addTab(
+                bulk_widget,
+                self.dialogs.translate("Bulk Info Manager"),
             )
             bulk_ui.lblCharactersDynamic.setText(
                 self.character_selection_text()
@@ -114,7 +118,7 @@ class CharacterController:
                 self.character_selection_text()
             )
         elif self.bulk_ui is not None:
-            self.window.tabPersos.clear()
+            self.panel.tabs.clear()
             self.restore_tabs()
             self.bulk_ui = None
             self.bulk_affected_characters.clear()
@@ -122,7 +126,7 @@ class CharacterController:
     def refresh_bulk_affected_characters(self):
         self.bulk_affected_characters = [
             character.name()
-            for character in self.window.lstCharacters.currentCharacters()
+            for character in self.panel.characters.currentCharacters()
             if character is not None
         ]
 
@@ -146,43 +150,36 @@ class CharacterController:
     def apply_bulk_info(self, bulk_ui):
         model = bulk_ui.tableView.model()
         if model.rowCount() == 0:
-            QMessageBox.warning(
-                self.window,
-                self.window.tr("No Entries!"),
-                self.window.tr(
-                    "Please add entries to apply to the selected characters."
-                ),
+            self.dialogs.warn(
+                "No Entries!",
+                "Please add entries to apply to the selected characters.",
             )
             return
 
-        for character_id in self.window.lstCharacters.currentCharacterIDs():
+        for character_id in self.panel.characters.currentCharacterIDs():
             for row in range(model.rowCount()):
-                self.window.mdlCharacter.addCharacterInfo(
+                self.models.characters.addCharacterInfo(
                     character_id,
                     model.item(row, 0).text(),
                     model.item(row, 1).text(),
                 )
 
-        QMessageBox.information(
-            self.window,
-            self.window.tr("Bulk Info Applied"),
-            self.window.tr(
-                "The bulk info has been applied to the selected characters."
-            ),
+        self.dialogs.inform(
+            "Bulk Info Applied",
+            "The bulk info has been applied to the selected characters.",
         )
         model.removeRows(0, model.rowCount())
 
     def add_bulk_info(self, bulk_ui):
-        dialog = QDialog(self.window)
-        dialog_ui = characterInfoDialog.Ui_characterInfoDialog()
-        dialog_ui.setupUi(dialog)
-
-        if dialog.exec_() == QDialog.Accepted:
-            bulk_ui.tableView.model().appendRow([
-                QStandardItem(dialog_ui.descriptionLineEdit.text()),
-                QStandardItem(dialog_ui.valueLineEdit.text()),
-            ])
-            bulk_ui.tableView.update()
+        entry = self.dialogs.ask_name_and_value()
+        if entry is None:
+            return
+        description, value = entry
+        bulk_ui.tableView.model().appendRow([
+            QStandardItem(description),
+            QStandardItem(value),
+        ])
+        bulk_ui.tableView.update()
 
     def remove_bulk_info(self, bulk_ui):
         selected_rows = bulk_ui.tableView.selectionModel().selectedRows()
@@ -190,45 +187,44 @@ class CharacterController:
             bulk_ui.tableView.model().removeRow(index.row())
 
     def add_character_info(self):
-        character_id = self.window.lstCharacters.currentCharacterID()
+        character_id = self.panel.characters.currentCharacterID()
         if character_id is None:
             return
 
-        dialog = QDialog(self.window)
-        dialog_ui = characterInfoDialog.Ui_characterInfoDialog()
-        dialog_ui.setupUi(dialog)
-        if dialog.exec_() == QDialog.Accepted:
-            self.window.mdlCharacter.addCharacterInfo(
-                character_id,
-                dialog_ui.descriptionLineEdit.text(),
-                dialog_ui.valueLineEdit.text(),
-            )
+        entry = self.dialogs.ask_name_and_value()
+        if entry is None:
+            return
+        description, value = entry
+        self.models.characters.addCharacterInfo(
+            character_id,
+            description,
+            value,
+        )
 
     def remove_character_info(self):
-        character_id = self.window.lstCharacters.currentCharacterID()
+        character_id = self.panel.characters.currentCharacterID()
         if character_id is None:
             return
         rows = {
             index.row()
-            for index in self.window.tblPersoInfos.selectedIndexes()
+            for index in self.panel.info.selectedIndexes()
         }
-        self.window.mdlCharacter.removeCharacterInfo(character_id, rows)
+        self.models.characters.removeCharacterInfo(character_id, rows)
 
     def choose_character_color(self):
-        character_id = self.window.lstCharacters.currentCharacterID()
-        character = self.window.mdlCharacter.getCharacterByID(character_id)
+        character_id = self.panel.characters.currentCharacterID()
+        character = self.models.characters.getCharacterByID(character_id)
         if character is None:
             return
 
-        color = iconColor(character.icon)
-        color = QColorDialog.getColor(color, self.window)
-        if color.isValid():
+        color = self.dialogs.choose_color(iconColor(character.icon))
+        if color is not None:
             character.setColor(color)
             self.update_character_color(character_id)
 
     def change_character_pov_state(self, state):
-        character_id = self.window.lstCharacters.currentCharacterID()
-        character = self.window.mdlCharacter.getCharacterByID(character_id)
+        character_id = self.panel.characters.currentCharacterID()
+        character = self.models.characters.getCharacterByID(character_id)
         if character is None:
             return
         character.setPOVEnabled(state == Qt.Checked)
@@ -239,26 +235,15 @@ class CharacterController:
             return
 
         index = character.index()
-        for widget in [
-            self.window.txtPersoName,
-            self.window.sldPersoImportance,
-            self.window.txtPersoMotivation,
-            self.window.txtPersoGoal,
-            self.window.txtPersoConflict,
-            self.window.txtPersoEpiphany,
-            self.window.txtPersoSummarySentence,
-            self.window.txtPersoSummaryPara,
-            self.window.txtPersoSummaryFull,
-            self.window.txtPersoNotes,
-        ]:
+        for widget in self.panel.fields:
             widget.setCurrentModelIndex(index)
 
         self.update_character_color(character.ID())
         self.update_character_importance(character.ID())
         self.update_character_pov_state(character.ID())
-        self.window.tblPersoInfos.setRootIndex(index)
-        if self.window.mdlCharacter.rowCount(index):
-            self.configure_info_view(self.window.tblPersoInfos)
+        self.panel.info.setRootIndex(index)
+        if self.models.characters.rowCount(index):
+            self.configure_info_view(self.panel.info)
 
     def configure_info_view(self, info_view):
         info_view.horizontalHeader().setStretchLastSection(True)
@@ -267,53 +252,48 @@ class CharacterController:
         info_view.verticalHeader().hide()
 
     def update_character_color(self, character_id):
-        character = self.window.mdlCharacter.getCharacterByID(character_id)
+        character = self.models.characters.getCharacterByID(character_id)
         if character is not None:
-            self.window.btnPersoColor.setStyleSheet(
+            self.panel.color_button.setStyleSheet(
                 "background:{};".format(character.color().name())
             )
 
     def update_character_importance(self, character_id):
-        character = self.window.mdlCharacter.getCharacterByID(character_id)
+        character = self.models.characters.getCharacterByID(character_id)
         if character is not None:
-            self.window.sldPersoImportance.setValue(
+            self.panel.importance_slider.setValue(
                 int(character.importance())
             )
 
     def update_character_pov_state(self, character_id):
-        character = self.window.mdlCharacter.getCharacterByID(character_id)
+        character = self.models.characters.getCharacterByID(character_id)
         if character is None:
             return
 
-        blocker = QSignalBlocker(self.window.chkPersoPOV)
+        blocker = QSignalBlocker(self.panel.pov_checkbox)
         state = Qt.Checked if character.pov() else Qt.Unchecked
-        self.window.chkPersoPOV.setCheckState(state)
+        self.panel.pov_checkbox.setCheckState(state)
         del blocker
-        self.window.chkPersoPOV.setEnabled(
-            len(self.window.mdlOutline.findItemsByPOV(character_id)) == 0
+        self.panel.pov_checkbox.setEnabled(
+            len(self.models.outline.findItemsByPOV(character_id)) == 0
         )
 
     def delete_characters(self):
-        character_ids = self.window.lstCharacters.currentCharacterIDs()
+        character_ids = self.panel.characters.currentCharacterIDs()
         if not character_ids:
             return []
 
-        confirm = QMessageBox.warning(
-            self.window,
-            self.window.tr("Delete selected character(s)?"),
-            self.window.tr(
-                "Are you sure you want to delete the selected character(s)?"
-            ),
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
+        if not self.dialogs.confirm(
+            "Delete selected character(s)?",
+            "Are you sure you want to delete the selected character(s)?",
+        ):
             return []
 
         for character_id in character_ids:
-            outline_ids = self.window.mdlOutline.findItemsByPOV(character_id)
-            self.window.mdlCharacter.removeCharacter(character_id)
+            outline_ids = self.models.outline.findItemsByPOV(character_id)
+            self.models.characters.removeCharacter(character_id)
             for outline_id in outline_ids:
-                item = self.window.mdlOutline.getItemByID(outline_id)
+                item = self.models.outline.getItemByID(outline_id)
                 if item is not None:
                     item.resetPOV()
         return character_ids

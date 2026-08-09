@@ -7,8 +7,14 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from manuskript.plugins.api import PLUGIN_API_VERSION
-from manuskript.plugins.capabilities import grant
+from manuskript.plugins.api import (
+    PLUGIN_API_VERSION,
+    PluginActivationContext,
+)
+from manuskript.plugins.capabilities import (
+    PluginCapabilityContext,
+    grant,
+)
 from manuskript.plugins.errors import (
     PluginCompatibilityError,
     PluginLoadError,
@@ -231,7 +237,9 @@ class PluginRuntime:
 
         # Negotiate before anything of the plugin's runs. A plugin whose
         # requirements core cannot meet is refused, not half-started.
-        capabilities, missing = grant(manifest.requires)
+        capabilities, missing = grant(
+            manifest.requires, self.capabilityContext()
+        )
         if missing:
             record.status = PluginStatus.UNSATISFIED
             record.error = (
@@ -248,6 +256,7 @@ class PluginRuntime:
             capabilities=capabilities,
         )
         module_prefix = self._module_prefix(manifest)
+        handle = None
         try:
             entry = self._load_entry_point(
                 manifest,
@@ -259,7 +268,12 @@ class PluginRuntime:
                 plugin_id,
                 registrar.contributions,
             )
+            self._activate_handle(plugin_id, handle, registrar)
         except Exception as error:
+            # The entry point already ran and may have connected signals or
+            # started timers. Whatever it started has to be told to stop,
+            # and while its modules are still importable.
+            self._deactivate_handle(plugin_id, handle)
             self.registry.remove_plugin(plugin_id)
             self._remove_modules(module_prefix)
             failure = PluginLoadError(
@@ -331,6 +345,51 @@ class PluginRuntime:
             )
         return entry
 
+    def capabilityContext(self):
+        """What a capability may be built from, beyond nothing.
+
+        A service that has to see what other plugins contributed cannot come
+        from a plain factory, and reaching a runtime through a global to get
+        it would be the service locator this codebase has been removing. So
+        the runtime hands over what it has, and the catalogue says which
+        capabilities want it.
+
+        The registry is passed live rather than as a snapshot: a plugin
+        enabled later contributes to conversions performed later, which is
+        what enabling a plugin is expected to mean.
+        """
+        # Imported here, not at module scope: the conversion service reads
+        # the plugin API, which is this package, so importing it from here
+        # makes the two modules import each other. Whichever is imported
+        # first then decides whether either works at all.
+        from manuskript.converters.conversion_service import (
+            conversion_service,
+        )
+
+        return PluginCapabilityContext(
+            registry=self.registry,
+            conversion_service=lambda: conversion_service(
+                registry=self.registry,
+            ),
+        )
+
+    def declares(self, plugin_id, capability):
+        """Whether this plugin asked for a capability in its manifest.
+
+        The one place that answers it. Two hosts hand services over -- the
+        settings panel and the editor workspace -- and each used to read
+        the manifest itself, which is two chances to disagree about what a
+        declaration is.
+
+        A plugin core has no record of has declared nothing. That is the
+        honest answer rather than a cautious one: contributions arrive from
+        loaded plugins, and a loaded plugin has a manifest.
+        """
+        record = self.records.get(plugin_id)
+        if record is None:
+            return False
+        return capability in record.manifest.requires
+
     def _record(self, plugin_id):
         if plugin_id not in self.records:
             raise KeyError("Unknown plugin {!r}.".format(plugin_id))
@@ -339,18 +398,39 @@ class PluginRuntime:
     def _deactivate_record(self, record):
         plugin_id = record.manifest.id
         self.registry.remove_plugin(plugin_id)
-        handle = record.handle
-        if handle is not None and hasattr(handle, "deactivate"):
-            try:
-                handle.deactivate()
-            except Exception:
-                LOGGER.exception(
-                    "Plugin %s failed while deactivating.",
-                    plugin_id,
-                )
+        self._deactivate_handle(plugin_id, record.handle)
         self._remove_modules(record.module_prefix)
         record.handle = None
         record.module_prefix = ""
+
+    @staticmethod
+    def _activate_handle(plugin_id, handle, registrar):
+        """Run the handle's side effects, now that refusal is behind us.
+
+        An activate that raises unwinds the whole load: the plugin is
+        deactivated, uninstalled and reported FAILED, exactly as if the
+        install itself had been refused.
+        """
+        if handle is None or not hasattr(handle, "activate"):
+            return
+        handle.activate(PluginActivationContext(
+            plugin_id=plugin_id,
+            capability=registrar.capability,
+        ))
+
+    @staticmethod
+    def _deactivate_handle(plugin_id, handle):
+        """Let a handle undo its side effects, and never let that call
+        mask whatever brought us here."""
+        if handle is None or not hasattr(handle, "deactivate"):
+            return
+        try:
+            handle.deactivate()
+        except Exception:
+            LOGGER.exception(
+                "Plugin %s failed while deactivating.",
+                plugin_id,
+            )
 
     @staticmethod
     def _module_prefix(manifest):

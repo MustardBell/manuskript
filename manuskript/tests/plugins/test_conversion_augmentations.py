@@ -1,0 +1,262 @@
+"""What a plugin may add to what one format means when it becomes another.
+
+The route is data, never part of the kind. A contribution kind per
+destination would make one format privileged -- native -- and leave every
+other reachable only through something more generic, which is a split these
+tests exist partly to prevent.
+
+So these tests name Markdown and HTML themselves, the way the HTML exporter
+names its own route, and one of them checks that an augmentation declared for
+another route stays out of this one.
+
+The first test converts real Markdown and inspects the HTML, because what the
+reader ends up looking at is the whole claim.
+"""
+
+import re
+
+import pytest
+
+from manuskript.media_types import BBCODE, HTML, MARKDOWN
+from manuskript.plugins.api import (
+    ConversionAugmentationContribution,
+    ConversionRequest,
+    ExtensionDescriptor,
+)
+from manuskript.plugins.errors import PluginRegistrationError
+from manuskript.plugins.conversion_augmentations import (
+    augmentations_for,
+)
+from manuskript.plugins.registry import PluginRegistry
+
+markdown_module = pytest.importorskip("markdown")
+
+
+class ParenthesisLists(markdown_module.Extension):
+    """Ordered lists written the way people write them: ``1)``.
+
+    Python-Markdown accepts ``1.`` and nothing else, so a list typed with
+    parentheses arrives as one run-on paragraph. This rewrites the marker
+    before the parser sees it, which is what a preprocessor is for, and
+    inserts the blank line the parser also insists on.
+    """
+
+    def extendMarkdown(self, md):
+        md.preprocessors.register(
+            _ParenthesisPreprocessor(md), "parenthesis-lists", 30,
+        )
+
+
+class _ParenthesisPreprocessor(markdown_module.preprocessors.Preprocessor):
+    MARKER = re.compile(r"^(\s*)(\d+)\)\s+(.*)$")
+
+    def run(self, lines):
+        out = []
+        previous_was_item = False
+        for line in lines:
+            match = self.MARKER.match(line)
+            if match is None:
+                out.append(line)
+                previous_was_item = False
+                continue
+            if not previous_was_item and out and out[-1].strip():
+                # The parser wants a blank line before a list, and a writer
+                # does not type one.
+                out.append("")
+            indent, number, text = match.groups()
+            out.append("{}{}. {}".format(indent, number, text))
+            previous_was_item = True
+        return out
+
+
+#: The one route these tests are about. Named here, by the test, exactly as
+#: the exporter names its own route -- never by the contract.
+TO_HTML = ConversionRequest(source_format=MARKDOWN, target_format=HTML)
+
+
+def an_augmentation(
+        extension_id="vendor.lists",
+        factory=ParenthesisLists,
+        source=MARKDOWN,
+        target=HTML,
+        page_types=(),
+        priority=0):
+    return ConversionAugmentationContribution(
+        descriptor=ExtensionDescriptor(
+            id=extension_id, name="Parenthesis lists",
+        ),
+        source_format=source,
+        target_format=target,
+        augmentation_factory=factory,
+        page_types=page_types,
+        priority=priority,
+    )
+
+
+def registry_with(*contributions):
+    registry = PluginRegistry()
+    registrar = registry.registrar("vendor.markup")
+    for contribution in contributions:
+        registrar.register_conversion_augmentation(contribution)
+    registry.install("vendor.markup", registrar.contributions)
+    return registry
+
+
+# ------------------------------------------------------- the whole point
+
+def test_a_list_written_with_parentheses_becomes_a_list():
+    """Without the augmentation this is one paragraph, which is the bug."""
+    source = "Intro.\n1) First\n2) Second\n3) Third"
+
+    plain = markdown_module.markdown(source)
+    augmented = markdown_module.markdown(
+        source, extensions=augmentations_for(registry_with(an_augmentation()), TO_HTML),
+    )
+
+    assert "<li>" not in plain
+    assert augmented.count("<li>") == 3
+    assert "<ol>" in augmented
+    assert "First" in augmented and "Third" in augmented
+
+
+def test_prose_is_left_alone():
+    """An augmentation that changed ordinary text would be a liability."""
+    source = "She counted to 3) and stopped.\n\nA year (1999) went by."
+
+    augmented = markdown_module.markdown(
+        source, extensions=augmentations_for(registry_with(an_augmentation()), TO_HTML),
+    )
+
+    assert "<li>" not in augmented
+    assert "1999" in augmented
+
+
+# --------------------------------------------------------------- the kind
+
+def test_an_augmentation_needs_something_to_build():
+    with pytest.raises(ValueError, match="needs a factory"):
+        an_augmentation(factory=None)
+
+
+def test_an_augmentation_must_name_the_route_it_augments():
+    """The formats are declared, never implied by the kind. A kind per
+    destination would privilege one format and leave every other reachable
+    only through something more generic.
+    """
+    with pytest.raises(ValueError, match="formats it augments"):
+        an_augmentation(target="")
+
+
+def test_an_augmentation_for_another_route_stays_out_of_this_one():
+    """The whole point of the route being data: augmenting Markdown to
+    BBCode is the same act as augmenting Markdown to HTML, and neither
+    leaks into the other.
+    """
+    to_bbcode = an_augmentation(
+        extension_id="vendor.bb", source=MARKDOWN, target=BBCODE,
+    )
+
+    assert to_bbcode.applies_to(TO_HTML) is False
+    assert to_bbcode.applies_to(
+        ConversionRequest(source_format=MARKDOWN, target_format=BBCODE)
+    ) is True
+    assert augmentations_for(registry_with(to_bbcode), TO_HTML) == []
+
+
+def test_the_registry_refuses_a_different_kind_of_contribution():
+    registry = PluginRegistry()
+    registrar = registry.registrar("vendor.markup")
+
+    with pytest.raises(PluginRegistrationError):
+        registrar.register_conversion_augmentation(object())
+
+
+# --------------------------------------------------------------- the scope
+
+def a_request(page_type=None):
+    return ConversionRequest(
+        source_format=MARKDOWN, target_format=HTML, page_type=page_type,
+    )
+
+
+def test_an_augmentation_naming_no_page_type_applies_everywhere():
+    contribution = an_augmentation()
+
+    assert contribution.applies_to(a_request()) is True
+    assert contribution.applies_to(a_request("vendor.sample")) is True
+
+
+def test_an_augmentation_naming_page_types_applies_only_to_those():
+    contribution = an_augmentation(page_types=("vendor.sample",))
+
+    assert contribution.applies_to(a_request()) is False
+    assert contribution.applies_to(a_request("other.page")) is False
+    assert contribution.applies_to(a_request("vendor.sample")) is True
+
+
+def test_the_registry_is_not_asked_which_ones_apply():
+    """It is a catalogue of what exists. Which of it applies is a question
+    about one rendering, and a registry answering it would need another such
+    method for every kind of context a caller might be in: by page type, by
+    media type, by route, by window.
+    """
+    registry = registry_with(an_augmentation())
+
+    for query in ("conversion_augmentations_for", "transforms_for"):
+        assert not hasattr(registry, query), query
+    assert len(registry.conversion_augmentations) == 1
+
+
+def test_augmentations_are_built_highest_priority_first():
+    """So an addition that must see the source before another can say so."""
+    built = []
+
+    def recording(name):
+        def factory():
+            built.append(name)
+            return ParenthesisLists()
+        return factory
+
+    registry = registry_with(
+        an_augmentation(
+            extension_id="vendor.second", factory=recording("second"),
+            priority=1,
+        ),
+        an_augmentation(
+            extension_id="vendor.first", factory=recording("first"),
+            priority=5,
+        ),
+    )
+
+    augmentations_for(registry, TO_HTML)
+
+    assert built == ["first", "second"]
+
+
+# ------------------------------------------------------------- when it breaks
+
+def test_an_extension_that_will_not_build_is_skipped_not_fatal():
+    """A plugin's fault must not be the difference between an export
+    happening and not happening.
+    """
+    def broken():
+        raise RuntimeError("no extension today")
+
+    said = []
+    registry = registry_with(
+        an_augmentation(extension_id="vendor.broken", factory=broken),
+        an_augmentation(extension_id="vendor.working", priority=-1),
+    )
+
+    built = augmentations_for(
+        registry, TO_HTML, report_error=said.append,
+    )
+
+    assert len(built) == 1
+    assert isinstance(built[0], ParenthesisLists)
+    assert said and "could not be used" in said[0]
+
+
+def test_no_registry_means_no_augmentations():
+    """Rendering without a plugin layer at all is an ordinary case."""
+    assert augmentations_for(None, TO_HTML) == []

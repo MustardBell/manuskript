@@ -2,7 +2,7 @@ from functools import partial
 
 from PyQt5.QtWidgets import QAction
 
-from manuskript.media_types import MediaTypeView, core_registry
+from manuskript.media_types import MediaTypeView
 from manuskript.plugins.capabilities import (
     CAPABILITY_MEDIA_REGISTRY,
     CAPABILITY_UI_EXPORT_ROUTING,
@@ -20,61 +20,99 @@ from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
 
 
 class PluginUiController:
-    """Own application-level plugin UI and contribution refreshes."""
+    """One window's plugin user interface.
 
-    def __init__(self, window, runtime, option_store, media_types=None):
-        self.window = window
-        self.runtime = runtime
-        self.option_store = option_store
-        self.mediaTypes = (
-            media_types if media_types is not None else core_registry()
+    Window scope, despite the name: there is one of these per workspace
+    window, and it owns that window's Plugins menu, its panels and
+    workspaces, and the dialogs it opens. It used to describe itself as
+    application-level, which was true only while there was one window.
+
+    What is genuinely application scope arrives as the contribution
+    service: the runtime, the option store, the media type registry, and
+    the one announcement that the set of contributions changed. Every
+    window subscribes to that and refreshes its own view; no window
+    refreshes anybody else's, and none of them can miss the news.
+    SHARED_SERVICES names what must be the same object in every window.
+
+    The page type and markup profile services are deliberately per
+    window: each reports errors to its own status bar and reads the
+    document source from its own editor. They are views onto shared
+    data, not copies of it.
+    """
+
+    #: Attributes that must be the same object in every window.
+    SHARED_SERVICES = (
+        "contributions", "runtime", "option_store", "mediaTypes",
+    )
+
+    def __init__(self, views, contributions, option_store=None,
+                 media_types=None):
+        self.views = views
+        self.contributions = contributions
+        self.runtime = contributions.runtime
+        self.option_store = (
+            option_store
+            if option_store is not None
+            else contributions.optionStore
         )
+        self.mediaTypes = (
+            media_types
+            if media_types is not None
+            else contributions.mediaTypes
+        )
+        # Every window refreshes its own view when the set of
+        # contributions changes, rather than only the window whose
+        # plugin manager happened to make the change.
+        contributions.changed.connect(self.refresh_contributions)
         self.markupProfiles = MarkupProfileService(
-            runtime.registry,
-            report_error=window.statusPresenter.show,
-            parent=window,
+            contributions.registry,
+            report_error=views.show_status,
+            parent=views.object_parent,
         )
         self.pageTypes = PageTypeService(
-            runtime.registry,
-            option_store=option_store,
+            contributions.registry,
+            option_store=self.option_store,
             media_types=self.mediaTypes,
-            report_error=window.statusPresenter.show,
+            report_error=views.show_status,
             source_provider=self._page_source,
-            parent=window,
+            parent=views.object_parent,
         )
         self.manager = None
 
-        window.menuTools.addSeparator()
-        self.menu = window.menuTools.addMenu(window.tr("Plugins"))
+        views.tools_menu.addSeparator()
+        self.menu = views.tools_menu.addMenu(
+            views.translate("Plugins")
+        )
         self.menu.setObjectName("menuPlugins")
         self.manageAction = QAction(
-            window.tr("Manage Plugins…"),
-            window,
+            views.translate("Manage Plugins…"),
+            views.object_parent,
         )
         self.manageAction.setObjectName("actPlugins")
         self.manageAction.setStatusTip(
-            window.tr("Manage installed Manuskript plugins")
+            views.translate("Manage installed Manuskript plugins")
         )
         self.menu.addAction(self.manageAction)
         self.manageAction.triggered.connect(self.show_manager)
         self.globalActions = (self.menu.menuAction(),)
         self.projectPanels = ProjectPanelHost(
-            window,
-            runtime,
+            views.project_panels,
+            self.runtime,
             menu=self.menu,
         )
         self.editorWorkspaces = EditorWorkspaceHost(
-            window,
-            runtime,
+            views.editor_workspaces,
+            self.runtime,
             menu=self.menu,
         )
 
     def _page_source(self, item):
-        current = self.window.mainEditor.currentEditor()
+        editor_host = self.views.editor_host
+        current = editor_host.currentEditor()
         editors = [current] if current is not None else []
         editors.extend(
             editor
-            for editor in self.window.mainEditor.allAllTabs()
+            for editor in editor_host.allAllTabs()
             if editor is not current
         )
         for editor in editors:
@@ -92,16 +130,13 @@ class PluginUiController:
     def show_manager(self):
         if self.manager is None:
             self.manager = PluginManagerDialog(
-                self.runtime,
-                self.window,
+                self.contributions,
+                self.views.dialog_parent,
                 option_store=self.option_store,
                 settings_context_provider=self._settings_context,
                 media_types=self.mediaTypes,
             )
             self.manager.finished.connect(self._manager_closed)
-            self.manager.pluginsChanged.connect(
-                self.refresh_contributions
-            )
         self.manager.show()
         self.manager.raise_()
         self.manager.activateWindow()
@@ -117,7 +152,7 @@ class PluginUiController:
             plugin_id=plugin_id,
             option_store=self.option_store,
             edit_options=partial(self._edit_options, plugin_id),
-            show_status=self.window.statusPresenter.show,
+            show_status=self.views.show_status,
             capability=partial(self._settings_capability, plugin_id),
         )
 
@@ -127,9 +162,7 @@ class PluginUiController:
         Same negotiation as during registration, enforced the same way:
         a name the manifest does not list is refused even when core has it.
         """
-        record = self.runtime.records.get(plugin_id)
-        declared = record.manifest.requires if record is not None else ()
-        if name not in declared:
+        if not self.runtime.declares(plugin_id, name):
             raise PluginScopeError(
                 "Plugin {} did not declare capability {!r} in its "
                 "manifest.".format(plugin_id, name)
@@ -150,7 +183,7 @@ class PluginUiController:
                 self.pageTypes,
                 export_routes_provider=self._export_routes,
                 edit_options=partial(self._edit_options, plugin_id),
-                show_status=self.window.statusPresenter.show,
+                show_status=self.views.show_status,
             )
         )
 
@@ -178,7 +211,7 @@ class PluginUiController:
         dialog = PluginOptionsDialog(
             contribution,
             self.option_store,
-            parent if parent is not None else self.window,
+            parent if parent is not None else self.views.dialog_parent,
         )
         return dialog.exec()
 
@@ -189,7 +222,7 @@ class PluginUiController:
         )
 
         exporters = exporter.create_exporters(
-            self.window.exportContext(),
+            self.views.export_context(),
             plugin_runtime=self.runtime,
             plugin_option_store=self.option_store,
         )
@@ -205,9 +238,7 @@ class PluginUiController:
         self.editorWorkspaces.refresh()
         self.markupProfiles.refresh()
         self.pageTypes.refresh()
-        cardStyles = getattr(self.window, "cardStyles", None)
-        if cardStyles is not None:
-            cardStyles.refresh()
+        self.views.refresh_card_styles()
 
     def project_opened(self):
         self.projectPanels.project_opened()
@@ -216,3 +247,31 @@ class PluginUiController:
     def prepare_project_close(self):
         self.editorWorkspaces.prepare_project_close()
         self.projectPanels.prepare_project_close()
+
+    def dispose(self):
+        """Release this window's plugin UI from application services."""
+        contributions = self.contributions
+        if contributions is None:
+            return
+        try:
+            contributions.changed.disconnect(
+                self.refresh_contributions
+            )
+        except (RuntimeError, TypeError):
+            pass
+        self.editorWorkspaces.prepare_project_close()
+        self.projectPanels.prepare_project_close()
+        manager = self.manager
+        self.manager = None
+        if manager is not None:
+            manager.close()
+            manager.deleteLater()
+        self.markupProfiles = None
+        self.pageTypes = None
+        self.projectPanels = None
+        self.editorWorkspaces = None
+        self.menu = None
+        self.manageAction = None
+        self.globalActions = ()
+        self.views = None
+        self.contributions = None

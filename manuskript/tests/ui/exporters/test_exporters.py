@@ -18,8 +18,8 @@ def test_export_dialog_loads_manager_and_restores_format(
         MWSampleProject):
     MW = MWSampleProject
 
-    MW.doCompile()
-    exporter_dialog = MW.dialog
+    MW.workspaceTransfers.show_export()
+    exporter_dialog = MW.workspaceTransfers.export_dialog
     assert exporter_dialog.isVisible()
     available_formats = []
     for index in range(exporter_dialog.cmbExporters.count()):
@@ -57,8 +57,8 @@ def test_export_dialog_loads_manager_and_restores_format(
     manager.close()
     exporter_dialog.close()
 
-    MW.doCompile()
-    restored = MW.dialog
+    MW.workspaceTransfers.show_export()
+    restored = MW.workspaceTransfers.export_dialog
     selected_exporter, selected_format = restored.getSelectedExporter()
     assert selected_exporter.name == exporter_name
     assert selected_format.name == format_name
@@ -96,8 +96,8 @@ def test_plugin_conversion_target_uses_the_compile_dialog(
         registrar.contributions,
     )
     try:
-        window.doCompile()
-        dialog = window.dialog
+        window.workspaceTransfers.show_export()
+        dialog = window.workspaceTransfers.export_dialog
         index = next(
             index
             for index in range(dialog.cmbExporters.count())
@@ -114,14 +114,14 @@ def test_plugin_conversion_target_uses_the_compile_dialog(
             "converted:"
         )
     finally:
-        window.dialog.close()
+        window.workspaceTransfers.export_dialog.close()
         registry.remove_plugin("test.compile-converter")
 
 
 def test_native_bbcode_is_a_usable_compile_target(MWSampleProject):
     window = MWSampleProject
-    window.doCompile()
-    dialog = window.dialog
+    window.workspaceTransfers.show_export()
+    dialog = window.workspaceTransfers.export_dialog
     try:
         index = next(
             index

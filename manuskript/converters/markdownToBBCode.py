@@ -177,6 +177,15 @@ class BBCodeConverter:
         return type(self)(self.rules + tuple(rules))
 
 
-def markdown_to_bbcode(text):
-    """Convert Manuskript Markdown to forum-oriented BBCode."""
-    return BBCodeConverter().convert(text)
+def markdown_to_bbcode(text, additions=()):
+    """Convert Manuskript Markdown to forum-oriented BBCode.
+
+    ``additions`` are extra rules for this one conversion, from whoever
+    contributed them. How a rule joins this converter is the converter's own
+    business, which is why every caller with additions comes through here
+    rather than assembling one itself.
+    """
+    converter = BBCodeConverter()
+    if additions:
+        converter = converter.extended(*additions)
+    return converter.convert(text)

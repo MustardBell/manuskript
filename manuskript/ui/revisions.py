@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import QWidget, QMenu, QActionGroup, QAction, QListWidgetIt
 
 from manuskript.enums import Outline
 from manuskript.ui.revisions_ui import Ui_revisions
-from manuskript.models import references as Ref
 
 
 def numberedDiff(before, after):

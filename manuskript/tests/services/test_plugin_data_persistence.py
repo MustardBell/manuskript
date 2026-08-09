@@ -11,7 +11,7 @@ def test_absent_plugin_raw_file_survives_save_reopen_and_resave(
         "portable-zipped.msk" if zipped else "portable-folder.msk"
     )
     window.welcome.createFile(str(project_file), overwrite=True)
-    window.settingsManager.saveToZip = zipped
+    window.projectRuntime.settingsManager.saveToZip = zipped
     namespace = window.projectManager.models.plugin_data.namespace(
         "example.archive",
         on_change=window.projectManager.startTimerNoChanges,
