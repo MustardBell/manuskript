@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 import importlib
-import os
 
-from PyQt5.QtCore import (pyqtSignal, Qt, QPoint,
+from PyQt5.QtCore import (pyqtSignal, Qt,
                           QUrl, QSize)
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
@@ -13,7 +12,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QTableView,
     QTextEdit,
     QTreeView,
@@ -49,10 +47,8 @@ from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
 )
-from manuskript.functions import appPath, openURL, showInFolder
 from manuskript import timing
 import manuskript.functions as F
-from manuskript.logging import getLogFilePath
 from manuskript.models.characterModel import characterModel
 from manuskript.models import outlineModel
 from manuskript.models.plotModel import plotModel
@@ -122,6 +118,14 @@ from manuskript.ui.workspace_search import (
 )
 from manuskript.ui.workspace_project_binding import (
     WorkspaceProjectBinding,
+)
+from manuskript.ui.window_placement import (
+    WindowPlacementController,
+    WindowPlacementViews,
+)
+from manuskript.ui.workspace_support import (
+    WorkspaceSupportController,
+    WorkspaceSupportViews,
 )
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
@@ -233,6 +237,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.workspaceSearch = self.workspaceLifetime.own(
             WorkspaceSearchController(
                 WorkspaceSearchViews.for_window(self)
+            )
+        )
+        self.windowPlacement = self.workspaceLifetime.own(
+            WindowPlacementController(
+                WindowPlacementViews.for_window(self)
             )
         )
         self.documentCommands = DocumentCommandRouter(
@@ -348,6 +357,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.workspaceTransfers = self.workspaceLifetime.own(
             WorkspaceTransferController(
                 WorkspaceTransferViews.for_window(self)
+            )
+        )
+        self.workspaceSupport = self.workspaceLifetime.own(
+            WorkspaceSupportController(
+                WorkspaceSupportViews.for_window(self)
             )
         )
         self.cardStyles = self.workspaceLifetime.own(
@@ -600,63 +614,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.workspaceTransfers.close_all()
         if self.pluginUi is not None:
             self.pluginUi.projectPanels.close_all()
-
-    ###############################################################################
-    # GENERAL / UI STUFF
-    ###############################################################################
-
-    ###############################################################################
-    # HELP
-    ###############################################################################
-
-    def centerChildWindow(self, win):
-        r = win.geometry()
-        r2 = self.geometry()
-        win.move(r2.center() - QPoint(int(r.width()/2), int(r.height()/2)))
-
-    def support(self):
-        openURL("https://github.com/olivierkes/manuskript/wiki/Technical-Support")
-
-    def locateLogFile(self):
-        logfile = getLogFilePath()
-
-        # Make sure we are even logging to a file.
-        if not logfile:
-            QMessageBox(QMessageBox.Information,
-                self.tr("Sorry!"),
-                "<p><b>" +
-                    self.tr("This session is not being logged.") +
-                "</b></p>",
-                QMessageBox.Ok).exec()
-            return
-
-        # Remind user that log files are at their best once they are complete.
-        msg = QMessageBox(QMessageBox.Information,
-            self.tr("A log file is a Work in Progress!"),
-            "<p><b>" +
-                self.tr("The log file \"{}\" will continue to be written to until Manuskript is closed.").format(os.path.basename(logfile)) +
-            "</b></p>" +
-            "<p>" +
-                self.tr("It will now be displayed in your file manager, but is of limited use until you close Manuskript.") +
-            "</p>",
-            QMessageBox.Ok)
-
-        ret = msg.exec()
-
-        # Open the filemanager.
-        if ret == QMessageBox.Ok:
-            if not showInFolder(logfile):
-                # If everything convenient fails, at least make sure the user can browse to its location manually.
-                QMessageBox(QMessageBox.Critical,
-                    self.tr("Error!"),
-                    "<p><b>" +
-                        self.tr("An error was encountered while trying to show the log file below in your file manager.") +
-                    "</b></p>" +
-                    "<p>" +
-                        logfile +
-                    "</p>",
-                    QMessageBox.Ok).exec()
-
 
     ###############################################################################
     # GENERAL AKA UNSORTED

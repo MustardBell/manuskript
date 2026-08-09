@@ -256,8 +256,8 @@ class MainWindowActionBinding:
                 window.workspaceDialogs.show_frequency,
             ),
             (window.actToolTargets, window.workspaceDialogs.show_targets),
-            (window.actSupport, window.support),
-            (window.actLocateLog, window.locateLogFile),
+            (window.actSupport, window.workspaceSupport.open_support),
+            (window.actLocateLog, window.workspaceSupport.locate_log),
             (window.actAbout, window.workspaceDialogs.show_about),
         ]:
             self._connect(action.triggered, slot)

@@ -117,7 +117,7 @@ class WorkspaceTransferViews:
             return message.exec() != QMessageBox.Abort
 
         return cls(
-            center=window.centerChildWindow,
+            center=window.windowPlacement.center,
             translate=window.tr,
             create_import=create_import,
             create_export=create_export,

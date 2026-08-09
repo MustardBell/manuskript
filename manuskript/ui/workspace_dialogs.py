@@ -72,7 +72,7 @@ class WorkspaceDialogViews:
 
         return cls(
             dialog_parent=dialog_parent,
-            center=window.centerChildWindow,
+            center=window.windowPlacement.center,
             authoring=AuthoringDialogFactories(
                 settings=create_settings,
                 frequency=lambda: frequencyAnalyzer(
