@@ -419,3 +419,73 @@ def test_workspace_action_respects_selection_and_disable(MWEmptyProject):
     finally:
         if window.pluginRuntime.registry.records("editor_workspace"):
             _remove_workspace(window)
+
+
+def test_a_workspace_pane_wraps_to_itself_not_to_the_editor_it_replaced(
+        MWEmptyProject):
+    """The document a workspace shows is the project's, shared with the tabs.
+
+    One QTextDocument carries one wrap width, so a tab left holding the same
+    document behind the workspace goes on deciding how the workspace's panes
+    wrap. The panes are much narrower than the editor, so their prose came
+    out laid out wider than the pane: clipped at the edge, with a horizontal
+    scrollbar under it. Selecting the item in the outline brought the fault
+    back, because the hidden tab opened it again.
+    """
+    window = MWEmptyProject
+    received = []
+    endpoints = []
+    outline = window.projectRuntime.models.outline
+    items = []
+    for title in ("Scene one", "Scene two"):
+        item = outlineItem(title=title, _type="md")
+        item.setData(Outline.text, "A paragraph of quite ordinary prose. " * 60)
+        outline.appendItem(item)
+        items.append(item)
+    tree = window.corePanels.project_tree.tree
+
+    def select(item):
+        tree.selectionModel().setCurrentIndex(
+            outline.indexFromItem(item),
+            QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
+        )
+        window.mainEditor.selectionChanged()
+        qApp.processEvents()
+
+    select(items[0])
+    select(items[1])
+    assert window.mainEditor.currentEditor() is not None
+
+    _install_workspace(window, received, endpoints)
+    try:
+        host = window.pluginUi.editorWorkspaces
+        host.open_workspace(CONTRIBUTION_ID)
+        qApp.processEvents()
+        endpoint = endpoints[0]
+        endpoint.set_maximum_text_width(240)
+        qApp.processEvents()
+
+        def pane_is_readable():
+            layout = endpoint.editor.document().documentLayout()
+            return (
+                layout.documentSize().width()
+                <= endpoint.editor.viewport().width()
+                and endpoint.editor.horizontalScrollBar().maximum() == 0
+            )
+
+        assert pane_is_readable()
+
+        # Reading around the outline while the workspace stands in for the
+        # editor must not hand the document back to a tab nobody can see.
+        select(items[0])
+        select(items[1])
+
+        assert pane_is_readable()
+
+        host.close_workspace()
+        qApp.processEvents()
+        # The editor takes its documents back when it is on screen again.
+        assert window.mainEditor.currentEditor().currentIndex.isValid()
+        assert window.mainEditor.currentEditor().txtRedacText.toPlainText()
+    finally:
+        _remove_workspace(window)

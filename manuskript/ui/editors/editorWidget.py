@@ -177,9 +177,29 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # self._model = model
         # self.setView()
 
+    def sourceEditors(self):
+        """Every text view this tab shows a document in.
+
+        A folder tab is several: one view per child it renders.
+        """
+        return (self.txtRedacText, *getattr(self, "txtEdits", ()))
+
+    def standDown(self):
+        """Let go of the documents while this tab is not what is on screen."""
+        for editor in self.sourceEditors():
+            stand_down = getattr(editor, "standDown", None)
+            if callable(stand_down):
+                stand_down()
+
+    def resume(self):
+        """Show again what standing down let go of."""
+        for editor in self.sourceEditors():
+            resume = getattr(editor, "resume", None)
+            if callable(resume):
+                resume()
+
     def dispose(self):
-        editors = (self.txtRedacText, *getattr(self, "txtEdits", ()))
-        for editor in editors:
+        for editor in self.sourceEditors():
             release_focus = getattr(editor, "releaseWorkspaceFocus", None)
             if callable(release_focus):
                 release_focus()

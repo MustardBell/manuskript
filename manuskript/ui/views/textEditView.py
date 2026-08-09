@@ -53,6 +53,9 @@ class textEditView(QTextEdit):
         #: The project's buffer for this document, once bound to one. Views
         #: sharing it are viewports on one text rather than copies of it.
         self._buffer = None
+        #: What this view was showing when it stood down, so it can pick the
+        #: same document up again when it is on screen once more.
+        self._releasedIndex = None
         #: This view's own highlighter, used only while it is not
         #: sharing a buffer. Read through the highlighter property.
         self._ownHighlighter = None
@@ -268,6 +271,40 @@ class textEditView(QTextEdit):
         # document ends up with exactly one however many views show it.
         buffer.focused(self)
         self.documentReplaced.emit()
+        return True
+
+    def standDown(self):
+        """Let go of the document while nothing on screen shows this view.
+
+        A QTextDocument carries one wrap width, and the buffer gives every
+        view of a document the same QTextDocument. So a view laying it out
+        decides how it wraps *everywhere* -- and a hidden view is as
+        entitled to do that as a visible one. An editor left holding its
+        text behind a plugin workspace therefore wrapped that workspace's
+        panes to the hidden editor's width: prose clipped at the pane edge,
+        with a horizontal scrollbar under it.
+
+        Standing down is the ordinary "this view shows nothing" path, so
+        the buffer is flushed and released exactly as it is when a
+        selection empties. Answers whether there was anything to let go of.
+        """
+        index = self._index
+        if index is None or not index.isValid():
+            return False
+        self._releasedIndex = QPersistentModelIndex(index)
+        self.setCurrentModelIndex(QModelIndex())
+        return True
+
+    def resume(self):
+        """Show again what standing down let go of."""
+        index = self._releasedIndex
+        self._releasedIndex = None
+        if index is None or not index.isValid():
+            return False
+        model = index.model()
+        self.setCurrentModelIndex(model.index(
+            index.row(), index.column(), index.parent(),
+        ))
         return True
 
     def _releaseSharedBuffer(self):

@@ -331,6 +331,14 @@ class mainEditor(QWidget, Ui_mainEditor):
         if self.editor_context is None:
             return
 
+        if self.pluginWorkspaceActive:
+            # A workspace replaces the editor rather than sitting over it,
+            # so there is nothing here to open a document into -- and
+            # opening one would take the project's buffer back from the
+            # workspace pane that is showing it. The selection is followed
+            # again when the workspace closes.
+            return
+
         title = self.getIndexTitle(index)
         # Opening a document is a blocking milestone of its own: reopening
         # the tabs a session left behind is most of what applying settings
@@ -411,6 +419,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         for control in self._nativeFooterWidgets:
             control.hide()
         self.attachMarkdownPresentationState(None)
+        self._standTabsDown()
         widget.setFocus(Qt.OtherFocusReason)
 
     def closePluginWorkspace(self):
@@ -422,8 +431,32 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._contentStack.removeWidget(workspace)
         for control in self._nativeFooterWidgets:
             control.show()
+        self._resumeTabs()
         self.tabChanged()
+        # The outline was still selectable while the workspace stood in for
+        # the editor, so what is selected now is what the reader last asked
+        # for -- not what the tabs were showing before it opened.
+        self.selectionChanged()
         self.pluginWorkspaceClosed.emit()
+
+    def _standTabsDown(self):
+        """Let the tabs release the documents a workspace is now showing.
+
+        The project shares one QTextDocument between every view of a
+        document, and a QTextDocument carries one wrap width. A tab left
+        holding its text behind a workspace goes on deciding how that text
+        wraps in the workspace's panes, which are a different width.
+        """
+        for tab in self.allAllTabs():
+            stand_down = getattr(tab, "standDown", None)
+            if callable(stand_down):
+                stand_down()
+
+    def _resumeTabs(self):
+        for tab in self.allAllTabs():
+            resume = getattr(tab, "resume", None)
+            if callable(resume):
+                resume()
 
     ###############################################################################
     # UI
