@@ -35,7 +35,7 @@ class NavigationController:
     def dispose(self):
         """Release the history callback and the workspace view adapter."""
         try:
-            self.history.navigated.disconnect()
+            self.history.navigated.disconnect(self.navigated)
         except TypeError:
             pass
         self.view = None

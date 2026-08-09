@@ -53,3 +53,16 @@ def test_navigation_controller_dispose_releases_history_callback_and_view():
 
     assert controller.history.navigated._methods == []
     assert controller.view is None
+
+
+def test_dispose_preserves_other_history_observers():
+    view = MagicMock()
+    observer = MagicMock()
+    controller = NavigationController(view)
+    controller.history.navigated.connect(observer)
+
+    controller.dispose()
+    controller.history.next(("main", 1))
+
+    observer.assert_called_once()
+    view.navigate.assert_not_called()
