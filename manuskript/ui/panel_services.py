@@ -39,16 +39,17 @@ class PanelDialogs:
     window can do.
     """
 
-    def __init__(self, window):
-        self._window = window
+    def __init__(self, parent, translate):
+        self._parent = parent
+        self._translate = translate
 
     @property
     def parent(self):
         """The widget dialogs belong to. Rarely what a caller wants."""
-        return self._window
+        return self._parent
 
     def translate(self, text):
-        return self._window.tr(text)
+        return self._translate(text)
 
     def confirm(self, title, text, default_no=False):
         """Yes or no, defaulting to the safer answer where asked."""
@@ -56,7 +57,7 @@ class PanelDialogs:
         if default_no:
             arguments["defaultButton"] = QMessageBox.No
         return QMessageBox.warning(
-            self._window,
+            self._parent,
             self.translate(title),
             self.translate(text),
             QMessageBox.Yes | QMessageBox.No,
@@ -65,21 +66,21 @@ class PanelDialogs:
 
     def warn(self, title, text):
         QMessageBox.warning(
-            self._window,
+            self._parent,
             self.translate(title),
             self.translate(text),
         )
 
     def inform(self, title, text):
         QMessageBox.information(
-            self._window,
+            self._parent,
             self.translate(title),
             self.translate(text),
         )
 
     def choose_color(self, initial):
         """A colour, or None when the person did not choose one."""
-        color = QColorDialog.getColor(initial, self._window)
+        color = QColorDialog.getColor(initial, self._parent)
         return color if color.isValid() else None
 
     def ask_name_and_value(self):
@@ -90,7 +91,7 @@ class PanelDialogs:
         """
         from manuskript.ui import characterInfoDialog
 
-        dialog = QDialog(self._window)
+        dialog = QDialog(self._parent)
         fields = characterInfoDialog.Ui_characterInfoDialog()
         fields.setupUi(dialog)
         if dialog.exec_() != QDialog.Accepted:

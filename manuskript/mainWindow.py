@@ -85,7 +85,10 @@ from manuskript.ui.editors.markdownPresentation import (
 )
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.statusLabel import statusLabel
-from manuskript.ui.status_presenter import StatusPresenter
+from manuskript.ui.status_presenter import (
+    StatusPresenter,
+    StatusPresenterViews,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -219,7 +222,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.history = self.navigationController.history
         self.panelNavigation = PanelNavigation(self.navigationController)
-        self.panelDialogs = PanelDialogs(self)
+        self.panelDialogs = PanelDialogs(self.centralWidget(), self.tr)
         self.characterController = CharacterController(
             CharacterModels(self.projectRuntime),
             CharacterPanelView.for_window(self),
@@ -258,7 +261,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
-        self.statusPresenter = StatusPresenter(self, self.statusLabel)
+        self.statusPresenter = StatusPresenter(
+            StatusPresenterViews.for_window(self, self.statusLabel)
+        )
         self.pluginRuntime = services.plugin_runtime
         self.pluginOptionStore = services.plugin_option_store
         self.mediaTypes = services.media_types

@@ -1,17 +1,41 @@
+from dataclasses import dataclass
+from typing import Any, Callable
+
 from PyQt5.QtCore import QTimer
 
 from manuskript.ui import style
 
 
+@dataclass(frozen=True)
+class StatusPresenterViews:
+    """The label and geometry operations needed to present a status."""
+
+    label: Any
+    hide_native_status: Callable[[], None]
+    layout_spacing: Callable[[], int]
+    local_bottom: Callable[[], int]
+
+    @classmethod
+    def for_window(cls, window, label):
+        return cls(
+            label=label,
+            hide_native_status=lambda: window.statusBar().hide(),
+            layout_spacing=lambda: window.layout().spacing(),
+            local_bottom=lambda: window.mapFromGlobal(
+                window.geometry().bottomLeft()
+            ).y(),
+        )
+
+
 class StatusPresenter:
     """Render application status messages in the main-window overlay."""
 
-    def __init__(self, window, label):
-        self.window = window
-        self.label = label
+    def __init__(self, views):
+        self.views = views
+        self.label = views.label
 
     def show(self, message, duration=5000, importance=1):
-        self.window.statusBar().hide()
+        self.views.hide_native_status()
         self.label.setText(message)
 
         styles = {
@@ -24,12 +48,10 @@ class StatusPresenter:
         self.label.adjustSize()
 
         geometry = self.label.geometry()
-        spacing = int(self.window.layout().spacing() / 2)
+        spacing = int(self.views.layout_spacing() / 2)
         geometry.setLeft(spacing)
         geometry.moveBottom(
-            self.window.mapFromGlobal(
-                self.window.geometry().bottomLeft()
-            ).y() - spacing
+            self.views.local_bottom() - spacing
         )
         self.label.setGeometry(geometry)
         self.label.show()
