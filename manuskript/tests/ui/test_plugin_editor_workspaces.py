@@ -190,7 +190,7 @@ def test_workspace_gets_guarded_project_capabilities(MWEmptyProject):
         assert endpoint.widget.effectiveMaximumWidth == 520
         endpoint.clear_maximum_text_width()
         assert endpoint.widget.effectiveMaximumWidth == (
-            window.settingsManager.textEditor["maxWidth"]
+            window.projectRuntime.settingsManager.textEditor["maxWidth"]
             or endpoint.widget.maximumWidth()
         )
 

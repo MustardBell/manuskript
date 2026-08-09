@@ -27,10 +27,8 @@ class TestProjectManager(unittest.TestCase):
         settings_manager = SettingsManager()
         with patch.object(settings_manager, "apply_loaded_settings_effects"):
             settings_manager.reset_to_defaults()
-        # The project's own things live on the runtime now; the window
-        # only points at them.
+        # The project's own things live on the runtime.
         self.window.projectRuntime.settingsManager = settings_manager
-        self.window.settingsManager = settings_manager
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
         self.autosave = MagicMock()
@@ -98,7 +96,7 @@ class TestProjectManager(unittest.TestCase):
 
     def test_project_change_transitions_session_to_dirty(self):
         self.project_manager.session.open("project.msk")
-        self.window.settingsManager.autoSaveNoChanges = False
+        self.window.projectRuntime.settingsManager.autoSaveNoChanges = False
 
         result = self.project_manager.startTimerNoChanges()
 
@@ -124,7 +122,10 @@ class TestProjectManager(unittest.TestCase):
         context = self.storage.save.call_args.args[0]
         self.assertEqual(context.project_file, "project.msk")
         self.assertIs(context.models, self.project_manager.models)
-        self.assertIs(context.settings, self.window.settingsManager)
+        self.assertIs(
+            context.settings,
+            self.window.projectRuntime.settingsManager,
+        )
 
     def test_failed_save_preserves_dirty_state(self):
         self.project_manager.session.open("project.msk")
@@ -141,7 +142,7 @@ class TestProjectManager(unittest.TestCase):
     def test_failed_automatic_save_prevents_project_close(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
-        self.window.settingsManager.saveOnQuit = True
+        self.window.projectRuntime.settingsManager.saveOnQuit = True
 
         with patch.object(self.project_manager, "saveDatas", return_value=False):
             result = self.project_manager.closeProject()
@@ -151,7 +152,7 @@ class TestProjectManager(unittest.TestCase):
 
     def test_save_on_quit_persists_even_when_content_is_clean(self):
         self.project_manager.session.open("project.msk")
-        self.window.settingsManager.saveOnQuit = True
+        self.window.projectRuntime.settingsManager.saveOnQuit = True
 
         with patch.object(
             self.project_manager,
@@ -170,7 +171,7 @@ class TestProjectManager(unittest.TestCase):
     def test_cancelled_unsaved_changes_prevent_project_close(self):
         self.project_manager.session.open("project.msk")
         self.project_manager.session.mark_dirty()
-        self.window.settingsManager.saveOnQuit = False
+        self.window.projectRuntime.settingsManager.saveOnQuit = False
 
         with patch.object(
             self.project_manager, "handleUnsavedChanges", return_value=False
@@ -284,7 +285,7 @@ class TestProjectManager(unittest.TestCase):
         snapshot.models = replacement_models
         snapshot.load_result = ProjectLoadResult()
         snapshot.settings.save.return_value = (
-            self.window.settingsManager.save()
+            self.window.projectRuntime.settingsManager.save()
         )
 
         with patch.object(
@@ -334,7 +335,7 @@ class TestProjectManager(unittest.TestCase):
         snapshot.models = replacement_models
         snapshot.load_result = ProjectLoadResult()
         snapshot.settings.save.return_value = (
-            self.window.settingsManager.save()
+            self.window.projectRuntime.settingsManager.save()
         )
 
         result = self.project_manager.restoreRevisionSnapshot(snapshot)
@@ -412,7 +413,6 @@ class TestSaveFlushesPendingText(unittest.TestCase):
         with patch.object(settings_manager, "apply_loaded_settings_effects"):
             settings_manager.reset_to_defaults()
         self.window.projectRuntime.settingsManager = settings_manager
-        self.window.settingsManager = settings_manager
         self.storage = MagicMock()
         self.view = lifecycle_for(self.window)
         self.view.flush_pending_edits = MagicMock()

@@ -79,7 +79,10 @@ def test_a_second_window_edits_the_same_project(MWEmptyProject):
         # The project layer is shared, not copied.
         assert other.projectRuntime is window.projectRuntime
         assert other.projectManager is window.projectManager
-        assert other.settingsManager is window.settingsManager
+        assert (
+            other.projectRuntime.settingsManager
+            is window.projectRuntime.settingsManager
+        )
         assert (
             other.projectRuntime.undoStack
             is window.projectRuntime.undoStack

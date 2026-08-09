@@ -34,11 +34,12 @@ def make_view():
 
 def test_simple_mode_suppresses_pov_without_changing_settings():
     view, window, properties, outline = make_view()
-    window.settingsManager.outlineViewColumns = [
+    settings = MagicMock()
+    settings.outlineViewColumns = [
         Outline.title,
         Outline.POV,
     ]
-    original_columns = list(window.settingsManager.outlineViewColumns)
+    original_columns = list(settings.outlineViewColumns)
 
     view.set_fiction_features_visible(False)
 
@@ -50,7 +51,7 @@ def test_simple_mode_suppresses_pov_without_changing_settings():
     properties.cmbPOV.setVisible.assert_called_once_with(False)
     outline.hideColumns.assert_called_once_with()
     outline.hideColumn.assert_called_once_with(Outline.POV)
-    assert list(window.settingsManager.outlineViewColumns) == original_columns
+    assert list(settings.outlineViewColumns) == original_columns
 
 
 def test_fiction_mode_reapplies_saved_outline_columns():

@@ -91,11 +91,11 @@ def test_a_window_shares_the_runtime_it_is_given(MWEmptyProject):
     window = MWEmptyProject
     runtime = window.projectRuntime
 
-    assert window.settingsManager is runtime.settingsManager
     assert window.projectManager is runtime.projectManager
     assert window.projectManager.model_parent is runtime.modelParent
     assert window.projectManager.settings is runtime.settingsManager
     for legacy_alias in (
+        "settingsManager",
         "undoStack",
         "revisionCoordinator",
         "mdlFlatData",

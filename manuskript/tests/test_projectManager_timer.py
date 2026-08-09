@@ -30,10 +30,8 @@ class TestProjectManagerAutosave(unittest.TestCase):
         )
 
     def _load_project(self, auto_save=True, after_change=True):
-        # Project settings belong to the runtime; the window's attribute
-        # is only a pointer at the same object.
+        # Project settings belong to the runtime.
         settings = self.window.projectRuntime.settingsManager
-        self.window.settingsManager = settings
         settings.autoSave = auto_save
         settings.autoSaveDelay = 15
         settings.autoSaveNoChanges = after_change

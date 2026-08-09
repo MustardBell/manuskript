@@ -178,16 +178,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # The project layer. A window is one view of it and never its
         # owner, so this is always something it was handed.
         self.projectRuntime = services.project_runtime
-        # Aliases onto the runtime for everything that still reaches
-        # these by attribute. They retire as callers learn to ask the
-        # runtime; what they name has moved, not what it does.
-        self.settingsManager = self.projectRuntime.settingsManager
         # Which windows are workspaces. Registering makes this one count
         # towards "the last window", and towards where commands go.
         self.windowRegistry = services.window_registry
         self.windowRegistry.register(self)
         self.applicationPreferences = services.application_preferences
-        self.settingsManager.configure_cursor_flash_time(
+        self.projectRuntime.settingsManager.configure_cursor_flash_time(
             lambda: self._defaultCursorFlashTime
         )
         self.referenceService = None
@@ -252,7 +248,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 MainViewConfiguration(
                     ViewConfigurationViews.for_window(self)
                 ),
-                self.settingsManager,
+                self.projectRuntime.settingsManager,
             )
         )
         self.viewSettingsMenu = ViewSettingsMenuBuilder(
@@ -324,7 +320,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.characterController,
                 self.plotController,
                 self.worldController,
-                self.settingsManager,
+                self.projectRuntime.settingsManager,
             ),
             contexts_factory=lambda: ProjectContextBinding(
                 ProjectViewSet.for_window(self)
@@ -334,7 +330,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.welcome.set_context(
             welcome_context_for(
                 self,
-                self.settingsManager,
+                self.projectRuntime.settingsManager,
                 self.projectHistory,
                 self.projectRuntime,
             )
@@ -867,7 +863,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.gitRevisionDialog is None:
             self.gitRevisionDialog = GitRevisionDialog(
                 self.projectManager,
-                self.settingsManager,
+                self.projectRuntime.settingsManager,
                 self.projectRuntime.revisionCoordinator,
                 host,
             )
@@ -1256,8 +1252,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         dictionaries = Spellchecker.availableDictionaries()
 
         # Set first run dictionary
-        if self.settingsManager.dict is None:
-            self.settingsManager.dict = Spellchecker.getDefaultDictionary()
+        settings = self.projectRuntime.settingsManager
+        if settings.dict is None:
+            settings.dict = Spellchecker.getDefaultDictionary()
 
         # Check if project dict is unavailable on this machine
         dict_available = False
@@ -1265,12 +1262,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if dict_available:
                 break
             for i in dicts:
-                if Spellchecker.normalizeDictName(lib, i) == self.settingsManager.dict:
+                if Spellchecker.normalizeDictName(lib, i) == settings.dict:
                     dict_available = True
                     break
         # Reset dict to default one if it's unavailable
         if not dict_available:
-            self.settingsManager.dict = Spellchecker.getDefaultDictionary()
+            settings.dict = Spellchecker.getDefaultDictionary()
 
         for lib, dicts in dictionaries.items():
             if len(dicts) > 0:
@@ -1283,7 +1280,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 a = QAction(i, self)
                 a.data = lib
                 a.setCheckable(True)
-                if Spellchecker.normalizeDictName(lib, i) == self.settingsManager.dict:
+                if Spellchecker.normalizeDictName(lib, i) == settings.dict:
                     a.setChecked(True)
                 a.triggered.connect(self.setDictionary, F.AUC)
                 self.menuDictGroup.addAction(a)
@@ -1293,7 +1290,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # If a new dictionary was chosen, apply the change and re-enable spellcheck if it was enabled.
         if not dict_available:
             self.setDictionary()
-            self.toggleSpellcheck(self.settingsManager.spellcheck)
+            self.toggleSpellcheck(settings.spellcheck)
 
         for lib, requirement in Spellchecker.supportedLibraries().items():
             if lib not in dictionaries:
@@ -1309,18 +1306,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in self.menuDictGroup.actions():
             if i.isChecked():
                 # self.dictChanged.emit(i.text().replace("&", ""))
-                self.settingsManager.dict = Spellchecker.normalizeDictName(i.data, i.text().replace("&", ""))
+                settings = self.projectRuntime.settingsManager
+                settings.dict = Spellchecker.normalizeDictName(
+                    i.data,
+                    i.text().replace("&", ""),
+                )
 
                 # Find all textEditView from self, and toggle spellcheck
                 for w in self.findChildren(textEditView, QRegExp(".*"),
                                            Qt.FindChildrenRecursively):
-                    w.setDict(self.settingsManager.dict)
+                    w.setDict(settings.dict)
 
     def openSpellcheckWebPage(self, lib):
         F.openURL(Spellchecker.getLibraryURL(lib))
 
     def toggleSpellcheck(self, val):
-        self.settingsManager.spellcheck = val
+        self.projectRuntime.settingsManager.spellcheck = val
 
         # Find all textEditView from self, and toggle spellcheck
         for w in self.findChildren(textEditView, QRegExp(".*"),
@@ -1340,7 +1341,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def settingsWindow(self, tab=None):
         self.sw = settingsWindow(
             SettingsWindowViews.for_window(self),
-            self.settingsManager,
+            self.projectRuntime.settingsManager,
             theme_repository=self.themeRepository,
             theme_preview_renderer=self.themePreviewRenderer,
             application_preferences=self.applicationPreferences,
@@ -1361,7 +1362,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def frequencyAnalyzer(self):
         self.fw = frequencyAnalyzer(
             self.projectRuntime.models.outline,
-            self.settingsManager,
+            self.projectRuntime.settingsManager,
             parent=self,
         )
         self.fw.show()
@@ -1472,7 +1473,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 character_model=models.characters,
                 label_model=models.labels,
                 status_model=models.statuses,
-                settings=self.settingsManager,
+                settings=self.projectRuntime.settingsManager,
                 current_outline_index=lambda: (
                     self.corePanels.project_tree.tree.currentIndex()
                     if self.corePanels.project_tree.tree.selectedIndexes()

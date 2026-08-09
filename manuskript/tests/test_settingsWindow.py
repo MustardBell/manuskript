@@ -87,7 +87,7 @@ def test_general(MWSampleProject):
     # Loading from mainWindow
     MW.actSettings.triggered.emit()
     assert MW.sw.isVisible()
-    assert MW.sw.settings is MW.settingsManager
+    assert MW.sw.settings is MW.projectRuntime.settingsManager
     MW.sw.close()
     MW.actLabels.triggered.emit()
     assert MW.sw.isVisible()
@@ -103,7 +103,7 @@ def test_general(MWSampleProject):
     from PyQt5.QtWidgets import qApp, QStyleFactory
     from PyQt5.QtCore import QSettings, Qt
     qS = QSettings(qApp.organizationName(), qApp.applicationName())
-    S = MW.settingsManager
+    S = MW.projectRuntime.settingsManager
 
     # Style
     assert SW.cmbStyle.count() == len(list(QStyleFactory.keys()))

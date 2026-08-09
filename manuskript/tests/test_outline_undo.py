@@ -139,7 +139,7 @@ def test_outline_views_delete_through_the_undo_stack(MWEmptyProject):
     item = scene(model, "Deleted from the tree")
     tree = window.corePanels.project_tree.tree
     tree.setCurrentIndex(model.indexFromItem(item))
-    settings = window.settingsManager
+    settings = window.projectRuntime.settingsManager
     previous = settings.dontShowDeleteWarning
     settings.dontShowDeleteWarning = True  # skip the modal
 

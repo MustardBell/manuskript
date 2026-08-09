@@ -184,10 +184,11 @@ def test_changing_the_setting_repaints_with_the_new_style(MWEmptyProject):
         window.projectRuntime.models.outline.indexFromItem(folder), newTab=True)
     editor = window.mainEditor.currentEditor()
     editor.setFolderView("cork")
-    previous = window.settingsManager.indexCardStyle
+    settings = window.projectRuntime.settingsManager
+    previous = settings.indexCardStyle
 
     # Start on ruled, the way a migrated pre-2026 project does.
-    window.settingsManager.indexCardStyle = RULED
+    settings.indexCardStyle = RULED
     window.mainEditor.updateCorkView()
     qApp.processEvents()
     assert isinstance(editor.corkView.cork_delegate.style, RuledCardStyle)
@@ -199,7 +200,7 @@ def test_changing_the_setting_repaints_with_the_new_style(MWEmptyProject):
             dialog.cmbCorkStyle.findData(PLAIN))
         qApp.processEvents()
 
-        assert window.settingsManager.indexCardStyle == PLAIN
+        assert settings.indexCardStyle == PLAIN
         assert isinstance(
             editor.corkView.cork_delegate.style, PlainCardStyle)
 
@@ -211,7 +212,7 @@ def test_changing_the_setting_repaints_with_the_new_style(MWEmptyProject):
             editor.corkView.cork_delegate.style, RuledCardStyle)
     finally:
         dialog.close()
-        window.settingsManager.indexCardStyle = previous
+        settings.indexCardStyle = previous
         window.mainEditor.closeAllTabs()
 
 
@@ -226,24 +227,26 @@ def test_an_uninstalled_style_still_draws(MWEmptyProject):
         window.projectRuntime.models.outline.indexFromItem(folder), newTab=True)
     editor = window.mainEditor.currentEditor()
     editor.setFolderView("cork")
-    previous = window.settingsManager.indexCardStyle
+    settings = window.projectRuntime.settingsManager
+    previous = settings.indexCardStyle
 
     try:
-        window.settingsManager.indexCardStyle = "gone.away"
+        settings.indexCardStyle = "gone.away"
         window.mainEditor.updateCorkView()
         qApp.processEvents()
 
         assert isinstance(
             editor.corkView.cork_delegate.style, PlainCardStyle)
     finally:
-        window.settingsManager.indexCardStyle = previous
+        settings.indexCardStyle = previous
         window.mainEditor.closeAllTabs()
 
 
 def test_settings_dropdown_lists_styles_and_persists_the_choice(
         MWEmptyProject):
     window = MWEmptyProject
-    previous = window.settingsManager.indexCardStyle
+    settings = window.projectRuntime.settingsManager
+    previous = settings.indexCardStyle
     window.settingsWindow()
     dialog = window.sw
 
@@ -257,16 +260,17 @@ def test_settings_dropdown_lists_styles_and_persists_the_choice(
         dialog.cmbCorkStyle.setCurrentIndex(
             dialog.cmbCorkStyle.findData(RULED))
 
-        assert window.settingsManager.indexCardStyle == RULED
+        assert settings.indexCardStyle == RULED
     finally:
-        window.settingsManager.indexCardStyle = previous
+        settings.indexCardStyle = previous
         dialog.close()
 
 
 def test_settings_dropdown_survives_an_uninstalled_style(MWEmptyProject):
     window = MWEmptyProject
-    previous = window.settingsManager.indexCardStyle
-    window.settingsManager.indexCardStyle = "gone.away"
+    settings = window.projectRuntime.settingsManager
+    previous = settings.indexCardStyle
+    settings.indexCardStyle = "gone.away"
 
     window.settingsWindow()
     dialog = window.sw
@@ -275,7 +279,7 @@ def test_settings_dropdown_survives_an_uninstalled_style(MWEmptyProject):
         # Falls back to the default rather than showing an empty combo,
         # and must not silently rewrite the setting just by opening.
         assert dialog.cmbCorkStyle.currentData() == PLAIN
-        assert window.settingsManager.indexCardStyle == "gone.away"
+        assert settings.indexCardStyle == "gone.away"
     finally:
-        window.settingsManager.indexCardStyle = previous
+        settings.indexCardStyle = previous
         dialog.close()

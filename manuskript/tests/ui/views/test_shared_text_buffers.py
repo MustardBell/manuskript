@@ -39,7 +39,7 @@ def editor_on(window, index):
     """A text editor bound to a document, as a pane or a window would be."""
     view = textEditView(
         window,
-        settings=window.settingsManager,
+        settings=window.projectRuntime.settingsManager,
     )
     view.set_text_editor_context(window.textEditorContext)
     view.setCurrentModelIndex(index)
@@ -198,7 +198,10 @@ def test_a_model_that_cannot_name_a_document_shares_nothing(
     index = window.projectRuntime.models.characters.index(0, 0)
     assert not hasattr(window.projectRuntime.models.characters, "getIndexByID")
 
-    editor = textEditView(window, settings=window.settingsManager)
+    editor = textEditView(
+        window,
+        settings=window.projectRuntime.settingsManager,
+    )
     editor.set_text_editor_context(window.textEditorContext)
     try:
         editor.setCurrentModelIndex(index)
