@@ -2,13 +2,12 @@
 # --!-- coding: utf8 --!--
 import os
 import shutil
-from collections import OrderedDict
 
 from PyQt5.QtCore import QSize, QTranslator, QObject
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIntValidator, QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
+from PyQt5.QtGui import QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
 from PyQt5.QtGui import QStyleHints
-from PyQt5.QtWidgets import QStyleFactory, QWidget, QStyle, QColorDialog, QListWidgetItem, QMessageBox
+from PyQt5.QtWidgets import QWidget, QStyle, QColorDialog, QListWidgetItem, QMessageBox
 from PyQt5.QtWidgets import qApp, QFileDialog
 
 from manuskript.domain.theme import ThemeEditorSession
@@ -28,6 +27,10 @@ from manuskript.functions import (
     writablePath,
 )
 from manuskript.functions import findBackground, themeIcon
+from manuskript.ui.application_settings_controller import (
+    ApplicationSettingsController,
+    ApplicationSettingsViews,
+)
 from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
@@ -103,82 +106,20 @@ class settingsWindow(QWidget, Ui_Settings):
         self.lstMenu.setMaximumWidth(140)
         self.lstMenu.setMinimumWidth(140)
 
-        lowerKeys = [i.lower() for i in list(QStyleFactory.keys())]
-
-        # General
-        self.cmbStyle.addItems(list(QStyleFactory.keys()))
-
-        try:
-            self.cmbStyle.setCurrentIndex(lowerKeys.index(qApp.style().objectName()))
-        except ValueError:
-            self.cmbStyle.setCurrentIndex(0)
-
-        self.cmbStyle.currentIndexChanged[str].connect(self.setStyle)
-
-        self.cmbTranslation.clear()
-        tr = OrderedDict()
-        tr["English"] = ""
-        tr["Arabic (Saudi Arabia)"] = "manuskript_ar_SA.qm"
-        tr["German"] = "manuskript_de.qm"
-        tr["English (Great Britain)"] = "manuskript_en_GB.qm"
-        tr["Spanish"] = "manuskript_es.qm"
-        tr["Persian"] = "manuskript_fa.qm"
-        tr["French"] = "manuskript_fr.qm"
-        tr["Hungarian"] = "manuskript_hu.qm"
-        tr["Indonesian"] = "manuskript_id.qm"
-        tr["Italian"] = "manuskript_it.qm"
-        tr["Japanese"] = "manuskript_ja.qm"
-        tr["Korean"] = "manuskript_ko.qm"
-        tr["Norwegian Bokmål"] = "manuskript_nb_NO.qm"
-        tr["Dutch"] = "manuskript_nl.qm"
-        tr["Polish"] = "manuskript_pl.qm"
-        tr["Portuguese (Brazil)"] = "manuskript_pt_BR.qm"
-        tr["Portuguese (Portugal)"] = "manuskript_pt_PT.qm"
-        tr["Romanian"] = "manuskript_ro.qm"
-        tr["Russian"] = "manuskript_ru.qm"
-        tr["Svenska"] = "manuskript_sv.qm"
-        tr["Turkish"] = "manuskript_tr.qm"
-        tr["Ukrainian"] = "manuskript_uk.qm"
-        tr["Chinese (Simplified)"] = "manuskript_zh_CN.qm"
-        tr["Chinese (Traditional)"] = "manuskript_zh_HANT.qm"
-        self.translations = tr
-
-        for name in tr:
-            self.cmbTranslation.addItem(name, tr[name])
-
-        translation = self.applicationPreferences.translation
-        if translation is not None and translation in tr.values():
-            # Sets the correct translation
-            self.cmbTranslation.setCurrentText(
-                [i for i in tr
-                 if tr[i] == translation][0])
-
-        self.cmbTranslation.currentIndexChanged.connect(self.setTranslation)
-
-        f = qApp.font()
-        self.spnGeneralFontSize.setValue(f.pointSize())
-        self.spnGeneralFontSize.valueChanged.connect(self.setAppFontSize)
-
-        self.chkProgressChars.setChecked(self.settings.progressChars);
-        self.chkProgressChars.stateChanged.connect(self.charSettingsChanged)
-
-        self.txtAutoSave.setValidator(QIntValidator(0, 999, self))
-        self.txtAutoSaveNoChanges.setValidator(QIntValidator(0, 999, self))
-        self.chkAutoSave.setChecked(self.settings.autoSave)
-        self.chkAutoSaveNoChanges.setChecked(self.settings.autoSaveNoChanges)
-        self.txtAutoSave.setText(str(self.settings.autoSaveDelay))
-        self.txtAutoSaveNoChanges.setText(str(self.settings.autoSaveNoChangesDelay))
-        self.chkSaveOnQuit.setChecked(self.settings.saveOnQuit)
-        self.chkSaveToZip.setChecked(self.settings.saveToZip)
-        self.chkAutoSave.stateChanged.connect(self.saveSettingsChanged)
-        self.chkAutoSaveNoChanges.stateChanged.connect(self.saveSettingsChanged)
-        self.chkSaveOnQuit.stateChanged.connect(self.saveSettingsChanged)
-        self.chkSaveToZip.stateChanged.connect(self.saveSettingsChanged)
-        self.txtAutoSave.textEdited.connect(self.saveSettingsChanged)
-        self.txtAutoSaveNoChanges.textEdited.connect(self.saveSettingsChanged)
-        autoLoad, _last = self.views.startup.auto_load_values()
-        self.chkAutoLoad.setChecked(autoLoad)
-        self.chkAutoLoad.stateChanged.connect(self.saveSettingsChanged)
+        self.applicationSettings = ApplicationSettingsController(
+            ApplicationSettingsViews.for_dialog(self),
+            self.settings,
+            self.applicationPreferences,
+            qApp,
+            auto_load_values=self.views.startup.auto_load_values,
+            set_auto_load=self.views.startup.set_auto_load,
+            reconfigure_autosave=self.views.project.reconfigure_autosave,
+            apply_workspace_font=self.views.appearance.set_font,
+            update_stats=self.views.appearance.update_stats,
+        )
+        self.applicationSettings.install()
+        # Compatibility for extensions that inspect the available mapping.
+        self.translations = self.applicationSettings.translations
 
         # Revisions are one settings feature with their own state and
         # commands. The dialog exposes compatibility methods below, but no
@@ -386,48 +327,19 @@ class settingsWindow(QWidget, Ui_Settings):
     ####################################################################################################
 
     def setStyle(self, style):
-        self.applicationPreferences.style = style
-        qApp.setStyle(style)
-        self.settings.applyTooltipStyle()
+        self.applicationSettings.set_style(style)
 
     def setTranslation(self, index):
-        path = self.cmbTranslation.currentData()
-        self.applicationPreferences.translation = path
-
-        # QMessageBox.information(self, "Warning", "You'll have to restart manuskript.")
+        self.applicationSettings.set_translation(index)
 
     def setAppFontSize(self, val):
-        """
-        Set application default font point size.
-        """
-        f = qApp.font()
-        f.setPointSize(val)
-        qApp.setFont(f)
-        self.views.appearance.set_font(f)
-        self.applicationPreferences.font_size = val
+        self.applicationSettings.set_font_size(val)
 
-    def charSettingsChanged(self):
-        self.settings.progressChars = True if self.chkProgressChars.checkState() else False
+    def charSettingsChanged(self, state=None):
+        self.applicationSettings.set_progress_characters(state)
 
-        self.views.appearance.update_stats()
-
-    def saveSettingsChanged(self):
-        if self.txtAutoSave.text() in ["", "0"]:
-            self.txtAutoSave.setText("1")
-        if self.txtAutoSaveNoChanges.text() in ["", "0"]:
-            self.txtAutoSaveNoChanges.setText("1")
-
-        self.views.startup.set_auto_load(
-            True if self.chkAutoLoad.checkState() else False
-        )
-
-        self.settings.autoSave = True if self.chkAutoSave.checkState() else False
-        self.settings.autoSaveNoChanges = True if self.chkAutoSaveNoChanges.checkState() else False
-        self.settings.saveOnQuit = True if self.chkSaveOnQuit.checkState() else False
-        self.settings.saveToZip = True if self.chkSaveToZip.checkState() else False
-        self.settings.autoSaveDelay = int(self.txtAutoSave.text())
-        self.settings.autoSaveNoChangesDelay = int(self.txtAutoSaveNoChanges.text())
-        self.views.project.reconfigure_autosave()
+    def saveSettingsChanged(self, *_args):
+        self.applicationSettings.save_project_preferences()
 
     ####################################################################################################
     #                                           REVISION                                               #
