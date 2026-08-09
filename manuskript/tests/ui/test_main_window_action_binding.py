@@ -69,6 +69,8 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
         MarkdownPresentationMode.LIVE_PREVIEW
     )
     assert binding.bound
+    assert not hasattr(binding, "window")
+    assert binding._window is None
 
 
 def test_main_window_action_binding_installs_permanent_feature_signals():

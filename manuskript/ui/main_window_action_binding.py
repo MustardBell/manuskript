@@ -9,11 +9,16 @@ from manuskript.ui.editors.markdownPresentation import (
 )
 
 
+def activate_markdown_mode(set_mode, mode, _checked=False):
+    """Adapt QAction's checked argument to the mode command's contract."""
+    set_mode(mode)
+
+
 class MainWindowActionBinding:
     """Install application-lifetime main-window signal routing once."""
 
     def __init__(self, window):
-        self.window = window
+        self._window = window
         self.bound = False
 
     def bind(self):
@@ -21,7 +26,7 @@ class MainWindowActionBinding:
             raise RuntimeError(
                 "Main-window actions may only be bound once."
             )
-        window = self.window
+        window = self._window
         window.projectManager.syncUiToState()
 
         self._bind_file_actions()
@@ -33,9 +38,13 @@ class MainWindowActionBinding:
         self._bind_tool_actions()
         self._bind_permanent_feature_signals()
         self.bound = True
+        # Composition is complete. Every connection now retains only its
+        # action and destination; keeping the whole window here would turn
+        # this one-shot installer into a permanent service locator.
+        self._window = None
 
     def _bind_file_actions(self):
-        window = self.window
+        window = self._window
         for action, slot in [
             (window.actOpen, window.welcome.openFile),
             (window.actSave, window.projectManager.saveDatas),
@@ -53,7 +62,7 @@ class MainWindowActionBinding:
             action.triggered.connect(slot)
 
     def _bind_edit_actions(self):
-        window = self.window
+        window = self._window
         self._install_history_actions()
         for action, command in [
             (window.actCopy, DocumentCommand.COPY),
@@ -82,7 +91,7 @@ class MainWindowActionBinding:
         from whichever text editor is being typed in. The outline views bind
         it themselves, scoped to the widget.
         """
-        window = self.window
+        window = self._window
         stack = getattr(window, "undoStack", None)
         if stack is None:
             return
@@ -98,7 +107,7 @@ class MainWindowActionBinding:
         window.menuEdit.insertSeparator(first)
 
     def _bind_format_actions(self):
-        window = self.window
+        window = self._window
         for action, slot in [
             (window.actHeaderSetextL1, window.formatSetext1),
             (window.actHeaderSetextL2, window.formatSetext2),
@@ -140,7 +149,7 @@ class MainWindowActionBinding:
             action.triggered.connect(slot)
 
     def _bind_organize_actions(self):
-        window = self.window
+        window = self._window
         for action, command in [
             (window.actMoveUp, DocumentCommand.MOVE_UP),
             (window.actMoveDown, DocumentCommand.MOVE_DOWN),
@@ -153,7 +162,7 @@ class MainWindowActionBinding:
             )
 
     def _bind_navigation_actions(self):
-        window = self.window
+        window = self._window
         window.actBack.triggered.connect(
             window.navigationController.back
         )
@@ -162,7 +171,7 @@ class MainWindowActionBinding:
         )
 
     def _bind_view_actions(self):
-        window = self.window
+        window = self._window
         window.generateViewMenu()
         window.mainEditor.activeMarkdownPresentationStateChanged.connect(
             window.attachMarkdownPresentationState
@@ -197,13 +206,16 @@ class MainWindowActionBinding:
         ]:
             action.setActionGroup(window.actMarkdownModeGroup)
             action.triggered.connect(
-                lambda _checked=False, selected_mode=mode:
-                    window.setMarkdownPresentationMode(selected_mode)
+                partial(
+                    activate_markdown_mode,
+                    window.setMarkdownPresentationMode,
+                    mode,
+                )
             )
         window.menuMarkdownMode.setEnabled(False)
 
     def _bind_tool_actions(self):
-        window = self.window
+        window = self._window
         for action, slot in [
             (window.actToolFrequency, window.frequencyAnalyzer),
             (window.actToolTargets, window.sessionTargets),
@@ -214,7 +226,7 @@ class MainWindowActionBinding:
             action.triggered.connect(slot)
 
     def _bind_permanent_feature_signals(self):
-        window = self.window
+        window = self._window
         for signal, slot in [
             (
                 window.txtPersosFilter.textChanged,
