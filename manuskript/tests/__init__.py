@@ -1,39 +1,39 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 
-"""Tests."""
+"""Test application composition, created only by tests that need it."""
 
-# METHOD 1
-# ========
-# Don't know why, this causes seg fault on SemaphoreCI
-# Seg fault in app = QApplication(...)
-# Workaround: create and discard an app first...
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
+
+# Widgets constructed by focused UI tests still need an application. Keep
+# the historical throwaway-instance workaround, but defer the expensive main
+# window and project composition until a workspace fixture is requested.
+QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 QApplication([])
+app = QApplication([])
 
-# Create app and mainWindow
-from manuskript import main
-arguments = main.process_commandline([])
+_application = None
 
-# The test settings persist between runs, so a session recorded by an
-# earlier run would have the first project-open reopen its windows here.
-# Cleared before the window exists, when nothing has read it yet.
-from PyQt5.QtCore import QSettings
 
-QSettings(
-    "manuskript_tests", "manuskript_tests",
-).remove("workspace/openWindows")
+def prepare_test_application():
+    """Build the session's QApplication and primary workspace lazily.
 
-app, MW = main.prepare(arguments, tests=True)
+    Importing a test package must not construct the entire GUI for more
+    than a thousand domain and service tests. Qt tests request the ``MW``
+    fixture, which comes through here and shares one deliberately composed
+    application for the session.
+    """
+    global _application
+    if _application is not None:
+        return _application
 
-# METHOD 2
-# ========
-# We need a qApplication to be running, or all the calls to qApp
-# will throw a seg fault.
-# from PyQt5.QtWidgets import QApplication
-# app = QApplication([])
-# app.setOrganizationName("manuskript_tests")
-# app.setApplicationName("manuskript_tests")
+    from PyQt5.QtCore import QSettings
+    from manuskript import main
 
-# from manuskript.mainWindow import MainWindow
-# MW = MainWindow()
+    QSettings(
+        "manuskript_tests", "manuskript_tests",
+    ).remove("workspace/openWindows")
+    arguments = main.process_commandline([])
+    _application = main.prepare(arguments, tests=True)
+    return _application

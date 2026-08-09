@@ -314,7 +314,9 @@ from PyQt5 import sip
 from PyQt5.QtCore import QCoreApplication, QEvent
 from PyQt5.QtWidgets import qApp
 
-from manuskript.tests import MW
+from manuskript.tests import prepare_test_application
+
+_app, MW = prepare_test_application()
 
 gc.disable()
 gc.collect()
