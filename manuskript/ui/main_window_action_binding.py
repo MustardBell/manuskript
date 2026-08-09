@@ -303,7 +303,7 @@ class MainWindowActionBinding:
         )
         self._connect(
             window.tabMain.currentChanged,
-            window.tabMainChanged,
+            window.workspaceSelection.tab_changed,
         )
         self._connect(
             window.actNewWindow.triggered,

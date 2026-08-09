@@ -108,6 +108,11 @@ from manuskript.ui.workspace_focus import (
     WorkspaceFocusController,
     WorkspaceFocusViews,
 )
+from manuskript.ui.workspace_selection import (
+    WorkspaceSelectionController,
+    WorkspaceSelectionHistory,
+    WorkspaceSelectionViews,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -179,7 +184,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Var
         self._autoLoadProject = None  # Used to load a command line project
         self.writingSession = WritingSessionProgress()
-        self._previousSelectionEmpty = True
         # The project layer. A window is one view of it and never its
         # owner, so this is always something it was handed.
         self.projectRuntime = services.project_runtime
@@ -243,14 +247,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Now every core panel exists, compose the controllers from their
         # explicit view contracts. Navigation used to be built before the
         # project tree and kept the whole window so it could find it later.
-        self.navigationController = NavigationController(
-            MainNavigationView(
-                NavigationViews.for_window(self),
-                self.projectRuntime,
+        self.navigationController = self.workspaceLifetime.own(
+            NavigationController(
+                MainNavigationView(
+                    NavigationViews.for_window(self),
+                    self.projectRuntime,
+                )
             )
         )
-        self.history = self.navigationController.history
-        self.panelNavigation = PanelNavigation(self.navigationController)
+        self.selectionHistory = self.workspaceLifetime.own(
+            WorkspaceSelectionHistory(self.navigationController)
+        )
+        self.panelNavigation = PanelNavigation(self.selectionHistory)
         self.panelDialogs = self.workspaceLifetime.own(
             PanelDialogs(self.centralWidget(), self.tr)
         )
@@ -271,6 +279,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             WorldPanelView.for_window(self),
             self.panelNavigation,
             self.panelDialogs,
+        )
+        self.workspaceSelection = self.workspaceLifetime.own(
+            WorkspaceSelectionController(
+                WorkspaceSelectionViews.for_window(self),
+                self.projectRuntime,
+                self.selectionHistory,
+                {
+                    self.TabPersos: (
+                        self.characterController.record_current_selection
+                    ),
+                    self.TabPlots: (
+                        self.plotController.record_current_selection
+                    ),
+                    self.TabWorld: (
+                        self.worldController.record_current_selection
+                    ),
+                },
+            )
         )
         self.viewConfigurationController = self.workspaceLifetime.own(
             ViewConfigurationController(
@@ -562,47 +588,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # GENERAL / UI STUFF
     ###############################################################################
 
-    def tabMainChanged(self):
-        "Called when main tab changes."
-        tabIsEditor = self.tabMain.currentIndex() == self.TabRedac
-        self.menuOrganize.menuAction().setEnabled(tabIsEditor)
-        for i in [self.actCut,
-                  self.actCopy,
-                  self.actPaste,
-                  self.actDelete,
-                  self.actRename]:
-            i.setEnabled(tabIsEditor)
-        tabIndex = self.tabMain.currentIndex()
-
-        if tabIndex == self.TabPersos:
-            self.characterController.record_current_selection()
-        elif tabIndex == self.TabPlots:
-            self.plotController.record_current_selection()
-        elif tabIndex == self.TabWorld:
-            self.worldController.record_current_selection()
-        elif tabIndex == self.TabOutline:
-            index = self.treeOutlineOutline.selectionModel().currentIndex()
-            if index.isValid():
-                id = self.projectRuntime.models.outline.ID(index)
-                self.pushHistory(("outline", id))
-                self._previousSelectionEmpty = id is not None
-            else:
-                self.pushHistory(("outline", None))
-                self._previousSelectionEmpty = False
-        elif tabIndex == self.TabRedac:
-            tree = self.corePanels.project_tree.tree
-            index = tree.selectionModel().currentIndex()
-            if index.isValid():
-                id = self.projectRuntime.models.outline.ID(index)
-                self.pushHistory(("redac", id))
-                self._previousSelectionEmpty = id is not None
-            else:
-                self.pushHistory(("redac", None))
-                self._previousSelectionEmpty = False
-        else:
-            self.pushHistory(("main", self.tabMain.currentIndex()))
-            self._previousSelectionEmpty = False
-
     def projectName(self):
         """
         Returns a user-friendly name for the loaded project.
@@ -616,19 +601,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # OUTLINE
     ###############################################################################
 
-    def outlineChanged(self, selected, deselected):
-        index = self.treeOutlineOutline.selectionModel().currentIndex()
-        if not index.isValid():
-            self.pushHistory(("outline", None))
-            self._previousSelectionEmpty = True
-            return
-        
-        self.pushHistory((
-            "outline", self.projectRuntime.models.outline.ID(index),
-        ))
-        self._previousSelectionEmpty = False
-
-
     def outlineRemoveItemsRedac(self):
         self.corePanels.project_tree.tree.delete()
 
@@ -638,21 +610,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
     # EDITOR
     ###############################################################################
-
-    def redacOutlineChanged(self):
-        index = (
-            self.corePanels.project_tree.tree
-            .selectionModel().currentIndex()
-        )
-        if not index.isValid():
-            self.pushHistory(("redac", None))
-            self._previousSelectionEmpty = True
-            return
-        
-        self.pushHistory((
-            "redac", self.projectRuntime.models.outline.ID(index),
-        ))
-        self._previousSelectionEmpty = False
 
     def openIndex(self, index):
         self.corePanels.project_tree.tree.setCurrentIndex(index)
@@ -669,23 +626,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         searchTextInput = self.dckSearch.findChild(QLineEdit, 'searchTextInput')
         searchTextInput.setFocus()
         searchTextInput.selectAll()
-
-    # Navigate
-    
-    def navigateBack(self):
-        self.navigationController.back()
-
-    def navigateForward(self):
-        self.navigationController.forward()
-
-    def pushHistory(self, entry):
-        self.navigationController.record(
-            entry,
-            replace=self._previousSelectionEmpty,
-        )
-
-    def navigated(self, event):
-        self.navigationController.navigated(event)
 
     def makeConnections(self):
         self.projectBinding.bind()

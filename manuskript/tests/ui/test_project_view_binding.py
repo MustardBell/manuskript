@@ -42,8 +42,14 @@ def test_outline_selection_binding_registers_project_connections():
 
     assert connect.call_count == 7
     connected_slots = [call.args[1] for call in connect.call_args_list]
-    assert window.outlineChanged in connected_slots
-    assert window.redacOutlineChanged in connected_slots
+    assert (
+        window.workspaceSelection.outline_selection_changed
+        in connected_slots
+    )
+    assert (
+        window.workspaceSelection.project_selection_changed
+        in connected_slots
+    )
     assert window.mainEditor.selectionChanged in connected_slots
 
 

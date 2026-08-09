@@ -41,3 +41,15 @@ def test_navigation_controller_can_replace_empty_selection_entry():
         call(("character", None)),
         call(("character", "alice")),
     ]
+
+
+def test_navigation_controller_dispose_releases_history_callback_and_view():
+    view = MagicMock()
+    controller = NavigationController(view)
+
+    assert controller.history.navigated._methods == [controller.navigated]
+
+    controller.dispose()
+
+    assert controller.history.navigated._methods == []
+    assert controller.view is None

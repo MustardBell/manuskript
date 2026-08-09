@@ -96,8 +96,12 @@ class ProjectBindingViews:
                 outline_item_editor=window.outlineItemEditor,
                 metadata=window.corePanels.metadata,
                 document_area=window.mainEditor,
-                outline_changed=window.outlineChanged,
-                project_tree_changed=window.redacOutlineChanged,
+                outline_changed=(
+                    window.workspaceSelection.outline_selection_changed
+                ),
+                project_tree_changed=(
+                    window.workspaceSelection.project_selection_changed
+                ),
             ),
             debug=DebugBindingViews(
                 flat_data=window.tblDebugFlatData,

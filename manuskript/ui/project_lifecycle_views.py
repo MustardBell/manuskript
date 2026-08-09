@@ -135,7 +135,7 @@ class ProjectLifecycleViews:
                 tabs=window.tabMain,
                 writing_session=window.writingSession,
                 set_window_title=window.setWindowTitle,
-                reset_history=window.history.reset,
+                reset_history=window.selectionHistory.reset,
                 notify_plugins_opened=notify_plugins_opened,
                 notify_plugins_closing=notify_plugins_closing,
                 show_project=window.switchToProject,

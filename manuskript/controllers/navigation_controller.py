@@ -31,3 +31,11 @@ class NavigationController:
             can_go_back=event.position > 0,
             can_go_forward=event.position < event.count - 1,
         )
+
+    def dispose(self):
+        """Release the history callback and the workspace view adapter."""
+        try:
+            self.history.navigated.disconnect()
+        except TypeError:
+            pass
+        self.view = None
