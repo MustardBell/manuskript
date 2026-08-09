@@ -3,7 +3,7 @@
 import importlib
 import os
 
-from PyQt5.QtCore import (pyqtSignal, QSignalMapper, Qt, QPoint,
+from PyQt5.QtCore import (pyqtSignal, Qt, QPoint,
                           QUrl, QSize)
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
@@ -49,7 +49,7 @@ from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
 )
-from manuskript.functions import wordCount, appPath, openURL, showInFolder
+from manuskript.functions import appPath, openURL, showInFolder
 from manuskript import timing
 import manuskript.functions as F
 from manuskript.logging import getLogFilePath
@@ -85,6 +85,10 @@ from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import (
     StatusPresenter,
     StatusPresenterViews,
+)
+from manuskript.ui.summary_word_counts import (
+    SummaryWordCountController,
+    SummaryWordCountViews,
 )
 from manuskript.ui.spellcheck_controller import (
     SpellcheckController,
@@ -440,15 +444,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.welcome.updateValues()
         self.switchToWelcome()
 
-        # Word count
-        self.mprWordCount = QSignalMapper(self)
-        for t, i in [
-            (self.txtSummarySentence, 0),
-            (self.txtSummaryPara, 1),
-            (self.txtSummaryPage, 2),
-            (self.txtSummaryFull, 3)
-        ]:
-            self.mprWordCount.setMapping(t, i)
+        self.summaryWordCounts = self.workspaceLifetime.own(
+            SummaryWordCountController(
+                SummaryWordCountViews.for_window(self)
+            )
+        )
+        self.summaryWordCounts.bind()
 
         self.cmbSummary.setCurrentIndex(0)
         self.cmbSummary.currentIndexChanged.emit(0)
@@ -660,29 +661,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###############################################################################
     # GENERAL AKA UNSORTED
     ###############################################################################
-
-    def wordCount(self, i):
-
-        src = {
-            0: self.txtSummarySentence,
-            1: self.txtSummaryPara,
-            2: self.txtSummaryPage,
-            3: self.txtSummaryFull
-        }[i]
-
-        lbl = {
-            0: self.lblSummaryWCSentence,
-            1: self.lblSummaryWCPara,
-            2: self.lblSummaryWCPage,
-            3: self.lblSummaryWCFull
-        }[i]
-
-        wc = wordCount(src.toPlainText())
-        if i in [2, 3]:
-            pages = self.tr(" (~{} pages)").format(int(wc / 25) / 10.)
-        else:
-            pages = ""
-        lbl.setText(self.tr("Words: {}{}").format(wc, pages))
 
     def setupMoreUi(self):
 

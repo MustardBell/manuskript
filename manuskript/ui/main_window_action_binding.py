@@ -320,20 +320,6 @@ class MainWindowActionBinding:
             window.actNewWindow.triggered,
             window.workspaceWindows.open,
         )
-        self._connect(
-            window.mprWordCount.mapped,
-            window.wordCount,
-        )
-        for summary in (
-            window.txtSummarySentence,
-            window.txtSummaryPara,
-            window.txtSummaryPage,
-            window.txtSummaryFull,
-        ):
-            self._connect(
-                summary.textChanged,
-                window.mprWordCount.map,
-            )
         # Focus is application-wide, so the window registry follows it
         # once and forwards to whichever workspace gained it. Connecting
         # per window would have every window react to every other
