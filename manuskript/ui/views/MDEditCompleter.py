@@ -8,7 +8,10 @@ from PyQt5.QtWidgets import QAction, qApp, QToolTip, QTextEdit
 
 from manuskript.ui.editors.completer import completer
 from manuskript.ui.views.MDEditView import MDEditView
-from manuskript.models import references as Ref
+from manuskript.models.reference_identity import (
+    REFERENCE_PATTERN,
+    REFERENCE_PATTERN_NON_CAPTURING,
+)
 
 
 class MDEditCompleter(MDEditView):
@@ -58,7 +61,7 @@ class MDEditCompleter(MDEditView):
         cursor.select(QTextCursor.BlockUnderCursor)
         text = cursor.selectedText()
         pos -= cursor.selectionStart()
-        match = re.findall(Ref.RegExNonCapturing, text)
+        match = re.findall(REFERENCE_PATTERN_NON_CAPTURING, text)
         for m in match:
             if text.find(m) <= pos <= text.find(m) + len(m):
                 return m
@@ -159,7 +162,7 @@ class MDEditCompleter(MDEditView):
         f.setWeight(QFont.DemiBold)
         fm = QFontMetrics(f)
         refs = []
-        for txt in re.finditer(Ref.RegEx, self.toPlainText()):
+        for txt in re.finditer(REFERENCE_PATTERN, self.toPlainText()):
             cursor.setPosition(txt.start())
             r = self.cursorRect(cursor)
             r.setWidth(fm.width(txt.group(0)))

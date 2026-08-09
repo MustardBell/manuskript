@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem
 from lxml import etree as ET
 
 from manuskript.enums import Plot, Outline, PlotStep
-from manuskript.models import references as Ref
+from manuskript.models.reference_identity import plot_reference
 from manuskript.ui import style as S
 
 
@@ -214,7 +214,7 @@ class plotTreeView(QTreeWidget):
             )
             sub.set(Outline.summaryFull.name, summary)
             sub.set(Outline.notes.name, self.tr("**Plot:** {}").format(
-                    Ref.plotReference(plotID)))
+                    plot_reference(plotID)))
 
             root.append(sub)
 

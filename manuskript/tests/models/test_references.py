@@ -5,6 +5,21 @@
 
 import pytest
 
+
+def test_reference_identity_round_trips_without_a_view():
+    from manuskript.models.reference_identity import (
+        ReferenceIdentity,
+        make_reference,
+    )
+
+    for kind in ("C", "T", "P", "W"):
+        complete = make_reference(kind, 42, label="Readable title")
+        assert complete == "{{{}:42:Readable title}}".format(kind)
+        assert ReferenceIdentity.parse(complete) == ReferenceIdentity(kind, "42")
+        assert make_reference(kind, 42, searchable=True) == "{{{}:42:".format(kind)
+
+    assert ReferenceIdentity.parse("not a reference") is None
+
 def test_references(MWSampleProject):
     """
     Tests references using sample project.

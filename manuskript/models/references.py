@@ -12,35 +12,40 @@ LOGGER = logging.getLogger(__name__)
 # SHORT REFERENCES
 ###############################################################################
 
-# A regex used to match references
 from PyQt5.QtWidgets import qApp
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt
 
 from manuskript.enums import Outline
 from manuskript.enums import Character
 from manuskript.enums import Plot
 from manuskript.enums import PlotStep
-from manuskript.functions import mixColors, safeTranslate
-from manuskript.ui import style as S
+from manuskript.functions import safeTranslate
+from manuskript.models.reference_identity import (
+    CHARACTER_REFERENCE_KIND,
+    PLOT_REFERENCE_KIND,
+    REFERENCE_PATTERN,
+    REFERENCE_PATTERN_NON_CAPTURING,
+    REFERENCE_SEARCH_PREFIX_TEMPLATE,
+    REFERENCE_TEMPLATE,
+    ReferenceIdentity,
+    TEXT_REFERENCE_KIND,
+    WORLD_REFERENCE_KIND,
+    character_reference,
+    plot_reference,
+    text_reference,
+    world_reference,
+)
 
 
-RegEx = r"{(\w):(\d+):?.*?}"
+RegEx = REFERENCE_PATTERN
 # A non-capturing regex used to identify references
-RegExNonCapturing = r"{\w:\d+:?.*?}"
+RegExNonCapturing = REFERENCE_PATTERN_NON_CAPTURING
 # The basic format of the references
-EmptyRef = "{{{}:{}:{}}}"
-EmptyRefSearchable = "{{{}:{}:"
-CharacterLetter = "C"
-TextLetter = "T"
-PlotLetter = "P"
-WorldLetter = "W"
-
-# Colors
-TextHighlightColor = QColor(mixColors(QColor(Qt.blue).name(), S.window, .3))
-CharacterHighlightColor = QColor(mixColors(QColor(Qt.yellow).name(), S.window, .3))
-PlotHighlightColor = QColor(mixColors(QColor(Qt.red).name(), S.window, .3))
-WorldHighlightColor = QColor(mixColors(QColor(Qt.green).name(), S.window, .3))
+EmptyRef = REFERENCE_TEMPLATE
+EmptyRefSearchable = REFERENCE_SEARCH_PREFIX_TEMPLATE
+CharacterLetter = CHARACTER_REFERENCE_KIND
+TextLetter = TEXT_REFERENCE_KIND
+PlotLetter = PLOT_REFERENCE_KIND
+WorldLetter = WORLD_REFERENCE_KIND
 
 
 @dataclass(frozen=True)
@@ -141,37 +146,25 @@ class ReferenceService:
 def plotReference(ID, searchable=False):
     """Takes the ID of a plot and returns a reference for that plot.
     @searchable: returns a stripped version that allows simple text search."""
-    if not searchable:
-        return EmptyRef.format(PlotLetter, ID, "")
-    else:
-        return EmptyRefSearchable.format(PlotLetter, ID, "")
+    return plot_reference(ID, searchable=searchable)
 
 
 def characterReference(ID, searchable=False):
     """Takes the ID of a character and returns a reference for that character.
     @searchable: returns a stripped version that allows simple text search."""
-    if not searchable:
-        return EmptyRef.format(CharacterLetter, ID, "")
-    else:
-        return EmptyRefSearchable.format(CharacterLetter, ID, "")
+    return character_reference(ID, searchable=searchable)
 
 
 def textReference(ID, searchable=False):
     """Takes the ID of an outline item and returns a reference for that item.
     @searchable: returns a stripped version that allows simple text search."""
-    if not searchable:
-        return EmptyRef.format(TextLetter, ID, "")
-    else:
-        return EmptyRefSearchable.format(TextLetter, ID, "")
+    return text_reference(ID, searchable=searchable)
 
 
 def worldReference(ID, searchable=False):
     """Takes the ID of a world item and returns a reference for that item.
     @searchable: returns a stripped version that allows simple text search."""
-    if not searchable:
-        return EmptyRef.format(WorldLetter, ID, "")
-    else:
-        return EmptyRefSearchable.format(WorldLetter, ID, "")
+    return world_reference(ID, searchable=searchable)
 
 
 ###############################################################################
@@ -182,12 +175,12 @@ def infos(ref, models):
     """Returns a full paragraph in HTML format
     containing detailed infos about the reference ``ref``.
     """
-    match = re.fullmatch(RegEx, ref)
-    if not match:
+    identity = ReferenceIdentity.parse(ref)
+    if identity is None:
         return safeTranslate(qApp, "references", "Not a reference: {}.").format(ref)
 
-    _type = match.group(1)
-    _ref = match.group(2)
+    _type = identity.kind
+    _ref = identity.identifier
 
     # A text or outline item
     if _type == TextLetter:
@@ -502,13 +495,12 @@ def infos(ref, models):
 def shortInfos(ref, models):
     """Returns infos about reference ``ref``.
     Returns -1 if ``ref`` is not a valid reference, and None if it is valid but unknown."""
-    match = re.fullmatch(RegEx, ref)
-
-    if not match:
+    identity = ReferenceIdentity.parse(ref)
+    if identity is None:
         return -1
 
-    _type = match.group(1)
-    _ref = match.group(2)
+    _type = identity.kind
+    _ref = identity.identifier
 
     _infos = dict()
     _infos["ID"] = _ref
@@ -622,10 +614,10 @@ def refToLink(ref, models):
     about that reference. For character, character's name. For text item,
     item's name, etc.
     """
-    match = re.fullmatch(RegEx, ref)
-    if match:
-        _type = match.group(1)
-        _ref = match.group(2)
+    identity = ReferenceIdentity.parse(ref)
+    if identity is not None:
+        _type = identity.kind
+        _ref = identity.identifier
         text = ""
         if _type == TextLetter:
             m = models.outline
@@ -708,12 +700,12 @@ def basicFormat(text, models):
 
 def open(ref, navigation):
     """Identify ``ref`` and open it."""
-    match = re.fullmatch(RegEx, ref)
-    if not match:
+    identity = ReferenceIdentity.parse(ref)
+    if identity is None:
         return
 
-    _type = match.group(1)
-    _ref = match.group(2)
+    _type = identity.kind
+    _ref = identity.identifier
 
     if _type == CharacterLetter:
         if navigation.open_character(_ref):

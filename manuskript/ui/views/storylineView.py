@@ -6,7 +6,12 @@ from PyQt5.QtWidgets import QWidget, QGraphicsScene, QGraphicsSimpleTextItem, QM
     QGraphicsLineItem, QGraphicsEllipseItem
 
 from manuskript.enums import Outline
-from manuskript.models import references
+from manuskript.models.reference_identity import (
+    CHARACTER_REFERENCE_KIND,
+    character_reference,
+    plot_reference,
+    text_reference,
+)
 import manuskript.functions as F
 from manuskript.ui.views.storylineView_ui import Ui_storylineView
 
@@ -95,7 +100,7 @@ class storylineView(QWidget, Ui_storylineView):
         r = []
         for importance in plotsID:
             for ID in importance:
-                ref = references.plotReference(ID)
+                ref = plot_reference(ID)
                 r.append(ref)
 
         return r
@@ -109,7 +114,7 @@ class storylineView(QWidget, Ui_storylineView):
         r = []
         for importance in chars:
             for c in importance:
-                ref = references.characterReference(c.ID())
+                ref = character_reference(c.ID())
                 r.append(ref)
 
         return r
@@ -205,7 +210,7 @@ class storylineView(QWidget, Ui_storylineView):
                     parent = addRectText(delta, w, rect, child.title(), level, tooltip=child.title())
                     parent.setToolTip(
                         self._references.tooltip(
-                            references.textReference(child.ID())
+                            text_reference(child.ID())
                         )
                     )
                     listItems(child, parent, level + 1)
@@ -214,7 +219,7 @@ class storylineView(QWidget, Ui_storylineView):
                     rectChild = addRectText(delta, TEXT_WIDTH, rect, "", level, tooltip=child.title())
                     rectChild.setToolTip(
                         self._references.tooltip(
-                            references.textReference(child.ID())
+                            text_reference(child.ID())
                         )
                     )
                     
@@ -225,7 +230,7 @@ class storylineView(QWidget, Ui_storylineView):
 
                         # Tests if POV
                         scenePOV = False  # Will hold true of character is POV of the current text, not containing folder
-                        if self._references.reference_type(ref) == references.CharacterLetter:
+                        if self._references.reference_type(ref) == CHARACTER_REFERENCE_KIND:
                             ID = self._references.reference_id(ref)
                             c = child
                             while c:
@@ -279,7 +284,7 @@ class storylineView(QWidget, Ui_storylineView):
         ]
 
         for ref in trackedItems:
-            if self._references.reference_type(ref) == references.CharacterLetter:
+            if self._references.reference_type(ref) == CHARACTER_REFERENCE_KIND:
                 color = self._mdlCharacter.getCharacterByID(
                     self._references.reference_id(ref)
                 ).color()
@@ -345,7 +350,7 @@ class RefCircle(QGraphicsEllipseItem):
         QGraphicsEllipseItem.__init__(self, x, y, diameter, diameter, parent)
         self.setBrush(Qt.white)
         self._references = reference_service
-        self._ref = references.textReference(ID)
+        self._ref = text_reference(ID)
         if self._references is not None:
             self.setToolTip(self._references.tooltip(self._ref))
         self.setPen(QPen(Qt.black, 2))

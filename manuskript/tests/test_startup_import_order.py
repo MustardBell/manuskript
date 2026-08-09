@@ -84,6 +84,7 @@ def test_the_preferences_migration_stays_clear_of_the_exporter_package():
 #: imported first.
 STANDS_ALONE = (
     "manuskript.converters.conversion_service",
+    "manuskript.models.reference_identity",
     "manuskript.plugins",
     "manuskript.plugins.runtime",
     "manuskript.plugins.capabilities",

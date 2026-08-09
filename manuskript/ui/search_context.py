@@ -12,7 +12,12 @@ from manuskript.enums import (
     PlotStep,
     World,
 )
-from manuskript.models import references
+from manuskript.models.reference_identity import (
+    character_reference,
+    plot_reference,
+    text_reference,
+    world_reference,
+)
 from manuskript.models.flatDataModelWrapper import flatDataModelWrapper
 from manuskript.panels.core import METADATA
 
@@ -185,21 +190,21 @@ class SearchResultViewAdapter:
         return widgets if isinstance(widgets, list) else [widgets]
 
     def _open_character(self, result):
-        self.references.open(references.characterReference(result.id()))
+        self.references.open(character_reference(result.id()))
         self.views.character_tabs.setEnabled(True)
 
     def _open_flat_data(self, _result):
         self.views.main_tabs.setCurrentIndex(self.views.summary_tab_index)
 
     def _open_outline(self, result):
-        self.references.open(references.textReference(result.id()))
+        self.references.open(text_reference(result.id()))
 
     def _open_world(self, result):
-        self.references.open(references.worldReference(result.id()))
+        self.references.open(world_reference(result.id()))
         self.views.world_tabs.setEnabled(True)
 
     def _open_plot(self, result):
-        self.references.open(references.plotReference(result.id()))
+        self.references.open(plot_reference(result.id()))
         self.views.plot_tabs.setEnabled(True)
 
     def _character_widgets(self, result):
