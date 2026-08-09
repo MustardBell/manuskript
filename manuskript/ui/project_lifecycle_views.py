@@ -119,7 +119,7 @@ class ProjectLifecycleViews:
             ),
             loaded_settings=LoadedSettingsViews(
                 view_state=window.windowState,
-                rebuild_view_menu=window.generateViewMenu,
+                rebuild_view_menu=window.viewSettingsMenu.rebuild,
                 editor=window.mainEditor,
                 spellcheck_action=window.actSpellcheck,
                 set_spellcheck=window.spellcheck.set_enabled,
@@ -128,8 +128,12 @@ class ProjectLifecycleViews:
                 ),
                 set_dictionary=window.spellcheck.apply_dictionary,
                 project_tree=window.corePanels.project_tree.tree,
-                set_simple_mode=window.setViewModeSimple,
-                set_fiction_mode=window.setViewModeFiction,
+                set_simple_mode=(
+                    window.viewConfigurationController.set_simple
+                ),
+                set_fiction_mode=(
+                    window.viewConfigurationController.set_fiction
+                ),
             ),
             workspace=ProjectWorkspaceViews(
                 tabs=window.tabMain,

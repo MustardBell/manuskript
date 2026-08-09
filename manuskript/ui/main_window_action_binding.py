@@ -15,6 +15,11 @@ def activate_markdown_mode(set_mode, mode, _checked=False):
     set_mode(mode)
 
 
+def activate_without_checked(callback, _checked=False):
+    """Adapt QAction's checked argument to an argument-free command."""
+    callback()
+
+
 class MainWindowActionBinding:
     """Install application-lifetime main-window signal routing once."""
 
@@ -89,7 +94,7 @@ class MainWindowActionBinding:
                 partial(window.documentCommands.dispatch, command)
             )
         for action, slot in [
-            (window.actSearch, window.doSearch),
+            (window.actSearch, window.workspaceSearch.show),
             (window.actLabels, window.workspaceDialogs.show_labels),
             (window.actStatus, window.workspaceDialogs.show_statuses),
             (window.actSettings, window.workspaceDialogs.show_settings),
@@ -191,7 +196,7 @@ class MainWindowActionBinding:
 
     def _bind_view_actions(self):
         window = self._window
-        window.generateViewMenu()
+        window.viewSettingsMenu.rebuild()
         self._connect(
             window.mainEditor.activeMarkdownPresentationStateChanged,
             window.markdownMenu.attach,
@@ -201,11 +206,17 @@ class MainWindowActionBinding:
         window.actModeFiction.setActionGroup(window.actModeGroup)
         self._connect(
             window.actModeSimple.triggered,
-            window.setViewModeSimple
+            partial(
+                activate_without_checked,
+                window.viewConfigurationController.set_simple,
+            )
         )
         self._connect(
             window.actModeFiction.triggered,
-            window.setViewModeFiction
+            partial(
+                activate_without_checked,
+                window.viewConfigurationController.set_fiction,
+            )
         )
         window.actMarkdownModeGroup = QActionGroup(window)
         for action, mode in [
@@ -288,11 +299,11 @@ class MainWindowActionBinding:
             ),
             (
                 window.corePanels.project_tree.remove_item.clicked,
-                window.outlineRemoveItemsRedac,
+                window.corePanels.project_tree.tree.delete,
             ),
             (
                 window.btnOutlineRemoveItem.clicked,
-                window.outlineRemoveItemsOutline,
+                window.treeOutlineOutline.delete,
             ),
         ]:
             self._connect(signal, slot, F.AUC)

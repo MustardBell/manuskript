@@ -100,8 +100,10 @@ class SettingsWindowViews:
             ),
             appearance=SettingsAppearanceViews(
                 set_font=window.setFont,
-                set_view_setting=window.setViewSettings,
-                rebuild_view_menu=window.generateViewMenu,
+                set_view_setting=(
+                    window.viewConfigurationController.set_view_setting
+                ),
+                rebuild_view_menu=window.viewSettingsMenu.rebuild,
                 outlines=lambda: tuple(window.findChildren(outlineView)),
                 project_tree=project_tree,
                 update_stats=editor.updateStats,

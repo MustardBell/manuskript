@@ -41,7 +41,7 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.actBack.triggered.connect.assert_called_once()
     window.actSettings.triggered.connect.assert_called_once()
     window.actToolTargets.triggered.connect.assert_called_once()
-    window.generateViewMenu.assert_called_once_with()
+    window.viewSettingsMenu.rebuild.assert_called_once_with()
     (
         window.mainEditor.activeMarkdownPresentationStateChanged.connect
         .assert_called_once()
@@ -66,6 +66,14 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.markupCommands.dispatch.assert_called_once_with(
         MarkupCommand.BOLD
     )
+    search_slot = window.actSearch.triggered.connect.call_args.args[0]
+    search_slot()
+    window.workspaceSearch.show.assert_called_once_with()
+    simple_mode_slot = (
+        window.actModeSimple.triggered.connect.call_args.args[0]
+    )
+    simple_mode_slot()
+    window.viewConfigurationController.set_simple.assert_called_once_with()
     live_preview_slot = (
         window.actMarkdownLivePreview.triggered.connect.call_args.args[0]
     )

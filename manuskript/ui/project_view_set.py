@@ -22,6 +22,7 @@ window for any of this, and it is the whole of that coupling.
 """
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Optional, Tuple
 
 
@@ -153,8 +154,11 @@ class ProjectViewSet:
                     # The project's, so both windows type into one text.
                     runtime.documentBuffers,
                 ),
-                open_index=window.openIndex,
-                open_indexes=window.openIndexes,
+                open_index=core.project_tree.tree.setCurrentIndex,
+                open_indexes=partial(
+                    window.mainEditor.openIndexes,
+                    newTab=True,
+                ),
                 selection_changed=core.metadata.selectionChanged,
                 show_status=window.statusPresenter.show,
                 settings=runtime.settingsManager,

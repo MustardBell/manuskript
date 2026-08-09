@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
     QApplication,
     QDockWidget,
     QLabel,
-    QLineEdit,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
@@ -113,6 +112,10 @@ from manuskript.ui.workspace_selection import (
     WorkspaceSelectionHistory,
     WorkspaceSelectionViews,
 )
+from manuskript.ui.workspace_search import (
+    WorkspaceSearchController,
+    WorkspaceSearchViews,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -191,8 +194,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # towards "the last window", and towards where commands go.
         self.windowRegistry = services.window_registry
         self.applicationPreferences = services.application_preferences
-        self.referenceService = None
-        self.textEditorContext = None
         # This window's layout, filed under this window. Two windows
         # sharing one set of keys meant the second saved over the first.
         self.windowId = window_id
@@ -222,6 +223,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
         )
         self.mainEditor.set_focus_source(self.workspaceFocus)
+        self.workspaceSearch = self.workspaceLifetime.own(
+            WorkspaceSearchController(
+                WorkspaceSearchViews.for_window(self)
+            )
+        )
         self.documentCommands = DocumentCommandRouter(
             self.workspaceFocus.current_document_target
         )
@@ -589,45 +595,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # GENERAL / UI STUFF
     ###############################################################################
 
-    def projectName(self):
-        """
-        Returns a user-friendly name for the loaded project.
-        """
-        pName = os.path.split(self.currentProject)[1]
-        if pName.endswith('.msk'):
-            pName=pName[:-4]
-        return pName
-
-    ###############################################################################
-    # OUTLINE
-    ###############################################################################
-
-    def outlineRemoveItemsRedac(self):
-        self.corePanels.project_tree.tree.delete()
-
-    def outlineRemoveItemsOutline(self):
-        self.treeOutlineOutline.delete()
-
-    ###############################################################################
-    # EDITOR
-    ###############################################################################
-
-    def openIndex(self, index):
-        self.corePanels.project_tree.tree.setCurrentIndex(index)
-
-    def openIndexes(self, indexes, newTab=True):
-        self.mainEditor.openIndexes(indexes, newTab=True)
-
-    # Menu #############################################################
-
-    def doSearch(self):
-        "Do a global search."
-        self.dckSearch.show()
-        self.dckSearch.activateWindow()
-        searchTextInput = self.dckSearch.findChild(QLineEdit, 'searchTextInput')
-        searchTextInput.setFocus()
-        searchTextInput.selectAll()
-
     def makeConnections(self):
         self.projectBinding.bind()
         self.referenceService = self.projectBinding.reference_service
@@ -891,27 +858,3 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.workspaceDialogs.show_media_types
         )
         self.menuDeveloper.addAction(self.actMediaTypes)
-
-    ###############################################################################
-    # VIEW MENU
-    ###############################################################################
-
-    def generateViewMenu(self):
-        self.viewSettingsMenu.rebuild()
-
-    def setViewSettings(self, item, part, element):
-        self.viewConfigurationController.set_view_setting(
-            item,
-            part,
-            element,
-        )
-
-    ###############################################################################
-    # VIEW MODES
-    ###############################################################################
-
-    def setViewModeSimple(self, _checked=False):
-        self.viewConfigurationController.set_simple()
-
-    def setViewModeFiction(self, _checked=False):
-        self.viewConfigurationController.set_fiction()
