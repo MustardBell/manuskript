@@ -2,6 +2,8 @@ import os
 import tempfile
 import zipfile
 
+from manuskript.domain.project_paths import normalize_project_path
+
 
 class LegacyArchiveError(OSError):
     pass
@@ -31,10 +33,15 @@ class Version0ProjectArchive:
                 for member in archive.namelist():
                     if member.endswith("/"):
                         continue
-                    files[os.path.normpath(member)] = archive.read(
+                    files[normalize_project_path(member)] = archive.read(
                         member
                     )
-        except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            zipfile.BadZipFile,
+        ) as error:
             raise LegacyArchiveReadError(
                 "Cannot read legacy project {}: {}".format(
                     project_file,

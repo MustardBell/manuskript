@@ -1,4 +1,5 @@
 import importlib
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -46,10 +47,11 @@ def make_context(
     )
 
 
-def test_export_context_resolves_project_directory():
-    context = make_context("/work/novel/manuscript.msk")
+def test_export_context_resolves_project_directory(tmp_path):
+    project = tmp_path / "novel" / "manuscript.msk"
+    context = make_context(str(project))
 
-    assert context.project_path == "/work/novel"
+    assert Path(context.project_path) == project.parent
 
 
 def test_export_context_provider_resolves_live_project_sources():
