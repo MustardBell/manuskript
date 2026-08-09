@@ -120,7 +120,10 @@ class ProjectViewSet:
         from manuskript.ui.reference_navigation import (
             reference_navigation_for,
         )
-        from manuskript.ui.search_context import SearchResultViewAdapter
+        from manuskript.ui.search_context import (
+            SearchResultViewAdapter,
+            SearchResultViews,
+        )
         from manuskript.ui.views.MDEditCompleter import MDEditCompleter
         from manuskript.ui.views.textEditView import textEditView
         from manuskript.ui.views.text_editor_context import (
@@ -129,6 +132,7 @@ class ProjectViewSet:
 
         runtime = window.projectRuntime
         core = window.corePanels
+        search_result_views = SearchResultViews.for_window(window)
         return cls(
             models=runtime.models,
             navigation=reference_navigation_for(
@@ -174,7 +178,7 @@ class ProjectViewSet:
             search=SearchViews(
                 view=window.widget,
                 result_views=lambda references: SearchResultViewAdapter(
-                    window,
+                    search_result_views,
                     references,
                 ),
             ),

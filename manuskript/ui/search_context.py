@@ -1,12 +1,7 @@
 from dataclasses import dataclass
-
-from PyQt5.QtWidgets import (
-    QLabel,
-    QLineEdit,
-    QListView,
-    QTableView,
-    QTextEdit,
-)
+from functools import partial
+from types import MappingProxyType
+from typing import Any, Callable, Mapping, Tuple
 
 from manuskript.enums import (
     Character,
@@ -19,6 +14,7 @@ from manuskript.enums import (
 )
 from manuskript.models import references
 from manuskript.models.flatDataModelWrapper import flatDataModelWrapper
+from manuskript.panels.core import METADATA
 
 
 @dataclass(frozen=True)
@@ -61,11 +57,98 @@ class SearchContext:
         )
 
 
+@dataclass(frozen=True)
+class SearchResultViews:
+    """Widgets search results may reveal or highlight in one workspace."""
+
+    main_tabs: Any
+    summary_tab_index: int
+    character_tabs: Any
+    summary_tabs: Any
+    world_tabs: Any
+    plot_tabs: Any
+    character_fields: Mapping[int, Tuple[int, Any]]
+    summary_fields: Mapping[int, Tuple[int, Any]]
+    metadata_fields: Mapping[int, Any]
+    world_fields: Mapping[int, Tuple[int, Any]]
+    plot_fields: Mapping[int, Tuple[int, Any]]
+    plot_step_fields: Mapping[int, Tuple[Any, ...]]
+    current_document_text: Callable[[], Any]
+    show_metadata: Callable[[], None]
+
+    @classmethod
+    def for_window(cls, window):
+        metadata = window.corePanels.metadata
+        properties = metadata.properties
+        plot_steps = window.lstSubPlots
+        main_editor = window.mainEditor
+        panel_host = window.panelHost
+        return cls(
+            main_tabs=window.tabMain,
+            summary_tab_index=window.TabSummary,
+            character_tabs=window.tabPersos,
+            summary_tabs=window.tabSummary,
+            world_tabs=window.tabWorld,
+            plot_tabs=window.tabPlot,
+            character_fields=MappingProxyType({
+                Character.name: (0, window.txtPersoName),
+                Character.goal: (0, window.txtPersoGoal),
+                Character.motivation: (0, window.txtPersoMotivation),
+                Character.conflict: (0, window.txtPersoConflict),
+                Character.epiphany: (0, window.txtPersoEpiphany),
+                Character.summarySentence: (
+                    0, window.txtPersoSummarySentence,
+                ),
+                Character.summaryPara: (0, window.txtPersoSummaryPara),
+                Character.summaryFull: (1, window.txtPersoSummaryFull),
+                Character.notes: (2, window.txtPersoNotes),
+                Character.infos: (3, window.tblPersoInfos),
+            }),
+            summary_fields=MappingProxyType({
+                FlatData.summarySituation: (0, window.txtSummarySituation),
+                FlatData.summarySentence: (0, window.txtSummarySentence),
+                FlatData.summaryPara: (1, window.txtSummaryPara),
+                FlatData.summaryPage: (2, window.txtSummaryPage),
+                FlatData.summaryFull: (3, window.txtSummaryFull),
+            }),
+            metadata_fields=MappingProxyType({
+                Outline.title: properties.txtTitle,
+                Outline.summarySentence: metadata.txtSummarySentence,
+                Outline.summaryFull: metadata.txtSummaryFull,
+                Outline.notes: metadata.txtNotes,
+                Outline.POV: properties.lblPOV,
+                Outline.status: properties.lblStatus,
+                Outline.label: properties.lblLabel,
+            }),
+            world_fields=MappingProxyType({
+                World.name: (0, window.txtWorldName),
+                World.description: (0, window.txtWorldDescription),
+                World.passion: (1, window.txtWorldPassion),
+                World.conflict: (1, window.txtWorldConflict),
+            }),
+            plot_fields=MappingProxyType({
+                Plot.name: (0, window.txtPlotName),
+                Plot.description: (0, window.txtPlotDescription),
+                Plot.characters: (0, window.lstPlotPerso),
+                Plot.result: (0, window.txtPlotResult),
+            }),
+            plot_step_fields=MappingProxyType({
+                PlotStep.name: (plot_steps,),
+                PlotStep.meta: (plot_steps,),
+                PlotStep.summary: (plot_steps, window.txtSubPlotSummary),
+            }),
+            current_document_text=lambda: (
+                main_editor.currentEditor().txtRedacText
+            ),
+            show_metadata=partial(panel_host.set_visible, METADATA),
+        )
+
+
 class SearchResultViewAdapter:
     """Expose search-result UI operations without global window lookup."""
 
-    def __init__(self, window, reference_service):
-        self.window = window
+    def __init__(self, views, reference_service):
+        self.views = views
         self.references = reference_service
 
     def open_result(self, result):
@@ -103,136 +186,50 @@ class SearchResultViewAdapter:
 
     def _open_character(self, result):
         self.references.open(references.characterReference(result.id()))
-        self.window.tabPersos.setEnabled(True)
+        self.views.character_tabs.setEnabled(True)
 
     def _open_flat_data(self, _result):
-        self.window.tabMain.setCurrentIndex(self.window.TabSummary)
+        self.views.main_tabs.setCurrentIndex(self.views.summary_tab_index)
 
     def _open_outline(self, result):
         self.references.open(references.textReference(result.id()))
 
     def _open_world(self, result):
         self.references.open(references.worldReference(result.id()))
-        self.window.tabWorld.setEnabled(True)
+        self.views.world_tabs.setEnabled(True)
 
     def _open_plot(self, result):
         self.references.open(references.plotReference(result.id()))
-        self.window.tabPlot.setEnabled(True)
+        self.views.plot_tabs.setEnabled(True)
 
     def _character_widgets(self, result):
-        targets = {
-            Character.name: (0, "txtPersoName", QLineEdit),
-            Character.goal: (0, "txtPersoGoal", QTextEdit),
-            Character.motivation: (0, "txtPersoMotivation", QTextEdit),
-            Character.conflict: (0, "txtPersoConflict", QTextEdit),
-            Character.epiphany: (0, "txtPersoEpiphany", QTextEdit),
-            Character.summarySentence: (
-                0,
-                "txtPersoSummarySentence",
-                QTextEdit,
-            ),
-            Character.summaryPara: (0, "txtPersoSummaryPara", QTextEdit),
-            Character.summaryFull: (1, "txtPersoSummaryFull", QTextEdit),
-            Character.notes: (2, "txtPersoNotes", QTextEdit),
-            Character.infos: (3, "tblPersoInfos", QTableView),
-        }
-        tab_index, name, widget_type = targets[result.column()]
-        self.window.tabPersos.setCurrentIndex(tab_index)
-        return self.window.tabPersos.findChild(widget_type, name)
+        tab_index, widget = self.views.character_fields[result.column()]
+        self.views.character_tabs.setCurrentIndex(tab_index)
+        return widget
 
     def _flat_data_widgets(self, result):
-        targets = {
-            FlatData.summarySituation: (
-                0,
-                "txtSummarySituation",
-                QLineEdit,
-                self.window,
-            ),
-            FlatData.summarySentence: (
-                0,
-                "txtSummarySentence",
-                QTextEdit,
-                self.window.tabSummary,
-            ),
-            FlatData.summaryPara: (
-                1,
-                "txtSummaryPara",
-                QTextEdit,
-                self.window.tabSummary,
-            ),
-            FlatData.summaryPage: (
-                2,
-                "txtSummaryPage",
-                QTextEdit,
-                self.window.tabSummary,
-            ),
-            FlatData.summaryFull: (
-                3,
-                "txtSummaryFull",
-                QTextEdit,
-                self.window.tabSummary,
-            ),
-        }
-        tab_index, name, widget_type, root = targets[result.column()]
-        self.window.tabSummary.setCurrentIndex(tab_index)
-        return root.findChild(widget_type, name)
+        tab_index, widget = self.views.summary_fields[result.column()]
+        self.views.summary_tabs.setCurrentIndex(tab_index)
+        return widget
 
     def _outline_widgets(self, result):
-        targets = {
-            Outline.text: ("txtRedacText", QTextEdit, False),
-            Outline.title: ("txtTitle", QLineEdit, True),
-            Outline.summarySentence: ("txtSummarySentence", QLineEdit, True),
-            Outline.summaryFull: ("txtSummaryFull", QTextEdit, True),
-            Outline.notes: ("txtNotes", QTextEdit, True),
-            Outline.POV: ("lblPOV", QLabel, True),
-            Outline.status: ("lblStatus", QLabel, True),
-            Outline.label: ("lblLabel", QLabel, True),
-        }
-        name, widget_type, is_metadata = targets[result.column()]
-        if is_metadata:
-            metadata = self.window.corePanels.metadata
+        if result.column() != Outline.text:
             # Through the panel's own action, so the toolbar button that
             # mirrors it stays in agreement.
-            self.window.panelHost.set_visible("core.metadata")
-            return metadata.findChild(widget_type, name)
-        editor = self.window.mainEditor.currentEditor()
-        return editor.findChild(widget_type, name)
+            self.views.show_metadata()
+            return self.views.metadata_fields[result.column()]
+        return self.views.current_document_text()
 
     def _world_widgets(self, result):
-        targets = {
-            World.name: (0, "txtWorldName", QLineEdit),
-            World.description: (0, "txtWorldDescription", QTextEdit),
-            World.passion: (1, "txtWorldPassion", QTextEdit),
-            World.conflict: (1, "txtWorldConflict", QTextEdit),
-        }
-        tab_index, name, widget_type = targets[result.column()]
-        self.window.tabWorld.setCurrentIndex(tab_index)
-        return self.window.tabWorld.findChild(widget_type, name)
+        tab_index, widget = self.views.world_fields[result.column()]
+        self.views.world_tabs.setCurrentIndex(tab_index)
+        return widget
 
     def _plot_widgets(self, result):
-        targets = {
-            Plot.name: (0, "txtPlotName", QLineEdit),
-            Plot.description: (0, "txtPlotDescription", QTextEdit),
-            Plot.characters: (0, "lstPlotPerso", QListView),
-            Plot.result: (0, "txtPlotResult", QTextEdit),
-        }
-        tab_index, name, widget_type = targets[result.column()]
-        self.window.tabPlot.setCurrentIndex(tab_index)
-        return self.window.tabPlot.findChild(widget_type, name)
+        tab_index, widget = self.views.plot_fields[result.column()]
+        self.views.plot_tabs.setCurrentIndex(tab_index)
+        return widget
 
     def _plot_step_widgets(self, result):
-        targets = {
-            PlotStep.name: [(1, "lstSubPlots", QTableView)],
-            PlotStep.meta: [(1, "lstSubPlots", QTableView)],
-            PlotStep.summary: [
-                (1, "lstSubPlots", QTableView),
-                (1, "txtSubPlotSummary", QTextEdit),
-            ],
-        }
-        widgets = []
-        for tab_index, name, widget_type in targets[result.column()]:
-            self.window.tabPlot.setCurrentIndex(tab_index)
-            widgets.append(
-                self.window.tabPlot.findChild(widget_type, name)
-            )
-        return widgets
+        self.views.plot_tabs.setCurrentIndex(1)
+        return list(self.views.plot_step_fields[result.column()])
