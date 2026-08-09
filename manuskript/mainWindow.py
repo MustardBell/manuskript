@@ -90,6 +90,7 @@ from manuskript.ui.status_presenter import (
     StatusPresenter,
     StatusPresenterViews,
 )
+from manuskript.ui.settings_window_views import SettingsWindowViews
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -1364,7 +1365,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def settingsWindow(self, tab=None):
         self.sw = settingsWindow(
-            self,
+            SettingsWindowViews.for_window(self),
             self.settingsManager,
             theme_repository=self.themeRepository,
             theme_preview_renderer=self.themePreviewRenderer,

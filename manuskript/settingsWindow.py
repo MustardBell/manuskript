@@ -4,7 +4,7 @@ import os
 import shutil
 from collections import OrderedDict
 
-from PyQt5.QtCore import QSize, QRegExp, QTranslator, QObject
+from PyQt5.QtCore import QSize, QTranslator, QObject
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIntValidator, QIcon, QFont, QColor, QPixmap, QStandardItem, QPainter
 from PyQt5.QtGui import QStyleHints
@@ -30,31 +30,27 @@ from manuskript.functions import (
     writablePath,
 )
 from manuskript.functions import findBackground, themeIcon
-from manuskript.ui.editors.tabSplitter import tabSplitter
 from manuskript.ui.editors.themes import ThemePreviewRenderer
 from manuskript.ui.plugins.index_card_styles import (
     IndexCardStyleService,
 )
 from manuskript.ui.settings_ui import Ui_Settings
-from manuskript.ui.views.outlineView import outlineView
-from manuskript.ui.views.textEditView import textEditView
-from manuskript.ui.welcome import welcome
 from manuskript.ui import style as S
 
 
 class settingsWindow(QWidget, Ui_Settings):
     def __init__(
         self,
-        mainWindow,
+        views,
         settings_manager,
         theme_repository=None,
         theme_preview_renderer=None,
         application_preferences=None,
         card_styles=None,
     ):
-        QWidget.__init__(self)
+        QWidget.__init__(self, views.parent)
         self.setupUi(self)
-        self.mw = mainWindow
+        self.views = views
         self.settings = settings_manager
         self.themeRepository = (
             theme_repository
@@ -178,7 +174,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.chkSaveToZip.stateChanged.connect(self.saveSettingsChanged)
         self.txtAutoSave.textEdited.connect(self.saveSettingsChanged)
         self.txtAutoSaveNoChanges.textEdited.connect(self.saveSettingsChanged)
-        autoLoad, last = self.mw.welcome.getAutoLoadValues()
+        autoLoad, _last = self.views.startup.auto_load_values()
         self.chkAutoLoad.setChecked(autoLoad)
         self.chkAutoLoad.stateChanged.connect(self.saveSettingsChanged)
 
@@ -230,7 +226,9 @@ class settingsWindow(QWidget, Ui_Settings):
         ]:
             signal.connect(self.revisionsSettingsChanged)
         self.btnManageGitRevisions.clicked.connect(
-            lambda _checked=False: self.mw.showGitRevisions(self)
+            lambda _checked=False: (
+                self.views.project.show_revision_history(self)
+            )
         )
         self.btnInitGitRepository.clicked.connect(
             lambda _checked=False: self.initGitRepository()
@@ -408,7 +406,7 @@ class settingsWindow(QWidget, Ui_Settings):
         Read when needed rather than captured: this window outlives any
         one project, and the models under it are replaced with each.
         """
-        return self.mw.projectRuntime.models
+        return self.views.project.models()
 
     def setTab(self, tab):
 
@@ -447,13 +445,13 @@ class settingsWindow(QWidget, Ui_Settings):
         f = qApp.font()
         f.setPointSize(val)
         qApp.setFont(f)
-        self.mw.setFont(f)
+        self.views.appearance.set_font(f)
         self.applicationPreferences.font_size = val
 
     def charSettingsChanged(self):
         self.settings.progressChars = True if self.chkProgressChars.checkState() else False
 
-        self.mw.mainEditor.updateStats()
+        self.views.appearance.update_stats()
 
     def saveSettingsChanged(self):
         if self.txtAutoSave.text() in ["", "0"]:
@@ -461,7 +459,7 @@ class settingsWindow(QWidget, Ui_Settings):
         if self.txtAutoSaveNoChanges.text() in ["", "0"]:
             self.txtAutoSaveNoChanges.setText("1")
 
-        self.mw.welcome.setAutoLoad(
+        self.views.startup.set_auto_load(
             True if self.chkAutoLoad.checkState() else False
         )
 
@@ -471,7 +469,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.settings.saveToZip = True if self.chkSaveToZip.checkState() else False
         self.settings.autoSaveDelay = int(self.txtAutoSave.text())
         self.settings.autoSaveNoChangesDelay = int(self.txtAutoSaveNoChanges.text())
-        self.mw.projectManager.reconfigureAutosave()
+        self.views.project.reconfigure_autosave()
 
     ####################################################################################################
     #                                           REVISION                                               #
@@ -493,7 +491,7 @@ class settingsWindow(QWidget, Ui_Settings):
         self.updateRevisionBackendUi()
 
     def gitAvailability(self):
-        return inspect_git_availability(self.mw.currentProject)
+        return inspect_git_availability(self.views.project.current_file())
 
     def updateRevisionBackendUi(self):
         enabled = self.chkRevisionsKeep.isChecked()
@@ -525,7 +523,7 @@ class settingsWindow(QWidget, Ui_Settings):
             git and availability.needs_repository
         )
         self.btnInitGitRepository.setEnabled(
-            enabled and bool(self.mw.currentProject)
+            enabled and bool(self.views.project.current_file())
         )
         self.lblRevisionStatus.setVisible(git and not availability.usable)
         self.lblRevisionStatus.setText(
@@ -540,7 +538,7 @@ class settingsWindow(QWidget, Ui_Settings):
                 "to the legacy internal snapshots."
             )
         if availability.needs_repository:
-            if not self.mw.currentProject:
+            if not self.views.project.current_file():
                 return self.tr(
                     "Open a project to see whether it is kept in a Git "
                     "repository."
@@ -554,7 +552,7 @@ class settingsWindow(QWidget, Ui_Settings):
 
     def initGitRepository(self):
         """Offer to put the project under Git so revisions start working."""
-        project = self.mw.currentProject
+        project = self.views.project.current_file()
         if not project:
             return
         directory = os.path.dirname(os.path.abspath(project)) or os.curdir
@@ -611,8 +609,8 @@ class settingsWindow(QWidget, Ui_Settings):
         lst = ["Nothing", "POV", "Label", "Progress", "Compile"]
         item, part = self.viewSettingsDatas()[cmb]
         element = lst[cmb.currentIndex()]
-        self.mw.setViewSettings(item, part, element)
-        self.mw.generateViewMenu()
+        self.views.appearance.set_view_setting(item, part, element)
+        self.views.appearance.rebuild_view_menu()
 
     def outlineColumnsData(self):
         return {
@@ -636,7 +634,7 @@ class settingsWindow(QWidget, Ui_Settings):
             self.settings.outlineViewColumns.remove(col)
 
         # Update views
-        for w in self.mw.findChildren(outlineView, QRegExp()):
+        for w in self.views.appearance.outlines():
             w.hideColumns()
 
     def treeViewSettignsChanged(self):
@@ -659,16 +657,16 @@ class settingsWindow(QWidget, Ui_Settings):
         iconSize = self.sldTreeIconSize.value()
         if iconSize != self.settings.viewSettings["Tree"]["iconSize"]:
             self.settings.viewSettings["Tree"]["iconSize"] = iconSize
-            self.mw.corePanels.project_tree.tree.setIconSize(
+            self.views.appearance.project_tree.setIconSize(
                 QSize(iconSize, iconSize)
             )
 
-        self.mw.corePanels.project_tree.tree.viewport().update()
+        self.views.appearance.project_tree.viewport().update()
 
     def countSpacesChanged(self):
         self.settings.countSpaces = True if self.chkCountSpaces.checkState() else False
 
-        self.mw.mainEditor.updateStats()
+        self.views.appearance.update_stats()
 
     def setCorkColor(self):
         color = QColor(self.settings.corkBackground["color"])
@@ -678,7 +676,7 @@ class settingsWindow(QWidget, Ui_Settings):
             self.settings.corkBackground["color"] = color.name()
             self.updateCorkColor()
             # Update Cork view
-            self.mw.mainEditor.updateCorkBackground()
+            self.views.appearance.update_cork_background()
 
     def populateCorkStyles(self):
         """List built-in and plugin card styles without firing a save."""
@@ -702,7 +700,7 @@ class settingsWindow(QWidget, Ui_Settings):
         if not style_id:
             return
         self.settings.indexCardStyle = style_id
-        self.mw.mainEditor.updateCorkView()
+        self.views.appearance.update_cork_view()
 
     def updateCorkColor(self):
         self.btnCorkColor.setStyleSheet("background:{};".format(self.settings.corkBackground["color"]))
@@ -727,7 +725,7 @@ class settingsWindow(QWidget, Ui_Settings):
                     self.settings.corkBackground["image"] = img
                 self.setCorkImageDefault()
         # Update Cork view
-        self.mw.mainEditor.updateCorkBackground()
+        self.views.appearance.update_cork_background()
 
     def populatesCmbBackgrounds(self, cmb):
         # self.cmbDelegate = cmbPixmapDelegate()
@@ -748,7 +746,7 @@ class settingsWindow(QWidget, Ui_Settings):
         cmb.setIconSize(QSize(128, 64))
 
     def addBackgroundImage(self):
-        lastDirectory = self.mw.welcome.getLastAccessedDirectory()
+        lastDirectory = self.views.startup.last_accessed_directory()
 
         """File dialog that request an existing file. For opening an image."""
         filename = QFileDialog.getOpenFileName(self,
@@ -840,15 +838,15 @@ class settingsWindow(QWidget, Ui_Settings):
     def updateAllWidgets(self):
 
         # Update font and defaultBlockFormat to all textEditView. Drastically.
-        for w in self.mw.findChildren(textEditView, QRegExp(".*")):
+        for w in self.views.editors.text_editors():
             w.loadFontSettings()
 
         # Update background color in all tabSplitter (tabs)
-        for w in self.mw.findChildren(tabSplitter, QRegExp(".*")):
+        for w in self.views.editors.tab_splitters():
             w.updateStyleSheet()
 
         # Update background color in all folder text view:
-        for w in self.mw.findChildren(QWidget, QRegExp("editorWidgetFolderText")):
+        for w in self.views.editors.folder_text_views():
             w.setStyleSheet("background: {};".format(self.settings.textEditor["background"]))
 
     def setApplicationCursorBlinking(self):

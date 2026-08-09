@@ -63,6 +63,24 @@ def test_git_history_opened_from_modal_settings_is_interactive(
     assert settings.isVisible()
     settings.close()
 
+
+def test_settings_window_uses_explicit_workspace_capabilities(
+        MWSampleProject):
+    window = MWSampleProject
+    window.settingsWindow()
+    settings = window.sw
+    try:
+        assert settings.parentWidget() is window
+        assert "mw" not in settings.__dict__
+        assert "window" not in settings.__dict__
+        assert settings._models() is window.projectRuntime.models
+        assert (
+            settings.views.project.current_file()
+            == window.currentProject
+        )
+    finally:
+        settings.close()
+
 def test_general(MWSampleProject):
     MW = MWSampleProject
 
