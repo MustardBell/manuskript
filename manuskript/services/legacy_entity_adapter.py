@@ -50,7 +50,7 @@ class LegacyEntityAdapter:
         )
         return EntityRecord(
             document=OutlineDocument(
-                id="legacy:project:summary",
+                id="project:summary",
                 title=title,
                 kind="entity",
                 text=body,

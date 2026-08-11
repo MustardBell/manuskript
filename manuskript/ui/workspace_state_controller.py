@@ -118,6 +118,7 @@ class WorkspaceStateController:
             if splitter is not None and value is not None:
                 splitter.restoreState(value)
         self._restore_panel_visibility(state)
+        return state
 
     def _restore_panel_state(self, state):
         stored = state.panel_state or {}

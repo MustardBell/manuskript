@@ -40,9 +40,6 @@ def make_context(settings, **commands):
     return TextEditorContext(
         settings=settings,
         reload_fonts=MagicMock(),
-        create_character=MagicMock(),
-        create_plot=MagicMock(),
-        create_world_item=MagicMock(),
         invoke_outline_command=MagicMock(),
         **commands,
     )
@@ -694,7 +691,7 @@ def test_selected_surface_can_become_an_explicit_entity_reference():
     )
 
 
-def test_reference_menu_can_create_then_link_a_generic_entity():
+def test_selected_text_offers_direct_entity_creation_then_linking():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
     create_entity = MagicMock(return_value=EntityReferenceChoice(
         "kyiv", "place", "Kyiv", "Places/Kyiv", (), True
@@ -713,15 +710,11 @@ def test_reference_menu_can_create_then_link_a_generic_entity():
     editor.setTextCursor(cursor)
 
     menu = editor.createStandardContextMenu()
-    reference_menu = next(
+    create_menu = next(
         action.menu() for action in menu.actions()
         if action.menu() is not None
-        and action.menu().title().replace("&", "") == "Reference…"
-    )
-    create_menu = next(
-        action.menu() for action in reference_menu.actions()
-        if action.menu() is not None
-        and action.menu().title().replace("&", "") == "Create new…"
+        and action.menu().title().replace("&", "")
+        == "Create entity from “Kyiv”…"
     )
     create_menu.actions()[0].trigger()
 
@@ -752,7 +745,7 @@ def test_story_assertion_command_inserts_source_block_at_current_paragraph():
     editor._insertStoryAssertion(assertion)
 
     assert any(
-        action.text().replace("&", "") == "Add story assertion…"
+        action.text().replace("&", "") == "Record story fact…"
         and action.isEnabled()
         for action in menu.actions()
     )

@@ -1,11 +1,10 @@
 import importlib
+from pathlib import Path
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
-from PyQt5.QtWidgets import QStyleOptionViewItem, qApp
-
 from manuskript.domain.project import CloseDecision
-from manuskript.enums import Outline
-from manuskript.models import outlineItem
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.views.textEditView import textEditView
@@ -122,43 +121,58 @@ def test_lifecycle_view_flushes_every_model_backed_text_editor():
     window.projectRuntime.documentBuffers.flush.assert_not_called()
 
 
-def test_close_then_open_rebinds_outline_models_without_stale_delegates(
-        MWEmptyProject, tmp_path):
-    window = MWEmptyProject
+def test_close_then_open_rebinds_outline_models_without_stale_delegates():
+    """Native Qt model replacement is isolated and hard-limited.
+
+    A stale delegate is capable of terminating the interpreter instead of
+    raising.  Keeping this in a child process makes that failure diagnosable
+    and prevents one lifecycle regression from taking the whole suite down.
+    """
+    script = r'''
+import tempfile
+from pathlib import Path
+
+from PyQt5.QtWidgets import QStyleOptionViewItem, qApp
+
+from manuskript.enums import Outline
+from manuskript.models import outlineItem
+from manuskript.tests import prepare_test_application
+
+_application, window = prepare_test_application()
+with tempfile.TemporaryDirectory() as directory:
+    first_project = Path(directory) / "first.msk"
+    window.welcome.createFile(str(first_project), overwrite=True)
     item = outlineItem(title="Scene", _type="md")
     window.projectRuntime.models.outline.appendItem(item)
     old_model = window.projectRuntime.models.outline
     old_index = old_model.indexFromItem(item)
     pov_index = old_index.sibling(old_index.row(), Outline.POV)
-    old_delegate = window.treeOutlineOutline.itemDelegateForColumn(
-        Outline.POV
-    )
+    old_delegate = window.treeOutlineOutline.itemDelegateForColumn(Outline.POV)
     window.projectManager.session.mark_clean()
 
     assert window.projectManager.closeProject()
     qApp.processEvents()
-
     assert window.treeOutlineOutline.model() is None
     assert window.corePanels.project_tree.tree.model() is None
     assert old_delegate.mdlCharacter is None
     old_delegate.sizeHint(QStyleOptionViewItem(), pov_index)
 
-    next_project = tmp_path / "mayor.msk"
+    next_project = Path(directory) / "mayor.msk"
     window.welcome.createFile(str(next_project), overwrite=True)
     qApp.processEvents()
-
     assert window.currentProject == str(next_project)
-    assert (
-        window.treeOutlineOutline.model()
-        is window.projectRuntime.models.outline
+    assert window.treeOutlineOutline.model() is window.projectRuntime.models.outline
+    assert window.corePanels.project_tree.tree.model() is window.projectRuntime.models.outline
+    assert window.treeOutlineOutline.itemDelegateForColumn(
+        Outline.POV
+    ).mdlCharacter is window.projectRuntime.models.characters
+'''
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", script],
+        cwd=str(Path(__file__).resolve().parents[3]),
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
-    assert (
-        window.corePanels.project_tree.tree.model()
-        is window.projectRuntime.models.outline
-    )
-    assert (
-        window.treeOutlineOutline.itemDelegateForColumn(
-            Outline.POV
-        ).mdlCharacter
-        is window.projectRuntime.models.characters
-    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

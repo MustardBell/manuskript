@@ -310,7 +310,7 @@ def _report(source_file, destination_file, source, reopened):
         MigrationSection("Outline", len(destination_outline), len(source_outline)),
         MigrationSection(
             "Project summary",
-            int("legacy:project:summary" in reopened_by_id),
+            int("project:summary" in reopened_by_id),
             1,
         ),
         MigrationSection(

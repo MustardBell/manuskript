@@ -1,4 +1,6 @@
-"""Window-local editor for one generic entity document."""
+"""Window-local editor for one canonical entity document."""
+
+import json
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -6,14 +8,18 @@ from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
 )
 
+from manuskript.domain.canonical_project import StructuredMetadataField
 from manuskript.domain.morphology import MorphologyProfile
 from manuskript.ui.morphology_editor import MorphologyParadigmDialog
 
@@ -28,6 +34,7 @@ class EntityEditorDialog(QDialog):
         save_entity,
         parent=None,
         morphology_providers=None,
+        read_only=False,
     ):
         super().__init__(parent)
         self.entity = entity
@@ -35,8 +42,15 @@ class EntityEditorDialog(QDialog):
         self._morphologyProviders = morphology_providers
         self._morphologyProfile = MorphologyProfile.from_entity(entity)
         self._morphologyChanged = False
+        self._readOnly = bool(read_only)
         self.setObjectName("entityEditorDialog")
-        self.setWindowTitle(self.tr("Entity — {}").format(entity.title))
+        schema = next(
+            (item for item in schemas if item.type == entity.type), None
+        )
+        entity_label = schema.label if schema is not None else self.tr("Entity")
+        self.setWindowTitle(
+            self.tr("{} — {}").format(entity_label, entity.title)
+        )
         self.setWindowModality(Qt.WindowModal)
         self.setMinimumSize(560, 540)
 
@@ -82,6 +96,8 @@ class EntityEditorDialog(QDialog):
             )
         )
         self.morphologyButton.setEnabled(
+            not self._readOnly
+            and
             morphology_providers is not None
             and bool(morphology_providers.providers)
             and provider_available
@@ -105,6 +121,42 @@ class EntityEditorDialog(QDialog):
         form.addRow(self.tr("Name forms:"), self.morphologyButton)
         form.addRow("", self.morphologySummary)
 
+        propertiesLabel = QLabel(self.tr("&Properties:"), self)
+        self.propertiesTable = QTableWidget(0, 2, self)
+        self.propertiesTable.setObjectName("entityPropertiesTable")
+        self.propertiesTable.setAccessibleName(
+            self.tr("Entity properties")
+        )
+        self.propertiesTable.setHorizontalHeaderLabels((
+            self.tr("Property"), self.tr("Value")
+        ))
+        self.propertiesTable.horizontalHeader().setStretchLastSection(True)
+        self.propertiesTable.verticalHeader().setVisible(False)
+        propertiesLabel.setBuddy(self.propertiesTable)
+        for field in entity.metadata:
+            if field.name == "morphology":
+                continue
+            self._appendProperty(field.name, field.value)
+
+        self.addPropertyButton = QPushButton(
+            self.tr("Add &property"), self
+        )
+        self.addPropertyButton.setObjectName("addEntityPropertyButton")
+        self.removePropertyButton = QPushButton(
+            self.tr("&Remove property"), self
+        )
+        self.removePropertyButton.setObjectName(
+            "removeEntityPropertyButton"
+        )
+        self.addPropertyButton.clicked.connect(
+            lambda: self._appendProperty("", "")
+        )
+        self.removePropertyButton.clicked.connect(self._removeProperty)
+        propertyButtons = QHBoxLayout()
+        propertyButtons.addWidget(self.addPropertyButton)
+        propertyButtons.addWidget(self.removePropertyButton)
+        propertyButtons.addStretch(1)
+
         body_label = QLabel(self.tr("&Markdown document:"), self)
         self.bodyEdit = QPlainTextEdit(self)
         self.bodyEdit.setObjectName("entityBodyEdit")
@@ -112,20 +164,90 @@ class EntityEditorDialog(QDialog):
         self.bodyEdit.setPlainText(entity.document.text)
         body_label.setBuddy(self.bodyEdit)
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel,
-            Qt.Horizontal,
-            self,
-        )
-        self.buttons.button(QDialogButtonBox.Save).setDefault(True)
-        self.buttons.accepted.connect(self.save)
-        self.buttons.rejected.connect(self.reject)
+        if self._readOnly:
+            self.buttons = QDialogButtonBox(
+                QDialogButtonBox.Close, Qt.Horizontal, self
+            )
+            self.buttons.rejected.connect(self.reject)
+        else:
+            self.buttons = QDialogButtonBox(
+                QDialogButtonBox.Save | QDialogButtonBox.Cancel,
+                Qt.Horizontal,
+                self,
+            )
+            self.buttons.button(QDialogButtonBox.Save).setDefault(True)
+            self.buttons.accepted.connect(self.save)
+            self.buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        layout.addWidget(propertiesLabel)
+        layout.addWidget(self.propertiesTable, 1)
+        layout.addLayout(propertyButtons)
         layout.addWidget(body_label)
         layout.addWidget(self.bodyEdit, 1)
         layout.addWidget(self.buttons)
+
+        if self._readOnly:
+            self.titleEdit.setReadOnly(True)
+            self.typeCombo.setEnabled(False)
+            self.aliasesEdit.setReadOnly(True)
+            self.propertiesTable.setEditTriggers(
+                QTableWidget.NoEditTriggers
+            )
+            self.addPropertyButton.setVisible(False)
+            self.removePropertyButton.setVisible(False)
+            self.bodyEdit.setReadOnly(True)
+
+    def _appendProperty(self, name, value):
+        row = self.propertiesTable.rowCount()
+        self.propertiesTable.insertRow(row)
+        nameItem = QTableWidgetItem(str(name))
+        valueItem = QTableWidgetItem(self._propertyText(value))
+        valueItem.setData(Qt.UserRole, value)
+        self.propertiesTable.setItem(row, 0, nameItem)
+        self.propertiesTable.setItem(row, 1, valueItem)
+        self.propertiesTable.setCurrentCell(row, 0)
+
+    def _removeProperty(self):
+        row = self.propertiesTable.currentRow()
+        if row >= 0:
+            self.propertiesTable.removeRow(row)
+
+    @staticmethod
+    def _propertyText(value):
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, indent=2)
+
+    def _metadata(self):
+        result = []
+        for row in range(self.propertiesTable.rowCount()):
+            nameItem = self.propertiesTable.item(row, 0)
+            valueItem = self.propertiesTable.item(row, 1)
+            name = nameItem.text().strip() if nameItem is not None else ""
+            if not name:
+                continue
+            text = valueItem.text() if valueItem is not None else ""
+            original = (
+                valueItem.data(Qt.UserRole) if valueItem is not None else ""
+            )
+            if isinstance(original, str):
+                value = text
+            else:
+                try:
+                    value = json.loads(text)
+                except (TypeError, ValueError) as error:
+                    raise ValueError(
+                        self.tr(
+                            "Property '{}' must contain valid JSON: {}"
+                        ).format(name, error)
+                    )
+            result.append(StructuredMetadataField(name, value))
+        metadata = tuple(result)
+        if self._morphologyProfile is not None:
+            metadata = self._morphologyProfile.apply_to(metadata)
+        return metadata
 
     def save(self):
         typed_type = self.typeCombo.currentText().strip()
@@ -139,17 +261,14 @@ class EntityEditorDialog(QDialog):
             line.strip() for line in self.aliasesEdit.toPlainText().splitlines()
             if line.strip()
         )
-        changes = {
-            "title": self.titleEdit.text(),
-            "entity_type": str(entity_type),
-            "aliases": aliases,
-            "text": self.bodyEdit.toPlainText(),
-        }
-        if self._morphologyChanged and self._morphologyProfile is not None:
-            changes["metadata"] = self._morphologyProfile.apply_to(
-                self.entity.metadata
-            )
         try:
+            changes = {
+                "title": self.titleEdit.text(),
+                "entity_type": str(entity_type),
+                "aliases": aliases,
+                "text": self.bodyEdit.toPlainText(),
+                "metadata": self._metadata(),
+            }
             self._saveEntity(self.entity.id, **changes)
         except (KeyError, PermissionError, ValueError) as error:
             QMessageBox.warning(
@@ -157,8 +276,16 @@ class EntityEditorDialog(QDialog):
                 self.tr("Cannot save entity"),
                 str(error),
             )
-            return
+            return False
         self.accept()
+        return True
+
+    def submit(self):
+        """Commit a window-private draft before its workspace detaches."""
+
+        if self._readOnly:
+            return True
+        return self.save()
 
     def _editMorphology(self):
         dialog = MorphologyParadigmDialog(
@@ -194,36 +321,71 @@ class EntityEditorController:
     """Own non-modal child dialogs for one workspace window."""
 
     def __init__(
-        self, parent, catalog, update_entity, morphology_providers=None
+        self,
+        parent,
+        catalog,
+        update_entity,
+        morphology_providers=None,
+        host_panel=None,
+        reveal=None,
     ):
         self.parent = parent
         self.catalog = catalog
         self.updateEntity = update_entity
         self.morphologyProviders = morphology_providers
+        self.hostPanel = host_panel
+        self.reveal = reveal
         self._dialogs = {}
 
     def open(self, entity_id):
         entity = self.catalog.find(entity_id)
-        if entity is None or entity not in self.catalog.native_entities:
+        if entity is None:
             return False
         existing = self._dialogs.get(entity_id)
         if existing is not None:
             existing.show()
             existing.raise_()
             existing.activateWindow()
+            if callable(self.reveal):
+                self.reveal()
             return True
+        if self.hostPanel is not None and self.hostPanel.editor is not None:
+            current = self.hostPanel.editor
+            if current.submit() is False:
+                return False
         dialog = EntityEditorDialog(
             entity,
             self.catalog.schemas.schemas,
             self.updateEntity,
             self.parent,
             morphology_providers=self.morphologyProviders,
+            read_only=(
+                not self.catalog.writable
+                or entity not in self.catalog.native_entities
+            ),
         )
-        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        if self.hostPanel is None:
+            dialog.setAttribute(Qt.WA_DeleteOnClose)
         self._dialogs[entity_id] = dialog
         dialog.destroyed.connect(
             lambda _object=None, key=entity_id, dialogs=self._dialogs:
                 dialogs.pop(key, None)
         )
-        dialog.show()
+        if self.hostPanel is None:
+            dialog.show()
+        else:
+            self.hostPanel.set_editor(dialog)
+            if callable(self.reveal):
+                self.reveal()
         return True
+
+    def close_all(self):
+        if self.hostPanel is not None:
+            self.hostPanel.clear()
+        else:
+            for dialog in tuple(self._dialogs.values()):
+                dialog.close()
+        self._dialogs.clear()
+
+    def pending_editors(self):
+        return tuple(self._dialogs.values())

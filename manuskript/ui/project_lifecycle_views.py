@@ -7,7 +7,6 @@ to the window, its application services, or unrelated plugin state.
 """
 
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Callable, Tuple
 
 from manuskript.ui.views.textEditView import textEditView
@@ -97,6 +96,11 @@ class ProjectLifecycleViews:
             if plugin_ui is not None:
                 plugin_ui.prepare_project_close()
 
+        def private_text_editors():
+            return tuple(window.findChildren(textEditView)) + tuple(
+                window.entityWorkspace.pending_editors()
+            )
+
         return cls(
             commands=ProjectCommandViews(
                 closed_only=(window.actOpen, window.menuRecents),
@@ -154,10 +158,7 @@ class ProjectLifecycleViews:
                 disconnect_project=window.workspaceProject.disconnect,
                 undo_stack=window.projectRuntime.undoStack,
                 editor=window.mainEditor,
-                private_text_editors=partial(
-                    window.findChildren,
-                    textEditView,
-                ),
+                private_text_editors=private_text_editors,
             ),
             dialogs=ProjectDialogViews(
                 # A QWidget parent is the capability dialogs need. Giving

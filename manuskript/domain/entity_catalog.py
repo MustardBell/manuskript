@@ -82,6 +82,7 @@ def first_party_story_entity_schemas() -> EntitySchemaRegistry:
     """Return optional story schemas without teaching core link syntax fiction."""
 
     return EntitySchemaRegistry((
+        EntitySchema("project", "Project", "Project"),
         EntitySchema("character", "Character", "Characters"),
         EntitySchema("place", "Place", "Places"),
         EntitySchema("object", "Object", "Objects"),
@@ -89,6 +90,7 @@ def first_party_story_entity_schemas() -> EntitySchemaRegistry:
         EntitySchema("concept", "Concept", "Concepts"),
         EntitySchema("event", "Event", "Events"),
         EntitySchema("plot", "Plot", "Plots"),
+        EntitySchema("world", "World item", "World"),
         EntitySchema("entity", "Other", "Entities"),
     ))
 
@@ -108,6 +110,7 @@ class EntityCatalog:
         self._native = ()
         self._legacy = ()
         self._writable = False
+        self._listeners = []
 
     @property
     def writable(self) -> bool:
@@ -135,6 +138,15 @@ class EntityCatalog:
         self._legacy = legacy
         self._writable = bool(writable)
         self._rebuild_morphology()
+        self._notify()
+
+    def subscribe(self, listener) -> None:
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def unsubscribe(self, listener) -> None:
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
     def find(self, entity_id: str) -> Optional[EntityRecord]:
         return next(
@@ -277,6 +289,7 @@ class EntityCatalog:
         )
         self._native = self._native + (entity,)
         self._rebuild_morphology()
+        self._notify()
         return entity
 
     def update(
@@ -329,7 +342,25 @@ class EntityCatalog:
             updated if item.id == entity_id else item for item in self._native
         )
         self._rebuild_morphology()
+        self._notify()
         return updated
+
+    def delete(self, entity_id: str) -> EntityRecord:
+        if not self._writable:
+            raise PermissionError(
+                "Native entities require a writable project."
+            )
+        entity = next(
+            (item for item in self._native if item.id == entity_id), None
+        )
+        if entity is None:
+            raise KeyError(entity_id)
+        self._native = tuple(
+            item for item in self._native if item.id != entity_id
+        )
+        self._rebuild_morphology()
+        self._notify()
+        return entity
 
     def surface_forms(self, entity_id: str) -> Tuple[str, ...]:
         entity = self.find(entity_id)
@@ -347,6 +378,11 @@ class EntityCatalog:
 
     def refresh_derived_surfaces(self):
         self._rebuild_morphology()
+        self._notify()
+
+    def _notify(self):
+        for listener in tuple(self._listeners):
+            listener()
 
     @staticmethod
     def reference_target(entity: EntityRecord) -> str:

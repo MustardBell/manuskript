@@ -10,20 +10,24 @@ names onto :class:`MainWindow`.
 from dataclasses import dataclass
 
 from PyQt5.QtWidgets import (
-    QComboBox,
-    QGroupBox,
     QPushButton,
-    QStackedWidget,
     QWidget,
 )
 
 from manuskript.panels.core import (
-    BOOK_SUMMARY,
+    CHARACTER_ENTITIES,
+    ENTITY_EDITOR,
     METADATA,
+    PLOT_ENTITIES,
+    PROJECT_ENTITIES,
     PROJECT_TREE,
     STORYLINE,
+    WORLD_ENTITIES,
 )
-from manuskript.ui.views.MDEditCompleter import MDEditCompleter
+from manuskript.ui.panels.core.entities import (
+    EntityBrowserPanel,
+    EntityEditorPanel,
+)
 from manuskript.ui.views.metadataView import metadataView
 from manuskript.ui.views.storylineView import storylineView
 from manuskript.ui.views.treeView import treeView
@@ -59,35 +63,6 @@ def _required_child(parent, widget_type, object_name):
 
 
 @dataclass(frozen=True)
-class BookSummaryPanelViews:
-    """The book-summary panel and the controls its bindings use."""
-
-    panel: QGroupBox
-    selector: QComboBox
-    pages: QStackedWidget
-    paragraph_editor: MDEditCompleter
-    page_editor: MDEditCompleter
-    full_editor: MDEditCompleter
-
-    @classmethod
-    def from_panel(cls, panel):
-        return cls(
-            panel=panel,
-            selector=_required_child(panel, QComboBox, "comboBox_2"),
-            pages=_required_child(panel, QStackedWidget, "stkPlotSummary"),
-            paragraph_editor=_required_child(
-                panel, MDEditCompleter, "txtPlotSummaryPara",
-            ),
-            page_editor=_required_child(
-                panel, MDEditCompleter, "txtPlotSummaryPage",
-            ),
-            full_editor=_required_child(
-                panel, MDEditCompleter, "txtPlotSummaryFull",
-            ),
-        )
-
-
-@dataclass(frozen=True)
 class ProjectTreePanelViews:
     """The project tree panel and its editing controls."""
 
@@ -116,18 +91,35 @@ class ProjectTreePanelViews:
 class CorePanelViewSet:
     """The core panel views belonging to one workspace window."""
 
-    book_summary: BookSummaryPanelViews
     project_tree: ProjectTreePanelViews
     metadata: metadataView
     storyline: storylineView
+    project_entities: EntityBrowserPanel
+    character_entities: EntityBrowserPanel
+    plot_entities: EntityBrowserPanel
+    world_entities: EntityBrowserPanel
+    entity_editor: EntityEditorPanel
 
     @classmethod
     def from_host(cls, host):
-        book_summary = _panel_widget(host, BOOK_SUMMARY, QGroupBox)
         project_tree = _panel_widget(host, PROJECT_TREE, QWidget)
         return cls(
-            book_summary=BookSummaryPanelViews.from_panel(book_summary),
             project_tree=ProjectTreePanelViews.from_panel(project_tree),
             metadata=_panel_widget(host, METADATA, metadataView),
             storyline=_panel_widget(host, STORYLINE, storylineView),
+            project_entities=_panel_widget(
+                host, PROJECT_ENTITIES, EntityBrowserPanel
+            ),
+            character_entities=_panel_widget(
+                host, CHARACTER_ENTITIES, EntityBrowserPanel
+            ),
+            plot_entities=_panel_widget(
+                host, PLOT_ENTITIES, EntityBrowserPanel
+            ),
+            world_entities=_panel_widget(
+                host, WORLD_ENTITIES, EntityBrowserPanel
+            ),
+            entity_editor=_panel_widget(
+                host, ENTITY_EDITOR, EntityEditorPanel
+            ),
         )

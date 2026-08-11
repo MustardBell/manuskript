@@ -6,6 +6,8 @@ recognising docks, and a factory that explodes costs the person a
 message, not the window.
 """
 
+from unittest.mock import MagicMock
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow
 
@@ -87,6 +89,23 @@ def test_opening_twice_reuses_the_living_instance():
 
     assert first is second
     assert len(host.instances) == 1
+    window.close()
+
+
+def test_revealing_a_dock_raises_its_tab():
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        default_visible=False,
+        widget_factory=label_factory,
+    ))
+    instance = host.open("core.notes", PanelContext())
+    instance.container.raise_ = raised = MagicMock()
+
+    assert host.reveal("core.notes")
+
+    assert instance.action.isChecked()
+    raised.assert_called_once_with()
     window.close()
 
 

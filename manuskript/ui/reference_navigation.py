@@ -10,12 +10,12 @@ def reference_navigation_for(window, models, open_entity=None):
     """
 
     def open_character(character_id):
-        item = window.lstCharacters.getItemByID(character_id)
-        if item is None:
+        if open_entity is None:
             return False
-        window.tabMain.setCurrentIndex(window.TabPersos)
-        window.lstCharacters.setCurrentItem(item)
-        return True
+        return bool(
+            open_entity(character_id)
+            or open_entity("legacy:character:{}".format(character_id))
+        )
 
     def open_text(text_id):
         index = models.outline.getIndexByID(text_id)
@@ -26,22 +26,20 @@ def reference_navigation_for(window, models, open_entity=None):
         return True
 
     def open_plot(plot_id):
-        item = window.lstPlots.getItemByID(plot_id)
-        if item is None:
+        if open_entity is None:
             return False
-        window.tabMain.setCurrentIndex(window.TabPlots)
-        window.lstPlots.setCurrentItem(item)
-        return True
+        return bool(
+            open_entity(plot_id)
+            or open_entity("legacy:plot:{}".format(plot_id))
+        )
 
     def open_world(world_id):
-        item = models.world.itemByID(world_id)
-        if item is None:
+        if open_entity is None:
             return False
-        window.tabMain.setCurrentIndex(window.TabWorld)
-        window.treeWorld.setCurrentIndex(
-            models.world.indexFromItem(item)
+        return bool(
+            open_entity(world_id)
+            or open_entity("legacy:world:{}".format(world_id))
         )
-        return True
 
     return ReferenceNavigation(
         open_character=open_character,

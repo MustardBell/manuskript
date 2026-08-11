@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, qApp
 
+from manuskript.domain.canonical_project import StructuredMetadataField
 from manuskript.domain.entity_catalog import (
     EntityCatalog,
     first_party_story_entity_schemas,
@@ -16,6 +17,7 @@ from manuskript.ui.entity_editor import (
     EntityEditorController,
     EntityEditorDialog,
 )
+from manuskript.ui.panels.core.entities import EntityEditorPanel
 
 
 def _catalog():
@@ -46,11 +48,46 @@ def test_entity_dialog_exposes_labeled_fields_and_saves_generic_values():
         entity_type="character",
         aliases=("Mara", "Ms Vane"),
         text="Updated notes.\n",
+        metadata=(),
     )
     assert dialog.result() == dialog.Accepted
     assert dialog.titleEdit.accessibleName() == "Entity title"
     assert dialog.aliasesEdit.accessibleName() == "Aliases, one per line"
     assert dialog.bodyEdit.accessibleName() == "Entity Markdown document"
+
+
+def test_entity_dialog_exposes_and_preserves_structured_properties():
+    catalog, entity = _catalog()
+    entity = catalog.update(
+        entity.id,
+        metadata=(
+            StructuredMetadataField("role", "protagonist"),
+            StructuredMetadataField("legacy.steps", [{"name": "Turn"}]),
+        ),
+    )
+    save_entity = MagicMock()
+    dialog = EntityEditorDialog(
+        entity, catalog.schemas.schemas, save_entity
+    )
+
+    assert dialog.propertiesTable.rowCount() == 2
+    assert dialog.propertiesTable.item(0, 0).text() == "role"
+    dialog.save()
+
+    assert save_entity.call_args.kwargs["metadata"] == entity.metadata
+
+
+def test_projected_entities_open_read_only_in_the_same_editor():
+    catalog, entity = _catalog()
+    catalog.replace((), (entity,), writable=False)
+    controller = EntityEditorController(QWidget(), catalog, MagicMock())
+
+    assert controller.open(entity.id)
+    dialog = controller._dialogs[entity.id]
+    assert dialog.titleEdit.isReadOnly()
+    assert dialog.bodyEdit.isReadOnly()
+    assert not dialog.typeCombo.isEnabled()
+    controller.close_all()
 
 
 def test_entity_dialog_accepts_an_extension_defined_type():
@@ -107,4 +144,29 @@ def test_entity_controller_owns_one_window_modal_child_per_entity():
 
     first.close()
     qApp.processEvents()
+    parent.close()
+
+
+def test_docked_entity_form_scrolls_instead_of_clipping_its_first_fields():
+    catalog, entity = _catalog()
+    parent = QWidget()
+    panel = EntityEditorPanel(parent)
+    panel.resize(320, 220)
+    controller = EntityEditorController(
+        parent,
+        catalog,
+        MagicMock(),
+        morphology_providers=first_party_morphology_providers(),
+        host_panel=panel,
+    )
+
+    assert controller.open(entity.id)
+    panel.show()
+    qApp.processEvents()
+
+    assert panel.scrollArea.widget() is panel.editor
+    assert panel.editor.titleEdit.text() == "Mara Vale"
+    assert panel.editor.morphologyButton.isEnabled()
+    assert panel.scrollArea.verticalScrollBar().maximum() > 0
+    controller.close_all()
     parent.close()

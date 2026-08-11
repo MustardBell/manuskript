@@ -351,6 +351,21 @@ class PanelHost:
         if instance is not None:
             self.visibility.set_visible(instance, visible)
 
+    def reveal(self, panel_id):
+        """Show a panel and bring its dock tab to the front."""
+
+        instance = self._instances.get(panel_id)
+        if instance is None:
+            return False
+        self.visibility.set_visible(instance, True)
+        if instance.container is not None:
+            instance.container.show()
+            instance.container.raise_()
+        else:
+            instance.widget.show()
+            instance.widget.raise_()
+        return True
+
     def close(self, panel_id):
         """Put a panel away. Its widget goes when nothing holds it."""
         self._detach(panel_id, keep=False)

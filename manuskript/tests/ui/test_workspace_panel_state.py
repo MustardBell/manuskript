@@ -137,9 +137,10 @@ def test_a_panel_the_controller_never_heard_of_keeps_its_state():
     store.load.return_value = WorkspaceWindowState(
         panel_state={NOTEBOOK: 7},
     )
-    controller.restore()
+    restored = controller.restore()
 
     assert notebook.page == 7
+    assert restored is store.load.return_value
 
 
 def test_a_panel_that_remembers_nothing_files_nothing():
@@ -207,23 +208,15 @@ def test_the_splitters_remembered_are_the_ones_panels_sit_in():
     ]
 
 
-def test_the_splitter_holding_the_book_summary_is_among_them():
-    """It was not, before: the two names listed by hand were the two in the
-    redaction tab, and the plots tab's splitter was nobody's.
-    """
-    descriptors = core_panel_descriptors(
-        plots_group=object(), redaction_group=object(),
-    )
+def test_core_docks_do_not_create_fixed_splitter_state():
+    """Qt saveState owns native dock geometry; core declares no slots."""
+    descriptors = core_panel_descriptors(redaction_group=object())
     window = a_window(descriptors=descriptors)
     controller = state_controller(window, MagicMock())
 
     controller.save()
 
-    assert sorted(saved_state(controller).splitters) == [
-        "splitterPlot",
-        "splitterRedacH",
-        "splitterRedacV",
-    ]
+    assert saved_state(controller).splitters == {}
 
 
 def test_the_metadata_panel_says_what_it_remembers():
@@ -232,7 +225,7 @@ def test_the_metadata_panel_says_what_it_remembers():
     """
     metadata = next(
         descriptor
-        for descriptor in core_panel_descriptors(object(), object())
+        for descriptor in core_panel_descriptors(object())
         if descriptor.id == METADATA
     )
 

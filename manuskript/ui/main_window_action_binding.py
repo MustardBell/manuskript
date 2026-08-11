@@ -274,22 +274,6 @@ class MainWindowActionBinding:
         window = self._window
         for signal, slot in [
             (
-                window.txtPersosFilter.textChanged,
-                window.lstCharacters.setFilter,
-            ),
-            (
-                window.lstCharacters.itemSelectionChanged,
-                window.characterController.handle_selection_changed,
-            ),
-            (
-                window.txtPlotFilter.textChanged,
-                window.lstPlots.setFilter,
-            ),
-            (
-                window.lstPlots.currentItemChanged,
-                window.plotController.handle_plot_selection_changed,
-            ),
-            (
                 window.corePanels.project_tree.add_folder.clicked,
                 window.corePanels.project_tree.tree.addFolder,
             ),

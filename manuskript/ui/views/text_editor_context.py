@@ -11,9 +11,6 @@ class TextEditorContext:
 
     settings: object
     reload_fonts: Callable
-    create_character: Callable[[str], None]
-    create_plot: Callable[[str], None]
-    create_world_item: Callable[[str], None]
     invoke_outline_command: Callable[[DocumentCommand], None]
     markup_profiles: Optional[object] = None
     page_types: Optional[object] = None
@@ -62,20 +59,6 @@ def text_editor_context_for(
 
         for editor in window.findChildren(textEditView):
             editor.loadFontSettings()
-
-    def create_character(name):
-        window.tabMain.setCurrentIndex(window.TabPersos)
-        character = models.characters.addCharacter(name=name)
-        item = window.lstCharacters.getItemByID(character.ID())
-        window.lstCharacters.setCurrentItem(item)
-
-    def create_plot(name):
-        window.tabMain.setCurrentIndex(window.TabPlots)
-        models.plots.addPlot(name)
-
-    def create_world_item(name):
-        window.tabMain.setCurrentIndex(window.TabWorld)
-        window.worldController.add_item(title=name)
 
     def invoke_outline_command(command):
         command = DocumentCommand(command)
@@ -135,6 +118,8 @@ def text_editor_context_for(
         if create_native_entity is None or entity_catalog is None:
             return None
         entity = create_native_entity(entity_type, title)
+        if open_entity is not None:
+            open_entity(entity.id)
         return entity_catalog.reference_choice(entity, exact_match=True)
 
     def can_write_assertions():
@@ -203,9 +188,6 @@ def text_editor_context_for(
         temporal_reference_choices=temporal_reference_choices,
         can_write_timeline=can_write_timeline,
         reload_fonts=reload_fonts,
-        create_character=create_character,
-        create_plot=create_plot,
-        create_world_item=create_world_item,
         invoke_outline_command=invoke_outline_command,
         markup_profiles=(
             window.pluginUi.markupProfiles

@@ -7,6 +7,7 @@ selection, its own open documents and its own panels.
 """
 
 import inspect
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -16,8 +17,6 @@ from weakref import ref
 import pytest
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtWidgets import QPlainTextEdit, qApp
-
-from manuskript.enums import Character
 
 from manuskript.panels import PanelContext, PanelDescriptor
 from manuskript.panels.core import METADATA, PROJECT_TREE, STORYLINE
@@ -224,41 +223,52 @@ def test_closing_the_second_window_leaves_the_project_open(
     assert window.windowRegistry.is_last(window)
 
 
-def test_closing_a_secondary_flushes_and_primary_save_persists_private_edit(
-        MWEmptyProject):
-    """Closing a view cannot destroy text still waiting in its editor."""
+def test_closing_a_secondary_flushes_and_primary_save_persists_entity_edit(
+        MWEmptyProject, tmp_path):
+    """A dock-opened entity draft belongs to its window until detach."""
+    from manuskript.load_save.project_files import Version1ProjectFiles
+    from manuskript.load_save.version_2_codec import Version2ProjectCodec
+    from manuskript.services.project_migration import ProjectMigrationService
+
     window = MWEmptyProject
     manager = window.projectManager
-    characters = window.projectRuntime.models.characters
-    character = characters.addCharacter(name="Pending character")
+    assert manager.saveDatas()
+    source = manager.currentProject
+    assert manager.closeProject()
+    native_project = tmp_path / "entity-close.msk"
+    ProjectMigrationService().upgrade_copy(source, native_project)
+    assert manager.loadProject(str(native_project))
+
+    character = manager.createEntity("character", "Pending character")
     other = window.workspaceWindows.open()
     note = "Written in the secondary immediately before it closed."
     try:
-        tree_item = other.lstCharacters.getItemByID(character.ID())
-        assert tree_item is not None
-        other.lstCharacters.setCurrentItem(tree_item)
-        qApp.processEvents()
-        model_index = character.index(Character.notes)
-        assert other.txtPersoNotes.isEnabled()
-
-        other.txtPersoNotes.setPlainText(note)
-        assert model_index.data() != note
+        assert other.entityWorkspace.open(character.id)
+        dialog = other.entityWorkspace.editor._dialogs[character.id]
+        dialog.bodyEdit.setPlainText(note)
+        assert manager.storage.entity_catalog.find(
+            character.id
+        ).document.text != note
 
         assert other.close()
-        assert model_index.data() == note
+        assert manager.storage.entity_catalog.find(
+            character.id
+        ).document.text == note
         assert manager.saveDatas()
 
-        project_directory = Path(window.currentProject).with_suffix("")
-        character_file = (
-            project_directory
-            / "characters"
-            / ("{}-Pending_character.txt".format(character.ID()))
+        files = Version1ProjectFiles().read(
+            str(native_project), zipped=False
+        ).files
+        reopened = Version2ProjectCodec().decode(files, zipped=False)
+        persisted = next(
+            entity for entity in reopened.entities
+            if entity.id == character.id
         )
-        assert note in character_file.read_text(encoding="utf-8")
+        assert persisted.document.text == note
     finally:
         if other in window.windowRegistry.workspace_windows:
             other.close()
-        # Do not let the shared empty-project fixture reuse this manuscript.
+        # The shared fixture must rebuild its original Format 1 manuscript.
         manager.session.mark_dirty()
 
 
@@ -299,7 +309,7 @@ def test_closing_a_secondary_disconnects_application_plugin_updates(
     assert other.pluginUi.views is None
 
 
-def test_a_deleted_secondary_window_is_collectable_in_isolation():
+def test_a_deleted_secondary_window_is_collectable_in_isolation(tmp_path):
     """Exercise native deletion and cyclic collection in another process.
 
     A stale SIP wrapper terminates Python rather than raising an exception,
@@ -330,12 +340,16 @@ del window
 gc.collect()
 assert window_ref() is None
 """
+    environment = os.environ.copy()
+    environment["XDG_CONFIG_HOME"] = str(tmp_path / "config")
+    environment["XDG_DATA_HOME"] = str(tmp_path / "data")
     result = subprocess.run(
         [sys.executable, "-B", "-c", script],
         cwd=str(Path(__file__).resolve().parents[2]),
         capture_output=True,
         text=True,
         timeout=30,
+        env=environment,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -354,12 +368,12 @@ def test_each_window_has_its_own_panels(MWEmptyProject):
         assert mine.widget is not theirs.widget
         assert mine.action is not theirs.action
 
-        was_visible = not mine.widget.isHidden()
+        was_visible = not mine.container.isHidden()
         other.panelHost.set_visible(METADATA, True)
         window.panelHost.set_visible(METADATA, False)
 
-        assert not theirs.widget.isHidden()
-        assert mine.widget.isHidden()
+        assert not theirs.container.isHidden()
+        assert mine.container.isHidden()
     finally:
         # The window is shared with every later test, so its panels are
         # left as they were found.
@@ -900,10 +914,8 @@ def test_a_floating_panel_is_not_a_workspace_window(MWEmptyProject):
         window.panelPlacement.toggle_floating(METADATA)
 
 
-def test_redocking_returns_the_panel_to_its_slot(MWEmptyProject):
-    """Its descriptor says where it belongs, so it goes back there
-    rather than wherever it happened to come from.
-    """
+def test_redocking_returns_the_panel_to_a_dock_area(MWEmptyProject):
+    """Core panels return as native docks, not fixed splitter children."""
     window = MWEmptyProject
     original = window.panelHost.instance(METADATA).widget
     window.panelPlacement.toggle_floating(METADATA)
@@ -912,8 +924,9 @@ def test_redocking_returns_the_panel_to_its_slot(MWEmptyProject):
 
     assert redocked.widget is original
     assert window.panelHost.floating() == ()
-    assert window.splitterRedacH.indexOf(original) == 2
-    assert redocked.container is None
+    assert redocked.container is not None
+    assert not redocked.container.isFloating()
+    assert window.dockWidgetArea(redocked.container) != Qt.NoDockWidgetArea
 
 
 def test_a_torn_off_panel_keeps_its_model_bindings(MWEmptyProject):
@@ -982,31 +995,17 @@ def test_tearing_off_twice_is_not_two_floats(MWEmptyProject):
         window.panelHost.redock(METADATA)
 
 
-def test_redocking_does_not_steal_space_from_the_editor(MWEmptyProject):
-    """Taking a widget out of a splitter lets Qt hand its space to the
-    others, and putting it back takes space from whichever neighbour Qt
-    picks. That collapsed the editor beside the metadata panel.
-    """
+def test_redocking_keeps_core_panels_out_of_editor_splitters(MWEmptyProject):
+    """Native docks must not return as fixed children of editor splitters."""
     window = MWEmptyProject
-    # A hidden splitter child has no width, so the panel has to be
-    # showing for its share to be the thing under test.
-    was_visible = not window.panelHost.instance(METADATA).widget.isHidden()
-    window.panelHost.set_visible(METADATA, True)
-    splitter = window.splitterRedacH
-    before = splitter.sizes()
-    assert len(before) == 3
+    original = window.panelHost.instance(METADATA).widget
 
     window.panelPlacement.toggle_floating(METADATA)
-    assert len(splitter.sizes()) == 2
-    window.panelPlacement.toggle_floating(METADATA)
+    redocked = window.panelPlacement.toggle_floating(METADATA)
 
-    # Exactly the arrangement it had, rather than whatever Qt would
-    # redistribute -- the returning panel took its space from the editor
-    # beside it and was itself left with none.
-    assert splitter.sizes() == before
-    assert splitter.sizes()[2] > 0
-
-    window.panelHost.set_visible(METADATA, was_visible)
+    assert redocked.widget is original
+    assert window.splitterRedacH.indexOf(original) == -1
+    assert window.dockWidgetArea(redocked.container) != Qt.NoDockWidgetArea
 
 
 # ------------------------------------------- documents are per window

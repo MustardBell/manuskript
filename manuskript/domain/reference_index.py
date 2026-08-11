@@ -134,6 +134,13 @@ class ReferenceIndex:
             ))
         self._references = tuple(retained + updated)
 
+    def remove(self, document_id: str) -> bool:
+        if document_id not in self._documents:
+            return False
+        del self._documents[document_id]
+        self.rebuild(self._documents.values())
+        return True
+
     def backlinks(self, target_document_id: str) -> Tuple[ReferenceOccurrence, ...]:
         return tuple(
             reference for reference in self._references

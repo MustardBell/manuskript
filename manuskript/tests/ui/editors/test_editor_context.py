@@ -31,8 +31,6 @@ def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
     assert editor.settings is settings
     assert window.projectRuntime.models.outline.settings is settings
     assert item.settings is settings
-    assert window.lstPlots.settings is settings
-    assert window.lstOutlinePlots.settings is settings
     assert (
         editor.txtRedacText.text_editor_context
         is window.workspaceProject.text_editor_context

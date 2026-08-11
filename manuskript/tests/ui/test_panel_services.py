@@ -2,7 +2,9 @@
 
 
 def test_panel_dialogs_keep_only_parenting_and_translation(MW):
-    dialogs = MW.panelDialogs
+    from manuskript.ui.panel_services import PanelDialogs
+
+    dialogs = PanelDialogs(MW.centralWidget(), MW.tr)
 
     assert dialogs.parent is MW.centralWidget()
     assert dialogs.translate("Name") == MW.tr("Name")

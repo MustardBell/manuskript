@@ -134,12 +134,15 @@ class collapsibleDockWidgets(QToolBar):
                 _btn.setChecked(visibility)
 
     def setCurrentGroup(self, group):
+        """Show this group's buttons, and everything belonging to no group.
+
+        A toggle without a group is one the whole window offers -- the
+        entity docks describe the project rather than any single main
+        tab -- so a tab change must leave it reachable.
+        """
         self.currentGroup = group
         for btn, action, widget, grp in self.otherWidgets:
-            if not grp == group or grp == None:
-                action.setVisible(False)
-            else:
-                action.setVisible(True)
+            action.setVisible(grp is None or grp == group)
 
     def setDockVisibility(self, dock, val):
         dock.setVisible(val)

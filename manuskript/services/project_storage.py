@@ -157,6 +157,10 @@ class ProjectStorage:
             project = replace(
                 project,
                 entities=self._entity_catalog.native_entities,
+                summary=(),
+                characters=(),
+                world=(),
+                plots=(),
             )
         return project
 
@@ -248,6 +252,12 @@ class ProjectStorage:
         self._rebuild_assertions()
         return entity
 
+    def delete_entity(self, entity_id):
+        entity = self._entity_catalog.delete(entity_id)
+        self._reference_index.remove(entity.document.id)
+        self._rebuild_assertions()
+        return entity
+
     def update_document_references(self, item):
         """Incrementally re-index one live outline item after an edit."""
 
@@ -277,7 +287,7 @@ class ProjectStorage:
                 text=entity.document.text,
                 aliases=self._entity_reference_surfaces(entity),
             )
-            for entity in self._entity_catalog.native_entities
+            for entity in self._entity_catalog.entities
         )
         self._reference_index.rebuild(documents)
         self._rebuild_assertions()
@@ -469,6 +479,14 @@ class ProjectStorage:
         project = replace(
             project,
             entities=self._entity_catalog.native_entities,
+            # Format 2 has one story vocabulary.  The legacy application
+            # models are still hydrated for old outline metadata and codec
+            # compatibility, but they are not a second persisted source of
+            # summaries, characters, plots, or world records.
+            summary=(),
+            characters=(),
+            world=(),
+            plots=(),
         )
         issues = tuple(
             issue for issue in self._version_2_codec.validate(project)
@@ -495,22 +513,48 @@ class ProjectStorage:
         return result
 
     def _adopt_canonical_project(self, project):
+        projected = self._legacy_entity_adapter.project(project)
+        native_ids = {entity.id for entity in project.entities}
+        missing_projected = tuple(
+            entity for entity in projected if entity.id not in native_ids
+        )
+        if project.format_version == 2:
+            # Older Format 2 writers could still leave the historical
+            # collections in legacy.yaml.  Promote those records in memory
+            # immediately so the only UI vocabulary is entities; the next
+            # save writes them as native documents and drops the collections.
+            native_entities = project.entities + missing_projected
+            legacy_entities = ()
+            project = replace(
+                project,
+                entities=native_entities,
+                summary=(),
+                characters=(),
+                world=(),
+                plots=(),
+            )
+        else:
+            native_entities = project.entities
+            legacy_entities = missing_projected
+
         self._canonical_project = project
         self._revision_workflow.rebuild(project)
-        legacy_entities = (
-            self._legacy_entity_adapter.project(project)
-            if project.format_version in (0, 1)
-            else ()
-        )
         self._entity_catalog.replace(
-            project.entities,
+            native_entities,
             legacy_entities,
             writable=project.format_version == 2,
         )
         entity_aliases = {
             entity.id: self._entity_reference_surfaces(entity)
-            for entity in project.entities
+            for entity in self._entity_catalog.entities
         }
+        documents = list(project.documents())
+        document_ids = {document.id for document in documents}
+        documents.extend(
+            entity.document
+            for entity in self._entity_catalog.entities
+            if entity.id not in document_ids
+        )
         self._reference_index.rebuild(tuple(
             ReferenceDocument(
                 id=document.id,
@@ -519,7 +563,7 @@ class ProjectStorage:
                 text=document.text,
                 aliases=entity_aliases.get(document.id, ()),
             )
-            for document in project.documents()
+            for document in documents
         ))
         self._rebuild_assertions()
 

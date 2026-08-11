@@ -63,13 +63,3 @@ def test_dispose_releases_connections_and_views():
 
     editor.textChanged.disconnect.assert_called_once_with(slot)
     assert controller._views is None
-
-
-def test_real_summary_text_updates_its_count_label(MWEmptyProject):
-    window = MWEmptyProject
-
-    window.txtSummarySentence.setPlainText("One two three four")
-
-    assert window.lblSummaryWCSentence.text() == window.tr(
-        "Words: {}{}"
-    ).format(4, "")

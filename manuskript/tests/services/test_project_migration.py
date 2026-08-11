@@ -155,7 +155,7 @@ def test_upgrade_promotes_legacy_story_records_to_native_entities(tmp_path):
     assert reopened.characters == ()
     assert reopened.world == ()
     assert reopened.plots == ()
-    assert "legacy:project:summary" in entities
+    assert "project:summary" in entities
     character = entities["legacy:character:mara"]
     assert character.type == "character"
     assert character.title == "Mara"

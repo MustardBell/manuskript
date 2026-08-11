@@ -34,42 +34,14 @@ def test_text_editor_context_refreshes_all_current_editors():
     second.loadFontSettings.assert_called_once_with()
 
 
-def test_text_editor_context_creates_and_selects_character():
-    window = make_window()
-    settings = MagicMock()
-    character = MagicMock()
-    character.ID.return_value = "alice"
-    models = MagicMock()
-    models.characters.addCharacter.return_value = character
-    item = MagicMock()
-    window.lstCharacters.getItemByID.return_value = item
-    context = text_editor_context_for(window, settings, models)
-
-    context.create_character("Alice")
-
-    window.tabMain.setCurrentIndex.assert_called_once_with(window.TabPersos)
-    models.characters.addCharacter.assert_called_once_with(name="Alice")
-    window.lstCharacters.getItemByID.assert_called_once_with("alice")
-    window.lstCharacters.setCurrentItem.assert_called_once_with(item)
-    assert context.settings is settings
-
-
-def test_text_editor_context_creates_plot_and_world_item():
+def test_text_editor_context_has_no_legacy_story_model_mutators():
     window = make_window()
     models = MagicMock()
     context = text_editor_context_for(window, MagicMock(), models)
 
-    context.create_plot("Quest")
-    context.create_world_item("City")
-
-    assert window.tabMain.setCurrentIndex.call_args_list[0].args == (
-        window.TabPlots,
-    )
-    assert window.tabMain.setCurrentIndex.call_args_list[1].args == (
-        window.TabWorld,
-    )
-    models.plots.addPlot.assert_called_once_with("Quest")
-    window.worldController.add_item.assert_called_once_with(title="City")
+    assert not hasattr(context, "create_character")
+    assert not hasattr(context, "create_plot")
+    assert not hasattr(context, "create_world_item")
 
 
 def test_text_editor_context_routes_typed_outline_command():
@@ -156,12 +128,14 @@ def test_text_editor_context_routes_generic_entity_commands():
     choice = MagicMock()
     catalog.reference_choice.return_value = choice
     create_entity = MagicMock(return_value=entity)
+    open_entity = MagicMock(return_value=True)
     context = text_editor_context_for(
         make_window(),
         MagicMock(),
         MagicMock(),
         entity_catalog=catalog,
         create_native_entity=create_entity,
+        open_entity=open_entity,
     )
 
     assert context.entity_reference_choices("Mara") == choices
@@ -169,6 +143,7 @@ def test_text_editor_context_routes_generic_entity_commands():
     assert context.create_entity("character", "Mara") is choice
     catalog.reference_choices.assert_called_once_with("Mara")
     create_entity.assert_called_once_with("character", "Mara")
+    open_entity.assert_called_once_with(entity.id)
     catalog.reference_choice.assert_called_once_with(
         entity, exact_match=True
     )

@@ -7,19 +7,22 @@ toggle, in the window's own context.
 """
 
 from manuskript.panels.descriptor import (
+    DOCK,
     PER_WINDOW,
     PROJECT,
-    SPLITTER_SLOT,
     PanelDescriptor,
     PanelState,
-    SplitterSlot,
 )
 
 
-BOOK_SUMMARY = "core.book-summary"
 PROJECT_TREE = "core.project-tree"
 METADATA = "core.metadata"
 STORYLINE = "core.storyline"
+PROJECT_ENTITIES = "core.entities.project"
+CHARACTER_ENTITIES = "core.entities.characters"
+PLOT_ENTITIES = "core.entities.plots"
+WORLD_ENTITIES = "core.entities.world"
+ENTITY_EDITOR = "core.entities.editor"
 
 #: Where the metadata panel's revision list files its own arrangement.
 #: Its own key rather than part of the panel's, because that is how it
@@ -44,35 +47,21 @@ METADATA_STATE = (
 )
 
 
-def core_panel_descriptors(plots_group, redaction_group, factories=None):
-    """The four workspace panels, grouped under their main tabs.
+def core_panel_descriptors(redaction_group, factories=None):
+    """The workspace's movable core and canonical-entity panels.
 
-    Slot indexes mirror where the Designer file has always put the
-    widgets, so a factory-built copy lands exactly where the .ui one
-    stood. ``factories`` maps panel ids to widget factories -- the Qt
-    half, supplied by the ui layer so this module stays importable
-    before a QApplication exists.
+    Only the redaction panels still answer to a main tab. The entity
+    docks describe the whole project, so they claim no group and their
+    toggles stay offered whichever tab is in front.
     """
     factories = factories or {}
     return (
         PanelDescriptor(
-            id=BOOK_SUMMARY,
-            title="Book summary",
-            placement=SPLITTER_SLOT,
-            scope=PROJECT,
-            multiplicity=PER_WINDOW,
-            slot=SplitterSlot("splitterPlot", 2),
-            group=plots_group,
-            default_visible=False,
-            widget_factory=factories.get(BOOK_SUMMARY),
-        ),
-        PanelDescriptor(
             id=PROJECT_TREE,
             title="Project tree",
-            placement=SPLITTER_SLOT,
+            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            slot=SplitterSlot("splitterRedacH", 0),
             group=redaction_group,
             default_visible=True,
             widget_factory=factories.get(PROJECT_TREE),
@@ -80,10 +69,9 @@ def core_panel_descriptors(plots_group, redaction_group, factories=None):
         PanelDescriptor(
             id=METADATA,
             title="Metadata",
-            placement=SPLITTER_SLOT,
+            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            slot=SplitterSlot("splitterRedacH", 2),
             group=redaction_group,
             default_visible=False,
             widget_factory=factories.get(METADATA),
@@ -92,25 +80,67 @@ def core_panel_descriptors(plots_group, redaction_group, factories=None):
         PanelDescriptor(
             id=STORYLINE,
             title="Story line",
-            placement=SPLITTER_SLOT,
+            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            slot=SplitterSlot("splitterRedacV", 1),
             group=redaction_group,
             default_visible=False,
             widget_factory=factories.get(STORYLINE),
         ),
+        PanelDescriptor(
+            id=PROJECT_ENTITIES,
+            title="Project",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=False,
+            widget_factory=factories.get(PROJECT_ENTITIES),
+        ),
+        PanelDescriptor(
+            id=CHARACTER_ENTITIES,
+            title="Characters",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=True,
+            widget_factory=factories.get(CHARACTER_ENTITIES),
+        ),
+        PanelDescriptor(
+            id=PLOT_ENTITIES,
+            title="Plots",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=False,
+            widget_factory=factories.get(PLOT_ENTITIES),
+        ),
+        PanelDescriptor(
+            id=WORLD_ENTITIES,
+            title="World & entities",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=False,
+            widget_factory=factories.get(WORLD_ENTITIES),
+        ),
+        PanelDescriptor(
+            id=ENTITY_EDITOR,
+            title="Entity editor",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=True,
+            widget_factory=factories.get(ENTITY_EDITOR),
+        ),
     )
 
 
-def register_core_panels(
-        registry, plots_group, redaction_group, factories=None):
+def register_core_panels(registry, redaction_group, factories=None):
     """Idempotent: the registry is application scope, windows are not.
 
     The first window declares the core panels; every later window finds
     them already there.
     """
-    for descriptor in core_panel_descriptors(
-            plots_group, redaction_group, factories):
+    for descriptor in core_panel_descriptors(redaction_group, factories):
         if descriptor.id not in registry:
             registry.register(descriptor)

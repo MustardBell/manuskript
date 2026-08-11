@@ -8,6 +8,7 @@ receive this port and cannot discover unrelated application or project state.
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QAction, QDockWidget, QSplitter
 
 from manuskript.ui.panels.failures import PanelFailureReporter
@@ -46,7 +47,14 @@ class PanelWindow:
             return splitters.get(name)
 
         def create_dock(title):
-            return QDockWidget(window.tr(title), window)
+            dock = QDockWidget(window.tr(title), window)
+            dock.setFeatures(
+                QDockWidget.DockWidgetClosable
+                | QDockWidget.DockWidgetMovable
+                | QDockWidget.DockWidgetFloatable
+            )
+            dock.setAllowedAreas(Qt.AllDockWidgetAreas)
+            return dock
 
         def create_action(title):
             return QAction(window.tr(title), window)

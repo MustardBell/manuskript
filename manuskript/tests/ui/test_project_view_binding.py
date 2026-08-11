@@ -9,26 +9,19 @@ from manuskript.ui.project_view_binding import (
 from manuskript.ui.project_binding_views import ProjectBindingViews
 
 
-def test_flat_data_binding_configures_summary_and_general_fields():
+def test_flat_data_binding_configures_general_fields_but_not_legacy_summary():
     window = MagicMock()
     runtime = MagicMock()
     views = ProjectBindingViews.for_window(window)
 
     FlatDataProjectBinding(views.flat_data, runtime).bind(MagicMock())
 
-    window.txtSummarySituation.setModel.assert_called_once_with(
-        runtime.models.flat_data
-    )
-    window.txtSummarySituation.setColumn.assert_called_once_with(0)
-    window.txtSummarySituation.setCurrentModelIndex.assert_called_once_with(
-        runtime.models.flat_data.index.return_value
-    )
+    window.txtSummarySituation.setModel.assert_not_called()
     window.txtGeneralEmail.setModel.assert_called_once_with(
         runtime.models.flat_data
     )
     window.txtGeneralEmail.setColumn.assert_called_once_with(7)
-    assert runtime.models.flat_data.index.call_count == 19
-    runtime.models.flat_data.index.assert_any_call(1, 4)
+    assert runtime.models.flat_data.index.call_count == 8
     runtime.models.flat_data.index.assert_any_call(0, 7)
 
 

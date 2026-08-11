@@ -4,6 +4,7 @@ import pytest
 
 from manuskript.enums import Model
 from manuskript.models import references
+from manuskript.panels.core import ENTITY_EDITOR
 from manuskript.ui.highlighters.searchResultHighlighters.searchResultHighlighter import (
     searchResultHighlighter,
 )
@@ -50,19 +51,18 @@ def test_search_context_exposes_project_sources_in_search_order():
 
 
 @pytest.mark.parametrize(
-    "model_type, expected_reference, enabled_panel",
+    "model_type, expected_reference",
     [
-        (Model.Character, references.characterReference("7"), "tabPersos"),
-        (Model.Outline, references.textReference("7"), None),
-        (Model.World, references.worldReference("7"), "tabWorld"),
-        (Model.Plot, references.plotReference("7"), "tabPlot"),
-        (Model.PlotStep, references.plotReference("7"), "tabPlot"),
+        (Model.Character, references.characterReference("7")),
+        (Model.Outline, references.textReference("7")),
+        (Model.World, references.worldReference("7")),
+        (Model.Plot, references.plotReference("7")),
+        (Model.PlotStep, references.plotReference("7")),
     ],
 )
 def test_result_adapter_routes_reference_navigation(
     model_type,
     expected_reference,
-    enabled_panel,
 ):
     window = MagicMock()
     reference_service = MagicMock()
@@ -74,13 +74,10 @@ def test_result_adapter_routes_reference_navigation(
     adapter.open_result(search_result(model_type))
 
     reference_service.open.assert_called_once_with(expected_reference)
-    if enabled_panel is not None:
-        getattr(window, enabled_panel).setEnabled.assert_called_once_with(True)
 
 
 def test_result_adapter_opens_flat_data_without_reference_navigation():
     window = MagicMock()
-    window.TabSummary = 4
     reference_service = MagicMock()
     adapter = SearchResultViewAdapter(
         SearchResultViews.for_window(window),
@@ -89,7 +86,7 @@ def test_result_adapter_opens_flat_data_without_reference_navigation():
 
     adapter.open_result(search_result(Model.FlatData))
 
-    window.tabMain.setCurrentIndex.assert_called_once_with(4)
+    window.entityWorkspace.open.assert_called_once_with("project:summary")
     reference_service.open.assert_not_called()
 
 
@@ -148,5 +145,9 @@ def test_project_search_context_opens_and_highlights_character(
 
     search_widget.openItem(matches[0])
 
-    assert window.tabMain.currentIndex() == window.TabPersos
-    assert window.txtPersoName.selectedText() == "Peter"
+    editor = window.corePanels.entity_editor.editor
+    assert editor is not None
+    assert editor.titleEdit.selectedText() == "Peter"
+    assert not window.panelHost.instance(
+        ENTITY_EDITOR
+    ).container.isHidden()

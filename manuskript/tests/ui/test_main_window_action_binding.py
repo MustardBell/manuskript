@@ -99,8 +99,6 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
     ):
         MainWindowActionBinding(window).bind()
 
-    window.txtPersosFilter.textChanged.connect.assert_called_once()
-    window.lstPlots.currentItemChanged.connect.assert_called_once()
     (
         window.corePanels.project_tree.add_folder.clicked.connect
         .assert_called_once()

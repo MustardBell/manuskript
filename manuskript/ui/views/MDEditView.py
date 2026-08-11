@@ -604,9 +604,13 @@ class MDEditView(textEditView):
                     group, choice, start, end, display
                 )
 
+        create_menu = None
         if schemas:
-            reference_menu.addSeparator()
-            create_menu = reference_menu.addMenu(self.tr("Create new…"))
+            shown = display if len(display) <= 32 else display[:29] + "…"
+            create_menu = QMenu(
+                self.tr("Create entity from “{}”…").format(shown),
+                menu,
+            )
             for schema in schemas:
                 action = create_menu.addAction(schema.label)
                 action.triggered.connect(
@@ -617,7 +621,10 @@ class MDEditView(textEditView):
                 )
 
         before = menu.actions()[0] if menu.actions() else None
-        menu.insertMenu(before, reference_menu)
+        if choices:
+            menu.insertMenu(before, reference_menu)
+        if create_menu is not None:
+            menu.insertMenu(before, create_menu)
         if before is not None:
             menu.insertSeparator(before)
         return menu
@@ -628,7 +635,7 @@ class MDEditView(textEditView):
         )
         if not callable(support) or not support():
             return
-        action = menu.addAction(self.tr("Add story assertion…"))
+        action = menu.addAction(self.tr("Record story fact…"))
         action.setStatusTip(self.tr(
             "Add an explicit source-owned claim at the current paragraph."
         ))

@@ -18,9 +18,8 @@ FieldBinding = Tuple[Any, int]
 
 @dataclass(frozen=True)
 class FlatDataBindingViews:
-    """Project-level summary and publication metadata fields."""
+    """Project-level publication metadata fields."""
 
-    summary_fields: Tuple[FieldBinding, ...]
     general_fields: Tuple[FieldBinding, ...]
 
 
@@ -63,22 +62,8 @@ class ProjectBindingViews:
 
     @classmethod
     def for_window(cls, window):
-        book_summary = window.corePanels.book_summary
         return cls(
             flat_data=FlatDataBindingViews(
-                summary_fields=(
-                    (window.txtSummarySituation, 0),
-                    (window.txtSummarySentence, 1),
-                    (window.txtSummarySentence_2, 1),
-                    (window.txtSummaryPara, 2),
-                    (window.txtSummaryPara_2, 2),
-                    (book_summary.paragraph_editor, 2),
-                    (window.txtSummaryPage, 3),
-                    (window.txtSummaryPage_2, 3),
-                    (book_summary.page_editor, 3),
-                    (window.txtSummaryFull, 4),
-                    (book_summary.full_editor, 4),
-                ),
                 general_fields=(
                     (window.txtGeneralTitle, 0),
                     (window.txtGeneralSubtitle, 1),

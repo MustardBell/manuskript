@@ -4,7 +4,7 @@ import importlib
 
 from PyQt5.QtCore import (pyqtSignal, Qt,
                           QUrl, QSize)
-from PyQt5.QtGui import QIcon, QColor
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
@@ -12,28 +12,15 @@ from PyQt5.QtWidgets import (
     QLabel,
     QListWidgetItem,
     QMainWindow,
-    QTableView,
-    QTextEdit,
-    QTreeView,
     QWidget,
 )
 
 from manuskript.commands import DocumentCommandRouter, MarkupCommandRouter
 from manuskript.domain.writing_session import WritingSessionProgress
-from manuskript.controllers.character_controller import CharacterController
 from manuskript.controllers.navigation_controller import NavigationController
-from manuskript.controllers.plot_controller import PlotController
 from manuskript.controllers.view_configuration_controller import (
     ViewConfigurationController,
 )
-from manuskript.controllers.world_controller import WorldController
-from manuskript.ui.panel_services import PanelDialogs, PanelNavigation
-from manuskript.ui.views.character_panel import (
-    CharacterModels,
-    CharacterPanelView,
-)
-from manuskript.ui.views.plot_panel import PlotModels, PlotPanelView
-from manuskript.ui.views.world_panel import WorldModels, WorldPanelView
 from manuskript.panels import PanelContext
 from manuskript.panels import core as core_panels
 from manuskript.panels.core import register_core_panels
@@ -49,10 +36,6 @@ from manuskript.ui.panels.core import (
 )
 from manuskript import timing
 import manuskript.functions as F
-from manuskript.models.characterModel import characterModel
-from manuskript.models import outlineModel
-from manuskript.models.plotModel import plotModel
-from manuskript.models.worldModel import worldModel
 from manuskript.services.external_process import ExternalProcessRunner
 from manuskript.services.external_tools import ExternalToolPaths
 from manuskript.services.theme_repository import ThemeRepository
@@ -73,6 +56,10 @@ from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_binding_views import ProjectBindingViews
 from manuskript.ui.project_context_binding import ProjectContextBinding
 from manuskript.ui.project_feature_binding import ProjectFeatureBinding
+from manuskript.ui.entity_workspace import (
+    EntityWorkspaceController,
+    panel_revealer,
+)
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
@@ -81,10 +68,6 @@ from manuskript.ui.statusLabel import statusLabel
 from manuskript.ui.status_presenter import (
     StatusPresenter,
     StatusPresenterViews,
-)
-from manuskript.ui.summary_word_counts import (
-    SummaryWordCountController,
-    SummaryWordCountViews,
 )
 from manuskript.ui.spellcheck_controller import (
     SpellcheckController,
@@ -190,6 +173,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # safely once C++-owned child wrappers are involved.
             self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
+        self.setDockOptions(
+            QMainWindow.AnimatedDocks
+            | QMainWindow.AllowNestedDocks
+            | QMainWindow.AllowTabbedDocks
+            | QMainWindow.GroupedDragging
+        )
         self.actUpgradeProjectFormat = QAction(
             self.tr("Upgrade Project Format…"), self
         )
@@ -293,44 +282,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.selectionHistory = self.workspaceLifetime.own(
             WorkspaceSelectionHistory(self.navigationController)
         )
-        self.panelNavigation = PanelNavigation(self.selectionHistory)
-        self.panelDialogs = self.workspaceLifetime.own(
-            PanelDialogs(self.centralWidget(), self.tr)
-        )
-        self.characterController = CharacterController(
-            CharacterModels(self.projectRuntime),
-            CharacterPanelView.for_window(self),
-            self.panelNavigation,
-            self.panelDialogs,
-        )
-        self.plotController = PlotController(
-            PlotModels(self.projectRuntime),
-            PlotPanelView.for_window(self),
-            self.panelNavigation,
-            self.panelDialogs,
-        )
-        self.worldController = WorldController(
-            WorldModels(self.projectRuntime),
-            WorldPanelView.for_window(self),
-            self.panelNavigation,
-            self.panelDialogs,
+        self.entityWorkspace = EntityWorkspaceController(
+            self,
+            self.projectRuntime,
+            (
+                self.corePanels.project_entities,
+                self.corePanels.character_entities,
+                self.corePanels.plot_entities,
+                self.corePanels.world_entities,
+            ),
+            self.corePanels.entity_editor,
+            panel_revealer(self.panelHost, core_panels.ENTITY_EDITOR),
         )
         self.workspaceSelection = self.workspaceLifetime.own(
             WorkspaceSelectionController(
                 WorkspaceSelectionViews.for_window(self),
                 self.projectRuntime,
                 self.selectionHistory,
-                {
-                    self.TabPersos: (
-                        self.characterController.record_current_selection
-                    ),
-                    self.TabPlots: (
-                        self.plotController.record_current_selection
-                    ),
-                    self.TabWorld: (
-                        self.worldController.record_current_selection
-                    ),
-                },
+                {},
             )
         )
         self.viewConfigurationController = self.workspaceLifetime.own(
@@ -351,7 +320,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # saved sizes once every widget it splits is there, and panel
         # visibility is restored by panel id through the host.
         with timing.span("window.layout"):
-            self.windowState.restore()
+            restored_layout = self.windowState.restore()
+            entity_panel_ids = self._entityPanelIds()
+            if not any(
+                panel_id in restored_layout.panels
+                for panel_id in entity_panel_ids
+            ):
+                self._stackEntityDocks(entity_panel_ids)
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
@@ -410,10 +385,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 ProjectBindingViews.for_window(self),
                 self.projectRuntime,
                 ProjectFeatureBinding(
-                    self.characterController,
-                    self.plotController,
-                    self.worldController,
-                    self.projectRuntime.settingsManager,
+                    self.entityWorkspace,
                 ),
                 contexts_factory=lambda: ProjectContextBinding(
                     ProjectViewSet.for_window(self)
@@ -470,16 +442,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.welcome.updateValues()
         self.switchToWelcome()
 
-        self.summaryWordCounts = self.workspaceLifetime.own(
-            SummaryWordCountController(
-                SummaryWordCountViews.for_window(self)
-            )
-        )
-        self.summaryWordCounts.bind()
-
-        self.cmbSummary.setCurrentIndex(0)
-        self.cmbSummary.currentIndexChanged.emit(0)
-
         self.actionBinding = self.workspaceLifetime.own(
             MainWindowActionBinding(self)
         )
@@ -512,7 +474,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self,
         )
 
-        self.characterController.capture_tabs()
         # Register only after successful composition.  A constructor that
         # fails halfway must not leave a phantom workspace in the application
         # registry, and focus routing now has an explicit destination.
@@ -600,6 +561,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.workspaceLifetime.dispose()
         super().closeEvent(event)
 
+    @staticmethod
+    def _entityPanelIds():
+        return (
+            core_panels.PROJECT_ENTITIES,
+            core_panels.CHARACTER_ENTITIES,
+            core_panels.PLOT_ENTITIES,
+            core_panels.WORLD_ENTITIES,
+            core_panels.ENTITY_EDITOR,
+        )
+
+    def _stackEntityDocks(self, panel_ids=None):
+        """Give newly introduced entity docks one compact landing zone.
+
+        This is only called when the saved layout predates entity panels.
+        Once those panel identifiers have been recorded, Qt's restored
+        arrangement is authoritative and this migration does nothing.
+        """
+
+        panel_ids = tuple(panel_ids or self._entityPanelIds())
+        docks = []
+        for panel_id in panel_ids:
+            instance = self.panelHost.instance(panel_id)
+            if instance is not None and instance.container is not None:
+                docks.append(instance.container)
+        if not docks:
+            return
+        anchor = docks[0]
+        for dock in docks[1:]:
+            self.tabifyDockWidget(anchor, dock)
+        character = self.panelHost.instance(
+            core_panels.CHARACTER_ENTITIES
+        )
+        if character is not None and character.container is not None:
+            character.container.raise_()
+
     def buildWorkspaceMenu(self):
         """Offer another window onto the same project.
 
@@ -647,15 +643,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
         register_core_panels(
             self.panelRegistry,
-            self.TabPlots,
             self.TabRedac,
             factories=core_panel_factories(),
         )
         for panel_id in (
-            core_panels.BOOK_SUMMARY,
             core_panels.PROJECT_TREE,
             core_panels.METADATA,
             core_panels.STORYLINE,
+            core_panels.PROJECT_ENTITIES,
+            core_panels.CHARACTER_ENTITIES,
+            core_panels.PLOT_ENTITIES,
+            core_panels.WORLD_ENTITIES,
+            core_panels.ENTITY_EDITOR,
         ):
             instance = self.panelHost.open(
                 panel_id,
@@ -715,6 +714,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lstTabs.currentRowChanged.connect(self.tabMain.setCurrentIndex)
         self.lstTabs.item(self.TabDebug).setHidden(not self.SHOW_DEBUG_TAB)
         self.tabMain.setTabEnabled(self.TabDebug, self.SHOW_DEBUG_TAB)
+        for legacy_tab in (
+            self.TabSummary,
+            self.TabPersos,
+            self.TabPlots,
+            self.TabWorld,
+        ):
+            self.lstTabs.item(legacy_tab).setHidden(True)
+            self.tabMain.setTabVisible(legacy_tab, False)
         self.tabMain.currentChanged.connect(self.lstTabs.setCurrentRow)
 
         # Splitters

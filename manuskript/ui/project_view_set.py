@@ -121,7 +121,6 @@ class ProjectViewSet:
         from manuskript.ui.reference_navigation import (
             reference_navigation_for,
         )
-        from manuskript.ui.entity_editor import EntityEditorController
         from manuskript.ui.search_context import (
             SearchResultViewAdapter,
             SearchResultViews,
@@ -135,16 +134,10 @@ class ProjectViewSet:
         runtime = window.projectRuntime
         core = window.corePanels
         search_result_views = SearchResultViews.for_window(window)
-        entity_editor = EntityEditorController(
-            window,
-            runtime.projectManager.storage.entity_catalog,
-            runtime.projectManager.updateEntity,
-            runtime.projectManager.storage.morphology_providers,
-        )
         navigation = reference_navigation_for(
             window,
             runtime.models,
-            entity_editor.open,
+            window.entityWorkspace.open,
         )
         return cls(
             models=runtime.models,

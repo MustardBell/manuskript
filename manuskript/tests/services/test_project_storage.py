@@ -407,10 +407,13 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert tuple(reopened.documents())[1].structured_metadata == (
         StructuredMetadataField("external-tool", {"keep": True}),
     )
-    assert reopened.entities[0].id == created_entity.id
-    assert reopened.entities[0].title == "Mara Vane"
-    assert reopened.entities[0].aliases == ("M. Vane",)
-    assert reopened.entities[0].document.text == "Entity notes.\n"
+    reopened_created = next(
+        entity for entity in reopened.entities
+        if entity.id == created_entity.id
+    )
+    assert reopened_created.title == "Mara Vane"
+    assert reopened_created.aliases == ("M. Vane",)
+    assert reopened_created.document.text == "Entity notes.\n"
     reopened_inflected = next(
         entity for entity in reopened.entities
         if entity.id == inflected_entity.id

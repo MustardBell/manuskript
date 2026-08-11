@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import partial
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Tuple
+from typing import Any, Callable, Mapping
 
 from manuskript.enums import (
     Character,
@@ -9,7 +9,6 @@ from manuskript.enums import (
     Model,
     Outline,
     Plot,
-    PlotStep,
     World,
 )
 from manuskript.models.reference_identity import (
@@ -66,18 +65,8 @@ class SearchContext:
 class SearchResultViews:
     """Widgets search results may reveal or highlight in one workspace."""
 
-    main_tabs: Any
-    summary_tab_index: int
-    character_tabs: Any
-    summary_tabs: Any
-    world_tabs: Any
-    plot_tabs: Any
-    character_fields: Mapping[int, Tuple[int, Any]]
-    summary_fields: Mapping[int, Tuple[int, Any]]
+    entity_workspace: Any
     metadata_fields: Mapping[int, Any]
-    world_fields: Mapping[int, Tuple[int, Any]]
-    plot_fields: Mapping[int, Tuple[int, Any]]
-    plot_step_fields: Mapping[int, Tuple[Any, ...]]
     current_document_text: Callable[[], Any]
     show_metadata: Callable[[], None]
 
@@ -85,37 +74,10 @@ class SearchResultViews:
     def for_window(cls, window):
         metadata = window.corePanels.metadata
         properties = metadata.properties
-        plot_steps = window.lstSubPlots
         main_editor = window.mainEditor
         panel_host = window.panelHost
         return cls(
-            main_tabs=window.tabMain,
-            summary_tab_index=window.TabSummary,
-            character_tabs=window.tabPersos,
-            summary_tabs=window.tabSummary,
-            world_tabs=window.tabWorld,
-            plot_tabs=window.tabPlot,
-            character_fields=MappingProxyType({
-                Character.name: (0, window.txtPersoName),
-                Character.goal: (0, window.txtPersoGoal),
-                Character.motivation: (0, window.txtPersoMotivation),
-                Character.conflict: (0, window.txtPersoConflict),
-                Character.epiphany: (0, window.txtPersoEpiphany),
-                Character.summarySentence: (
-                    0, window.txtPersoSummarySentence,
-                ),
-                Character.summaryPara: (0, window.txtPersoSummaryPara),
-                Character.summaryFull: (1, window.txtPersoSummaryFull),
-                Character.notes: (2, window.txtPersoNotes),
-                Character.infos: (3, window.tblPersoInfos),
-            }),
-            summary_fields=MappingProxyType({
-                FlatData.summarySituation: (0, window.txtSummarySituation),
-                FlatData.summarySentence: (0, window.txtSummarySentence),
-                FlatData.summaryPara: (1, window.txtSummaryPara),
-                FlatData.summaryPage: (2, window.txtSummaryPage),
-                FlatData.summaryFull: (3, window.txtSummaryFull),
-            }),
+            entity_workspace=window.entityWorkspace,
             metadata_fields=MappingProxyType({
                 Outline.title: properties.txtTitle,
                 Outline.summarySentence: metadata.txtSummarySentence,
@@ -124,23 +86,6 @@ class SearchResultViews:
                 Outline.POV: properties.lblPOV,
                 Outline.status: properties.lblStatus,
                 Outline.label: properties.lblLabel,
-            }),
-            world_fields=MappingProxyType({
-                World.name: (0, window.txtWorldName),
-                World.description: (0, window.txtWorldDescription),
-                World.passion: (1, window.txtWorldPassion),
-                World.conflict: (1, window.txtWorldConflict),
-            }),
-            plot_fields=MappingProxyType({
-                Plot.name: (0, window.txtPlotName),
-                Plot.description: (0, window.txtPlotDescription),
-                Plot.characters: (0, window.lstPlotPerso),
-                Plot.result: (0, window.txtPlotResult),
-            }),
-            plot_step_fields=MappingProxyType({
-                PlotStep.name: (plot_steps,),
-                PlotStep.meta: (plot_steps,),
-                PlotStep.summary: (plot_steps, window.txtSubPlotSummary),
             }),
             current_document_text=lambda: (
                 main_editor.currentEditor().txtRedacText
@@ -191,31 +136,32 @@ class SearchResultViewAdapter:
 
     def _open_character(self, result):
         self.references.open(character_reference(result.id()))
-        self.views.character_tabs.setEnabled(True)
 
     def _open_flat_data(self, _result):
-        self.views.main_tabs.setCurrentIndex(self.views.summary_tab_index)
+        self.views.entity_workspace.open("project:summary")
 
     def _open_outline(self, result):
         self.references.open(text_reference(result.id()))
 
     def _open_world(self, result):
         self.references.open(world_reference(result.id()))
-        self.views.world_tabs.setEnabled(True)
 
     def _open_plot(self, result):
         self.references.open(plot_reference(result.id()))
-        self.views.plot_tabs.setEnabled(True)
 
     def _character_widgets(self, result):
-        tab_index, widget = self.views.character_fields[result.column()]
-        self.views.character_tabs.setCurrentIndex(tab_index)
-        return widget
+        editor = self._entity_editor()
+        if result.column() == Character.name:
+            return editor.titleEdit
+        if result.column() == Character.notes:
+            return editor.bodyEdit
+        return editor.propertiesTable
 
     def _flat_data_widgets(self, result):
-        tab_index, widget = self.views.summary_fields[result.column()]
-        self.views.summary_tabs.setCurrentIndex(tab_index)
-        return widget
+        editor = self._entity_editor()
+        if result.column() == FlatData.summaryFull:
+            return editor.bodyEdit
+        return editor.propertiesTable
 
     def _outline_widgets(self, result):
         if result.column() != Outline.text:
@@ -226,15 +172,26 @@ class SearchResultViewAdapter:
         return self.views.current_document_text()
 
     def _world_widgets(self, result):
-        tab_index, widget = self.views.world_fields[result.column()]
-        self.views.world_tabs.setCurrentIndex(tab_index)
-        return widget
+        editor = self._entity_editor()
+        if result.column() == World.name:
+            return editor.titleEdit
+        if result.column() == World.description:
+            return editor.bodyEdit
+        return editor.propertiesTable
 
     def _plot_widgets(self, result):
-        tab_index, widget = self.views.plot_fields[result.column()]
-        self.views.plot_tabs.setCurrentIndex(tab_index)
-        return widget
+        editor = self._entity_editor()
+        if result.column() == Plot.name:
+            return editor.titleEdit
+        if result.column() == Plot.description:
+            return editor.bodyEdit
+        return editor.propertiesTable
 
     def _plot_step_widgets(self, result):
-        self.views.plot_tabs.setCurrentIndex(1)
-        return list(self.views.plot_step_fields[result.column()])
+        return self._entity_editor().propertiesTable
+
+    def _entity_editor(self):
+        editor = self.views.entity_workspace.editorPanel.editor
+        if editor is None:
+            raise RuntimeError("Entity search result did not open an editor.")
+        return editor

@@ -255,6 +255,11 @@ class ProjectManager:
         self.startTimerNoChanges()
         return entity
 
+    def deleteEntity(self, entity_id):
+        entity = self.storage.delete_entity(entity_id)
+        self.startTimerNoChanges()
+        return entity
+
     def saveDatas(
         self,
         projectName=None,

@@ -3,7 +3,7 @@ from manuskript.enums import Character, Plot
 
 
 class FlatDataProjectBinding:
-    """Bind general-information and summary fields to flat project data."""
+    """Bind general publication fields to the compatibility model."""
 
     def __init__(self, views, runtime):
         self.views = views
@@ -16,13 +16,6 @@ class FlatDataProjectBinding:
 
     def bind(self, _connect):
         models = self.models
-        for widget, column in self.views.summary_fields:
-            widget.setModel(models.flat_data)
-            widget.setColumn(column)
-            widget.setCurrentModelIndex(
-                models.flat_data.index(1, column)
-            )
-
         for widget, column in self.views.general_fields:
             widget.setModel(models.flat_data)
             widget.setColumn(column)

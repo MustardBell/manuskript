@@ -7,12 +7,22 @@ QApplication exists.
 """
 
 from manuskript.panels.core import (
-    BOOK_SUMMARY,
+    CHARACTER_ENTITIES,
+    ENTITY_EDITOR,
     METADATA,
+    PLOT_ENTITIES,
+    PROJECT_ENTITIES,
     PROJECT_TREE,
     STORYLINE,
+    WORLD_ENTITIES,
 )
-from manuskript.ui.panels.core.book_summary import build_book_summary
+from manuskript.ui.panels.core.entities import (
+    build_character_entities,
+    build_plot_entities,
+    build_project_entities,
+    build_world_entities,
+    build_entity_editor,
+)
 from manuskript.ui.panels.core.metadata import build_metadata
 from manuskript.ui.panels.core.project_tree import build_project_tree
 from manuskript.ui.panels.core.storyline import build_storyline
@@ -26,7 +36,11 @@ def core_panel_factories():
     no longer declares any of them.
     """
     return {
-        BOOK_SUMMARY: build_book_summary,
+        PROJECT_ENTITIES: build_project_entities,
+        CHARACTER_ENTITIES: build_character_entities,
+        PLOT_ENTITIES: build_plot_entities,
+        WORLD_ENTITIES: build_world_entities,
+        ENTITY_EDITOR: build_entity_editor,
         METADATA: build_metadata,
         PROJECT_TREE: build_project_tree,
         STORYLINE: build_storyline,

@@ -796,56 +796,10 @@ class textEditView(QTextEdit):
         popup_menu = self.createStandardContextMenu()
         popup_menu.exec_(event.globalPos())
 
-    def newCharacter(self):
-        text = self.sender().data()
-        LOGGER.debug(f'New character: {text}')
-        if self.text_editor_context is not None:
-            self.text_editor_context.create_character(text)
-
-    def newPlotItem(self):
-        text = self.sender().data()
-        LOGGER.debug(f'New plot item: {text}')
-        if self.text_editor_context is not None:
-            self.text_editor_context.create_plot(text)
-
-    def newWorldItem(self):
-        text = self.sender().data()
-        LOGGER.debug(f'New world item: {text}')
-        if self.text_editor_context is not None:
-            self.text_editor_context.create_world_item(text)
-
-
     def appendContextMenuEntriesForWord(self, popup_menu, selectedWord):
-        # add "new <something>" buttons at end
-        entity_schemas = getattr(
-            self.text_editor_context, "entity_schemas", None
-        )
-        if callable(entity_schemas) and entity_schemas():
-            # Format 2 uses the generic Reference… interaction below the
-            # Markdown editor instead of three legacy model-specific actions.
-            return popup_menu
-        if selectedWord != None:
-            # new character
-            charAction = QAction(self.tr("&New Character"), popup_menu)
-            charAction.setIcon(F.themeIcon("characters"))
-            charAction.triggered.connect(self.newCharacter)
-            charAction.setData(selectedWord)
-            popup_menu.insertAction(None, charAction)
-
-            # new plot item
-            plotAction = QAction(self.tr("&New Plot Item"), popup_menu)
-            plotAction.setIcon(F.themeIcon("plots"))
-            plotAction.triggered.connect(self.newPlotItem)
-            plotAction.setData(selectedWord)
-            popup_menu.insertAction(None, plotAction)
-
-            # new world item
-            worldAction = QAction(self.tr("&New World Item"), popup_menu)
-            worldAction.setIcon(F.themeIcon("world"))
-            worldAction.triggered.connect(self.newWorldItem)
-            worldAction.setData(selectedWord)
-            popup_menu.insertAction(None, worldAction)
-
+        # Entity creation belongs to the Markdown-aware editor, which can
+        # offer schemas from the canonical catalogue.  A base text widget
+        # must never fall back to mutating the hidden legacy story models.
         return popup_menu
 
     def createStandardContextMenu(self):

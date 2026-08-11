@@ -40,7 +40,11 @@ def test_references(MWSampleProject):
     )
     references = ReferenceService(
         reference_models,
-        reference_navigation_for(MW, MW.projectRuntime.models),
+        reference_navigation_for(
+            MW,
+            MW.projectRuntime.models,
+            MW.entityWorkspace.open,
+        ),
         ReferenceHtmlPresenter(reference_models),
     )
 

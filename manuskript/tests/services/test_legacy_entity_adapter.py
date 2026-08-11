@@ -33,7 +33,7 @@ def test_legacy_story_records_project_into_generic_entities_without_collision():
     entities = LegacyEntityAdapter().project(project)
 
     assert tuple(entity.id for entity in entities) == (
-        "legacy:project:summary",
+        "project:summary",
         "legacy:character:1",
         "legacy:world:1",
         "legacy:plot:1",
