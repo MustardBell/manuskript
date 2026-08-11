@@ -458,6 +458,19 @@ class TestSaveFlushesPendingText(unittest.TestCase):
 
         self.view.flush_pending_edits.assert_called_once_with()
 
+    def test_read_only_canonical_capture_includes_pending_ui_state_without_save(self):
+        self.manager.session.open("project.msk")
+        current = object()
+        self.storage.capture_current.return_value = current
+
+        captured = self.manager.captureCanonicalProject()
+
+        self.assertIs(captured, current)
+        self.view.flush_pending_edits.assert_called_once_with()
+        self.view.capture_project_state.assert_called_once_with()
+        self.storage.capture_current.assert_called_once()
+        self.storage.save.assert_not_called()
+
     def test_close_flushes_before_deciding_whether_project_is_dirty(self):
         """A delayed private edit must participate in the close decision."""
         self.manager.session.open("project.msk")

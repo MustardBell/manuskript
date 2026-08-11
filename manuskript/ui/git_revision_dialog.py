@@ -139,6 +139,16 @@ class GitRevisionDialog(QDialog):
         self.btnRestore.clicked.connect(self._restore)
         self.btnRestore.setEnabled(False)
         actions.addWidget(self.btnRestore)
+        self.btnStructuralDiff = QPushButton(
+            self.tr("Structural diff to current"), self
+        )
+        self.btnStructuralDiff.setToolTip(self.tr(
+            "Compare documents, metadata, references, assertions, and "
+            "paragraph structure without restoring files."
+        ))
+        self.btnStructuralDiff.clicked.connect(self._structuralDiff)
+        self.btnStructuralDiff.setEnabled(False)
+        actions.addWidget(self.btnStructuralDiff)
         actions.addStretch(1)
         layout.addLayout(actions)
 
@@ -252,6 +262,25 @@ class GitRevisionDialog(QDialog):
         finally:
             QApplication.restoreOverrideCursor()
 
+    def _structuralDiff(self):
+        commit_id = self._selectedCommit()
+        if commit_id is None:
+            return
+        try:
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            current = self.project_manager.captureCanonicalProject()
+            report = self.coordinator.structural_diff(
+                self.project_manager.currentProject,
+                commit_id,
+                current,
+                self.settings,
+            )
+            self.details.setPlainText(report.render_text())
+        except Exception as error:
+            self._showError(error)
+        finally:
+            QApplication.restoreOverrideCursor()
+
     def _tagFilterChanged(self, checked):
         git_settings = self.settings.revisions.setdefault("git", {})
         git_settings["taggedOnly"] = bool(checked)
@@ -350,6 +379,7 @@ class GitRevisionDialog(QDialog):
         self.btnCommit.setEnabled(available)
         self.btnTag.setEnabled(available and selected)
         self.btnRestore.setEnabled(available and selected)
+        self.btnStructuralDiff.setEnabled(available and selected)
 
     def _showError(self, error):
         QMessageBox.critical(

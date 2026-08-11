@@ -4,6 +4,7 @@ import logging
 from manuskript.domain.revisions import RevisionConfiguration
 from manuskript.services.git_revisions import GitRevisionBackend
 from manuskript.services.revision_snapshot import RevisionSnapshotLoader
+from manuskript.domain.structural_diff import CanonicalProjectDiffer
 
 
 LOGGER = logging.getLogger(__name__)
@@ -16,12 +17,16 @@ class ProjectRevisionCoordinator:
         self,
         backend_factory=None,
         snapshot_loader=None,
+        structural_differ=None,
     ):
         self.backend_factory = (
             backend_factory or GitRevisionBackend
         )
         self.snapshot_loader = (
             snapshot_loader or RevisionSnapshotLoader()
+        )
+        self.structural_differ = (
+            structural_differ or CanonicalProjectDiffer()
         )
 
     def git_backend(self, project_file):
@@ -73,4 +78,20 @@ class ProjectRevisionCoordinator:
         return self.git_backend(project_file).create_tag(
             revision,
             name,
+        )
+
+    def structural_diff(
+        self,
+        project_file,
+        revision,
+        current_project,
+        settings,
+    ):
+        """Compare a validated in-memory Git snapshot with current state."""
+
+        loaded = self.load_snapshot(project_file, revision, settings)
+        if not loaded.load_result.succeeded:
+            raise ValueError("The selected revision could not be decoded.")
+        return self.structural_differ.compare(
+            loaded.canonical_project, current_project
         )

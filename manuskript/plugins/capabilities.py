@@ -42,6 +42,9 @@ CAPABILITY_ASSERTIONS_READ = "assertions.read"
 CAPABILITY_ASSERTIONS_WRITE = "assertions.write"
 CAPABILITY_TIMELINE_READ = "timeline.read"
 CAPABILITY_RULES_EXECUTE = "rules.execute"
+CAPABILITY_PROSE_ANALYSIS = "analysis.prose"
+CAPABILITY_WORKFLOW_READ = "workflow.read"
+CAPABILITY_WORKFLOW_WRITE = "workflow.write"
 CAPABILITY_QUERY_EXECUTE = "query.execute"
 CAPABILITY_MORPHOLOGY_REGISTRY = "morphology.registry"
 
@@ -208,6 +211,24 @@ CAPABILITIES = (
         summary=(
             "Run deterministic continuity rules and receive immutable "
             "findings with source evidence and explicit uncertainty."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_PROSE_ANALYSIS,
+        summary=(
+            "Run bounded deterministic prose measurements and receive "
+            "source occurrences without scores or prescriptive judgments."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_WORKFLOW_READ,
+        summary="Read per-document revision-pass workflow state.",
+    ),
+    Capability(
+        name=CAPABILITY_WORKFLOW_WRITE,
+        summary=(
+            "Update Format 2 revision-pass metadata through a project command; "
+            "includes workflow.read."
         ),
     ),
     Capability(

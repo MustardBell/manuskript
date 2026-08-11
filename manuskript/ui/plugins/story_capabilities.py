@@ -18,13 +18,23 @@ from manuskript.domain.story_assertions import (
     TemporalInterval,
     TemporalPoint,
 )
+from manuskript.domain.prose_analysis import (
+    ProseAnalysisOptions,
+    ProseAnalyzer,
+    ProseDocument,
+)
 from manuskript.plugins.api import (
     AssertionDiagnosticSnapshot,
     AssertionSnapshot,
     AssertionTermValue,
     ChronologySnapshot,
+    CountedPatternSnapshot,
+    DocumentProseMetricsSnapshot,
+    DocumentRevisionWorkflowSnapshot,
     EntitySnapshot,
     MorphologyProviderSnapshot,
+    ProseAnalysisSnapshot,
+    ProseOccurrenceSnapshot,
     ReferenceOccurrenceSnapshot,
     ReferenceSuggestionSnapshot,
     RuleDiagnosticSnapshot,
@@ -32,6 +42,8 @@ from manuskript.plugins.api import (
     RuleFindingSnapshot,
     RuleReportSnapshot,
     RuleSummarySnapshot,
+    RevisionPassSnapshot,
+    SimilarNameSnapshot,
     StoryReferenceValue,
     TemporalDiagnosticSnapshot,
     TemporalFactSnapshot,
@@ -42,6 +54,7 @@ from manuskript.plugins.api import (
 from manuskript.plugins.capabilities import (
     CAPABILITY_ASSERTIONS_READ,
     CAPABILITY_ASSERTIONS_WRITE,
+    CAPABILITY_PROSE_ANALYSIS,
     CAPABILITY_ENTITIES_READ,
     CAPABILITY_ENTITIES_WRITE,
     CAPABILITY_MORPHOLOGY_REGISTRY,
@@ -50,7 +63,8 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_REFERENCES_WRITE,
     CAPABILITY_RULES_EXECUTE,
     CAPABILITY_TIMELINE_READ,
-    CAPABILITY_RULES_EXECUTE,
+    CAPABILITY_WORKFLOW_READ,
+    CAPABILITY_WORKFLOW_WRITE,
 )
 from manuskript.plugins.errors import PluginScopeError
 
@@ -63,6 +77,8 @@ _PERSISTED_CAPABILITIES = frozenset((
     CAPABILITY_ASSERTIONS_READ,
     CAPABILITY_ASSERTIONS_WRITE,
     CAPABILITY_TIMELINE_READ,
+    CAPABILITY_WORKFLOW_READ,
+    CAPABILITY_WORKFLOW_WRITE,
 ))
 
 
@@ -158,6 +174,13 @@ def build_story_capability(
         ),
         CAPABILITY_TIMELINE_READ: lambda: TimelineReadCapability(manager),
         CAPABILITY_RULES_EXECUTE: lambda: RuleExecuteCapability(manager),
+        CAPABILITY_PROSE_ANALYSIS: lambda: ProseAnalysisCapability(manager),
+        CAPABILITY_WORKFLOW_READ: lambda: RevisionWorkflowReadCapability(
+            manager
+        ),
+        CAPABILITY_WORKFLOW_WRITE: lambda: RevisionWorkflowWriteCapability(
+            manager
+        ),
         CAPABILITY_QUERY_EXECUTE: lambda: QueryExecuteCapability(manager),
         CAPABILITY_MORPHOLOGY_REGISTRY: lambda: (
             MorphologyRegistryCapability(manager, plugin_id)
@@ -701,6 +724,151 @@ class RuleExecuteCapability:
                 for item in report.findings
             ),
             report.evaluated_rule_ids,
+        )
+
+
+def _prose_occurrence(item):
+    return ProseOccurrenceSnapshot(
+        item.document_id, item.start, item.end, item.excerpt
+    )
+
+
+def _counted_pattern(item):
+    return CountedPatternSnapshot(
+        item.pattern,
+        item.count,
+        tuple(_prose_occurrence(value) for value in item.occurrences),
+    )
+
+
+class ProseAnalysisCapability:
+    def __init__(self, manager, analyzer=None):
+        self._storage = manager.storage
+        self._analyzer = analyzer or ProseAnalyzer()
+
+    def analyze(
+        self,
+        *,
+        ngram_min=3,
+        ngram_max=6,
+        minimum_repetitions=2,
+        opening_words=3,
+        nearby_distance=12,
+        fillers=(),
+        maximum_results=200,
+    ):
+        entity_ids = {
+            item.id for item in self._storage.entity_catalog.entities
+        }
+        documents = tuple(
+            ProseDocument(item.id, item.title, item.text)
+            for item in self._storage.reference_index.documents
+            if item.id not in entity_ids
+        )
+        names = tuple(
+            item.title for item in self._storage.entity_catalog.entities
+        )
+        report = self._analyzer.analyze(
+            documents,
+            names,
+            ProseAnalysisOptions(
+                int(ngram_min),
+                int(ngram_max),
+                int(minimum_repetitions),
+                int(opening_words),
+                int(nearby_distance),
+                tuple(str(item) for item in fillers),
+                int(maximum_results),
+            ),
+        )
+        return ProseAnalysisSnapshot(
+            tuple(
+                DocumentProseMetricsSnapshot(
+                    item.document_id,
+                    item.title,
+                    item.word_count,
+                    item.sentence_lengths,
+                    item.paragraph_lengths,
+                    item.dialogue_word_ratio,
+                    item.punctuation,
+                )
+                for item in report.documents
+            ),
+            tuple(_counted_pattern(item) for item in report.repeated_phrases),
+            tuple(_counted_pattern(item) for item in report.repeated_openings),
+            tuple(_counted_pattern(item) for item in report.nearby_repetitions),
+            tuple(_counted_pattern(item) for item in report.passive_candidates),
+            tuple(_counted_pattern(item) for item in report.filler_phrases),
+            tuple(_counted_pattern(item) for item in report.spelling_mixtures),
+            tuple(
+                SimilarNameSnapshot(
+                    item.first,
+                    item.second,
+                    item.distance,
+                    item.similarity,
+                )
+                for item in report.similar_names
+            ),
+        )
+
+
+class RevisionWorkflowReadCapability:
+    def __init__(self, manager):
+        self._manager = manager
+        self._store = manager.storage.revision_workflow
+
+    def passes(self):
+        return tuple(
+            RevisionPassSnapshot(item.id, item.label)
+            for item in self._store.definitions
+        )
+
+    def documents(self):
+        storage = self._manager.storage
+        titles = {
+            item.id: item.title for item in storage.reference_index.documents
+        }
+        entity_ids = {item.id for item in storage.entity_catalog.entities}
+        return tuple(
+            DocumentRevisionWorkflowSnapshot(
+                document.id,
+                document.title,
+                {
+                    item.id: self._store.workflow(document.id).state(
+                        item.id
+                    ).value
+                    for item in self._store.definitions
+                },
+            )
+            for document in sorted(
+                (
+                    item for item in storage.reference_index.documents
+                    if item.id not in entity_ids
+                ),
+                key=lambda item: (item.title.casefold(), item.id),
+            )
+        )
+
+
+class RevisionWorkflowWriteCapability(RevisionWorkflowReadCapability):
+    def set_state(self, document_id, pass_id, state):
+        workflow = self._manager.storage.update_revision_pass(
+            str(document_id), str(pass_id), str(state)
+        )
+        changed = getattr(self._manager, "startTimerNoChanges", None)
+        if callable(changed):
+            changed()
+        titles = {
+            item.id: item.title
+            for item in self._manager.storage.reference_index.documents
+        }
+        return DocumentRevisionWorkflowSnapshot(
+            workflow.document_id,
+            titles.get(workflow.document_id, workflow.document_id),
+            {
+                item.id: workflow.state(item.id).value
+                for item in self._store.definitions
+            },
         )
 
 

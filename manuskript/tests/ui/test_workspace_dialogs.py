@@ -35,6 +35,7 @@ def controller_fixture(project_open=True):
             frequency=lambda: create("frequency"),
             targets=lambda: create("targets"),
             revisions=lambda host: QWidget(host),
+            upgrade=lambda: create("upgrade"),
             project_is_open=lambda: project_open,
         ),
         application=ApplicationDialogFactories(
@@ -91,6 +92,18 @@ def test_revision_history_is_not_created_without_an_open_project():
 
     assert controller.show_revision_history() is None
     assert controller.revision_dialog is None
+
+
+def test_upgrade_dialog_is_project_scoped():
+    controller, _parent, _centered, created = controller_fixture()
+
+    dialog = controller.show_upgrade()
+
+    assert dialog is created["upgrade"][0]
+    controller.close_all()
+
+    closed, _parent, _centered, _created = controller_fixture(False)
+    assert closed.show_upgrade() is None
 
 
 def test_close_all_forgets_and_closes_every_workspace_tool():

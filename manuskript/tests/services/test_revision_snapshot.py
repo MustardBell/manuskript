@@ -12,6 +12,7 @@ def test_loader_hydrates_detached_models_from_snapshot():
     model_factory.create.return_value = models
     storage = MagicMock()
     storage.load_snapshot.return_value = ProjectLoadResult()
+    storage.canonical_project = MagicMock(name="canonical")
     snapshot = GitProjectSnapshot(
         commit_id="a" * 40,
         files={"settings.txt": "{}"},
@@ -27,6 +28,7 @@ def test_loader_hydrates_detached_models_from_snapshot():
     assert loaded.commit_id == snapshot.commit_id
     assert loaded.models is models
     assert loaded.load_result.succeeded
+    assert loaded.canonical_project is storage.canonical_project
     model_factory.create.assert_called_once()
     assert model_factory.create.call_args.args[0] == "owner"
     storage.load_snapshot.assert_called_once()

@@ -219,6 +219,8 @@ Both methods are optional, and returning nothing stays valid:
 | `timeline.read` | partial chronology and temporal assertion state | in project panels and editor workspaces |
 | `rules.execute` | deterministic continuity rules and evidence reports | in project panels and editor workspaces |
 | `query.execute` | the typed structural query engine | in project panels and editor workspaces |
+| `analysis.prose` | bounded deterministic prose measurements and source evidence | in project panels and editor workspaces |
+| `workflow.read` / `workflow.write` | per-document revision passes / guarded Format 2 workflow updates | in project panels and editor workspaces |
 | `morphology.registry` | provider snapshots and namespaced registration | in project panels and editor workspaces |
 
 `api.capability(name)` raises `PluginScopeError` for anything you did not

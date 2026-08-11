@@ -193,6 +193,7 @@ def test_features_negotiate_structured_compatibility_not_version_checks():
     project_files = strategy.support("plugins.project-files")
     timeline_write = strategy.support("timeline.write")
     rules_execute = strategy.support("rules.execute")
+    workflow_write = strategy.support("workflow.write")
 
     assert links.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
     assert links.old_client_save_safe
@@ -207,6 +208,7 @@ def test_features_negotiate_structured_compatibility_not_version_checks():
     assert timeline_write.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
     assert timeline_write.writable and timeline_write.old_client_save_safe
     assert rules_execute.readable and rules_execute.old_client_save_safe
+    assert not workflow_write.supported
     assert entity_read.persistence_level is PersistenceLevel.DERIVED
     assert entity_read.readable and not entity_read.writable
     assert not entity_write.supported
@@ -219,6 +221,13 @@ def test_v2_negotiates_native_entity_morphology_without_format_checks():
     assert support.persistence_level is PersistenceLevel.NATIVE
     assert support.readable
     assert support.writable
+
+
+def test_v2_negotiates_native_revision_workflow_metadata():
+    support = compatibility_strategy(2).support("workflow.write")
+
+    assert support.persistence_level is PersistenceLevel.NATIVE
+    assert support.readable and support.writable
 
 
 def test_persistence_decorator_cannot_shadow_authoritative_base_fields():

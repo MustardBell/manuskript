@@ -20,6 +20,8 @@ from manuskript.ui.settings_window_views import SettingsWindowViews
 from manuskript.ui.tools.frequencyAnalyzer import frequencyAnalyzer
 from manuskript.ui.tools.media_type_inspector import MediaTypeInspector
 from manuskript.ui.tools.targets import TargetsContext, TargetsDialog
+from manuskript.ui.project_upgrade_dialog import ProjectUpgradeDialog
+from manuskript.services.project_migration import ProjectMigrationService
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,7 @@ class AuthoringDialogFactories:
     frequency: Callable[[], Any]
     targets: Callable[[], Any]
     revisions: Callable[[Any], Any]
+    upgrade: Callable[[], Any]
     project_is_open: Callable[[], bool]
 
 
@@ -93,6 +96,11 @@ class WorkspaceDialogViews:
                     runtime.revisionCoordinator,
                     parent,
                 ),
+                upgrade=lambda: ProjectUpgradeDialog(
+                    manager,
+                    ProjectMigrationService(),
+                    parent=dialog_parent,
+                ),
                 project_is_open=lambda: manager.session.is_open,
             ),
             application=ApplicationDialogFactories(
@@ -113,6 +121,7 @@ class WorkspaceDialogController:
     FREQUENCY = "frequency"
     TARGETS = "targets"
     REVISIONS = "revisions"
+    UPGRADE = "upgrade"
     MEDIA_TYPES = "media-types"
     ABOUT = "about"
 
@@ -195,6 +204,14 @@ class WorkspaceDialogController:
             dialog.hide()
             dialog.setParent(host, Qt.Dialog)
         return self._lifecycle.present(dialog, center=False)
+
+    def show_upgrade(self, _checked=False):
+        if not self.views.authoring.project_is_open():
+            return None
+        return self._lifecycle.present(self._lifecycle.replace(
+            self.UPGRADE,
+            self.views.authoring.upgrade,
+        ))
 
     def show_media_types(self, _checked=False):
         return self._lifecycle.present(self._lifecycle.replace(

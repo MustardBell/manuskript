@@ -39,6 +39,7 @@ from manuskript.domain.reference_index import (
 from manuskript.domain.story_query import StoryQueryEngine
 from manuskript.domain.rule_store import RuleDocument, RuleStore
 from manuskript.domain.story_rules import StoryRuleEngine
+from manuskript.domain.revision_workflow import RevisionWorkflowStore
 from manuskript.domain.temporal_story import (
     ChronologyIndex,
     TemporalStoryIndex,
@@ -68,6 +69,7 @@ class ProjectStorage:
         assertion_store=None,
         chronology_index=None,
         rule_store=None,
+        revision_workflow=None,
     ):
         self._file_cache = (
             file_cache if file_cache is not None else {}
@@ -116,6 +118,9 @@ class ProjectStorage:
             self._temporal_story,
             self._rule_store,
         )
+        self._revision_workflow = (
+            revision_workflow or RevisionWorkflowStore()
+        )
         self._story_query = StoryQueryEngine(
             self._entity_catalog,
             self._reference_index,
@@ -133,6 +138,27 @@ class ProjectStorage:
         return compatibility_strategy(
             self._canonical_project.format_version
         )
+
+    def capture_current(self, context):
+        """Project the live application models without writing or adopting.
+
+        Read-only tools such as structural diff need the state on screen,
+        including edits made since the last save. Returning a detached
+        canonical value keeps them from treating the last disk snapshot as
+        current or mutating persistence as a side effect of inspection.
+        """
+
+        if self._canonical_project is None:
+            raise ValueError("No canonical project is open.")
+        project = self._application_model_adapter.capture(
+            context, self._canonical_project
+        )
+        if project.format_version == 2:
+            project = replace(
+                project,
+                entities=self._entity_catalog.native_entities,
+            )
+        return project
 
     @property
     def reference_index(self):
@@ -169,6 +195,16 @@ class ProjectStorage:
     @property
     def story_rules(self):
         return self._story_rules
+
+    @property
+    def revision_workflow(self):
+        return self._revision_workflow
+
+    def update_revision_pass(self, document_id, pass_id, state):
+        self._canonical_project = self._revision_workflow.update(
+            self._canonical_project, document_id, pass_id, state
+        )
+        return self._revision_workflow.workflow(document_id)
 
     def register_morphology_provider(self, provider):
         self._morphology_providers.register(provider)
@@ -340,6 +376,7 @@ class ProjectStorage:
         self._assertion_store.rebuild(())
         self._chronology_index.rebuild(())
         self._rule_store.rebuild(())
+        self._revision_workflow.rebuild(None)
         self._entity_catalog.replace((), writable=False)
 
     def _load_version_1(self, context, *, zipped, file_access):
@@ -459,6 +496,7 @@ class ProjectStorage:
 
     def _adopt_canonical_project(self, project):
         self._canonical_project = project
+        self._revision_workflow.rebuild(project)
         legacy_entities = (
             self._legacy_entity_adapter.project(project)
             if project.format_version in (0, 1)

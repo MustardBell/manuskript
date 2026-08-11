@@ -9,3 +9,7 @@
 	path = manuskript/plugins/anchors
 	url = https://github.com/MustardBell/manuskript-anchors.git
 	branch = main
+[submodule "manuskript/plugins/story_workstation"]
+	path = manuskript/plugins/story_workstation
+	url = https://github.com/MustardBell/manuskript-story-workstation.git
+	branch = main

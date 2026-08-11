@@ -332,6 +332,19 @@ class ProjectManager:
             LOGGER.warning("Project {} not saved.".format(current_project_name))
         return result.succeeded
 
+    def captureCanonicalProject(self):
+        """Return current authored state for read-only project tools."""
+
+        if not self.session.is_open:
+            raise InvalidProjectStateTransition(
+                "There is no open project to capture."
+            )
+        self.flushPendingEdits()
+        self.ui.capture_project_state()
+        return self.storage.capture_current(
+            self.persistence_context(self.currentProject)
+        )
+
     def _recordRevisionAfterSave(self, message):
         try:
             self.revision_coordinator.after_project_save(

@@ -133,3 +133,32 @@ def test_commit_revision_saves_first_and_commits_the_saved_project():
     manager.ui.flush_pending_edits.assert_not_called()
     manager.saveDatas.assert_called_once_with(record_revision=False)
     backend.commit.assert_called_once_with("Chapter complete")
+
+
+def test_structural_diff_compares_validated_snapshot_to_current_project():
+    loader = MagicMock()
+    loaded = MagicMock()
+    loaded.load_result.succeeded = True
+    loaded.canonical_project = object()
+    loader.load.return_value = loaded
+    differ = MagicMock()
+    expected = MagicMock()
+    differ.compare.return_value = expected
+    coordinator = ProjectRevisionCoordinator(
+        backend_factory=lambda _project: MagicMock(),
+        snapshot_loader=loader,
+        structural_differ=differ,
+    )
+    coordinator.load_snapshot = MagicMock(return_value=loaded)
+    current = object()
+    settings = MagicMock()
+
+    result = coordinator.structural_diff(
+        "book.msk", "draft-one", current, settings
+    )
+
+    assert result is expected
+    coordinator.load_snapshot.assert_called_once_with(
+        "book.msk", "draft-one", settings
+    )
+    differ.compare.assert_called_once_with(loaded.canonical_project, current)

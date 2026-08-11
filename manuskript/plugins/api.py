@@ -234,6 +234,65 @@ class RuleDiagnosticSnapshot:
 
 
 @dataclass(frozen=True)
+class RevisionPassSnapshot:
+    id: str
+    label: str
+
+
+@dataclass(frozen=True)
+class DocumentRevisionWorkflowSnapshot:
+    document_id: str
+    title: str
+    states: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class ProseOccurrenceSnapshot:
+    document_id: str
+    source_start: int
+    source_end: int
+    excerpt: str
+
+
+@dataclass(frozen=True)
+class CountedPatternSnapshot:
+    pattern: str
+    count: int
+    occurrences: tuple[ProseOccurrenceSnapshot, ...] = ()
+
+
+@dataclass(frozen=True)
+class SimilarNameSnapshot:
+    first: str
+    second: str
+    distance: int
+    similarity: float
+
+
+@dataclass(frozen=True)
+class DocumentProseMetricsSnapshot:
+    document_id: str
+    title: str
+    word_count: int
+    sentence_lengths: tuple[int, ...]
+    paragraph_lengths: tuple[int, ...]
+    dialogue_word_ratio: float
+    punctuation: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class ProseAnalysisSnapshot:
+    documents: tuple[DocumentProseMetricsSnapshot, ...]
+    repeated_phrases: tuple[CountedPatternSnapshot, ...]
+    repeated_openings: tuple[CountedPatternSnapshot, ...]
+    nearby_repetitions: tuple[CountedPatternSnapshot, ...]
+    passive_candidates: tuple[CountedPatternSnapshot, ...]
+    filler_phrases: tuple[CountedPatternSnapshot, ...]
+    spelling_mixtures: tuple[CountedPatternSnapshot, ...]
+    similar_names: tuple[SimilarNameSnapshot, ...]
+
+
+@dataclass(frozen=True)
 class ReferenceOccurrenceSnapshot:
     source_document_id: str
     source_path: str

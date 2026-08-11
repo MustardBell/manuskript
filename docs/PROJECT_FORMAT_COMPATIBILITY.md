@@ -20,8 +20,14 @@ rebuilding a project.
 | Temporal story state | compatible assertion fields | save-safe as text | native |
 | Queries and continuity reports | derived | not applicable | derived |
 | Declarative custom rules | compatible fenced Markdown | save-safe as text | native |
+| Revision-pass workflow | unavailable | not applicable | native frontmatter |
+| Git snapshots and structural diffs | external/derived | not applicable | external/derived |
+| Deterministic prose analysis | derived | not applicable | derived |
 
 Format 0 and Format 1 remain readable. Format 1 remains writable without a
 mandatory upgrade. Existing Format 2 projects remain Format 2 when saved. The
-planned migration command will write and validate a separate upgraded copy;
-ordinary open/save never replaces a source project or changes its format.
+migration command writes and validates a separate upgraded copy through the
+same public codecs used for ordinary load/save. It refuses preservation
+mismatches and reports converted records, retained extension data, broken
+references, and warnings. Ordinary open/save never replaces a source project
+or changes its format.

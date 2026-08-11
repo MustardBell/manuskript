@@ -12,6 +12,7 @@ import pytest
 from manuskript.plugins.capabilities import (
     CAPABILITY_ASSERTIONS_READ,
     CAPABILITY_ASSERTIONS_WRITE,
+    CAPABILITY_PROSE_ANALYSIS,
     CAPABILITY_EDITOR_CONTROL,
     CAPABILITY_ENTITIES_READ,
     CAPABILITY_ENTITIES_WRITE,
@@ -23,6 +24,8 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_REFERENCES_READ,
     CAPABILITY_REFERENCES_WRITE,
     CAPABILITY_TIMELINE_READ,
+    CAPABILITY_WORKFLOW_READ,
+    CAPABILITY_WORKFLOW_WRITE,
     CAPABILITY_RULES_EXECUTE,
     capability_catalogue,
     grant,
@@ -138,6 +141,9 @@ def test_story_capabilities_are_named_deferred_api_promises():
         CAPABILITY_MORPHOLOGY_REGISTRY,
         CAPABILITY_TIMELINE_READ,
         CAPABILITY_RULES_EXECUTE,
+        CAPABILITY_PROSE_ANALYSIS,
+        CAPABILITY_WORKFLOW_READ,
+        CAPABILITY_WORKFLOW_WRITE,
     ):
         assert name in catalogue
         assert catalogue[name].summary

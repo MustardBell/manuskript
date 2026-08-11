@@ -127,3 +127,25 @@ def test_dialog_asks_the_project_manager_to_commit():
     manager.commitRevision.assert_called_once_with("Chapter complete")
     coordinator.manual_commit.assert_not_called()
     dialog.close()
+
+
+def test_dialog_shows_structural_diff_without_restoring_files():
+    dialog, manager, settings, coordinator, _backend = make_dialog()
+    current = object()
+    manager.captureCanonicalProject.return_value = current
+    report = MagicMock()
+    report.render_text.return_value = "document-moved: Opening moved"
+    coordinator.structural_diff.return_value = report
+
+    dialog._structuralDiff()
+
+    coordinator.structural_diff.assert_called_once_with(
+        manager.currentProject,
+        "a" * 40,
+        current,
+        settings,
+    )
+    assert "document-moved" in dialog.details.toPlainText()
+    manager.restoreRevision.assert_not_called()
+    manager.saveDatas.assert_not_called()
+    dialog.close()

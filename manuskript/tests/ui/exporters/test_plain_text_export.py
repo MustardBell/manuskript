@@ -10,6 +10,11 @@ from manuskript.domain.story_assertions import (
     AssertionTerm,
     StoryReference,
 )
+from manuskript.domain.rule_dsl import (
+    CustomRuleDefinition,
+    CustomRuleKind,
+    encode_rule_block,
+)
 from manuskript.enums import Outline
 from manuskript.exporter.manuskript.plainText import plainText
 from manuskript.exporter.pandoc.HTML import HTML as PandocHTML
@@ -158,8 +163,15 @@ def test_plain_text_export_starts_below_selected_parent():
     assert "Second" in output
 
 
-def test_exports_strip_valid_story_assertions_but_keep_the_prose():
+def test_exports_strip_valid_story_semantics_but_keep_prose_and_invalid_source():
     model, _chapter, first, _second = make_outline()
+    custom_rule = encode_rule_block(CustomRuleDefinition(
+        "location-rule",
+        "Only one location",
+        CustomRuleKind.EXCLUSIVE_OBJECT,
+        predicate="located_at",
+    ))
+    malformed = "```manuskript-rule\nid: unfinished\n```\n"
     first.setData(
         Outline.text,
         "Mara takes the key.\n\n" + encode_assertion_block(Assertion(
@@ -167,7 +179,7 @@ def test_exports_strip_valid_story_assertions_but_keep_the_prose():
             StoryReference("entity", "mara"),
             "possesses",
             AssertionTerm.referencing("entity", "key"),
-        )),
+        )) + custom_rule + malformed,
     )
 
     output = make_format(model).concatenate(
@@ -177,6 +189,8 @@ def test_exports_strip_valid_story_assertions_but_keep_the_prose():
     assert "Mara takes the key." in output
     assert "manuskript-assertion" not in output
     assert "mara-has-key" not in output
+    assert "location-rule" not in output
+    assert malformed.strip() in output
 
 
 def test_export_filter_settings_round_trip_selected_values():
@@ -227,6 +241,12 @@ def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
         "has_mode",
         AssertionTerm.scalar("custom"),
     ))
+    semantic_rule = encode_rule_block(CustomRuleDefinition(
+        "export-rule",
+        "Export rule",
+        CustomRuleKind.EXCLUSIVE_OBJECT,
+        predicate="located_at",
+    ))
 
     class PageTypes:
         def __init__(self):
@@ -238,7 +258,7 @@ def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
             self.targets.append((target_format, route_id))
             if target_format == MARKDOWN:
                 return PageExportDocument(
-                    "semantic **Markdown**\n\n" + semantic_block,
+                    "semantic **Markdown**\n\n" + semantic_block + semantic_rule,
                     MARKDOWN,
                 )
             return PageExportDocument(

@@ -22,6 +22,7 @@ class LoadedRevisionSnapshot:
     models: object
     settings: object
     load_result: object
+    canonical_project: object = None
 
 
 class RevisionSnapshotLoader:
@@ -45,6 +46,7 @@ class RevisionSnapshotLoader:
             models=models,
             settings=settings,
             load_result=result,
+            canonical_project=self.storage.canonical_project,
         )
 
     @staticmethod

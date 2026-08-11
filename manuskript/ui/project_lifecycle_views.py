@@ -113,6 +113,7 @@ class ProjectLifecycleViews:
                     window.actImport,
                     window.actCompile,
                     window.actSettings,
+                    window.actUpgradeProjectFormat,
                 ),
                 tools_menu=window.menuTools,
                 global_tool_actions=global_tool_actions,

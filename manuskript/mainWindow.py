@@ -190,6 +190,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # safely once C++-owned child wrappers are involved.
             self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
+        self.actUpgradeProjectFormat = QAction(
+            self.tr("Upgrade Project Format…"), self
+        )
+        self.actUpgradeProjectFormat.setObjectName(
+            "actUpgradeProjectFormat"
+        )
+        self.actUpgradeProjectFormat.setStatusTip(self.tr(
+            "Create and validate a separate Project Format 2 copy"
+        ))
+        self.menuFile.insertAction(
+            self.actImport, self.actUpgradeProjectFormat
+        )
         #: Kept whole so another window can be opened from this one
         #: without naming the services one at a time.
         self.services = services

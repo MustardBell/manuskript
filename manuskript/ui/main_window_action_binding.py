@@ -70,6 +70,10 @@ class MainWindowActionBinding:
             (window.actImport, window.workspaceTransfers.show_import),
             (window.actCompile, window.workspaceTransfers.show_export),
             (
+                window.actUpgradeProjectFormat,
+                window.workspaceDialogs.show_upgrade,
+            ),
+            (
                 window.actCloseProject,
                 window.projectManager.closeProject,
             ),

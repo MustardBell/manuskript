@@ -114,6 +114,23 @@ Custom deterministic continuity constraints use source-owned
 rule vocabulary; they cannot execute Python or infer facts from prose. See
 [Story debugger](STORY_DEBUGGER.md).
 
+Per-document revision passes are workflow metadata, not story assertions.
+They therefore live in the document's `manuskript` frontmatter rather than
+prose:
+
+```yaml
+manuskript:
+  revision_workflow:
+    passes:
+      continuity: in-progress
+      structural: complete
+```
+
+Omitted passes mean `not-started`. The stable initial vocabulary is Draft,
+Structural, Character, Continuity, Line, and Proof; stored keys are open to
+future pass definitions. This metadata is native to Format 2 and is not
+offered as a writable feature for Format 1.
+
 Selecting prose and invoking `Reference…` offers deterministic exact
 title/alias matches, grouped explicit choices, and `Create new…`. Choosing an
 entry writes `[[path|selected surface]]` into the source. Exact scanners ignore
@@ -140,3 +157,11 @@ Format 2 projects can be opened, edited, and saved without being normalized to
 Format 1. Creating an upgraded copy from an older project is intentionally a
 separate migration operation: opening or saving a Format 1 project never opts
 it into Format 2 implicitly.
+
+`File ▸ Upgrade Project Format…` implements that boundary. It saves the open
+Format 1 project, decodes it through the Format 1 codec, encodes a different
+destination through the Format 2 codec, reopens the result in memory, and only
+then publishes the copy. The source path is never replaced. The report compares
+converted domain counts and verifies plugin files, unknown files, and unknown
+structured fields; any preservation mismatch prevents the copy from being
+written.

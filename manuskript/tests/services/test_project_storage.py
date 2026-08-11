@@ -24,6 +24,7 @@ from manuskript.domain.story_assertions import (
     TemporalPoint,
 )
 from manuskript.domain.temporal_story import TemporalFactStatus
+from manuskript.domain.revision_workflow import RevisionPassState
 from manuskript.domain.story_query import (
     AssertionsWhere,
     QueryResult,
@@ -86,6 +87,26 @@ def test_storage_routes_v1_through_codec_and_application_adapter():
         "story.msk", zipped=False, files=(), moves=(), cache=cache,
         marker_version=1,
     )
+
+
+def test_capture_current_projects_live_models_without_writing_or_adopting():
+    context = MagicMock()
+    current = CanonicalProject(format_version=2)
+    live = CanonicalProject(
+        format_version=2,
+        outline=(OutlineDocument("scene", "Live", "scene", "changed"),),
+    )
+    adapter = MagicMock()
+    adapter.capture.return_value = live
+    storage = ProjectStorage(application_model_adapter=adapter)
+    storage._canonical_project = current
+    storage.entity_catalog.replace((), writable=True)
+
+    captured = storage.capture_current(context)
+
+    assert captured == live
+    assert storage.canonical_project is current
+    adapter.capture.assert_called_once_with(context, current)
 
 
 def test_storage_clears_persistence_cache():
@@ -357,6 +378,9 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert storage.story_query.execute(AssertionsWhere(predicate="knows")) == (
         QueryResult(QueryScope.ASSERTION, assertion.id),
     )
+    storage.update_revision_pass(
+        document_id, "continuity", RevisionPassState.IN_PROGRESS
+    )
     saved = storage.save(context)
     persisted = access.read(str(project_file), zipped=False).files
     reopened = codec.decode(persisted)
@@ -370,6 +394,13 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert tuple(reopened.documents())[0].text.startswith(
         "Changed through the UI adapter.\n"
     )
+    workflow_metadata = {
+        item.name: item.value
+        for item in tuple(reopened.documents())[0].structured_metadata
+    }
+    assert workflow_metadata[
+        "manuskript.revision_workflow"
+    ]["passes"]["continuity"] == "in-progress"
     assert persisted[untouched_path] == untouched_source
     assert persisted[legacy_path] == legacy_source
     assert reopened.structured_metadata == source_project.structured_metadata

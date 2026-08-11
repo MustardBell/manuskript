@@ -1,10 +1,15 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 from manuskript.enums import Outline
 from manuskript.domain.assertion_store import AssertionDocument
-from manuskript.domain.canonical_project import CanonicalProject
+from manuskript.domain.canonical_project import (
+    CanonicalProject,
+    OutlineDocument,
+)
+from manuskript.domain.reference_index import ReferenceDocument
 from manuskript.domain.morphology import (
     GrammaticalForm,
     MorphologyComponent,
@@ -30,6 +35,9 @@ from manuskript.ui.plugins.story_capabilities import (
     RuleExecuteCapability,
     TimelineReadCapability,
     ProjectSourceGateway,
+    ProseAnalysisCapability,
+    RevisionWorkflowReadCapability,
+    RevisionWorkflowWriteCapability,
 )
 
 
@@ -257,6 +265,51 @@ def test_rule_execute_returns_immutable_evidence_snapshots(story_services):
         "location-1", "location-2"
     }
     assert any(item.id == "location.exclusive" for item in capability.rules())
+
+
+def test_prose_analysis_capability_observes_project_documents_not_entities(
+        story_services):
+    manager, _outline = story_services
+    manager.storage.reference_index.rebuild((
+        ReferenceDocument(
+            "scene", "Manuscript/Scene.md", "Scene",
+            "She shook her head. She shook her head."
+        ),
+    ))
+
+    report = ProseAnalysisCapability(manager).analyze(
+        ngram_min=3, ngram_max=3
+    )
+
+    assert report.documents[0].document_id == "scene"
+    assert report.repeated_phrases[0].count == 2
+    assert report.repeated_phrases[0].occurrences[0].source_start >= 0
+
+
+def test_revision_workflow_capabilities_update_format_two_metadata(
+        story_services):
+    manager, _outline = story_services
+    project = CanonicalProject(
+        format_version=2,
+        outline=(OutlineDocument(
+            "scene", "Scene", "scene", "Text.",
+            source_path="Manuscript/Scene.md",
+        ),),
+    )
+    manager.storage._canonical_project = project
+    manager.storage.revision_workflow.rebuild(project)
+    manager.storage.reference_index.rebuild((ReferenceDocument(
+        "scene", "Manuscript/Scene.md", "Scene", "Text."
+    ),))
+    manager.startTimerNoChanges = MagicMock()
+
+    updated = RevisionWorkflowWriteCapability(manager).set_state(
+        "scene", "continuity", "in-progress"
+    )
+
+    assert updated.states["continuity"] == "in-progress"
+    assert RevisionWorkflowReadCapability(manager).documents()[0] == updated
+    manager.startTimerNoChanges.assert_called_once_with()
 
 
 def test_morphology_registration_is_namespaced_and_refreshes_surfaces(

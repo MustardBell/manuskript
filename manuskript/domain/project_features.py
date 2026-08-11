@@ -187,6 +187,8 @@ class V2PersistenceStrategy(ProjectPersistenceStrategy):
             "timeline.read",
             "timeline.write",
             "rules.execute",
+            "workflow.read",
+            "workflow.write",
             "plugins.project-files",
         )
         super().__init__({
