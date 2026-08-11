@@ -134,6 +134,32 @@ def test_putting_away_a_panel_shown_behind_its_toggle_still_hides_it():
     window.close()
 
 
+def test_a_closed_dock_panel_leaves_nothing_holding_its_instance():
+    """Qt keeps slot callables on the C++ connection, out of gc's sight.
+
+    A dock handed the instance itself therefore held the panel, which
+    held its widget, which held the window -- a closed workspace stayed
+    alive with no reference `gc.get_referrers` could find.
+    """
+    import gc
+    import weakref
+
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        widget_factory=label_factory,
+    ))
+    instance = host.open("core.notes", PanelContext())
+    instance_ref = weakref.ref(instance)
+
+    host.close("core.notes")
+    del instance
+    gc.collect()
+
+    assert instance_ref() is None
+    window.close()
+
+
 def test_syncing_visibility_makes_the_toggle_say_what_is_showing():
     host, window = make_host(PanelDescriptor(
         id="core.notes",

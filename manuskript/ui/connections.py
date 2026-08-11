@@ -72,7 +72,17 @@ class _WeakCallable:
         return getattr(owner, value[1], None)
 
     def __call__(self, *args, **kwargs):
-        callback = self._resolve(self._callable)
+        try:
+            stored = self._callable
+        except AttributeError:
+            # Emitted into while this adapter is itself being finalised.
+            # A connection Qt must keep -- ``destroyed`` is the one that
+            # tells a host its dock has gone -- still fires during
+            # teardown, by which time this object's own state may be
+            # cleared. There is nothing left to call, and raising here
+            # only produces unraisable noise at exit.
+            return None
+        callback = self._resolve(stored)
         if callback is None:
             return None
         stored_args = []

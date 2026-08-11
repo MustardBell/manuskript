@@ -20,6 +20,7 @@ this away" would close a panel merely tabbed behind its neighbour.
 """
 
 from functools import partial
+from weakref import ref
 
 from manuskript.ui.connections import weak_callback
 
@@ -50,12 +51,19 @@ class PanelVisibility:
         action.toggled.connect(weak_callback(target.setVisible))
         target.setVisible(descriptor.default_visible)
         if instance.container is not None:
-            instance.container.visibilityChanged.connect(
-                weak_callback(partial(
-                    self._container_changed,
-                    instance,
-                ))
-            )
+            # By weak reference, and that is the whole point: Qt keeps
+            # this callable on the C++ connection, where Python's garbage
+            # collector cannot see it. Handing it the instance itself
+            # left the dock holding the panel, the panel holding its
+            # widget, and the widget holding the window -- so a closed
+            # workspace stayed alive with no reference anything could
+            # find.
+            watch = weak_callback(partial(
+                self._container_changed,
+                ref(instance),
+            ))
+            instance.container.visibilityChanged.connect(watch)
+            instance.container_watch = watch
         instance.action = action
         return action
 
@@ -63,8 +71,19 @@ class PanelVisibility:
         """Stop the toggle driving whatever it was driving.
 
         The action belongs to this window and goes with it; a host
-        adopting the panel makes its own.
+        adopting the panel makes its own. The dock stops reporting to
+        this panel too -- bind made that connection, so unbind is what
+        takes it back off.
         """
+        watch = instance.container_watch
+        instance.container_watch = None
+        if watch is not None and instance.container is not None:
+            try:
+                instance.container.visibilityChanged.disconnect(watch)
+            except (RuntimeError, TypeError):
+                # Already disconnected, or the dock is gone. Qt raises
+                # rather than shrugging.
+                pass
         action = instance.action
         if action is None:
             return
@@ -111,14 +130,15 @@ class PanelVisibility:
         if target is not None:
             instance.action.setChecked(not target.isHidden())
 
-    def _container_changed(self, instance, visible):
+    def _container_changed(self, instance_reference, visible):
         """Follow a floating dock the person closed with its own button.
 
         Only while floating, and that restriction is correctness rather
         than caution: a docked panel goes invisible whenever a neighbour
         is tabbed in front of it, and it has not been put away.
         """
-        if instance.action is None:
+        instance = instance_reference()
+        if instance is None or instance.action is None:
             return
         container = instance.container
         if container is None or not container.isFloating():

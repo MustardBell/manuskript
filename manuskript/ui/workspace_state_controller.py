@@ -80,6 +80,11 @@ class WorkspaceStateController:
         )
         self._dock_visibility = {}
         self._dock_visibility_locked = True
+        #: What each project-scoped panel was showing before the welcome
+        #: screen put it away, by panel id. Panels are hidden through the
+        #: host rather than the widget, so their toggles keep agreeing
+        #: with them, and the ids never mix with dock object names.
+        self._projectPanelVisibility = {}
         #: This window's own view of the project -- which documents were
         #: open and which main tab it was on. Read at construction and
         #: applied when a project opens, since neither means anything
@@ -118,6 +123,11 @@ class WorkspaceStateController:
             if splitter is not None and value is not None:
                 splitter.restoreState(value)
         self._restore_panel_visibility(state)
+        # The welcome screen is shown before any project opens and puts
+        # the project panels away, so what they were restored to has to
+        # be known by then -- otherwise opening a project brings back
+        # nothing at all.
+        self._remember_project_panels()
         return state
 
     def _restore_panel_state(self, state):
@@ -298,6 +308,9 @@ class WorkspaceStateController:
             self._remember_project_docks()
         for dock in self.project_docks:
             dock.setVisible(False)
+        host = self.views.panel_host
+        for panel_id in self._project_panels():
+            host.set_visible(panel_id, False)
         self._dock_visibility_locked = False
 
     def restore_project_docks(self):
@@ -305,11 +318,47 @@ class WorkspaceStateController:
             dock.setVisible(
                 self._dock_visibility.get(dock.objectName(), False)
             )
+        host = self.views.panel_host
+        for panel_id in self._project_panels():
+            host.set_visible(
+                panel_id, self._projectPanelVisibility.get(panel_id, False)
+            )
         self._dock_visibility_locked = False
+
+    def _project_panels(self):
+        """The panels this window shows only while a project is open.
+
+        A project panel used to sit in a splitter inside the project
+        page, so the welcome screen hid it by covering it. A dock hangs
+        off the window instead and stays up over the welcome screen
+        unless it is put away explicitly.
+        """
+        host = self.views.panel_host
+        if host is None:
+            return ()
+        return tuple(
+            panel_id
+            for panel_id, instance in host.instances.items()
+            if instance.descriptor.requires_project
+        )
 
     def _remember_project_docks(self):
         for dock in self.project_docks:
             self._dock_visibility[dock.objectName()] = dock.isVisible()
+        self._remember_project_panels()
+
+    def _remember_project_panels(self):
+        host = self.views.panel_host
+        for panel_id in self._project_panels():
+            instance = host.instance(panel_id)
+            shown = (
+                instance.container
+                if instance.container is not None
+                else instance.widget
+            )
+            self._projectPanelVisibility[panel_id] = bool(
+                shown is not None and not shown.isHidden()
+            )
 
     @staticmethod
     def _bool_list(values):

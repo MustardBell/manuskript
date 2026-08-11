@@ -55,6 +55,11 @@ class PanelInstance:
     #: putting it back takes that space from wherever Qt chooses -- so
     #: the arrangement is remembered and restored rather than recomputed.
     slot_sizes: Optional[list] = None
+    #: What this panel's dock calls when its visibility changes, kept so
+    #: the connection can be taken back off again. A dock left connected
+    #: to a panel that has gone still emits while Qt tears the window
+    #: down, into a Python object that is no longer whole.
+    container_watch: Optional[Any] = None
 
 
 class PanelHost:

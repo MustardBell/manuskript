@@ -157,6 +157,40 @@ def test_entity_panels_belong_to_no_single_main_tab():
     assert all(groups[panel_id] is None for panel_id in ENTITY_IDS)
 
 
+def test_the_welcome_screen_shows_no_project_panel(MWNoProject):
+    """A project panel is a dock now, so nothing covers it any more.
+
+    In a splitter it sat inside the project page and the welcome screen
+    hid it by being on top; a dock hangs off the window and stays up
+    over the welcome screen until it is put away on purpose.
+    """
+    window = MWNoProject
+
+    for panel_id, instance in window.panelHost.instances.items():
+        if not instance.descriptor.requires_project:
+            continue
+        shown = (
+            instance.container
+            if instance.container is not None
+            else instance.widget
+        )
+        assert shown.isHidden(), panel_id
+
+
+def test_opening_a_project_brings_its_panels_back(MWEmptyProject):
+    window = MWEmptyProject
+
+    visible = {
+        panel_id
+        for panel_id, instance in window.panelHost.instances.items()
+        if instance.descriptor.requires_project
+        and instance.container is not None
+        and not instance.container.isHidden()
+    }
+    assert CHARACTER_ENTITIES in visible
+    assert PROJECT_TREE in visible
+
+
 def test_switching_main_tab_keeps_ungrouped_panel_toggles_reachable(
         MWEmptyProject):
     """An ungrouped toggle is shown all the time, per the toolbar contract.
