@@ -15,16 +15,23 @@ from manuskript.domain.story_assertions import (
     AssertionTerm,
     CanonState,
     StoryReference,
+    TemporalInterval,
+    TemporalPoint,
 )
 from manuskript.plugins.api import (
     AssertionDiagnosticSnapshot,
     AssertionSnapshot,
     AssertionTermValue,
+    ChronologySnapshot,
     EntitySnapshot,
     MorphologyProviderSnapshot,
     ReferenceOccurrenceSnapshot,
     ReferenceSuggestionSnapshot,
     StoryReferenceValue,
+    TemporalDiagnosticSnapshot,
+    TemporalFactSnapshot,
+    TemporalIntervalValue,
+    TemporalPointValue,
     WorkspaceDocument,
 )
 from manuskript.plugins.capabilities import (
@@ -36,6 +43,7 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_QUERY_EXECUTE,
     CAPABILITY_REFERENCES_READ,
     CAPABILITY_REFERENCES_WRITE,
+    CAPABILITY_TIMELINE_READ,
 )
 from manuskript.plugins.errors import PluginScopeError
 
@@ -47,6 +55,7 @@ _PERSISTED_CAPABILITIES = frozenset((
     CAPABILITY_REFERENCES_WRITE,
     CAPABILITY_ASSERTIONS_READ,
     CAPABILITY_ASSERTIONS_WRITE,
+    CAPABILITY_TIMELINE_READ,
 ))
 
 
@@ -140,6 +149,7 @@ def build_story_capability(
         CAPABILITY_ASSERTIONS_WRITE: lambda: AssertionWriteCapability(
             manager, source
         ),
+        CAPABILITY_TIMELINE_READ: lambda: TimelineReadCapability(manager),
         CAPABILITY_QUERY_EXECUTE: lambda: QueryExecuteCapability(manager),
         CAPABILITY_MORPHOLOGY_REGISTRY: lambda: (
             MorphologyRegistryCapability(manager, plugin_id)
@@ -168,6 +178,43 @@ def _reference_value(reference):
     return StoryReferenceValue(reference.kind, reference.id)
 
 
+def _temporal_point_value(point):
+    if point is None:
+        return None
+    return TemporalPointValue(
+        point.axis.value,
+        (
+            _reference_value(point.reference)
+            if point.reference is not None else None
+        ),
+        point.value,
+    )
+
+
+def _temporal_interval_value(interval):
+    if interval is None:
+        return None
+    return TemporalIntervalValue(
+        _temporal_point_value(interval.valid_from),
+        _temporal_point_value(interval.valid_until),
+    )
+
+
+def _domain_temporal_point(point):
+    if isinstance(point, TemporalPoint):
+        return point
+    reference = getattr(point, "reference", None)
+    axis = getattr(point.axis, "value", point.axis)
+    return TemporalPoint(
+        str(axis),
+        reference=(
+            StoryReference(str(reference.kind), str(reference.id))
+            if reference is not None else None
+        ),
+        value=getattr(point, "value", None),
+    )
+
+
 def _assertion_snapshot(assertion):
     span = assertion.provenance.source_span
     return AssertionSnapshot(
@@ -190,6 +237,22 @@ def _assertion_snapshot(assertion):
         assertion.provenance.anchor,
         assertion.provenance.note,
         assertion.canon_state.value,
+        _temporal_interval_value(assertion.validity),
+    )
+
+
+def _chronology_snapshot(record):
+    return ChronologySnapshot(
+        _reference_value(record.subject),
+        record.kind.value,
+        record.assertion_id,
+        record.start.isoformat() if record.start is not None else None,
+        record.end.isoformat() if record.end is not None else None,
+        (
+            _reference_value(record.related_to)
+            if record.related_to is not None else None
+        ),
+        record.label,
     )
 
 
@@ -374,6 +437,8 @@ class AssertionWriteCapability(AssertionReadCapability):
         canon_state="canon",
         anchor="",
         note="",
+        valid_from=None,
+        valid_until=None,
     ):
         return self._append(
             document_id,
@@ -387,6 +452,8 @@ class AssertionWriteCapability(AssertionReadCapability):
                 canon_state,
                 anchor,
                 note,
+                valid_from,
+                valid_until,
             ),
         )
 
@@ -401,6 +468,8 @@ class AssertionWriteCapability(AssertionReadCapability):
         canon_state="canon",
         anchor="",
         note="",
+        valid_from=None,
+        valid_until=None,
     ):
         return self._append(
             document_id,
@@ -412,6 +481,8 @@ class AssertionWriteCapability(AssertionReadCapability):
                 canon_state,
                 anchor,
                 note,
+                valid_from,
+                valid_until,
             ),
         )
 
@@ -483,19 +554,91 @@ class AssertionWriteCapability(AssertionReadCapability):
         return _assertion_snapshot(indexed or assertion)
 
     def _assertion(
-        self, subject, predicate, term, qualifiers, canon_state, anchor, note
+        self,
+        subject,
+        predicate,
+        term,
+        qualifiers,
+        canon_state,
+        anchor,
+        note,
+        valid_from,
+        valid_until,
     ):
+        interval = None
+        if valid_from is not None or valid_until is not None:
+            interval = TemporalInterval(
+                _domain_temporal_point(valid_from)
+                if valid_from is not None else None,
+                _domain_temporal_point(valid_until)
+                if valid_until is not None else None,
+            )
         return Assertion(
-            str(self._idFactory()),
-            StoryReference(str(subject.kind), str(subject.id)),
-            str(predicate),
-            term,
-            tuple(
+            id=str(self._idFactory()),
+            subject=StoryReference(str(subject.kind), str(subject.id)),
+            predicate=str(predicate),
+            object=term,
+            qualifiers=tuple(
                 AssertionQualifier(str(name), value)
                 for name, value in (qualifiers or {}).items()
             ),
-            AssertionProvenance(anchor=str(anchor), note=str(note)),
-            CanonState(canon_state),
+            provenance=AssertionProvenance(
+                anchor=str(anchor), note=str(note)
+            ),
+            canon_state=CanonState(canon_state),
+            validity=interval,
+        )
+
+
+class TimelineReadCapability:
+    """Read-only projection of partial time; source writes remain assertions."""
+
+    def __init__(self, manager):
+        self._chronology = manager.storage.chronology
+        self._temporal = manager.storage.temporal_story
+
+    def chronology(self):
+        return tuple(
+            _chronology_snapshot(item) for item in self._chronology.records
+        )
+
+    def diagnostics(self):
+        return tuple(
+            TemporalDiagnosticSnapshot(
+                item.assertion_id, item.message, item.severity
+            )
+            for item in self._chronology.diagnostics
+        )
+
+    def compare(self, left, right):
+        return self._chronology.compare(
+            _domain_temporal_point(left), _domain_temporal_point(right)
+        ).value
+
+    def facts(
+        self,
+        at,
+        *,
+        subject=None,
+        predicate="",
+        include_unknown=True,
+    ):
+        domain_subject = (
+            StoryReference(str(subject.kind), str(subject.id))
+            if subject is not None else None
+        )
+        return tuple(
+            TemporalFactSnapshot(
+                _assertion_snapshot(fact.assertion),
+                fact.status.value,
+                fact.reason,
+            )
+            for fact in self._temporal.facts(
+                _domain_temporal_point(at),
+                subject=domain_subject,
+                predicate=str(predicate),
+                include_unknown=bool(include_unknown),
+            )
         )
 
 

@@ -13,6 +13,8 @@ from manuskript.domain.story_assertions import (
     AssertionTerm,
     CanonState,
     StoryReference,
+    TemporalInterval,
+    TemporalPoint,
 )
 
 
@@ -113,4 +115,56 @@ def test_assertion_looking_text_inside_a_larger_code_fence_stays_literal():
 
     assert assertions == ()
     assert diagnostics == ()
+    assert strip_assertion_blocks(source) == source
+
+
+def test_temporal_validity_round_trips_narrative_and_story_boundaries():
+    narrative = _assertion()
+    narrative = Assertion(
+        **{
+            **narrative.__dict__,
+            "validity": TemporalInterval(
+                TemporalPoint.narrative("document", "scene-13"),
+                TemporalPoint.narrative("document", "scene-20"),
+            ),
+        }
+    )
+    story_time = Assertion(
+        "vienna-window",
+        StoryReference("entity", "mara"),
+        "located_at",
+        AssertionTerm.referencing("entity", "vienna"),
+        validity=TemporalInterval(
+            TemporalPoint.story_time("1914-07-28T09:30:00+02:00"),
+            TemporalPoint.story_time("1914-08-01"),
+        ),
+    )
+
+    reopened, diagnostics = assertions_from_source(
+        encode_assertion_block(narrative) + encode_assertion_block(story_time)
+    )
+
+    assert not diagnostics
+    assert reopened[0].validity == narrative.validity
+    assert reopened[1].validity == story_time.validity
+
+
+def test_malformed_temporal_validity_remains_visible_source():
+    source = (
+        "```manuskript-assertion\n"
+        "id: impossible-time\n"
+        "subject: {kind: entity, id: mara}\n"
+        "predicate: located_at\n"
+        "object: {reference: {kind: entity, id: vienna}}\n"
+        "validity:\n"
+        "  from: {axis: narrative, reference: {kind: document, id: one}}\n"
+        "  until: {axis: story, value: 1914-08-01}\n"
+        "```\n"
+    )
+
+    assertions, diagnostics = assertions_from_source(source)
+
+    assert assertions == ()
+    assert diagnostics[0].severity == "error"
+    assert "share an axis" in diagnostics[0].message
     assert strip_assertion_blocks(source) == source

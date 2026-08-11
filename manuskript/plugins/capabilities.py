@@ -40,6 +40,7 @@ CAPABILITY_REFERENCES_READ = "references.read"
 CAPABILITY_REFERENCES_WRITE = "references.write"
 CAPABILITY_ASSERTIONS_READ = "assertions.read"
 CAPABILITY_ASSERTIONS_WRITE = "assertions.write"
+CAPABILITY_TIMELINE_READ = "timeline.read"
 CAPABILITY_QUERY_EXECUTE = "query.execute"
 CAPABILITY_MORPHOLOGY_REGISTRY = "morphology.registry"
 
@@ -192,6 +193,13 @@ CAPABILITIES = (
         summary=(
             "Append or remove fenced source-owned assertions through a "
             "guarded outline edit; includes assertions.read."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_TIMELINE_READ,
+        summary=(
+            "Read partial story chronology and evaluate explicit temporal "
+            "assertions without treating unknown order as false."
         ),
     ),
     Capability(

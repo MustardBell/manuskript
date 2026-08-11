@@ -3,6 +3,8 @@ from manuskript.domain.story_assertions import (
     AssertionTermKind,
     CanonState,
     StoryReference,
+    TemporalAxis,
+    TemporalPoint,
 )
 from manuskript.ui.assertion_editor import AssertionEditorDialog
 
@@ -72,3 +74,51 @@ def test_assertion_dialog_reports_validation_inline_and_focuses_the_field():
     assert dialog.errorLabel.isVisibleTo(dialog)
     assert "predicate" in dialog.errorLabel.text().casefold()
     assert dialog.focusWidget() is dialog.predicateCombo
+
+
+def test_assertion_dialog_builds_narrative_temporal_validity_accessibly():
+    choices = (
+        (
+            "Scene 4 — narrative order",
+            TemporalPoint.narrative("document", "scene-4"),
+        ),
+        (
+            "Scene 8 — narrative order",
+            TemporalPoint.narrative("document", "scene-8"),
+        ),
+    )
+    dialog = AssertionEditorDialog(
+        StoryReference("document", "scene-18"),
+        (),
+        id_factory=lambda: "assertion-1",
+        temporal_choices=choices,
+        temporal_enabled=True,
+    )
+    dialog.validityAxisCombo.setCurrentIndex(
+        dialog.validityAxisCombo.findData(TemporalAxis.NARRATIVE)
+    )
+    dialog.validityFromCombo.setCurrentIndex(1)
+    dialog.validityUntilCombo.setCurrentIndex(2)
+
+    assertion = dialog.assertion
+
+    assert assertion.validity.valid_from == choices[0][1]
+    assert assertion.validity.valid_until == choices[1][1]
+    assert dialog.validityFromCombo.accessibleName() == "Valid from"
+
+
+def test_assertion_dialog_accepts_custom_iso_story_time():
+    dialog = AssertionEditorDialog(
+        StoryReference("document", "scene-18"),
+        (),
+        id_factory=lambda: "assertion-1",
+        temporal_enabled=True,
+    )
+    dialog.validityAxisCombo.setCurrentIndex(
+        dialog.validityAxisCombo.findData(TemporalAxis.STORY)
+    )
+    dialog.validityFromCombo.setEditText("1914-07-28T09:30:00+02:00")
+
+    assert dialog.assertion.validity.valid_from.value == (
+        "1914-07-28T09:30:00+02:00"
+    )

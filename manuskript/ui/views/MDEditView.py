@@ -629,11 +629,25 @@ class MDEditView(textEditView):
             self.text_editor_context, "entity_reference_choices", None
         )
         choices = tuple(provider("")) if callable(provider) else ()
+        temporal_provider = getattr(
+            self.text_editor_context, "temporal_reference_choices", None
+        )
+        timeline_support = getattr(
+            self.text_editor_context, "can_write_timeline", None
+        )
         from manuskript.ui.assertion_editor import AssertionEditorDialog
         dialog = AssertionEditorDialog(
             StoryReference("document", document_id),
             choices,
             self,
+            temporal_choices=(
+                tuple(temporal_provider())
+                if callable(temporal_provider) else ()
+            ),
+            temporal_enabled=(
+                bool(timeline_support()) if callable(timeline_support)
+                else False
+            ),
         )
         if dialog.exec_() != dialog.Accepted:
             return False

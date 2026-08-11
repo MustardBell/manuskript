@@ -266,6 +266,36 @@ class AssertionDslPersistenceDecorator(PersistenceDecorator):
         ))
 
 
+class TimelineDslPersistenceDecorator(PersistenceDecorator):
+    namespace = "timeline"
+
+    def __init__(self, wrapped: ProjectPersistenceStrategy):
+        super().__init__(wrapped, (
+            _support(
+                "timeline.read",
+                PersistenceLevel.COMPATIBLE_ENCODING,
+                old_readable=False,
+                old_editable=False,
+                old_save_safe=True,
+                reason=(
+                    "Temporal validity and chronology remain inside safely "
+                    "preserved assertion fences for Format 1 clients."
+                ),
+            ),
+            _support(
+                "timeline.write",
+                PersistenceLevel.COMPATIBLE_ENCODING,
+                old_readable=False,
+                old_editable=False,
+                old_save_safe=True,
+                reason=(
+                    "Temporal validity and chronology remain inside safely "
+                    "preserved assertion fences for Format 1 clients."
+                ),
+            ),
+        ))
+
+
 class MorphologyPersistenceDecorator(PersistenceDecorator):
     namespace = "morphology"
 
@@ -309,10 +339,14 @@ class StoryOverlayPersistenceDecorator(PersistenceDecorator):
 def compatibility_strategy(version: int) -> ProjectPersistenceStrategy:
     if version == 1:
         return AssertionDslPersistenceDecorator(
-            LegacyEntityReadPersistenceDecorator(
-                StoryOverlayPersistenceDecorator(
-                    MorphologyPersistenceDecorator(
-                        WikilinkPersistenceDecorator(V1PersistenceStrategy())
+            TimelineDslPersistenceDecorator(
+                LegacyEntityReadPersistenceDecorator(
+                    StoryOverlayPersistenceDecorator(
+                        MorphologyPersistenceDecorator(
+                            WikilinkPersistenceDecorator(
+                                V1PersistenceStrategy()
+                            )
+                        )
                     )
                 )
             )

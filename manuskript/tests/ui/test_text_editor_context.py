@@ -5,6 +5,8 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtTest import QTest
 
 from manuskript.commands import DocumentCommand
+from manuskript.domain.reference_index import ReferenceDocument, ReferenceIndex
+from manuskript.domain.story_assertions import TemporalAxis
 from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.views.text_editor_context import text_editor_context_for
 
@@ -204,6 +206,33 @@ def test_text_editor_context_negotiates_assertion_writes_dynamically():
 
     assert context.can_write_assertions()
     strategy.supports.assert_called_once_with("assertions.write", write=True)
+
+
+def test_text_editor_context_negotiates_timeline_and_builds_order_choices():
+    strategy = MagicMock()
+    strategy.supports.return_value = True
+    references = ReferenceIndex()
+    references.rebuild((
+        ReferenceDocument("scene-1", "One.md", "One", ""),
+        ReferenceDocument("scene-2", "Two.md", "Two", ""),
+    ))
+    context = text_editor_context_for(
+        make_window(),
+        MagicMock(),
+        MagicMock(),
+        reference_index=references,
+        persistence_strategy=lambda: strategy,
+    )
+
+    assert context.can_write_timeline()
+    choices = context.temporal_reference_choices()
+    assert tuple(point.axis for _label, point in choices) == (
+        TemporalAxis.NARRATIVE,
+        TemporalAxis.STORY,
+        TemporalAxis.NARRATIVE,
+        TemporalAxis.STORY,
+    )
+    strategy.supports.assert_called_once_with("timeline.write", write=True)
 
 
 def test_text_editor_click_reports_workspace_focus():

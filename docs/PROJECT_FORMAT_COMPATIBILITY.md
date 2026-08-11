@@ -16,8 +16,8 @@ rebuilding a project.
 | Morphology on legacy characters | compatible fields | save-safe | native |
 | Plugin project files | overlay | not save-safe | native namespace |
 | Generic entities | limited/overlay | representation-dependent | native |
-| Explicit story assertions | overlay | not save-safe | native |
-| Temporal story state | overlay | not save-safe | native |
+| Explicit story assertions | compatible fenced Markdown | save-safe as text | native |
+| Temporal story state | compatible assertion fields | save-safe as text | native |
 | Queries and continuity reports | derived | not applicable | derived |
 
 Format 0 and Format 1 remain readable. Format 1 remains writable without a

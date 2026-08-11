@@ -103,6 +103,12 @@ The assertion index and typed structural query engine are disposable. See
 [Explicit story assertions](STORY_ASSERTIONS.md) for the syntax, candidate
 comparison, authority rules, and query nodes.
 
+Assertions may carry an optional `validity` interval on either manuscript
+narrative order or partial story chronology. Scene/event chronology is itself
+recorded as explicit `occurs_at` assertions and may be unknown, relative,
+exact, a range, or a relation to another scene/event. No date is mandatory.
+See [Temporal story model](TEMPORAL_STORY_MODEL.md).
+
 Selecting prose and invoking `Reference…` offers deterministic exact
 title/alias matches, grouped explicit choices, and `Create new…`. Choosing an
 entry writes `[[path|selected surface]]` into the source. Exact scanners ignore

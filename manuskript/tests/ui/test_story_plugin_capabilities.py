@@ -11,7 +11,11 @@ from manuskript.domain.morphology import (
     MorphologyProfile,
 )
 from manuskript.domain.story_query import AssertionsWhere
-from manuskript.plugins.api import StoryReferenceValue, WorkspaceDocument
+from manuskript.plugins.api import (
+    StoryReferenceValue,
+    TemporalPointValue,
+    WorkspaceDocument,
+)
 from manuskript.models import outlineItem, outlineModel
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.ui.plugins.story_capabilities import (
@@ -23,6 +27,7 @@ from manuskript.ui.plugins.story_capabilities import (
     QueryExecuteCapability,
     ReferenceReadCapability,
     ReferenceWriteCapability,
+    TimelineReadCapability,
     ProjectSourceGateway,
 )
 
@@ -78,6 +83,10 @@ class _Outline:
             entity_ids=tuple(
                 item.id for item in self.manager.storage.entity_catalog.entities
             ),
+        )
+        self.manager.storage.chronology.rebuild(
+            self.manager.storage.assertion_store.assertions,
+            narrative_ids=(self._document.id,),
         )
         return True
 
@@ -167,12 +176,16 @@ def test_assertion_write_round_trips_source_provenance_and_canon_state(
         qualifiers={"certainty": "explicit"},
         anchor="paragraph:key-transfer",
         note="Mara accepts the key.",
+        valid_from=TemporalPointValue(
+            "narrative", StoryReferenceValue("document", "scene")
+        ),
     )
 
     assert created.document_id == "scene"
     assert created.source_start > 0
     assert created.source_end > created.source_start
     assert created.object.reference.id == key.id
+    assert created.validity.valid_from.reference.id == "scene"
     assert "```manuskript-assertion" in outline.document("scene").text
     assert AssertionReadCapability(manager).find("claim-1").anchor == (
         "paragraph:key-transfer"
@@ -187,6 +200,35 @@ def test_assertion_write_round_trips_source_provenance_and_canon_state(
     )[0].id == "claim-1"
     assert writer.remove("claim-1")
     assert "manuskript-assertion" not in outline.document("scene").text
+
+
+def test_timeline_read_exposes_partial_order_and_temporal_fact_status(
+        story_services):
+    manager, outline = story_services
+    writer = AssertionWriteCapability(
+        manager, outline, id_factory=lambda: "location-1"
+    )
+    point = TemporalPointValue(
+        "narrative", StoryReferenceValue("document", "scene")
+    )
+    writer.append_relationship(
+        "scene",
+        StoryReferenceValue("entity", "mara"),
+        "located_at",
+        StoryReferenceValue("entity", "vienna"),
+        valid_from=point,
+    )
+
+    timeline = TimelineReadCapability(manager)
+    facts = timeline.facts(
+        point,
+        subject=StoryReferenceValue("entity", "mara"),
+        predicate="located_at",
+    )
+
+    assert facts[0].status == "active"
+    assert facts[0].assertion.validity.valid_from == point
+    assert timeline.compare(point, point) == "same"
 
 
 def test_morphology_registration_is_namespaced_and_refreshes_surfaces(

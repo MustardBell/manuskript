@@ -191,6 +191,7 @@ def test_features_negotiate_structured_compatibility_not_version_checks():
     entity_read = strategy.support("entities.read")
     entity_write = strategy.support("entities.write")
     project_files = strategy.support("plugins.project-files")
+    timeline_write = strategy.support("timeline.write")
 
     assert links.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
     assert links.old_client_save_safe
@@ -202,6 +203,8 @@ def test_features_negotiate_structured_compatibility_not_version_checks():
     )
     assert assertion_write.writable
     assert assertion_write.old_client_save_safe
+    assert timeline_write.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
+    assert timeline_write.writable and timeline_write.old_client_save_safe
     assert entity_read.persistence_level is PersistenceLevel.DERIVED
     assert entity_read.readable and not entity_read.writable
     assert not entity_write.supported

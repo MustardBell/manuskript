@@ -216,6 +216,7 @@ Both methods are optional, and returning nothing stays valid:
 | `entities.read` / `entities.write` | immutable generic entity snapshots / entity commands | in project panels and editor workspaces |
 | `references.read` / `references.write` | explicit wikilinks / guarded source insertion | in project panels and editor workspaces |
 | `assertions.read` / `assertions.write` | explicit source assertions / guarded source commands | in project panels and editor workspaces |
+| `timeline.read` | partial chronology and temporal assertion state | in project panels and editor workspaces |
 | `query.execute` | the typed structural query engine | in project panels and editor workspaces |
 | `morphology.registry` | provider snapshots and namespaced registration | in project panels and editor workspaces |
 
@@ -261,7 +262,15 @@ display=None)` replaces the requested source span with a validated wikilink.
 `assertions.read` offers `assertions()`, `find(id)`,
 `relationships(predicate="")`, and `diagnostics()`. `assertions.write` adds
 `append_relationship`, `append_value`, `set_canon_state`, and `remove`; its
-arguments use the public `StoryReferenceValue(kind, id)` contract.
+arguments use the public `StoryReferenceValue(kind, id)` contract. Append
+commands accept optional `TemporalPointValue` boundaries. Assertion snapshots
+carry a `TemporalIntervalValue`, so temporal author data is never omitted.
+
+`timeline.read` offers `chronology()`, `diagnostics()`, `compare(left, right)`,
+and `facts(at, subject=..., predicate=..., include_unknown=True)`. Comparisons
+return `before`, `same`, `after`, or `unknown`; unknown chronology is not
+silently treated as false. The service is deliberately read-only. Timeline
+writes remain ordinary guarded assertion writes rather than a second database.
 
 `query.execute.execute(expression)` accepts the exported query nodes `All`,
 `AssertionsWhere`, `DocumentsReferencing`, `EntitiesWhere`,

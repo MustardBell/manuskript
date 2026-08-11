@@ -21,6 +21,9 @@ from manuskript.domain.story_assertions import (
     AssertionTerm,
     CanonState,
     StoryReference,
+    TemporalAxis,
+    TemporalInterval,
+    TemporalPoint,
 )
 
 
@@ -114,6 +117,7 @@ def decode_assertion(value, span=None):
             source_span=span,
         ),
         canon_state=canon,
+        validity=_decode_validity(value.get("validity")),
     )
 
 
@@ -140,6 +144,8 @@ def encode_assertion_block(assertion: Assertion) -> str:
             ) if item
         },
     }
+    if assertion.validity is not None:
+        value["validity"] = _encode_validity(assertion.validity)
     body = yaml.safe_dump(
         value,
         allow_unicode=True,
@@ -193,3 +199,67 @@ def _decode_reference(value, field):
 
 def _encode_reference(reference):
     return {"kind": reference.kind, "id": reference.id}
+
+
+def _decode_validity(value):
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise TypeError("validity must be a mapping")
+    unknown = set(value).difference(("from", "until"))
+    if unknown:
+        raise ValueError(
+            "validity contains unknown fields: {}".format(
+                ", ".join(sorted(str(item) for item in unknown))
+            )
+        )
+    return TemporalInterval(
+        valid_from=_decode_temporal_point(value.get("from"), "validity.from"),
+        valid_until=_decode_temporal_point(
+            value.get("until"), "validity.until"
+        ),
+    )
+
+
+def _decode_temporal_point(value, field):
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise TypeError("{} must be a mapping".format(field))
+    try:
+        axis = TemporalAxis(str(value.get("axis", "")))
+    except ValueError as error:
+        raise ValueError("{} has an unknown temporal axis".format(field)) from error
+    has_reference = "reference" in value
+    has_value = "value" in value
+    if has_reference == has_value:
+        raise ValueError(
+            "{} requires exactly one reference or value".format(field)
+        )
+    reference = (
+        _decode_reference(value["reference"], field + ".reference")
+        if has_reference else None
+    )
+    return TemporalPoint(axis, reference=reference, value=value.get("value"))
+
+
+def _encode_validity(validity):
+    if validity is None:
+        return None
+    return {
+        key: _encode_temporal_point(point)
+        for key, point in (
+            ("from", validity.valid_from),
+            ("until", validity.valid_until),
+        )
+        if point is not None
+    }
+
+
+def _encode_temporal_point(point):
+    value = {"axis": point.axis.value}
+    if point.reference is not None:
+        value["reference"] = _encode_reference(point.reference)
+    else:
+        value["value"] = point.value
+    return value

@@ -120,6 +120,15 @@ class AssertionStore:
             references = [assertion.subject]
             if assertion.object.reference is not None:
                 references.append(assertion.object.reference)
+            if assertion.validity is not None:
+                references.extend(
+                    point.reference
+                    for point in (
+                        assertion.validity.valid_from,
+                        assertion.validity.valid_until,
+                    )
+                    if point is not None and point.reference is not None
+                )
             for reference in references:
                 valid_ids = known.get(reference.kind)
                 if valid_ids is None or reference.id in valid_ids:

@@ -131,6 +131,19 @@ class StoryReferenceValue:
 
 
 @dataclass(frozen=True)
+class TemporalPointValue:
+    axis: str
+    reference: Optional[StoryReferenceValue] = None
+    value: Any = None
+
+
+@dataclass(frozen=True)
+class TemporalIntervalValue:
+    valid_from: Optional[TemporalPointValue] = None
+    valid_until: Optional[TemporalPointValue] = None
+
+
+@dataclass(frozen=True)
 class AssertionTermValue:
     reference: Optional[StoryReferenceValue] = None
     value: Any = None
@@ -150,6 +163,32 @@ class AssertionSnapshot:
     anchor: str = ""
     note: str = ""
     canon_state: str = "canon"
+    validity: Optional[TemporalIntervalValue] = None
+
+
+@dataclass(frozen=True)
+class ChronologySnapshot:
+    subject: StoryReferenceValue
+    kind: str
+    assertion_id: str
+    start: Optional[str] = None
+    end: Optional[str] = None
+    related_to: Optional[StoryReferenceValue] = None
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class TemporalDiagnosticSnapshot:
+    assertion_id: str
+    message: str
+    severity: str = "warning"
+
+
+@dataclass(frozen=True)
+class TemporalFactSnapshot:
+    assertion: AssertionSnapshot
+    status: str
+    reason: str = ""
 
 
 @dataclass(frozen=True)

@@ -37,6 +37,10 @@ from manuskript.domain.reference_index import (
     ReferenceIndex,
 )
 from manuskript.domain.story_query import StoryQueryEngine
+from manuskript.domain.temporal_story import (
+    ChronologyIndex,
+    TemporalStoryIndex,
+)
 from manuskript.linguistics import first_party_morphology_providers
 
 
@@ -60,6 +64,7 @@ class ProjectStorage:
         legacy_entity_adapter=None,
         morphology_providers=None,
         assertion_store=None,
+        chronology_index=None,
     ):
         self._file_cache = (
             file_cache if file_cache is not None else {}
@@ -97,6 +102,10 @@ class ProjectStorage:
         self._canonical_project = None
         self._reference_index = ReferenceIndex()
         self._assertion_store = assertion_store or AssertionStore()
+        self._chronology_index = chronology_index or ChronologyIndex()
+        self._temporal_story = TemporalStoryIndex(
+            self._assertion_store, self._chronology_index
+        )
         self._story_query = StoryQueryEngine(
             self._entity_catalog,
             self._reference_index,
@@ -134,6 +143,14 @@ class ProjectStorage:
     @property
     def story_query(self):
         return self._story_query
+
+    @property
+    def chronology(self):
+        return self._chronology_index
+
+    @property
+    def temporal_story(self):
+        return self._temporal_story
 
     def register_morphology_provider(self, provider):
         self._morphology_providers.register(provider)
@@ -303,6 +320,7 @@ class ProjectStorage:
         self._canonical_project = None
         self._reference_index.rebuild(())
         self._assertion_store.rebuild(())
+        self._chronology_index.rebuild(())
         self._entity_catalog.replace((), writable=False)
 
     def _load_version_1(self, context, *, zipped, file_access):
@@ -455,6 +473,10 @@ class ProjectStorage:
         )
 
     def _rebuild_assertions(self):
+        entity_ids = tuple(
+            entity.id for entity in self._entity_catalog.entities
+        )
+        entity_id_set = set(entity_ids)
         self._assertion_store.rebuild(
             (
                 AssertionDocument(
@@ -462,8 +484,14 @@ class ProjectStorage:
                 )
                 for document in self._reference_index.documents
             ),
-            entity_ids=(
-                entity.id for entity in self._entity_catalog.entities
+            entity_ids=entity_ids,
+        )
+        self._chronology_index.rebuild(
+            self._assertion_store.assertions,
+            narrative_ids=(
+                document.id
+                for document in self._reference_index.documents
+                if document.id not in entity_id_set
             ),
         )
 

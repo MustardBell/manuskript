@@ -20,7 +20,10 @@ from manuskript.domain.story_assertions import (
     Assertion,
     AssertionTerm,
     StoryReference,
+    TemporalInterval,
+    TemporalPoint,
 )
+from manuskript.domain.temporal_story import TemporalFactStatus
 from manuskript.domain.story_query import (
     AssertionsWhere,
     QueryResult,
@@ -323,6 +326,9 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
         StoryReference("entity", created_entity.id),
         "knows",
         AssertionTerm.referencing("entity", inflected_entity.id),
+        validity=TemporalInterval(
+            TemporalPoint.narrative("document", document_id)
+        ),
     )
     item.setData(
         Outline.text,
@@ -330,6 +336,10 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     )
     storage.update_document_references(item)
     assert storage.assertion_store.assertions[0].id == assertion.id
+    assert storage.temporal_story.evaluate(
+        storage.assertion_store.assertions[0],
+        TemporalPoint.narrative("document", document_id),
+    ).status is TemporalFactStatus.ACTIVE
     assert storage.story_query.execute(AssertionsWhere(predicate="knows")) == (
         QueryResult(QueryScope.ASSERTION, assertion.id),
     )

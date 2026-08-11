@@ -24,6 +24,9 @@ from manuskript.domain.story_assertions import (
     AssertionTerm,
     CanonState,
     StoryReference,
+    TemporalAxis,
+    TemporalInterval,
+    TemporalPoint,
 )
 
 
@@ -47,13 +50,15 @@ class AssertionEditorDialog(QDialog):
         entity_choices,
         parent=None,
         id_factory=None,
+        temporal_choices=(),
+        temporal_enabled=False,
     ):
         super().__init__(parent)
         self._idFactory = id_factory or (lambda: str(uuid.uuid4()))
         self._assertionId = str(self._idFactory())
         self.setObjectName("assertionEditorDialog")
         self.setWindowTitle(self.tr("Add story assertion"))
-        self.setMinimumSize(560, 520)
+        self.setMinimumSize(600, 620)
 
         references = [(
             self.tr("Current document"), current_document
@@ -112,6 +117,27 @@ class AssertionEditorDialog(QDialog):
                 state.value.replace("-", " ").title(), state
             )
 
+        self._temporalChoices = tuple(temporal_choices)
+        self.validityAxisCombo = QComboBox(self)
+        self.validityAxisCombo.setObjectName("assertionValidityAxisCombo")
+        self.validityAxisCombo.setAccessibleName(
+            self.tr("Assertion temporal scope")
+        )
+        self.validityAxisCombo.addItem(self.tr("No temporal scope"), None)
+        self.validityAxisCombo.addItem(
+            self.tr("Narrative order"), TemporalAxis.NARRATIVE
+        )
+        self.validityAxisCombo.addItem(
+            self.tr("Story chronology"), TemporalAxis.STORY
+        )
+        self.validityAxisCombo.setEnabled(bool(temporal_enabled))
+        self.validityFromCombo = self._temporal_combo(
+            "assertionValidityFromCombo", self.tr("Valid from")
+        )
+        self.validityUntilCombo = self._temporal_combo(
+            "assertionValidityUntilCombo", self.tr("Valid until")
+        )
+
         self.qualifiersEdit = QPlainTextEdit(self)
         self.qualifiersEdit.setObjectName("assertionQualifiersEdit")
         self.qualifiersEdit.setAccessibleName(
@@ -146,6 +172,9 @@ class AssertionEditorDialog(QDialog):
         form.addRow(self.tr("Object &kind:"), self.objectKindCombo)
         form.addRow(self.tr("&Object:"), self.objectStack)
         form.addRow(self.tr("&Canon state:"), self.canonCombo)
+        form.addRow(self.tr("Temporal &scope:"), self.validityAxisCombo)
+        form.addRow(self.tr("Valid &from:"), self.validityFromCombo)
+        form.addRow(self.tr("Valid &until:"), self.validityUntilCombo)
         form.addRow(self.tr("&Qualifiers:"), self.qualifiersEdit)
         form.addRow(self.tr("Source &anchor:"), self.anchorEdit)
         form.addRow(self.tr("Provenance &note:"), self.noteEdit)
@@ -160,6 +189,10 @@ class AssertionEditorDialog(QDialog):
         self.objectKindCombo.currentIndexChanged.connect(
             self.objectStack.setCurrentIndex
         )
+        self.validityAxisCombo.currentIndexChanged.connect(
+            self._refresh_temporal_controls
+        )
+        self._refresh_temporal_controls()
 
         layout = QVBoxLayout(self)
         layout.addWidget(help_label)
@@ -194,7 +227,53 @@ class AssertionEditorDialog(QDialog):
                 note=self.noteEdit.toPlainText().strip(),
             ),
             canon_state=self.canonCombo.currentData(),
+            validity=self._validity(),
         )
+
+    def _temporal_combo(self, object_name, accessible_name):
+        combo = QComboBox(self)
+        combo.setObjectName(object_name)
+        combo.setAccessibleName(accessible_name)
+        return combo
+
+    def _refresh_temporal_controls(self):
+        axis = self.validityAxisCombo.currentData()
+        for combo in (self.validityFromCombo, self.validityUntilCombo):
+            combo.clear()
+            combo.addItem(self.tr("Unspecified"), None)
+            for label, point in self._temporalChoices:
+                if point.axis is axis:
+                    combo.addItem(str(label), point)
+            combo.setEditable(axis is TemporalAxis.STORY)
+            combo.setEnabled(axis is not None)
+            if combo.isEditable():
+                combo.lineEdit().setPlaceholderText(
+                    self.tr("Choose an event/scene or enter ISO-8601 time")
+                )
+
+    def _validity(self):
+        axis = self.validityAxisCombo.currentData()
+        if axis is None:
+            return None
+        start = self._temporal_point(self.validityFromCombo, axis)
+        end = self._temporal_point(self.validityUntilCombo, axis)
+        return TemporalInterval(start, end)
+
+    @staticmethod
+    def _temporal_point(combo, axis):
+        point = combo.currentData()
+        if point is not None:
+            return point
+        text = combo.currentText().strip()
+        if not text or (
+            combo.currentIndex() == 0 and text == combo.itemText(0)
+        ):
+            return None
+        if axis is not TemporalAxis.STORY:
+            raise ValueError(
+                "Narrative boundaries must select a manuscript document."
+            )
+        return TemporalPoint.story_time(text)
 
     def _validate_and_accept(self):
         if not self.predicateCombo.currentText().strip():

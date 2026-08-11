@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from manuskript.commands import DocumentCommand
+from manuskript.domain.story_assertions import TemporalPoint
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class TextEditorContext:
     entity_schemas: Optional[Callable[[], tuple]] = None
     create_entity: Optional[Callable[[str, str], object]] = None
     can_write_assertions: Optional[Callable[[], bool]] = None
+    temporal_reference_choices: Optional[Callable[[], tuple]] = None
+    can_write_timeline: Optional[Callable[[], bool]] = None
 
 
 def text_editor_context_for(
@@ -145,6 +148,47 @@ def text_editor_context_for(
             and strategy.supports("assertions.write", write=True)
         )
 
+    def can_write_timeline():
+        strategy = (
+            persistence_strategy()
+            if callable(persistence_strategy)
+            else persistence_strategy
+        )
+        return bool(
+            strategy is not None
+            and strategy.supports("timeline.write", write=True)
+        )
+
+    def temporal_reference_choices():
+        if reference_index is None:
+            return ()
+        entities = {
+            entity.id: entity
+            for entity in (
+                entity_catalog.entities if entity_catalog is not None else ()
+            )
+        }
+        choices = []
+        for document in reference_index.documents:
+            if document.id in entities:
+                if entities[document.id].type == "event":
+                    choices.append((
+                        "{} — event".format(document.title),
+                        TemporalPoint.story_reference("entity", document.id),
+                    ))
+                continue
+            choices.extend((
+                (
+                    "{} — narrative order".format(document.title),
+                    TemporalPoint.narrative("document", document.id),
+                ),
+                (
+                    "{} — story chronology".format(document.title),
+                    TemporalPoint.story_reference("document", document.id),
+                ),
+            ))
+        return tuple(choices)
+
     return TextEditorContext(
         settings=settings,
         document_buffers=buffers,
@@ -156,6 +200,8 @@ def text_editor_context_for(
         entity_schemas=entity_schemas,
         create_entity=create_entity,
         can_write_assertions=can_write_assertions,
+        temporal_reference_choices=temporal_reference_choices,
+        can_write_timeline=can_write_timeline,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,

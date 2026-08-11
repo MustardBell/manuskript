@@ -1,6 +1,7 @@
 """Explicit author assertions, distinct from references and derived facts."""
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import Enum
 from typing import Any, Optional, Tuple
 
@@ -14,6 +15,11 @@ class CanonState(str, Enum):
     DEPRECATED = "deprecated"
 
 
+class TemporalAxis(str, Enum):
+    NARRATIVE = "narrative"
+    STORY = "story"
+
+
 @dataclass(frozen=True)
 class StoryReference:
     """Stable identity used by an assertion, not a prose wikilink address."""
@@ -24,6 +30,74 @@ class StoryReference:
     def __post_init__(self):
         if not self.kind.strip() or not self.id.strip():
             raise ValueError("Story references require kind and stable ID.")
+
+
+@dataclass(frozen=True)
+class TemporalPoint:
+    """One boundary on narrative order or story chronology."""
+
+    axis: TemporalAxis
+    reference: Optional[StoryReference] = None
+    value: Any = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "axis", TemporalAxis(self.axis))
+        if (self.reference is None) == (self.value is None):
+            raise ValueError(
+                "A temporal point requires exactly one reference or value."
+            )
+        if self.axis is TemporalAxis.NARRATIVE and self.reference is None:
+            raise ValueError(
+                "Narrative points must reference an outline document."
+            )
+        if self.axis is TemporalAxis.STORY and self.value is not None:
+            if isinstance(self.value, datetime):
+                return
+            if isinstance(self.value, date):
+                return
+            if not isinstance(self.value, str) or not self.value.strip():
+                raise ValueError("Story times must be ISO-8601 values.")
+            normalized = self.value.strip()
+            if normalized.endswith("Z"):
+                normalized = normalized[:-1] + "+00:00"
+            try:
+                datetime.fromisoformat(normalized)
+            except ValueError as error:
+                raise ValueError("Story times must be ISO-8601 values.") from error
+
+    @classmethod
+    def narrative(cls, kind, identifier):
+        return cls(
+            TemporalAxis.NARRATIVE,
+            reference=StoryReference(str(kind), str(identifier)),
+        )
+
+    @classmethod
+    def story_reference(cls, kind, identifier):
+        return cls(
+            TemporalAxis.STORY,
+            reference=StoryReference(str(kind), str(identifier)),
+        )
+
+    @classmethod
+    def story_time(cls, value):
+        return cls(TemporalAxis.STORY, value=value)
+
+
+@dataclass(frozen=True)
+class TemporalInterval:
+    valid_from: Optional[TemporalPoint] = None
+    valid_until: Optional[TemporalPoint] = None
+
+    def __post_init__(self):
+        if self.valid_from is None and self.valid_until is None:
+            raise ValueError("A temporal interval requires a boundary.")
+        if (
+            self.valid_from is not None
+            and self.valid_until is not None
+            and self.valid_from.axis is not self.valid_until.axis
+        ):
+            raise ValueError("Temporal interval boundaries must share an axis.")
 
 
 class AssertionTermKind(str, Enum):
@@ -82,6 +156,7 @@ class Assertion:
     qualifiers: Tuple[AssertionQualifier, ...] = ()
     provenance: AssertionProvenance = AssertionProvenance()
     canon_state: CanonState = CanonState.CANON
+    validity: Optional[TemporalInterval] = None
 
     def __post_init__(self):
         if not self.id.strip() or not self.predicate.strip():
