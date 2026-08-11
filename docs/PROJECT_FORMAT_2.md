@@ -30,10 +30,20 @@ metadata, never inferred from a directory name. Unknown manifest and document
 frontmatter keys must survive a decode/encode round trip.
 
 Project-local application settings live in `.manuskript/settings.json`.
-Legacy concepts that have not yet been migrated to generic entity documents
-are represented losslessly in `.manuskript/legacy.yaml`; that is a transitional
-codec representation, not a second authoritative story database. Plugin-owned
-portable data remains under `plugins/<plugin-id>/`.
+Remaining legacy concepts are represented losslessly in
+`.manuskript/legacy.yaml`; that is a transitional codec representation, not a
+second authoritative story database. Plugin-owned portable data remains under
+`plugins/<plugin-id>/`.
+
+The project summary and the character, plot, and world collections are not
+among them. A Format 2 project keeps its whole story vocabulary as generic
+entity documents, so those collections are never written back to
+`legacy.yaml`. A project saved by an older Format 2 writer may still contain
+them; loading promotes each record to a native entity in memory, and the next
+save persists it as an entity document and drops the collection. Formats 0
+and 1 keep their own representation on disk and project the same records as
+read-only entities, so every format presents one entity vocabulary to the
+application.
 
 ## Generic entities
 

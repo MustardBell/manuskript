@@ -9,7 +9,8 @@ rebuilding a project.
 | Feature | Format 1 in this Manuskript | Old-client round trip | Format 2 |
 | --- | --- | --- | --- |
 | Plain Markdown | native | full | native |
-| Outline, characters, world, plots | native | full | native/adapted |
+| Outline | native | full | native |
+| Summary, characters, world, plots | native | full | native entities |
 | Wikilink references | compatible inline text | save-safe as text | native |
 | Backlinks and indexes | derived | not applicable | derived |
 | Character custom metadata | compatible fields | save-safe | native |
@@ -31,3 +32,9 @@ same public codecs used for ordinary load/save. It refuses preservation
 mismatches and reports converted records, retained extension data, broken
 references, and warnings. Ordinary open/save never replaces a source project
 or changes its format.
+
+Whatever the format on disk, the application sees one story vocabulary. A
+Format 2 project owns its summary, characters, plots, and world records as
+generic entity documents and can edit them. Formats 0 and 1 keep their own
+representation and project the same records as read-only entities: they are
+browsable and referenceable, and editing them requires an upgrade.
