@@ -109,6 +109,48 @@ def test_revealing_a_dock_raises_its_tab():
     window.close()
 
 
+def test_putting_away_a_panel_shown_behind_its_toggle_still_hides_it():
+    """``restoreState`` arranges docks itself, without asking any action.
+
+    The toggle is then already unchecked while the dock is on screen, so
+    an implementation that only re-checks the action would emit nothing
+    and leave the panel showing.
+    """
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        default_visible=True,
+        widget_factory=label_factory,
+    ))
+    instance = host.open("core.notes", PanelContext())
+    host.set_visible("core.notes", False)
+    assert not instance.action.isChecked()
+
+    instance.container.show()
+
+    host.set_visible("core.notes", False)
+
+    assert instance.container.isHidden()
+    window.close()
+
+
+def test_syncing_visibility_makes_the_toggle_say_what_is_showing():
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        default_visible=False,
+        widget_factory=label_factory,
+    ))
+    instance = host.open("core.notes", PanelContext())
+    assert not instance.action.isChecked()
+
+    instance.container.show()
+    host.sync_visibility()
+
+    assert instance.action.isChecked()
+    window.close()
+
+
 def test_a_failing_factory_reports_instead_of_raising():
     """The action that opens a panel must survive the panel being
     broken; the person gets told, the caller gets None.

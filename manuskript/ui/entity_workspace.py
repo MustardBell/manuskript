@@ -5,6 +5,7 @@ from weakref import ref
 
 from PyQt5.QtWidgets import QInputDialog, QMessageBox
 
+from manuskript.ui.connections import weak_callback
 from manuskript.ui.entity_editor import EntityEditorController
 
 
@@ -35,6 +36,11 @@ class EntityWorkspaceController:
         self.manager = None
         self.editor = None
         self.bound = False
+        # The catalogue belongs to the project and outlives every window
+        # onto it, so what it holds must not be this window. A stale
+        # subscription resolves to nothing rather than to a closed
+        # workspace.
+        self._onCatalogChanged = weak_callback(self.refresh)
 
     def bind(self, connect):
         if self.bound:
@@ -57,14 +63,14 @@ class EntityWorkspaceController:
             connect(panel.createRequested, self.create)
             connect(panel.editRequested, self.open)
             connect(panel.deleteRequested, self.delete)
-        self.catalog.subscribe(self.refresh)
+        self.catalog.subscribe(self._onCatalogChanged)
         self.bound = True
         self.refresh()
 
     def unbind(self):
         if not self.bound:
             return
-        self.catalog.unsubscribe(self.refresh)
+        self.catalog.unsubscribe(self._onCatalogChanged)
         if self.editor is not None:
             self.editor.close_all()
         for panel in self.panels:

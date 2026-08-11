@@ -130,6 +130,10 @@ class WorkspaceStateController:
 
     def _restore_panel_visibility(self, state):
         host = self.views.panel_host
+        # ``restoreState`` above has already arranged the docks, toggles
+        # and all, so the toggles are told what it did before this
+        # window's own record is applied on top.
+        host.sync_visibility()
         for panel_id, visible in (state.panels or {}).items():
             if host.instance(panel_id) is not None:
                 host.set_visible(panel_id, visible)

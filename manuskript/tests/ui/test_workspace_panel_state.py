@@ -75,6 +75,7 @@ class Host:
     def __init__(self, instances):
         self._instances = instances
         self.shown = {}
+        self.synced = 0
 
     def instance(self, panel_id):
         return self._instances.get(panel_id)
@@ -85,6 +86,9 @@ class Host:
 
     def set_visible(self, panel_id, visible):
         self.shown[panel_id] = visible
+
+    def sync_visibility(self):
+        self.synced += 1
 
 
 class Registry:

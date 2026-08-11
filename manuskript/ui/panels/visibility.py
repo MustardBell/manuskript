@@ -82,9 +82,34 @@ class PanelVisibility:
 
         Through the action, because that is what every button mirrors;
         poking the widget would leave them all saying otherwise.
+
+        The action can still fall out of step with the panel: restoring
+        a window state shows and hides docks itself, without asking any
+        of them. An action already reading the way it was asked emits
+        nothing, so the panel is set directly in that case -- otherwise
+        putting a restored panel away would do nothing at all.
         """
-        if instance.action is not None:
-            instance.action.setChecked(visible)
+        if instance.action is None:
+            return
+        if instance.action.isChecked() == visible:
+            target = PanelVisibility.shown_thing(instance)
+            if target is not None:
+                target.setVisible(visible)
+            return
+        instance.action.setChecked(visible)
+
+    @staticmethod
+    def sync(instance):
+        """Point a panel's toggle at where the panel actually ended up.
+
+        Called after a bulk restore, which moves docks without going
+        through any action, so that every button says what is showing.
+        """
+        if instance.action is None:
+            return
+        target = PanelVisibility.shown_thing(instance)
+        if target is not None:
+            instance.action.setChecked(not target.isHidden())
 
     def _container_changed(self, instance, visible):
         """Follow a floating dock the person closed with its own button.

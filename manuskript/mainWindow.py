@@ -282,17 +282,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.selectionHistory = self.workspaceLifetime.own(
             WorkspaceSelectionHistory(self.navigationController)
         )
-        self.entityWorkspace = EntityWorkspaceController(
-            self,
-            self.projectRuntime,
-            (
-                self.corePanels.project_entities,
-                self.corePanels.character_entities,
-                self.corePanels.plot_entities,
-                self.corePanels.world_entities,
-            ),
-            self.corePanels.entity_editor,
-            panel_revealer(self.panelHost, core_panels.ENTITY_EDITOR),
+        self.entityWorkspace = self.workspaceLifetime.own(
+            EntityWorkspaceController(
+                self,
+                self.projectRuntime,
+                (
+                    self.corePanels.project_entities,
+                    self.corePanels.character_entities,
+                    self.corePanels.plot_entities,
+                    self.corePanels.world_entities,
+                ),
+                self.corePanels.entity_editor,
+                panel_revealer(self.panelHost, core_panels.ENTITY_EDITOR),
+            )
         )
         self.workspaceSelection = self.workspaceLifetime.own(
             WorkspaceSelectionController(

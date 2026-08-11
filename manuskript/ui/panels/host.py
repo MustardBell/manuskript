@@ -351,6 +351,15 @@ class PanelHost:
         if instance is not None:
             self.visibility.set_visible(instance, visible)
 
+    def sync_visibility(self):
+        """Make every toggle agree with where its panel actually is.
+
+        A restored window state arranges docks directly, so the toggles
+        have to be told what it did before anything trusts them.
+        """
+        for instance in self._instances.values():
+            self.visibility.sync(instance)
+
     def reveal(self, panel_id):
         """Show a panel and bring its dock tab to the front."""
 
