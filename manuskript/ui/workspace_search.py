@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from PyQt5.QtCore import QTimer
+
 
 @dataclass(frozen=True)
 class WorkspaceSearchViews:
@@ -26,6 +28,15 @@ class WorkspaceSearchController:
     def show(self, _checked=False):
         self._views.dock.show()
         self._views.dock.activateWindow()
+        self._focus_query()
+        # QAction restores the widget that owned focus after its triggered
+        # handlers return on some Qt platform plugins. Reassert the user's
+        # destination once that native action dispatch has settled.
+        QTimer.singleShot(0, self._focus_query)
+
+    def _focus_query(self):
+        if self._views is None:
+            return
         self._views.query.setFocus()
         self._views.query.selectAll()
 

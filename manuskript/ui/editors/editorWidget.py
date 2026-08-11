@@ -199,11 +199,15 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
                 resume()
 
     def dispose(self):
+        # Stop observing workspace focus before an editor publishes its final
+        # release.  Qt may already have destroyed this QObject's native half
+        # while Python is deterministically tearing down the surrounding tab;
+        # notifying it at that point raises from the SIP wrapper.
+        self.textHistory.dispose()
         for editor in self.sourceEditors():
             release_focus = getattr(editor, "releaseWorkspaceFocus", None)
             if callable(release_focus):
                 release_focus()
-        self.textHistory.dispose()
 
     def set_context(self, editor_context):
         self.editor_context = editor_context

@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.editorTextHistory import EditorTextHistory
 from manuskript.ui.editors.tabSplitter import tabSplitter
 
@@ -42,6 +43,23 @@ def test_standalone_editor_history_falls_back_without_global_focus():
     history = EditorTextHistory(owner)
 
     assert history.activeEditor() is canonical
+
+
+def test_editor_tab_unsubscribes_before_publishing_final_focus_release():
+    events = []
+    history = MagicMock()
+    history.dispose.side_effect = lambda: events.append("unsubscribed")
+    source = MagicMock()
+    source.releaseWorkspaceFocus.side_effect = (
+        lambda: events.append("focus released")
+    )
+    tab = MagicMock()
+    tab.textHistory = history
+    tab.sourceEditors.return_value = (source,)
+
+    editorWidget.dispose(tab)
+
+    assert events == ["unsubscribed", "focus released"]
 
 
 def test_split_pane_replaces_and_releases_workspace_focus_source():
