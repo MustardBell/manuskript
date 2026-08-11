@@ -328,7 +328,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 panel_id in restored_layout.panels
                 for panel_id in entity_panel_ids
             ):
-                self._stackEntityDocks(entity_panel_ids)
+                self._placeEntityDocks(entity_panel_ids)
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
@@ -573,12 +573,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.ENTITY_EDITOR,
         )
 
-    def _stackEntityDocks(self, panel_ids=None):
-        """Give newly introduced entity docks one compact landing zone.
+    def _placeEntityDocks(self, panel_ids=None):
+        """Give newly introduced entity docks a place of their own.
 
-        This is only called when the saved layout predates entity panels.
-        Once those panel identifiers have been recorded, Qt's restored
-        arrangement is authoritative and this migration does nothing.
+        Neighbours down the dock area, not tabs over one another. They
+        answer different questions and get read together, so stacking
+        them into a single frame put four of them behind a tab strip
+        and made one dock out of five.
+
+        This is only called when the saved layout predates entity
+        panels. Once those panel identifiers have been recorded, Qt's
+        restored arrangement is authoritative and this does nothing.
         """
 
         panel_ids = tuple(panel_ids or self._entityPanelIds())
@@ -589,14 +594,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 docks.append(instance.container)
         if not docks:
             return
-        anchor = docks[0]
+        previous = docks[0]
         for dock in docks[1:]:
-            self.tabifyDockWidget(anchor, dock)
-        character = self.panelHost.instance(
-            core_panels.CHARACTER_ENTITIES
-        )
-        if character is not None and character.container is not None:
-            character.container.raise_()
+            self.splitDockWidget(previous, dock, Qt.Vertical)
+            previous = dock
 
     def buildWorkspaceMenu(self):
         """Offer another window onto the same project.

@@ -177,6 +177,27 @@ def test_the_welcome_screen_shows_no_project_panel(MWNoProject):
         assert shown.isHidden(), panel_id
 
 
+def test_entity_docks_land_as_neighbours_not_as_one_tabbed_dock(
+        MWEmptyProject):
+    """Five docks, not one dock with five tabs.
+
+    They answer different questions and are read together, so tabbing
+    them over each other hid four behind a tab strip and made a single
+    dock out of the set.
+    """
+    window = MWEmptyProject
+
+    for panel_id in ENTITY_IDS:
+        window.panelHost.reveal(panel_id)
+
+    docks = [
+        window.panelHost.instance(panel_id).container
+        for panel_id in ENTITY_IDS
+    ]
+    for dock in docks:
+        assert window.tabifiedDockWidgets(dock) == [], dock.objectName()
+
+
 def test_opening_a_project_brings_its_panels_back(MWEmptyProject):
     window = MWEmptyProject
 
