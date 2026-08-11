@@ -205,6 +205,10 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         # notifying it at that point raises from the SIP wrapper.
         self.textHistory.dispose()
         for editor in self.sourceEditors():
+            dispose = getattr(editor, "dispose", None)
+            if callable(dispose):
+                dispose()
+                continue
             release_focus = getattr(editor, "releaseWorkspaceFocus", None)
             if callable(release_focus):
                 release_focus()

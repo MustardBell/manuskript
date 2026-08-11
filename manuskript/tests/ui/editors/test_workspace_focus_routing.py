@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+from PyQt5.QtWidgets import qApp
+
 from manuskript.ui.editors.editorWidget import editorWidget
 from manuskript.ui.editors.editorTextHistory import EditorTextHistory
 from manuskript.ui.editors.tabSplitter import tabSplitter
@@ -45,13 +47,13 @@ def test_standalone_editor_history_falls_back_without_global_focus():
     assert history.activeEditor() is canonical
 
 
-def test_editor_tab_unsubscribes_before_publishing_final_focus_release():
+def test_editor_tab_unsubscribes_before_disposing_source_editors():
     events = []
     history = MagicMock()
     history.dispose.side_effect = lambda: events.append("unsubscribed")
     source = MagicMock()
-    source.releaseWorkspaceFocus.side_effect = (
-        lambda: events.append("focus released")
+    source.dispose.side_effect = (
+        lambda: events.append("editor disposed")
     )
     tab = MagicMock()
     tab.textHistory = history
@@ -59,7 +61,7 @@ def test_editor_tab_unsubscribes_before_publishing_final_focus_release():
 
     editorWidget.dispose(tab)
 
-    assert events == ["unsubscribed", "focus released"]
+    assert events == ["unsubscribed", "editor disposed"]
 
 
 def test_split_pane_replaces_and_releases_workspace_focus_source():
@@ -155,3 +157,29 @@ def test_closing_the_focused_tab_releases_workspace_command_targets(
 
     assert window.workspaceFocus.focused_widget is None
     assert window.workspaceFocus.markup_target is None
+
+
+def test_closing_a_tab_cancels_deferred_editor_callbacks(MWEmptyProject):
+    from manuskript.models.outlineItem import outlineItem
+
+    window = MWEmptyProject
+    model = window.projectRuntime.models.outline
+    item = outlineItem(title="Deferred callbacks", _type="md")
+    model.appendItem(item)
+    window.mainEditor.setCurrentModelIndex(
+        model.indexFromItem(item),
+        newTab=True,
+    )
+    source = window.mainEditor.currentEditor().txtRedacText
+    source.updateTimer.start()
+    source.scheduleInteractionRectUpdate()
+    assert source.updateTimer.isActive()
+    assert source.interactionRectUpdateTimer.isActive()
+
+    window.mainEditor.closeAllTabs()
+
+    assert source.updateTimer is None
+    assert not source.interactionRectUpdateTimer.isActive()
+    # Both callbacks used to reach a document/highlighter already detached
+    # by closeTab(), which newer PyQt treats as a fatal slot exception.
+    qApp.processEvents()

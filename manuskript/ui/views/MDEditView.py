@@ -30,6 +30,7 @@ from manuskript.ui.plugins.markup_profiles import MARKDOWN_BASE_ID
 from manuskript.plugins.api import RenderedDocument
 from manuskript.plugins.execution import run_page_renderer
 from manuskript.domain.assertion_dsl import encode_assertion_block
+from manuskript.domain.markdown_dsl import MarkdownDslParser
 from manuskript.domain.story_assertions import StoryReference
 from manuskript import functions as F
 
@@ -67,6 +68,7 @@ class MDEditView(textEditView):
         self._readingRenderer = None
         self._wikilinkCompletionRange = None
         self._wikilinkCompletionMenu = None
+        self._dslParser = MarkdownDslParser()
         textEditView.__init__(self, parent, index, html, spellcheck,
                               highlighting=True, dict=dict,
                               autoResize=autoResize, settings=settings,
@@ -107,6 +109,20 @@ class MDEditView(textEditView):
         )
         self.setMouseTracking(True)
         self.scheduleInteractionRectUpdate()
+
+    def dispose(self):
+        """Cancel Markdown-only deferred work before base editor teardown."""
+        timer = getattr(self, "interactionRectUpdateTimer", None)
+        if timer is not None:
+            timer.stop()
+            try:
+                timer.timeout.disconnect(self.updateInteractionRects)
+            except (TypeError, RuntimeError):
+                pass
+        self.clickRects = []
+        self._wikilinkCompletionRange = None
+        self._wikilinkCompletionMenu = None
+        textEditView.dispose(self)
 
     @property
     def presentationMode(self):
@@ -508,7 +524,7 @@ class MDEditView(textEditView):
             return None
         if any(
             span.start <= opening < span.end
-            for span in self.highlighter.dslParser.excluded_spans(
+            for span in self._dslParser.excluded_spans(
                 block.text()
             )
         ):
@@ -1389,7 +1405,7 @@ class MDEditView(textEditView):
         text = self.toPlainText()
         wikilink_positions = {
             link.span.start + (1 if link.embedded else 0)
-            for link in self.highlighter.dslParser.parse(text).wikilinks
+            for link in self._dslParser.parse(text).wikilinks
         }
         for rx in [
                 self.imageRegex,

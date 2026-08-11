@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import qApp
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.MDFunctions import MDFormatSelection
 from manuskript.ui.highlighters import (
+    BasicHighlighter,
     MarkdownHighlighter,
     MarkdownState,
     MarkdownTokenType,
@@ -41,6 +42,24 @@ def test_interaction_rectangle_updates_are_coalesced():
     qApp.processEvents()
 
     assert updates == [True]
+
+
+def test_wikilink_geometry_does_not_depend_on_highlighter_internals():
+    editor = make_editor()
+    original = editor.highlighter
+    original.setDocument(None)
+    original.deleteLater()
+    editor.highlighter = BasicHighlighter(editor)
+    editor.setPlainText("A [[Target]] reference")
+
+    try:
+        editor.getClickRects()
+
+        assert len(editor.clickRects) == 1
+        assert editor.clickRects[0].texts[1] == "Target"
+    finally:
+        editor.dispose()
+        editor.deleteLater()
 
 
 def test_setext_heading_is_highlighted_and_reported():

@@ -89,8 +89,8 @@ class textEditView(QTextEdit):
         self._tooltip = { 'depth' : 0, 'active' : 0 }
 
         # Submit text changed only after 500ms without modifications
-        self.updateTimer = QTimer()
-        self.updateTimer.destroyed.connect(self.cleanupTimer)
+        self._disposed = False
+        self.updateTimer = QTimer(self)
         self.updateTimer.setInterval(500)
         self.updateTimer.setSingleShot(True)
         self.updateTimer.timeout.connect(self.submit)
@@ -151,13 +151,39 @@ class textEditView(QTextEdit):
         if context is not None:
             self.settings = context.settings
     
-    def cleanupTimer(self):
-        if self.updateTimer:
-            self.disconnectDocument()
-            self.updateTimer = None
-    
-    def __del__(self):
-        self.cleanupTimer()
+    def dispose(self):
+        """Stop every callback before the native editor is destroyed.
+
+        Tabs are removed synchronously and deleted by Qt on the next event
+        turn.  A zero-delay layout task or the private submit timer can run in
+        that interval, when the editor has already released its project
+        document.  Treat those callbacks as owned resources instead of
+        relying on Python garbage collection to eventually destroy them.
+        """
+        if self._disposed:
+            return
+        self._disposed = True
+        self.releaseWorkspaceFocus()
+        self._releaseSharedBuffer()
+        self.disconnectDocument()
+        timer = self.updateTimer
+        if timer is not None:
+            timer.stop()
+            try:
+                timer.timeout.disconnect(self.submit)
+            except (TypeError, RuntimeError):
+                pass
+        self.updateTimer = None
+        self.updateTimerConnection = None
+        model = self._model
+        if model is not None:
+            try:
+                model.dataChanged.disconnect(self.update)
+            except (TypeError, RuntimeError):
+                pass
+        self._model = None
+        self._index = QModelIndex()
+        self._indexes = None
 
     def setModel(self, model):
         self._model = model
