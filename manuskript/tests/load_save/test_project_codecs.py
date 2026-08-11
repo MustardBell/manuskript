@@ -98,6 +98,28 @@ def test_v1_complex_fixture_preserves_duplicates_unknowns_and_provenance():
     )
 
 
+def test_v1_crlf_sources_parse_semantically_and_round_trip_exactly():
+    source = {
+        path: (
+            content.replace("\n", "\r\n")
+            if isinstance(content, str) else content
+        )
+        for path, content in _fixture_files("v1_complex").items()
+    }
+    project = Version1ProjectCodec().decode(source)
+
+    assert project.metadata[-1] == MetadataField(
+        "Unknown Header", "preserved"
+    )
+    assert [item.value for item in project.characters[0].custom_fields] == [
+        "uk", "Лена", "Оленка"
+    ]
+    assert tuple(document.id for document in project.documents()) == (
+        "100", "101", "102"
+    )
+    assert dict(Version1ProjectCodec().encode(project).files) == source
+
+
 def test_v1_archive_uses_the_same_canonical_codec(tmp_path):
     source = _fixture_files("v1_complex")
     archive = tmp_path / "complex.msk"

@@ -1,0 +1,4 @@
+# Compatibility corpora are byte-for-byte persistence fixtures.  Git must not
+# rewrite their line endings on Windows: the tests deliberately distinguish
+# source preservation from semantic parsing.
+manuskript/tests/fixtures/compatibility/** -text

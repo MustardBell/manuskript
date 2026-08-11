@@ -29,6 +29,12 @@ def parse_mmd(text: str) -> MmdDocument:
     in_body = False
 
     for line in text.split("\n"):
+        # Keep the source-preserving codec's raw text untouched while parsing
+        # CRLF input into the same semantic model as LF input.  split("\n")
+        # is intentional here: unlike splitlines(), it retains terminal empty
+        # lines, which are meaningful to the historical MMD body parser.
+        if line.endswith("\r"):
+            line = line[:-1]
         if in_body:
             body.append(line)
             continue

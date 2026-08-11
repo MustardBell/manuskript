@@ -41,7 +41,9 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        pip install pyinstaller PyQt5 lxml pyenchant pytest pytest-faulthandler markdown==3.9 pillow dmgbuild
+        grep -vE '^(PyQt5-Qt5|PyQt5_sip)==' requirements.txt > portable-requirements.txt
+        pip install -r portable-requirements.txt
+        pip install pyinstaller pyenchant pytest pytest-faulthandler pillow dmgbuild
 
     - name: Run Pytest
       run: |
