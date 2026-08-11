@@ -146,6 +146,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     TabRedac = 6
     TabDebug = 7
 
+    #: Navigation rows that open a dock rather than switch a page. The
+    #: story surfaces became entity docks, but the list on the left is
+    #: still where one looks for them, so the rows stay and change what
+    #: they do.
+    NAVIGATION_PANELS = {
+        TabSummary: core_panels.PROJECT_ENTITIES,
+        TabPersos: core_panels.CHARACTER_ENTITIES,
+        TabPlots: core_panels.PLOT_ENTITIES,
+        TabWorld: core_panels.WORLD_ENTITIES,
+    }
+
     SHOW_DEBUG_TAB = False
 
     def __init__(self, services, window_id=WORKSPACE_PRIMARY):
@@ -573,6 +584,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.ENTITY_EDITOR,
         )
 
+    def navigateTo(self, row):
+        """Open what a navigation row stands for.
+
+        Most rows still stand for a page. The story rows stand for a
+        dock, and revealing it rather than switching a page is what
+        keeps them where the person has always looked for them.
+        """
+        panel_id = self.NAVIGATION_PANELS.get(row)
+        if panel_id is None:
+            self.tabMain.setCurrentIndex(row)
+            return False
+        return self.panelHost.reveal(panel_id)
+
     def _placeEntityDocks(self, panel_ids=None):
         """Give newly introduced entity docks a place of their own.
 
@@ -714,16 +738,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             item.setTextAlignment(Qt.AlignCenter)
             self.lstTabs.addItem(item)
         self.tabMain.tabBar().hide()
-        self.lstTabs.currentRowChanged.connect(self.tabMain.setCurrentIndex)
+        self.lstTabs.currentRowChanged.connect(self.navigateTo)
         self.lstTabs.item(self.TabDebug).setHidden(not self.SHOW_DEBUG_TAB)
         self.tabMain.setTabEnabled(self.TabDebug, self.SHOW_DEBUG_TAB)
-        for legacy_tab in (
-            self.TabSummary,
-            self.TabPersos,
-            self.TabPlots,
-            self.TabWorld,
-        ):
-            self.lstTabs.item(legacy_tab).setHidden(True)
+        # Summary, Characters, Plots and World are entity docks now. Their
+        # rows stay where they have always been -- this list is where one
+        # looks for them -- and open the dock instead of a page whose
+        # widgets no longer answer for the story.
+        for legacy_tab in self.NAVIGATION_PANELS:
             self.tabMain.setTabVisible(legacy_tab, False)
         self.tabMain.currentChanged.connect(self.lstTabs.setCurrentRow)
 

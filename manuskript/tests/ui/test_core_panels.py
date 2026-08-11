@@ -177,6 +177,32 @@ def test_the_welcome_screen_shows_no_project_panel(MWNoProject):
         assert shown.isHidden(), panel_id
 
 
+def test_the_story_rows_stay_in_navigation_and_open_their_docks(
+        MWEmptyProject):
+    """Summary, Characters, Plots and World became docks, but the list on
+    the left is still where one looks for them. The rows stay; what they
+    do changes from switching a page to revealing the dock.
+    """
+    window = MWEmptyProject
+    rows = range(window.lstTabs.count())
+    shown = [i for i in rows if not window.lstTabs.item(i).isHidden()]
+    assert window.TabSummary in shown
+    assert window.TabPersos in shown
+    assert window.TabPlots in shown
+    assert window.TabWorld in shown
+
+    page = window.tabMain.currentIndex()
+    window.panelHost.set_visible(CHARACTER_ENTITIES, False)
+    dock = window.panelHost.instance(CHARACTER_ENTITIES).container
+    assert dock.isHidden()
+
+    assert window.navigateTo(window.TabPersos)
+
+    assert not dock.isHidden()
+    # A dock row is not a page: it must not move the central area.
+    assert window.tabMain.currentIndex() == page
+
+
 def test_entity_docks_land_as_neighbours_not_as_one_tabbed_dock(
         MWEmptyProject):
     """Five docks, not one dock with five tabs.

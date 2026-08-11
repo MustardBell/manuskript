@@ -107,7 +107,13 @@ def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):
     assert not instance.container.isHidden()
 
 
-def test_legacy_story_tabs_are_not_user_interface(MWEmptyProject):
+def test_legacy_story_pages_are_not_user_interface(MWEmptyProject):
+    """The pages go; the navigation rows stay and open docks instead.
+
+    Only the old widgets are unreachable -- taking the rows away as well
+    would move where the person looks for characters, which is not what
+    replacing the surface behind them was meant to do.
+    """
     window = MWEmptyProject
     for index in (
         window.TabSummary,
@@ -115,5 +121,6 @@ def test_legacy_story_tabs_are_not_user_interface(MWEmptyProject):
         window.TabPlots,
         window.TabWorld,
     ):
-        assert window.lstTabs.item(index).isHidden()
         assert not window.tabMain.isTabVisible(index)
+        assert not window.lstTabs.item(index).isHidden()
+        assert index in window.NAVIGATION_PANELS
