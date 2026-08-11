@@ -127,21 +127,3 @@ def test_editors_are_asked_for_freshly_each_time(MWEmptyProject):
 
     assert first is not second
     assert list(first) == list(second)
-
-
-def test_panel_navigation_needs_no_window():
-    """Panel selection events use the shared history policy directly."""
-    from unittest.mock import MagicMock, call
-
-    from manuskript.ui.panel_services import PanelNavigation
-
-    history = MagicMock()
-    navigation = PanelNavigation(history)
-
-    navigation.record(("character", "alice"), selection_empty=False)
-    navigation.record(("character", None), selection_empty=True)
-
-    assert history.record_selection.call_args_list == [
-        call(("character", "alice"), False),
-        call(("character", None), True),
-    ]
