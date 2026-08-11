@@ -139,6 +139,7 @@ class ProjectViewSet:
             window,
             runtime.projectManager.storage.entity_catalog,
             runtime.projectManager.updateEntity,
+            runtime.projectManager.storage.morphology_providers,
         )
         navigation = reference_navigation_for(
             window,

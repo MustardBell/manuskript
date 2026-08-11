@@ -181,6 +181,7 @@ class V2PersistenceStrategy(ProjectPersistenceStrategy):
             "entities.write",
             "references.read",
             "references.write",
+            "morphology.entities",
             "assertions.read",
             "assertions.write",
             "timeline.read",

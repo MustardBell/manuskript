@@ -12,6 +12,7 @@ from manuskript.domain.canonical_project import (
     StructuredMetadataField,
 )
 from manuskript.domain.markdown_dsl import MarkdownDslParser, SourceSpan
+from manuskript.domain.morphology import MorphologyIndex
 from manuskript.domain.project_paths import normalize_project_path
 
 
@@ -99,9 +100,11 @@ class EntityCatalog:
         self,
         schemas=None,
         id_factory: Optional[Callable[[], str]] = None,
+        morphology_index: Optional[MorphologyIndex] = None,
     ):
         self.schemas = schemas or EntitySchemaRegistry()
         self._id_factory = id_factory or (lambda: str(uuid.uuid4()))
+        self.morphology_index = morphology_index
         self._native = ()
         self._legacy = ()
         self._writable = False
@@ -131,6 +134,7 @@ class EntityCatalog:
         self._native = native
         self._legacy = legacy
         self._writable = bool(writable)
+        self._rebuild_morphology()
 
     def find(self, entity_id: str) -> Optional[EntityRecord]:
         return next(
@@ -142,6 +146,15 @@ class EntityCatalog:
         normalized = self._normalize_surface(surface)
         if not normalized:
             return ()
+        if self.morphology_index is not None:
+            identifiers = {
+                item.entity_id
+                for item in self.morphology_index.lookup(surface)
+            }
+            return tuple(
+                entity for entity in self.entities
+                if entity.id in identifiers
+            )
         return tuple(
             entity for entity in self.entities
             if normalized in {
@@ -190,7 +203,7 @@ class EntityCatalog:
         ) + tuple(link.span for link in tree.wikilinks)
         surfaces = {}
         for entity in self.entities:
-            for value in (entity.title,) + entity.aliases:
+            for value in self.surface_forms(entity.id):
                 key = self._normalize_surface(value)
                 if key:
                     surfaces.setdefault(key, (value, []))[1].append(entity.id)
@@ -263,6 +276,7 @@ class EntityCatalog:
             metadata=tuple(metadata),
         )
         self._native = self._native + (entity,)
+        self._rebuild_morphology()
         return entity
 
     def update(
@@ -273,6 +287,7 @@ class EntityCatalog:
         entity_type: Optional[str] = None,
         aliases=None,
         text: Optional[str] = None,
+        metadata: Optional[Iterable[StructuredMetadataField]] = None,
     ) -> EntityRecord:
         if not self._writable:
             raise PermissionError(
@@ -306,11 +321,29 @@ class EntityCatalog:
                 if aliases is None
                 else self._unique_aliases(aliases, new_title)
             ),
+            metadata=(
+                entity.metadata if metadata is None else tuple(metadata)
+            ),
         )
         self._native = tuple(
             updated if item.id == entity_id else item for item in self._native
         )
+        self._rebuild_morphology()
         return updated
+
+    def surface_forms(self, entity_id: str) -> Tuple[str, ...]:
+        entity = self.find(entity_id)
+        if entity is None:
+            return ()
+        if self.morphology_index is None:
+            return (entity.title,) + entity.aliases
+        return tuple(
+            item.text for item in self.morphology_index.forms_for(entity_id)
+        )
+
+    def _rebuild_morphology(self):
+        if self.morphology_index is not None:
+            self.morphology_index.rebuild(self.entities)
 
     @staticmethod
     def reference_target(entity: EntityRecord) -> str:

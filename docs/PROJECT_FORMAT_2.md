@@ -62,6 +62,15 @@ organization, concept, event, plot, and user-defined types. Legacy Character,
 World, and Plot records are exposed through a read-only generic adapter; they
 are not silently migrated or duplicated in Format 1 storage.
 
+### Morphology metadata
+
+An entity may carry an author-reviewed morphology profile inside its generic
+structured metadata. The profile names a provider and decomposes a compound
+name into components with grammatical attributes and per-form overrides.
+See [Morphology providers](MORPHOLOGY_PROVIDERS.md) for the schema and
+authority rules. Provider output and lookup indexes are derived state and are
+never required to recover what the author configured.
+
 ## Markdown and DSL
 
 Ordinary Markdown is valid Format 2 source. The first core DSL primitive is an

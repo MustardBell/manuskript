@@ -196,6 +196,14 @@ def test_features_negotiate_structured_compatibility_not_version_checks():
     assert not project_files.old_client_save_safe
 
 
+def test_v2_negotiates_native_entity_morphology_without_format_checks():
+    support = compatibility_strategy(2).support("morphology.entities")
+
+    assert support.persistence_level is PersistenceLevel.NATIVE
+    assert support.readable
+    assert support.writable
+
+
 def test_persistence_decorator_cannot_shadow_authoritative_base_fields():
     base = V1PersistenceStrategy()
     existing = base.support("outline.write")

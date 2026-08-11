@@ -1,12 +1,21 @@
 import pytest
 
-from manuskript.domain.canonical_project import EntityRecord, OutlineDocument
+from manuskript.domain.canonical_project import (
+    EntityRecord,
+    OutlineDocument,
+)
 from manuskript.domain.entity_catalog import (
     EntityCatalog,
     EntitySchema,
     EntitySchemaRegistry,
     first_party_story_entity_schemas,
 )
+from manuskript.domain.morphology import (
+    MorphologyComponent,
+    MorphologyIndex,
+    MorphologyProfile,
+)
+from manuskript.linguistics import first_party_morphology_providers
 
 
 def _entity(identifier, title, path, aliases=(), entity_type="character"):
@@ -116,3 +125,31 @@ def test_entity_update_keeps_identity_and_address_while_editing_semantics():
     assert updated.title == "Mara Vane"
     assert updated.aliases == ("Mara", "Ms Vane")
     assert updated.document.text == "Updated notes."
+
+
+def test_generated_morphology_participates_in_exact_matching_and_scanning():
+    index = MorphologyIndex(first_party_morphology_providers())
+    catalog = EntityCatalog(morphology_index=index)
+    profile = MorphologyProfile(
+        "uk.personal-names",
+        (MorphologyComponent(
+            "given-name", "Олена", (("gender", "feminine"),)
+        ),),
+    )
+    entity = EntityRecord(
+        OutlineDocument(
+            "olena", "Олена", "entity", "",
+            source_path="Characters/Олена.md",
+        ),
+        "character",
+        metadata=profile.apply_to(()),
+    )
+    catalog.replace((entity,))
+
+    assert tuple(item.id for item in catalog.exact_matches("Олени")) == (
+        "olena",
+    )
+    assert catalog.reference_choices("Олені")[0].exact_match
+    assert catalog.scan("Я зустрів Олену біля вокзалу.")[0].entity_ids == (
+        "olena",
+    )

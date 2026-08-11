@@ -10,21 +10,35 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QVBoxLayout,
 )
+
+from manuskript.domain.morphology import MorphologyProfile
+from manuskript.ui.morphology_editor import MorphologyParadigmDialog
 
 
 class EntityEditorDialog(QDialog):
     """Edit generic entity fields without knowing any story semantics."""
 
-    def __init__(self, entity, schemas, save_entity, parent=None):
+    def __init__(
+        self,
+        entity,
+        schemas,
+        save_entity,
+        parent=None,
+        morphology_providers=None,
+    ):
         super().__init__(parent)
         self.entity = entity
         self._saveEntity = save_entity
+        self._morphologyProviders = morphology_providers
+        self._morphologyProfile = MorphologyProfile.from_entity(entity)
+        self._morphologyChanged = False
         self.setObjectName("entityEditorDialog")
         self.setWindowTitle(self.tr("Entity — {}").format(entity.title))
         self.setWindowModality(Qt.WindowModal)
-        self.setMinimumSize(560, 480)
+        self.setMinimumSize(560, 540)
 
         self.titleEdit = QLineEdit(entity.title, self)
         self.titleEdit.setObjectName("entityTitleEdit")
@@ -51,12 +65,45 @@ class EntityEditorDialog(QDialog):
         self.pathLabel.setObjectName("entityPathLabel")
         self.pathLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.pathLabel.setWordWrap(True)
+        self.morphologyButton = QPushButton(
+            self.tr("Edit name &forms…"), self
+        )
+        self.morphologyButton.setObjectName("editMorphologyButton")
+        self.morphologyButton.setAccessibleDescription(self.tr(
+            "Review deterministic grammatical forms and author overrides."
+        ))
+        provider_available = (
+            self._morphologyProfile is None
+            or (
+                morphology_providers is not None
+                and morphology_providers.get(
+                    self._morphologyProfile.provider_id
+                ) is not None
+            )
+        )
+        self.morphologyButton.setEnabled(
+            morphology_providers is not None
+            and bool(morphology_providers.providers)
+            and provider_available
+        )
+        if not provider_available:
+            self.morphologyButton.setToolTip(self.tr(
+                "Install the configured morphology provider before editing "
+                "this profile."
+            ))
+        self.morphologyButton.clicked.connect(self._editMorphology)
+        self.morphologySummary = QLabel(self)
+        self.morphologySummary.setObjectName("morphologySummary")
+        self.morphologySummary.setWordWrap(True)
+        self._updateMorphologySummary()
 
         form = QFormLayout()
         form.addRow(self.tr("&Title:"), self.titleEdit)
         form.addRow(self.tr("T&ype:"), self.typeCombo)
         form.addRow(self.tr("&Aliases:"), self.aliasesEdit)
         form.addRow(self.tr("File:"), self.pathLabel)
+        form.addRow(self.tr("Name forms:"), self.morphologyButton)
+        form.addRow("", self.morphologySummary)
 
         body_label = QLabel(self.tr("&Markdown document:"), self)
         self.bodyEdit = QPlainTextEdit(self)
@@ -92,14 +139,18 @@ class EntityEditorDialog(QDialog):
             line.strip() for line in self.aliasesEdit.toPlainText().splitlines()
             if line.strip()
         )
-        try:
-            self._saveEntity(
-                self.entity.id,
-                title=self.titleEdit.text(),
-                entity_type=str(entity_type),
-                aliases=aliases,
-                text=self.bodyEdit.toPlainText(),
+        changes = {
+            "title": self.titleEdit.text(),
+            "entity_type": str(entity_type),
+            "aliases": aliases,
+            "text": self.bodyEdit.toPlainText(),
+        }
+        if self._morphologyChanged and self._morphologyProfile is not None:
+            changes["metadata"] = self._morphologyProfile.apply_to(
+                self.entity.metadata
             )
+        try:
+            self._saveEntity(self.entity.id, **changes)
         except (KeyError, PermissionError, ValueError) as error:
             QMessageBox.warning(
                 self,
@@ -109,14 +160,46 @@ class EntityEditorDialog(QDialog):
             return
         self.accept()
 
+    def _editMorphology(self):
+        dialog = MorphologyParadigmDialog(
+            self._morphologyProfile,
+            self._morphologyProviders,
+            self.titleEdit.text() or self.entity.title,
+            self,
+        )
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        self._morphologyProfile = dialog.profile
+        self._morphologyChanged = True
+        self._updateMorphologySummary()
+
+    def _updateMorphologySummary(self):
+        profile = self._morphologyProfile
+        if profile is None:
+            text = self.tr("No grammatical forms configured.")
+        else:
+            provider = (
+                self._morphologyProviders.get(profile.provider_id)
+                if self._morphologyProviders is not None
+                else None
+            )
+            label = provider.label if provider is not None else profile.provider_id
+            text = self.tr("{}; {} name component(s).").format(
+                label, len(profile.components)
+            )
+        self.morphologySummary.setText(text)
+
 
 class EntityEditorController:
     """Own non-modal child dialogs for one workspace window."""
 
-    def __init__(self, parent, catalog, update_entity):
+    def __init__(
+        self, parent, catalog, update_entity, morphology_providers=None
+    ):
         self.parent = parent
         self.catalog = catalog
         self.updateEntity = update_entity
+        self.morphologyProviders = morphology_providers
         self._dialogs = {}
 
     def open(self, entity_id):
@@ -134,6 +217,7 @@ class EntityEditorController:
             self.catalog.schemas.schemas,
             self.updateEntity,
             self.parent,
+            morphology_providers=self.morphologyProviders,
         )
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         self._dialogs[entity_id] = dialog

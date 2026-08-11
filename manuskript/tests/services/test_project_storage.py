@@ -11,6 +11,10 @@ from manuskript.domain.canonical_project import (
     OutlineDocument,
     StructuredMetadataField,
 )
+from manuskript.domain.morphology import (
+    MorphologyComponent,
+    MorphologyProfile,
+)
 from manuskript.load_save.format_detection import DetectedProjectFormat
 from manuskript.load_save.project_codec import EncodedProject
 from manuskript.load_save.project_files import ProjectFileReadResult
@@ -286,6 +290,23 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert storage.reference_index.resolve("M. Vane")[1].id == (
         created_entity.id
     )
+    morphology = MorphologyProfile(
+        "uk.personal-names",
+        (MorphologyComponent(
+            "given-name", "Олена", (("gender", "feminine"),)
+        ),),
+    )
+    inflected_entity = storage.create_entity("character", "Олена")
+    inflected_entity = storage.update_entity(
+        inflected_entity.id,
+        metadata=morphology.apply_to(inflected_entity.metadata),
+    )
+    assert storage.entity_catalog.exact_matches("Олени")[0].id == (
+        inflected_entity.id
+    )
+    assert storage.reference_index.complete("Олені")[0].document_id == (
+        inflected_entity.id
+    )
     saved = storage.save(context)
     persisted = access.read(str(project_file), zipped=False).files
     reopened = codec.decode(persisted)
@@ -309,6 +330,11 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert reopened.entities[0].title == "Mara Vane"
     assert reopened.entities[0].aliases == ("M. Vane",)
     assert reopened.entities[0].document.text == "Entity notes.\n"
+    reopened_inflected = next(
+        entity for entity in reopened.entities
+        if entity.id == inflected_entity.id
+    )
+    assert MorphologyProfile.from_entity(reopened_inflected) == morphology
 
     copy_file = tmp_path / "native-copy.msk"
     copy_context = ProjectPersistenceContext(

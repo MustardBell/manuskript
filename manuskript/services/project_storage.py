@@ -26,11 +26,13 @@ from manuskript.domain.entity_catalog import (
     EntityCatalog,
     first_party_story_entity_schemas,
 )
+from manuskript.domain.morphology import MorphologyIndex
 from manuskript.domain.project_features import compatibility_strategy
 from manuskript.domain.reference_index import (
     ReferenceDocument,
     ReferenceIndex,
 )
+from manuskript.linguistics import first_party_morphology_providers
 
 
 LOGGER = logging.getLogger(__name__)
@@ -51,6 +53,7 @@ class ProjectStorage:
         application_model_adapter=None,
         entity_catalog=None,
         legacy_entity_adapter=None,
+        morphology_providers=None,
     ):
         self._file_cache = (
             file_cache if file_cache is not None else {}
@@ -72,8 +75,15 @@ class ProjectStorage:
         self._application_model_adapter = (
             application_model_adapter or LegacyApplicationModelAdapter()
         )
+        self._morphology_providers = (
+            morphology_providers or first_party_morphology_providers()
+        )
+        self._morphology_index = MorphologyIndex(
+            self._morphology_providers
+        )
         self._entity_catalog = entity_catalog or EntityCatalog(
-            first_party_story_entity_schemas()
+            first_party_story_entity_schemas(),
+            morphology_index=self._morphology_index,
         )
         self._legacy_entity_adapter = (
             legacy_entity_adapter or LegacyEntityAdapter()
@@ -101,6 +111,10 @@ class ProjectStorage:
     def entity_catalog(self):
         return self._entity_catalog
 
+    @property
+    def morphology_providers(self):
+        return self._morphology_providers
+
     def create_entity(self, entity_type, title, aliases=()):
         entity = self._entity_catalog.create(entity_type, title, aliases)
         self._reference_index.update(ReferenceDocument(
@@ -108,7 +122,7 @@ class ProjectStorage:
             path=entity.document.source_path,
             title=entity.title,
             text=entity.document.text,
-            aliases=entity.aliases,
+            aliases=self._entity_reference_surfaces(entity),
         ))
         return entity
 
@@ -119,7 +133,7 @@ class ProjectStorage:
             path=entity.document.source_path,
             title=entity.title,
             text=entity.document.text,
-            aliases=entity.aliases,
+            aliases=self._entity_reference_surfaces(entity),
         ))
         return entity
 
@@ -151,7 +165,7 @@ class ProjectStorage:
                 path=entity.document.source_path,
                 title=entity.title,
                 text=entity.document.text,
-                aliases=entity.aliases,
+                aliases=self._entity_reference_surfaces(entity),
             )
             for entity in self._entity_catalog.native_entities
         )
@@ -378,7 +392,8 @@ class ProjectStorage:
             writable=project.format_version == 2,
         )
         entity_aliases = {
-            entity.id: entity.aliases for entity in project.entities
+            entity.id: self._entity_reference_surfaces(entity)
+            for entity in project.entities
         }
         self._reference_index.rebuild(tuple(
             ReferenceDocument(
@@ -390,6 +405,12 @@ class ProjectStorage:
             )
             for document in project.documents()
         ))
+
+    def _entity_reference_surfaces(self, entity):
+        return tuple(
+            value for value in self._entity_catalog.surface_forms(entity.id)
+            if value.casefold() != entity.title.casefold()
+        )
 
     @staticmethod
     def _failure_message(operation, context, error):
