@@ -82,6 +82,11 @@ class PanelHost:
         self.visibility = PanelVisibility(views.create_action)
         # Where a panel that could not be built is reported.
         self.failures = views.failures
+        #: Told about every panel this host mounts, whoever asked for it.
+        #: The window offers a toggle for each; without this it could only
+        #: offer them for the panels it opened itself, so a plugin's panel
+        #: had no way into the toolbar every other panel is listed in.
+        self.on_open = None
         directory.add(self)
 
     def instance(self, panel_id):
@@ -179,6 +184,8 @@ class PanelHost:
         self._instances[descriptor.id] = instance
         if container is not None:
             container.show()
+        if callable(self.on_open):
+            self.on_open(instance)
         return instance
 
     def _watch_container(self, instance):

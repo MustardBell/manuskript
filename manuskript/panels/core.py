@@ -10,6 +10,7 @@ from manuskript.panels.descriptor import (
     DOCK,
     PER_WINDOW,
     PROJECT,
+    NavigatorEntry,
     PanelDescriptor,
     PanelState,
 )
@@ -94,6 +95,9 @@ def core_panel_descriptors(redaction_group, factories=None):
             multiplicity=PER_WINDOW,
             default_visible=False,
             widget_factory=factories.get(PROJECT_ENTITIES),
+            navigator=NavigatorEntry(
+                label="Summary", icon="application-text-template", order=200,
+            ),
         ),
         PanelDescriptor(
             id=CHARACTER_ENTITIES,
@@ -103,6 +107,9 @@ def core_panel_descriptors(redaction_group, factories=None):
             multiplicity=PER_WINDOW,
             default_visible=True,
             widget_factory=factories.get(CHARACTER_ENTITIES),
+            navigator=NavigatorEntry(
+                label="Characters", icon="characters", order=300,
+            ),
         ),
         PanelDescriptor(
             id=PLOT_ENTITIES,
@@ -112,6 +119,9 @@ def core_panel_descriptors(redaction_group, factories=None):
             multiplicity=PER_WINDOW,
             default_visible=False,
             widget_factory=factories.get(PLOT_ENTITIES),
+            navigator=NavigatorEntry(
+                label="Plots", icon="plots", order=400,
+            ),
         ),
         PanelDescriptor(
             id=WORLD_ENTITIES,
@@ -121,6 +131,9 @@ def core_panel_descriptors(redaction_group, factories=None):
             multiplicity=PER_WINDOW,
             default_visible=False,
             widget_factory=factories.get(WORLD_ENTITIES),
+            navigator=NavigatorEntry(
+                label="World", icon="world", order=500,
+            ),
         ),
     )
 

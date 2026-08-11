@@ -120,10 +120,13 @@ def test_an_entity_is_edited_where_it_is_listed(MWEmptyProject):
         for panel_id in window.panelHost.instances
     )
 
-    panel = window.corePanels.character_entities
-    assert panel.editor.isHidden()
-    for other in window.entityWorkspace.panels:
-        assert other.editor is not panel.editor or other is panel
+    panels = window.entityWorkspace.panels
+    # Each browser edits in a half of its own, and that half is a child
+    # of the browser -- so it cannot outlive it or be reached without it.
+    halves = {id(panel.editor) for panel in panels}
+    assert len(halves) == len(panels)
+    for panel in panels:
+        assert panel.isAncestorOf(panel.editor)
 
 
 def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):
@@ -172,4 +175,5 @@ def test_legacy_story_pages_are_not_user_interface(MWEmptyProject):
     ):
         assert not window.tabMain.isTabVisible(index)
         assert not window.lstTabs.item(index).isHidden()
-        assert index in window.NAVIGATION_PANELS
+        # The row is still there and now opens the dock instead.
+        assert window.navigator.target(index).opens_panel

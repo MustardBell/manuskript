@@ -11,6 +11,26 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple
 
 
+@dataclass(frozen=True)
+class NavigatorEntry:
+    """A panel's row in the window's navigator.
+
+    The navigator lists the places a person goes -- the manuscript, the
+    cast, the world -- rather than every panel that exists. A panel says
+    it belongs there and what to draw; the window decides nothing about
+    which panels it has heard of, so a plugin's panel can take a row on
+    the same terms as a core one.
+
+    ``icon`` is a theme icon name, resolved where icons are resolved.
+    ``order`` sorts the rows; core leaves gaps so anything else can land
+    between them without renumbering.
+    """
+
+    label: str
+    icon: str = ""
+    order: int = 1000
+
+
 #: The panel sits inside a named splitter, at a fixed position.
 SPLITTER_SLOT = "splitter-slot"
 
@@ -127,6 +147,11 @@ class PanelDescriptor:
     #: What this panel remembers between sessions, beyond whether it was
     #: showing. Empty for the panels whose whole state is their visibility.
     state: Tuple[PanelState, ...] = ()
+    #: A row in the window's navigator, for a panel that is one of the
+    #: places a person goes rather than a tool they turn on. Declared
+    #: here so anything that can register a panel can offer one, rather
+    #: than the window holding a list of the rows it happens to know.
+    navigator: Optional["NavigatorEntry"] = None
 
     def __post_init__(self):
         if not self.id or "." not in self.id:

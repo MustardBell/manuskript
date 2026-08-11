@@ -88,9 +88,22 @@ def mainWindowSS():
         border-radius: 3px;
         background: {backgroundHover};
     }}
+
+    /* Panels are docks now, and several of them sit side by side down
+       one edge. Without an edge of their own they read as one long
+       column of controls rather than as separate panels, and the title
+       is the only clue where one ends. */
+    QDockWidget{{
+        font-weight: bold;
+    }}
+    QDockWidget > QWidget{{
+        border: 1px solid {panelBorder};
+        border-top: none;
+    }}
     """.format(
         backgroundHover=highlightLight,
-        borderHover=mid
+        borderHover=mid,
+        panelBorder=mid,
     )
 
 def styleMainWindow(mw):

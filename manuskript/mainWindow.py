@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QListWidgetItem,
     QMainWindow,
+    QTabWidget,
     QWidget,
 )
 
@@ -123,6 +124,10 @@ from manuskript.ui.view_configuration import (
 from manuskript.services.workspace_state import (
     PRIMARY as WORKSPACE_PRIMARY,
 )
+from manuskript.ui.workspace_navigator import (
+    NavigatorTarget,
+    WorkspaceNavigator,
+)
 from manuskript.ui.workspace_state_controller import (
     WorkspaceStateController,
     WorkspaceStateViews,
@@ -143,16 +148,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     TabRedac = 6
     TabDebug = 7
 
-    #: Navigation rows that open a dock rather than switch a page. The
-    #: story surfaces became entity docks, but the list on the left is
-    #: still where one looks for them, so the rows stay and change what
-    #: they do.
-    NAVIGATION_PANELS = {
-        TabSummary: core_panels.PROJECT_ENTITIES,
-        TabPersos: core_panels.CHARACTER_ENTITIES,
-        TabPlots: core_panels.PLOT_ENTITIES,
-        TabWorld: core_panels.WORLD_ENTITIES,
-    }
+    #: The navigator rows this window states itself: the pages it still
+    #: keeps. Everything else in the list is contributed by a panel that
+    #: declared a navigator entry, core or plugin alike. Orders leave
+    #: gaps so a new row can land between these without renumbering.
+    NAVIGATOR_PAGES = (
+        NavigatorTarget("General", "stock_view-details", 100, page=TabInfos),
+        NavigatorTarget("Outline", "outline", 600, page=TabOutline),
+        NavigatorTarget("Editor", "gtk-edit", 700, page=TabRedac),
+        NavigatorTarget(
+            "Debug", "applications-debugging", 800, page=TabDebug,
+        ),
+    )
 
     SHOW_DEBUG_TAB = False
 
@@ -191,6 +198,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             | QMainWindow.AllowNestedDocks
             | QMainWindow.AllowTabbedDocks
         )
+        # Tabs above what they switch, not below it. Qt puts a dock area's
+        # tab bar at the bottom by default, which reads as belonging to
+        # the panel underneath rather than choosing between the panels
+        # above -- and every other tab bar in this window is on top.
+        self.setTabPosition(Qt.AllDockWidgetAreas, QTabWidget.North)
         self.actUpgradeProjectFormat = QAction(
             self.tr("Upgrade Project Format…"), self
         )
@@ -582,18 +594,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.WORLD_ENTITIES,
         )
 
-    def navigateTo(self, row):
-        """Open what a navigation row stands for.
+    def _offerPanelToggle(self, instance):
+        """Give a newly mounted panel its button in the toolbar."""
+        self.toolbar.addPanelToggle(
+            instance.action,
+            instance.widget,
+            instance.descriptor.group,
+            panel_id=instance.descriptor.id,
+        )
 
-        Most rows still stand for a page. The story rows stand for a
-        dock, and revealing it rather than switching a page is what
-        keeps them where the person has always looked for them.
-        """
-        panel_id = self.NAVIGATION_PANELS.get(row)
-        if panel_id is None:
-            self.tabMain.setCurrentIndex(row)
+    def navigateTo(self, row):
+        """Open what a navigator row stands for: a page, or a panel."""
+        target = self.navigator.target(row)
+        if target is None:
             return False
-        return self.panelHost.reveal(panel_id)
+        if target.opens_panel:
+            return self.panelHost.reveal(target.panel_id)
+        self.tabMain.setCurrentIndex(target.page)
+        return False
+
+    def _selectNavigatorPage(self, page):
+        """Follow a page change back to the row that stands for it."""
+        row = self.navigator.row_for_page(page)
+        if row is not None:
+            self.lstTabs.setCurrentRow(row)
 
     def _placeEntityDocks(self, panel_ids=None):
         """Give newly introduced entity docks a place of their own.
@@ -671,6 +695,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.TabRedac,
             factories=core_panel_factories(),
         )
+        # Every panel this window mounts is offered in the toolbar, not
+        # only the ones listed here: a plugin's panel is opened by the
+        # plugin controller and would otherwise have no way into the
+        # list every other panel appears in.
+        self.panelHost.on_open = self._offerPanelToggle
         for panel_id in (
             core_panels.PROJECT_TREE,
             core_panels.METADATA,
@@ -680,18 +709,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.PLOT_ENTITIES,
             core_panels.WORLD_ENTITIES,
         ):
-            instance = self.panelHost.open(
-                panel_id,
-                PanelContext(translate=self.tr),
-            )
-            if instance is None:
-                continue
-            self.toolbar.addPanelToggle(
-                instance.action,
-                instance.widget,
-                instance.descriptor.group,
-                panel_id=panel_id,
-            )
+            self.panelHost.open(panel_id, PanelContext(translate=self.tr))
 
         self.corePanels = CorePanelViewSet.from_host(self.panelHost)
 
@@ -713,38 +731,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Hides navigation dock title bar
         self.dckNavigation.setTitleBarWidget(QWidget(None))
 
-        # Custom "tab" bar on the left
+        # The navigator on the left. Rows come from the pages this window
+        # still keeps and from every panel that asked for one, so what is
+        # listed is no longer whatever the main tab widget happens to
+        # hold -- which is what took Characters out of it when characters
+        # became a dock.
+        self.navigator = WorkspaceNavigator.compose(
+            pages=self.NAVIGATOR_PAGES,
+            descriptors=self.panelRegistry.descriptors(),
+        )
         self.lstTabs.setIconSize(QSize(48, 48))
-        for i in range(self.tabMain.count()):
-
-            icons = [QIcon.fromTheme("stock_view-details"), #info
-                     QIcon.fromTheme("application-text-template"), #applications-publishing
-                     F.themeIcon("characters"),
-                     F.themeIcon("plots"),
-                     F.themeIcon("world"),
-                     F.themeIcon("outline"),
-                     QIcon.fromTheme("gtk-edit"),
-                     QIcon.fromTheme("applications-debugging")
-            ]
-            self.tabMain.setTabIcon(i, icons[i])
-
-            item = QListWidgetItem(self.tabMain.tabIcon(i),
-                                   self.tabMain.tabText(i))
+        for target in self.navigator.targets:
+            label = self.tr(target.label)
+            item = QListWidgetItem(F.themeIcon(target.icon), label)
             item.setSizeHint(QSize(item.sizeHint().width(), 64))
-            item.setToolTip(self.tabMain.tabText(i))
+            item.setToolTip(label)
             item.setTextAlignment(Qt.AlignCenter)
             self.lstTabs.addItem(item)
+            if target.page is not None:
+                self.tabMain.setTabIcon(target.page, item.icon())
         self.tabMain.tabBar().hide()
         self.lstTabs.currentRowChanged.connect(self.navigateTo)
-        self.lstTabs.item(self.TabDebug).setHidden(not self.SHOW_DEBUG_TAB)
+        debug_row = self.navigator.row_for_page(self.TabDebug)
+        if debug_row is not None:
+            self.lstTabs.item(debug_row).setHidden(not self.SHOW_DEBUG_TAB)
         self.tabMain.setTabEnabled(self.TabDebug, self.SHOW_DEBUG_TAB)
-        # Summary, Characters, Plots and World are entity docks now. Their
-        # rows stay where they have always been -- this list is where one
-        # looks for them -- and open the dock instead of a page whose
-        # widgets no longer answer for the story.
-        for legacy_tab in self.NAVIGATION_PANELS:
+        # The pages those story rows used to switch to are unreachable:
+        # their widgets no longer answer for the story.
+        for legacy_tab in (
+            self.TabSummary, self.TabPersos, self.TabPlots, self.TabWorld,
+        ):
             self.tabMain.setTabVisible(legacy_tab, False)
-        self.tabMain.currentChanged.connect(self.lstTabs.setCurrentRow)
+        self.tabMain.currentChanged.connect(self._selectNavigatorPage)
 
         # Splitters
         self.splitterPersos.setStretchFactor(0, 25)
