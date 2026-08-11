@@ -136,7 +136,7 @@ def test_importing_test_support_does_not_compose_the_application_window():
     program = (
         "import manuskript.tests\n"
         "from PyQt5.QtWidgets import QApplication\n"
-        "assert QApplication.instance() is not None\n"
+        "assert QApplication.instance() is manuskript.tests.app\n"
         "assert QApplication.topLevelWidgets() == []\n"
     )
 

@@ -6,11 +6,13 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
-# Widgets constructed by focused UI tests still need an application. Keep
-# the historical throwaway-instance workaround, but defer the expensive main
-# window and project composition until a workspace fixture is requested.
+# Widgets constructed by focused UI tests still need an application. Own
+# exactly one for the interpreter lifetime, as Qt requires, while deferring
+# the expensive main window and project composition until a workspace fixture
+# is requested. The old CI workaround constructed and immediately destroyed
+# an anonymous QApplication before this one; modern Qt retains process-global
+# GUI state across that destruction, making every later widget undefined.
 QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
-QApplication([])
 app = QApplication([])
 
 _application = None
