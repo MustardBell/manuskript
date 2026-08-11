@@ -88,10 +88,18 @@ class DockMount:
         self.views = views
 
     def prepare(self, descriptor):
-        """A dock, which is both the widget's parent and its container."""
+        """A dock, which is both the widget's parent and its container.
+
+        Its close button puts the panel away; it does not destroy it.
+        Delete-on-close here was inherited from the plugin host this
+        replaced, and it meant the X on a dock took the panel out of the
+        window for good -- the toggle that should bring it back had
+        nothing left to show, and anything still holding the panel was
+        left holding a deleted widget.
+        """
         dock = self.views.create_dock(descriptor.title)
         dock.setObjectName(dock_name(descriptor))
-        dock.setAttribute(Qt.WA_DeleteOnClose, True)
+        dock.setAttribute(Qt.WA_DeleteOnClose, False)
         return dock, dock
 
     def install(self, descriptor, widget, container):

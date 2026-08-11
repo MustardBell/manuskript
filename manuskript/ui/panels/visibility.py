@@ -131,17 +131,22 @@ class PanelVisibility:
             instance.action.setChecked(not target.isHidden())
 
     def _container_changed(self, instance_reference, visible):
-        """Follow a floating dock the person closed with its own button.
+        """Follow a dock the person closed with its own button.
 
-        Only while floating, and that restriction is correctness rather
-        than caution: a docked panel goes invisible whenever a neighbour
-        is tabbed in front of it, and it has not been put away.
+        Qt reports a dock invisible for two different reasons, and only
+        one of them means it was put away: a neighbour tabbed in front
+        of it is not. A dock that was closed is hidden; one that is
+        merely behind is not hidden, so that is what tells them apart --
+        which the old floating-only rule could not, and a docked panel
+        closed with its X left every button still claiming it was there.
         """
         instance = instance_reference()
         if instance is None or instance.action is None:
             return
         container = instance.container
-        if container is None or not container.isFloating():
+        if container is None:
+            return
+        if not visible and not container.isHidden():
             return
         if instance.action.isChecked() != visible:
             instance.action.setChecked(visible)

@@ -152,7 +152,9 @@ def test_a_dock_mount_makes_the_container_the_widget_is_built_into():
 
     assert parent is container
     assert container.objectName() == "panel.core.notes"
-    assert container.testAttribute(Qt.WA_DeleteOnClose)
+    # The X puts the panel away; a panel the window still owns must not
+    # be destroyed by it, or its toggle has nothing to bring back.
+    assert not container.testAttribute(Qt.WA_DeleteOnClose)
     assert container.widget() is widget
     assert window.dockWidgetArea(container) == Qt.RightDockWidgetArea
     window.close()

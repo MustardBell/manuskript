@@ -70,7 +70,7 @@ def test_a_dock_panel_keeps_its_declared_object_name():
 
     dock = instance.container
     assert dock.objectName() == "pluginProjectPanel.example.notes.panel"
-    assert dock.testAttribute(Qt.WA_DeleteOnClose)
+    assert not dock.testAttribute(Qt.WA_DeleteOnClose)
     assert window.dockWidgetArea(dock) == Qt.RightDockWidgetArea
     assert instance.widget.text() == "panel body"
     assert instance.host is host
@@ -131,6 +131,31 @@ def test_putting_away_a_panel_shown_behind_its_toggle_still_hides_it():
     host.set_visible("core.notes", False)
 
     assert instance.container.isHidden()
+    window.close()
+
+
+def test_closing_a_docked_panel_with_its_x_unchecks_the_toggle():
+    """Qt calls a dock invisible both when it is closed and when a
+    neighbour is tabbed in front of it. Only the first means the person
+    put it away, and the old rule -- follow it only while floating --
+    could not tell them apart, so a docked panel closed with its X left
+    every button still claiming it was showing.
+    """
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        default_visible=True,
+        widget_factory=label_factory,
+    ))
+    instance = host.open("core.notes", PanelContext())
+    # visibilityChanged is not emitted for a window that never appeared.
+    window.show()
+    assert instance.action.isChecked()
+
+    instance.container.close()
+
+    assert instance.container.isHidden()
+    assert not instance.action.isChecked()
     window.close()
 
 

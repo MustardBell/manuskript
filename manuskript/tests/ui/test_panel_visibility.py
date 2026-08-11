@@ -119,22 +119,30 @@ def test_unbinding_twice_is_not_an_error():
     window.close()
 
 
-def test_closing_a_floating_dock_unchecks_its_toggle():
+def test_closing_a_dock_with_its_own_button_unchecks_its_toggle():
     """Its own close button is the person putting the panel away, and
     every button that mirrors the toggle has to agree.
+
+    Docked, not floating: this used to be believed only while the dock
+    floated, so closing a docked panel with its X left every button
+    still claiming it was there.
     """
     window = QMainWindow()
     dock = QDockWidget("Notes", window)
     dock.setWidget(QLabel("body", dock))
-    dock.setFloating(True)
+    window.addDockWidget(0x2, dock)
     instance = PanelInstance(
         descriptor=a_panel(), widget=dock.widget(), container=dock,
     )
     visibility = visibility_for(window)
     action = visibility.bind(instance)
+    # visibilityChanged is not emitted for a window that never appeared.
+    window.show()
+    assert action.isChecked() is True
 
-    dock.visibilityChanged.emit(False)
+    dock.close()
 
+    assert dock.isHidden()
     assert action.isChecked() is False
     window.close()
 
@@ -142,8 +150,9 @@ def test_closing_a_floating_dock_unchecks_its_toggle():
 def test_a_panel_tabbed_behind_a_neighbour_is_not_put_away():
     """Qt hides a docked widget whenever another tab in the same area is
     selected. Taking that for "the person closed it" would close a panel
-    merely tabbed behind its neighbour -- which is why the signal is only
-    believed while the dock floats.
+    merely tabbed behind its neighbour -- so what is believed is not the
+    signal but the dock: one that was closed is hidden, one that is
+    merely behind is not.
     """
     window = QMainWindow()
     dock = QDockWidget("Notes", window)
@@ -158,6 +167,7 @@ def test_a_panel_tabbed_behind_a_neighbour_is_not_put_away():
 
     dock.visibilityChanged.emit(False)
 
+    assert not dock.isHidden()
     assert action.isChecked() is True
     window.close()
 

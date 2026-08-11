@@ -77,6 +77,36 @@ def test_format_one_story_models_appear_in_entity_docks(MWSampleProject):
     assert not window.corePanels.character_entities.newButton.isEnabled()
 
 
+def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):
+    """Reported: creating a character raised RuntimeError after a dock
+    was closed with its X. Delete-on-close destroyed the panel, and the
+    next catalogue change wrote into its deleted tree.
+    """
+    from PyQt5 import sip
+    from PyQt5.QtCore import QCoreApplication, QEvent
+    from PyQt5.QtWidgets import qApp
+
+    from manuskript.panels.core import CHARACTER_ENTITIES
+
+    window = MWEmptyProject
+    instance = window.panelHost.instance(CHARACTER_ENTITIES)
+    panel = instance.widget
+
+    instance.container.close()
+    qApp.processEvents()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    qApp.processEvents()
+
+    assert not sip.isdeleted(panel)
+    assert window.panelHost.instance(CHARACTER_ENTITIES) is not None
+
+    # What the crash came through: a catalogue change reaching the panel.
+    window.entityWorkspace.refresh()
+
+    window.panelHost.set_visible(CHARACTER_ENTITIES, True)
+    assert not instance.container.isHidden()
+
+
 def test_legacy_story_tabs_are_not_user_interface(MWEmptyProject):
     window = MWEmptyProject
     for index in (
