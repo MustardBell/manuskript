@@ -10,7 +10,10 @@ def test_show_reveals_search_and_selects_the_existing_query():
     controller.show()
 
     views.dock.show.assert_called_once_with()
+    views.dock.raise_.assert_called_once_with()
     views.dock.activateWindow.assert_called_once_with()
+    views.dock.setFocusProxy.assert_called_once_with(views.query)
+    views.dock.setFocus.assert_called_once_with()
     views.query.setFocus.assert_called_once_with()
     views.query.selectAll.assert_called_once_with()
 

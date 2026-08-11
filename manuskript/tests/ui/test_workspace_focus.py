@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from PyQt5 import sip
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QWidget
 
 from manuskript.ui.views.MDEditView import MDEditView
@@ -140,6 +141,23 @@ def test_workspace_focus_does_not_retain_a_listener_owner():
     controller.focus_changed(None, _Widget())
 
     assert listener_ref() is None
+    assert controller._listeners == []
+
+
+def test_workspace_focus_drops_a_receiver_whose_qobject_was_deleted():
+    class NativeListener(QObject):
+        notified = pyqtSignal()
+
+        def focus_changed(self, _old, _new):
+            self.notified.emit()
+
+    controller = WorkspaceFocusController(WorkspaceFocusViews(()))
+    listener = NativeListener()
+    controller.subscribe(listener.focus_changed)
+    sip.delete(listener)
+
+    controller.focus_changed(None, _Widget())
+
     assert controller._listeners == []
 
 

@@ -115,12 +115,29 @@ class WorkspaceFocusController:
         callbacks = []
         for listener_ref in self._listeners:
             listener = listener_ref()
-            if listener is not None:
+            if listener is not None and self._listener_is_alive(listener):
                 listeners.append(listener_ref)
                 callbacks.append(listener)
         self._listeners = listeners
         for listener in callbacks:
             listener(_old, new)
+
+    @staticmethod
+    def _listener_is_alive(listener):
+        """Whether a weak Python receiver still has a native Qt object.
+
+        A QObject wrapper can outlive the C++ object owned by its parent.
+        WeakMethod still resolves in that interval, but invoking a signal on
+        the receiver raises ``RuntimeError``. Treat native death exactly like
+        ordinary weak-reference death and prune the observer.
+        """
+        owner = getattr(listener, "__self__", None)
+        if owner is None:
+            return True
+        try:
+            return not sip.isdeleted(owner)
+        except TypeError:
+            return True
 
     @staticmethod
     def _find_markdown_editor(widget):
