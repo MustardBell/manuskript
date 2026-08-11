@@ -190,7 +190,11 @@ def test_closing_a_project_forgets_its_history(MWEmptyProject):
         model, [model.indexFromItem(item)]))
     assert window.projectRuntime.undoStack.canUndo()
 
-    window.projectLifecycleView.prepare_close()
+    # Close through the public lifecycle boundary. Calling the view adapter
+    # directly leaves the session open and causes the fixture to prepare the
+    # same widget tree for closure a second time before the next project.
+    window.projectManager.session.mark_clean()
+    assert window.projectManager.closeProject()
 
     assert not window.projectRuntime.undoStack.canUndo()
 

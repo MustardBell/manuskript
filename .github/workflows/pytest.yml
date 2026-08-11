@@ -80,9 +80,7 @@ jobs:
       if: runner.os == 'Linux'
       run: xvfb-run -s '-screen 0 640x480x24 +extension GLX' pytest -v
 
-    - name: Test with pytest (Windows and macOS, offscreen Qt)
+    - name: Test with pytest (Windows and macOS, native Qt)
       if: runner.os != 'Linux'
       run: pytest -v
       shell: bash
-      env:
-        QT_QPA_PLATFORM: offscreen
