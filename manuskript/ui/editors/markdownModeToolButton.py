@@ -16,6 +16,7 @@ class MarkdownModeToolButton(EditorOverlayToolButton):
         MarkdownPresentationMode.SOURCE: "Source",
         MarkdownPresentationMode.FORMATTED_SOURCE: "Formatted Source",
         MarkdownPresentationMode.LIVE_PREVIEW: "Live Preview",
+        MarkdownPresentationMode.CLEAN_EDITING: "Clean Editing",
         MarkdownPresentationMode.READING: "Reading",
     }
 

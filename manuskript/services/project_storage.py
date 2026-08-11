@@ -16,10 +16,15 @@ from manuskript.load_save.version_1_codec import (
     Version1ProjectCodec,
 )
 from manuskript.load_save.version_0_codec import Version0ProjectCodec
+from manuskript.load_save.version_2_codec import Version2ProjectCodec
 from manuskript.services.legacy_project_adapter import (
     LegacyApplicationModelAdapter,
 )
 from manuskript.domain.project_features import compatibility_strategy
+from manuskript.domain.reference_index import (
+    ReferenceDocument,
+    ReferenceIndex,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -36,6 +41,7 @@ class ProjectStorage:
         format_detector=None,
         version_1_codec=None,
         version_0_codec=None,
+        version_2_codec=None,
         application_model_adapter=None,
     ):
         self._file_cache = (
@@ -54,10 +60,12 @@ class ProjectStorage:
         self._format_detector = format_detector or ProjectFormatDetector()
         self._version_1_codec = version_1_codec or Version1ProjectCodec()
         self._version_0_codec = version_0_codec or Version0ProjectCodec()
+        self._version_2_codec = version_2_codec or Version2ProjectCodec()
         self._application_model_adapter = (
             application_model_adapter or LegacyApplicationModelAdapter()
         )
         self._canonical_project = None
+        self._reference_index = ReferenceIndex()
 
     @property
     def canonical_project(self):
@@ -71,6 +79,45 @@ class ProjectStorage:
             self._canonical_project.format_version
         )
 
+    @property
+    def reference_index(self):
+        return self._reference_index
+
+    def update_document_references(self, item):
+        """Incrementally re-index one live outline item after an edit."""
+
+        if self._canonical_project is None or item is None:
+            return
+        self._reference_index.update(
+            self._reference_document_from_item(item)
+        )
+
+    def rebuild_document_references(self, root_item):
+        """Re-index live outline structure after inserts, moves, or removals."""
+
+        if self._canonical_project is None or root_item is None:
+            return
+        documents = []
+
+        def collect(parent):
+            for child in parent.children():
+                documents.append(self._reference_document_from_item(child))
+                collect(child)
+
+        collect(root_item)
+        self._reference_index.rebuild(documents)
+
+    @staticmethod
+    def _reference_document_from_item(item):
+        from manuskript.enums import Outline
+        fallback_path = item.path("/") if item.parent() is not None else item.title()
+        return ReferenceDocument(
+            id=str(item.ID() or ""),
+            path=str(getattr(item, "_lastPath", "") or fallback_path),
+            title=str(item.title() or ""),
+            text=str(item.data(Outline.text) or ""),
+        )
+
     def load(self, context):
         try:
             detected = self._format_detector.detect(context.project_file)
@@ -80,11 +127,18 @@ class ProjectStorage:
                     zipped=detected.zipped,
                     file_access=self._file_access,
                 )
+            if detected.version == 2:
+                return self._load_version_2(
+                    context,
+                    zipped=detected.zipped,
+                    file_access=self._file_access,
+                )
             if detected.version == 0:
-                self._canonical_project = self._version_0_codec.decode(
+                project = self._version_0_codec.decode(
                     self._legacy_file_access.read(context.project_file),
                     zipped=True,
                 )
+                self._adopt_canonical_project(project)
             return loadSave.loadProject(
                 context,
                 cache=self._file_cache,
@@ -98,9 +152,16 @@ class ProjectStorage:
 
     def save(self, context, version=None):
         try:
-            selected_version = 1 if version is None else version
+            selected_version = (
+                self._canonical_project.format_version
+                if version is None
+                and self._canonical_project is not None
+                else 1 if version is None else version
+            )
             if selected_version == 1:
                 return self._save_version_1(context)
+            if selected_version == 2:
+                return self._save_version_2(context)
             return loadSave.saveProject(
                 context,
                 version=version,
@@ -136,6 +197,7 @@ class ProjectStorage:
     def clear_cache(self):
         self._file_cache.clear()
         self._canonical_project = None
+        self._reference_index.rebuild(())
 
     def _load_version_1(self, context, *, zipped, file_access):
         read_result = file_access.read(
@@ -147,7 +209,7 @@ class ProjectStorage:
             zipped=bool(zipped),
         )
         self._application_model_adapter.hydrate(project, context)
-        self._canonical_project = project
+        self._adopt_canonical_project(project)
         if not zipped:
             self._file_cache.clear()
             self._file_cache.update(read_result.files)
@@ -178,12 +240,87 @@ class ProjectStorage:
             files=encoded.files,
             moves=self._application_model_adapter.moves(before, project),
             cache=self._file_cache,
+            marker_version=1,
         )
         if result.succeeded:
-            self._canonical_project = self._version_1_codec.decode(
+            project = self._version_1_codec.decode(
                 dict(encoded.files), zipped=project.zipped
             )
+            self._adopt_canonical_project(project)
         return result
+
+    def _load_version_2(self, context, *, zipped, file_access):
+        read_result = file_access.read(
+            context.project_file, zipped=bool(zipped)
+        )
+        project = self._version_2_codec.decode(
+            read_result.files, zipped=bool(zipped)
+        )
+        fatal = tuple(
+            "{}: {}".format(issue.source.path, issue.message)
+            for issue in self._version_2_codec.validate(project)
+            if issue.severity == "error"
+        )
+        if fatal:
+            return ProjectLoadResult(
+                unreadable_files=read_result.unreadable_files,
+                fatal_errors=fatal,
+            )
+        self._application_model_adapter.hydrate(project, context)
+        self._adopt_canonical_project(project)
+        if not zipped:
+            self._file_cache.clear()
+            self._file_cache.update(read_result.files)
+        return ProjectLoadResult(
+            unreadable_files=read_result.unreadable_files,
+            diagnostics=tuple(
+                "{}: {}".format(issue.source.path, issue.message)
+                for issue in project.issues
+            ),
+        )
+
+    def _save_version_2(self, context):
+        before = self._canonical_project
+        if before is None or before.format_version != 2:
+            before = self._version_2_codec.decode(
+                {}, zipped=bool(context.settings.saveToZip)
+            )
+        project = self._application_model_adapter.capture(context, before)
+        issues = tuple(
+            issue for issue in self._version_2_codec.validate(project)
+            if issue.severity == "error"
+        )
+        if issues:
+            return ProjectSaveResult(failed_files=tuple(
+                issue.source.path or context.project_file for issue in issues
+            ))
+        encoded = self._version_2_codec.encode(project)
+        result = self._file_access.write(
+            context.project_file,
+            zipped=project.zipped,
+            files=encoded.files,
+            moves=self._application_model_adapter.moves(before, project),
+            cache=self._file_cache,
+            marker_version=2,
+        )
+        if result.succeeded:
+            project = self._version_2_codec.decode(
+                dict(encoded.files), zipped=project.zipped
+            )
+            self._adopt_canonical_project(project)
+        return result
+
+    def _adopt_canonical_project(self, project):
+        self._canonical_project = project
+        self._reference_index.rebuild(tuple(
+            ReferenceDocument(
+                id=document.id,
+                path=document.source_path,
+                title=document.title,
+                text=document.text,
+            )
+            for document in project.documents()
+        ))
 
     @staticmethod
     def _failure_message(operation, context, error):

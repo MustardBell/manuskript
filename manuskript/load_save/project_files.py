@@ -49,6 +49,7 @@ class Version1ProjectFiles:
         files,
         moves,
         cache,
+        marker_version=1,
     ):
         if zipped:
             return self._write_zip(project_file, files)
@@ -57,6 +58,7 @@ class Version1ProjectFiles:
             files=files,
             moves=moves,
             cache=cache,
+            marker_version=marker_version,
         )
 
     def _read_zip(self, project_file):
@@ -178,6 +180,7 @@ class Version1ProjectFiles:
         files,
         moves,
         cache,
+        marker_version,
     ):
         failures = []
         root = self._project_directory(project_file)
@@ -207,7 +210,9 @@ class Version1ProjectFiles:
         self._write_files(root, files, cache, failures)
         self._remove_stale_files(root, files, cache, failures)
         self._remove_empty_outline_directories(root)
-        self._write_project_marker(project_file, failures)
+        self._write_project_marker(
+            project_file, failures, marker_version=marker_version
+        )
 
         return ProjectSaveResult(
             failed_files=tuple(dict.fromkeys(failures))
@@ -351,7 +356,9 @@ class Version1ProjectFiles:
                     # Non-empty and concurrently removed directories are fine.
                     pass
 
-    def _write_project_marker(self, project_file, failures):
+    def _write_project_marker(
+        self, project_file, failures, marker_version=1
+    ):
         try:
             with open(
                 project_file,
@@ -359,7 +366,7 @@ class Version1ProjectFiles:
                 encoding="utf8",
                 newline="\n",
             ) as file_object:
-                file_object.write("1")
+                file_object.write(str(marker_version))
         except OSError as error:
             LOGGER.error(
                 "Cannot write project marker %s: %s",

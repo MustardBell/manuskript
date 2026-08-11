@@ -120,6 +120,29 @@ def test_text_editor_context_leaves_an_unrelated_focus_target_alone():
     window.workspaceFocus.focus_changed.assert_not_called()
 
 
+def test_text_editor_context_exposes_project_wikilink_commands():
+    window = make_window()
+    reference_index = MagicMock()
+    suggestions = (MagicMock(),)
+    reference_index.complete.return_value = suggestions
+    document = MagicMock(id="stable-document-id")
+    reference_index.resolve.return_value = (MagicMock(), document)
+    open_document = MagicMock(return_value=True)
+    context = text_editor_context_for(
+        window,
+        MagicMock(),
+        MagicMock(),
+        reference_index=reference_index,
+        open_document=open_document,
+    )
+
+    assert context.complete_wikilink("mar") == suggestions
+    assert context.open_wikilink("Characters/Mara")
+    reference_index.complete.assert_called_once_with("mar")
+    reference_index.resolve.assert_called_once_with("Characters/Mara")
+    open_document.assert_called_once_with("stable-document-id")
+
+
 def test_text_editor_click_reports_workspace_focus():
     context = MagicMock()
     context.settings = MagicMock()

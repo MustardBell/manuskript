@@ -23,6 +23,7 @@ from manuskript.ui.editors.markdownPresentation import (
 )
 from manuskript.ui import style as S
 from manuskript import functions as F
+from manuskript.domain.markdown_dsl import MarkdownDslParser
 
 
 LOGGER = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ class MarkdownHighlighter(BasicHighlighter):
         self.searchExpressionRegExp = False
         self.searchExpressionCase = False
         self.pluginExtensions = ()
+        self.dslParser = MarkdownDslParser()
 
         #f = self.document().defaultFont()
         #f.setFamily("monospace")
@@ -266,6 +268,8 @@ class MarkdownHighlighter(BasicHighlighter):
 
         for extension in self.pluginExtensions:
             extension.highlight_block(self, text)
+
+        self._highlightWikilinks(text)
 
         if self.spellCheckEnabled:
             self.spellCheck(text)
@@ -588,6 +592,9 @@ class MarkdownHighlighter(BasicHighlighter):
         ):
             return False
 
+        if mode is MarkdownPresentationMode.CLEAN_EDITING:
+            return True
+
         # Live Preview is the canonical source document. Only its character
         # formats change; no text is inserted, removed, or position-mapped.
         cursor_block = self.editor.textCursor().block()
@@ -605,6 +612,55 @@ class MarkdownHighlighter(BasicHighlighter):
         # point size and causing line-height/layout feedback loops.
         markupFormat.setFontStretch(1)
         markupFormat.setProperty(self.MarkupHiddenProperty, True)
+
+    def _highlightWikilinks(self, text):
+        """Project core wikilinks without changing the QTextDocument."""
+
+        if self._presentationMode() is MarkdownPresentationMode.SOURCE:
+            return
+        if self.currentBlockState() in (
+            MS.MarkdownStateCodeBlock,
+            MS.MarkdownStateInGithubCodeFence,
+            MS.MarkdownStateInPandocCodeFence,
+            MS.MarkdownStateCodeFenceEnd,
+        ):
+            return
+        tree = self.dslParser.parse(text)
+        active_block = self.currentBlock() == self.editor.textCursor().block()
+        hide = (
+            self._presentationMode() is MarkdownPresentationMode.CLEAN_EDITING
+            or (
+                self._presentationMode()
+                is MarkdownPresentationMode.LIVE_PREVIEW
+                and not active_block
+            )
+        )
+        for link in tree.wikilinks:
+            visible_span = link.display_span or link.target_span
+            visible_format = QTextCharFormat(self.format(visible_span.start))
+            visible_format.setForeground(QBrush(self.linkColor))
+            visible_format.setFontUnderline(True)
+            self.setFormat(
+                visible_span.start, visible_span.length, visible_format
+            )
+
+            hidden_spans = [
+                (link.span.start, link.target_span.start),
+                (visible_span.end, link.span.end),
+            ]
+            if link.display_span is not None:
+                hidden_spans.append((
+                    link.target_span.start, link.display_span.start
+                ))
+            for start, end in hidden_spans:
+                if end <= start:
+                    continue
+                markup_format = QTextCharFormat(self.format(start))
+                if self.theme.get("markup"):
+                    markup_format.setForeground(self.theme["markup"])
+                if hide:
+                    self._hideMarkup(markup_format)
+                self.setFormat(start, end - start, markup_format)
 
     def formatsFromTheme(self, theme, format=None,
                          markupFormat=QTextCharFormat()):

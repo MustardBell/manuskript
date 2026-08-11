@@ -134,12 +134,10 @@ class ProjectViewSet:
         runtime = window.projectRuntime
         core = window.corePanels
         search_result_views = SearchResultViews.for_window(window)
+        navigation = reference_navigation_for(window, runtime.models)
         return cls(
             models=runtime.models,
-            navigation=reference_navigation_for(
-                window,
-                runtime.models,
-            ),
+            navigation=navigation,
             editors=EditorViews(
                 outline_trees=(
                     core.project_tree.tree,
@@ -153,6 +151,8 @@ class ProjectViewSet:
                     runtime.models,
                     # The project's, so both windows type into one text.
                     runtime.documentBuffers,
+                    runtime.projectManager.storage.reference_index,
+                    navigation.open_text,
                 ),
                 open_index=core.project_tree.tree.setCurrentIndex,
                 open_indexes=partial(

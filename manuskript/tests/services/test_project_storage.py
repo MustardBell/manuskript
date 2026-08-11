@@ -6,12 +6,17 @@ from PyQt5.QtCore import QObject
 from manuskript.domain.persistence import (
     ProjectSaveResult,
 )
-from manuskript.domain.canonical_project import CanonicalProject
+from manuskript.domain.canonical_project import (
+    CanonicalProject,
+    OutlineDocument,
+    StructuredMetadataField,
+)
 from manuskript.load_save.format_detection import DetectedProjectFormat
 from manuskript.load_save.project_codec import EncodedProject
 from manuskript.load_save.project_files import ProjectFileReadResult
 from manuskript.load_save.project_files import Version1ProjectFiles
 from manuskript.load_save.version_1_codec import Version1ProjectCodec
+from manuskript.load_save.version_2_codec import Version2ProjectCodec
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.services.project_model_factory import ProjectModelFactory
 from manuskript.services.project_persistence import ProjectPersistenceContext
@@ -55,7 +60,8 @@ def test_storage_routes_v1_through_codec_and_application_adapter():
     adapter.hydrate.assert_called_once_with(canonical, context)
     adapter.capture.assert_called_once_with(context, canonical)
     file_access.write.assert_called_once_with(
-        "story.msk", zipped=False, files=(), moves=(), cache=cache
+        "story.msk", zipped=False, files=(), moves=(), cache=cache,
+        marker_version=1,
     )
 
 
@@ -187,3 +193,107 @@ def test_real_v1_storage_round_trip_uses_canonical_boundary_and_preserves_extens
     )
     assert reopened.world[0].value("future-field") == "kept"
     assert reopened.plots[0].value("plugin-attribute") == "kept"
+
+
+def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
+    codec = Version2ProjectCodec()
+    document_id = "018f1f42-c546-7d20-bf25-b8d70433c123"
+    source_project = CanonicalProject(
+        format_version=2,
+        outline=(
+            OutlineDocument(
+                id=document_id,
+                title="Opening",
+                kind="scene",
+                text="Original [[Opening]].\n",
+            ),
+            OutlineDocument(
+                id="untouched",
+                title="Untouched",
+                kind="notes",
+                text="Do not normalize this document.\n",
+                structured_metadata=(
+                    StructuredMetadataField(
+                        "external-tool", {"keep": True}
+                    ),
+                ),
+            ),
+            OutlineDocument(
+                id="legacy-mmd",
+                title="Legacy",
+                kind="md",
+                text="Legacy body.\n",
+            ),
+        ),
+        settings_source="{}",
+        structured_metadata=(
+            StructuredMetadataField("external-project", {"keep": True}),
+        ),
+    )
+    encoded = codec.encode(source_project)
+    encoded_files = dict(encoded.files)
+    untouched_path = next(
+        document.source_path
+        for document in codec.decode(encoded_files).documents()
+        if document.id == "untouched"
+    )
+    untouched_source = encoded_files[untouched_path]
+    legacy_path = next(
+        document.source_path
+        for document in codec.decode(encoded_files).documents()
+        if document.id == "legacy-mmd"
+    )
+    legacy_source = (
+        "title:          Legacy\n"
+        "ID:             legacy-mmd\n"
+        "type:           md\n\n\n"
+        "Legacy body.\n"
+    )
+    encoded_files[legacy_path] = legacy_source
+    project_file = tmp_path / "native.msk"
+    access = Version1ProjectFiles()
+    assert access.write(
+        str(project_file), zipped=False, files=tuple(encoded_files.items()),
+        moves=(), cache={}, marker_version=2,
+    ).succeeded
+
+    settings = SettingsManager()
+    parent = QObject()
+    models = ProjectModelFactory().create(parent, settings)
+    context = ProjectPersistenceContext(
+        str(project_file), models, settings
+    )
+    storage = ProjectStorage()
+
+    loaded = storage.load(context)
+    item = models.outline.getItemByID(document_id)
+    assert len(storage.reference_index.backlinks(document_id)) == 1
+    item.setData(Outline.text, "Changed through the UI adapter.\n")
+    storage.update_document_references(item)
+    assert not storage.reference_index.backlinks(document_id)
+    saved = storage.save(context)
+    persisted = access.read(str(project_file), zipped=False).files
+    reopened = codec.decode(persisted)
+
+    assert loaded.succeeded
+    assert saved.succeeded
+    assert project_file.read_text(encoding="utf-8") == "2"
+    assert storage.canonical_project.format_version == 2
+    assert tuple(reopened.documents())[0].id == document_id
+    assert tuple(reopened.documents())[0].kind == "scene"
+    assert tuple(reopened.documents())[0].text == (
+        "Changed through the UI adapter.\n"
+    )
+    assert persisted[untouched_path] == untouched_source
+    assert persisted[legacy_path] == legacy_source
+    assert reopened.structured_metadata == source_project.structured_metadata
+    assert tuple(reopened.documents())[1].structured_metadata == (
+        StructuredMetadataField("external-tool", {"keep": True}),
+    )
+
+    copy_file = tmp_path / "native-copy.msk"
+    copy_context = ProjectPersistenceContext(
+        str(copy_file), models, settings
+    )
+    assert storage.save(copy_context).succeeded
+    assert copy_file.read_text(encoding="utf-8") == "2"

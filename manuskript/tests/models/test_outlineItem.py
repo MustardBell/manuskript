@@ -77,6 +77,17 @@ def test_outline_item_preserves_typed_plugin_values_in_xml():
     assert restored.hasPluginValue("example.structured-page")
     assert restored.pluginValue("example.structured-page") is True
 
+
+def test_outline_model_accepts_opaque_format_2_ids_and_keeps_numeric_allocator_safe():
+    model = outlineModel()
+    root = model.rootItem
+    outlineItem(parent=root, ID="018f1f42-c546-7d20-bf25-b8d70433c123")
+    outlineItem(parent=root, ID="41")
+
+    created = outlineItem(parent=root)
+
+    assert created.ID() == "42"
+
 def test_modelStuff(outlineModelBasic):
     """
     Tests with children items.

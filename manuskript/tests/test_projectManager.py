@@ -635,6 +635,36 @@ class TestTheProjectIsNotReadThroughAWindow(unittest.TestCase):
                 self.manager.startTimerNoChanges,
             )
 
+    def test_outline_reference_index_tracks_edits_and_structure(self):
+        models = MagicMock()
+        models.change_sources = ()
+        self.manager.models = models
+
+        self.manager._connectModelChanges()
+
+        models.outline.dataChanged.connect.assert_called_once_with(
+            self.manager._outlineReferencesChanged,
+        )
+        for signal in (
+            models.outline.rowsInserted,
+            models.outline.rowsRemoved,
+            models.outline.modelReset,
+        ):
+            signal.connect.assert_called_once_with(
+                self.manager._outlineReferenceStructureChanged,
+            )
+
+        index = MagicMock()
+        index.isValid.return_value = True
+        item = index.internalPointer.return_value
+        self.manager._outlineReferencesChanged(index, index)
+        self.manager._outlineReferenceStructureChanged()
+
+        self.storage.update_document_references.assert_called_once_with(item)
+        self.storage.rebuild_document_references.assert_called_once_with(
+            models.outline.rootItem
+        )
+
     def test_no_models_yet_means_nothing_to_watch_rather_than_a_crash(self):
         """A project opened from data already in memory never went through
         loadEmptyDatas, so there may be no model graph to connect.

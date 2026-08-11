@@ -1,10 +1,14 @@
-from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtCore import QTimer, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QTextDocument
 from PyQt5.QtWidgets import QFrame, QTextBrowser
+
+from manuskript.domain.markdown_dsl import render_wikilinks_as_markdown
 
 
 class MarkdownReadingView(QTextBrowser):
     """Read-only projection of an MDEditView's source document."""
+
+    wikilinkActivated = pyqtSignal(str)
 
     def __init__(self, source_editor, parent=None):
         super().__init__(parent)
@@ -12,6 +16,7 @@ class MarkdownReadingView(QTextBrowser):
         self.setObjectName("markdownReadingView")
         self.setFrameShape(QFrame.NoFrame)
         self.setOpenExternalLinks(True)
+        self.anchorClicked.connect(self._anchorClicked)
         self.setReadOnly(True)
         if source_editor._autoResize:
             self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -84,7 +89,7 @@ class MarkdownReadingView(QTextBrowser):
         if self._renderer is None:
             document.setBaseUrl(QUrl())
             document.setMarkdown(
-                source,
+                render_wikilinks_as_markdown(source),
                 QTextDocument.MarkdownDialectGitHub,
             )
         else:
@@ -98,3 +103,8 @@ class MarkdownReadingView(QTextBrowser):
 
         new_maximum = scrollbar.maximum()
         scrollbar.setValue(round(scroll_ratio * new_maximum))
+
+    def _anchorClicked(self, url):
+        if url.scheme() == "manuskript":
+            target = url.toString()[len("manuskript:"):]
+            self.wikilinkActivated.emit(target)

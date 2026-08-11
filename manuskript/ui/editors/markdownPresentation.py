@@ -11,6 +11,7 @@ class MarkdownPresentationMode(Enum):
     SOURCE = "source"
     FORMATTED_SOURCE = "formatted-source"
     LIVE_PREVIEW = "live-preview"
+    CLEAN_EDITING = "clean-editing"
     READING = "reading"
 
     @classmethod

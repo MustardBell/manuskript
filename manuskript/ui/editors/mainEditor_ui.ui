@@ -216,6 +216,11 @@
       </item>
       <item>
        <property name="text">
+        <string>Clean Editing</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
         <string>Reading</string>
        </property>
       </item>

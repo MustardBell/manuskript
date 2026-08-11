@@ -21,5 +21,6 @@ rebuilding a project.
 | Queries and continuity reports | derived | not applicable | derived |
 
 Format 0 and Format 1 remain readable. Format 1 remains writable without a
-mandatory upgrade. A Format 2 upgrade writes and validates a separate copy;
-it never replaces the source project in place.
+mandatory upgrade. Existing Format 2 projects remain Format 2 when saved. The
+planned migration command will write and validate a separate upgraded copy;
+ordinary open/save never replaces a source project or changes its format.

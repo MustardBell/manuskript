@@ -101,6 +101,7 @@ class mainEditor(QWidget, Ui_mainEditor):
             MarkdownPresentationMode.SOURCE,
             MarkdownPresentationMode.FORMATTED_SOURCE,
             MarkdownPresentationMode.LIVE_PREVIEW,
+            MarkdownPresentationMode.CLEAN_EDITING,
             MarkdownPresentationMode.READING,
         )
         self._markdownPresentationBinding = MarkdownPresentationBinding(

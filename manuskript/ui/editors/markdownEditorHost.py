@@ -100,6 +100,9 @@ class MarkdownEditorHost(QStackedWidget):
             )
             self.addWidget(self.readingView)
             self.sourceEditor.readingView = self.readingView
+            self.readingView.wikilinkActivated.connect(
+                self.sourceEditor.wikilinkActivated
+            )
             self.readingView.setRenderer(self.readingRenderer)
         return self.readingView
 

@@ -54,8 +54,8 @@ class LegacyApplicationModelAdapter:
     """The only v1 boundary permitted to know both canonical records and Qt."""
 
     def hydrate(self, project: CanonicalProject, context) -> None:
-        if project.format_version != 1:
-            raise ValueError("The current application adapter accepts v1 projects.")
+        if project.format_version not in (1, 2):
+            raise ValueError("The current application adapter accepts v1/v2 projects.")
         self._hydrate_settings(project, context.settings)
         self._hydrate_flat(project, context.models.flat_data)
         self._hydrate_labels(project, context.models.labels)
@@ -82,10 +82,11 @@ class LegacyApplicationModelAdapter:
         )
         characters = self._capture_characters(context.models.characters)
         outline = self._merge_outline_extensions(
-            self._capture_outline(context.models.outline), baseline.outline
+            self._capture_outline(context.models.outline), baseline.outline,
+            preserve_paths=baseline.format_version == 2,
         )
         return CanonicalProject(
-            format_version=1,
+            format_version=baseline.format_version,
             zipped=bool(context.settings.saveToZip),
             metadata=metadata,
             summary=summary,
@@ -107,6 +108,7 @@ class LegacyApplicationModelAdapter:
             ),
             unknown_files=baseline.unknown_files,
             issues=baseline.issues,
+            structured_metadata=baseline.structured_metadata,
             source_files=baseline.source_files,
         )
 
@@ -237,7 +239,9 @@ class LegacyApplicationModelAdapter:
                 parent=parent,
                 ID=record.id,
                 title=record.title,
-                _type=record.kind,
+                _type=(
+                    "folder" if record.kind == "folder" else "md"
+                ),
             )
             item._lastPath = record.source_path
             for value in record.metadata:
@@ -443,25 +447,120 @@ class LegacyApplicationModelAdapter:
             collect(child)
         return tuple(revisions)
 
-    def _merge_outline_extensions(self, captured, baseline):
+    def _merge_outline_extensions(
+        self, captured, baseline, preserve_paths=False
+    ):
         previous = {item.id: item for item in self._walk_outline(baseline)}
 
         def merge(document):
             old = previous.get(document.id)
-            metadata = list(document.metadata)
-            known_names = {item.name for item in metadata}
-            if old is not None:
-                metadata.extend(
-                    item for item in old.metadata
-                    if item.name not in Outline.__members__
-                    and item.name not in known_names
+            if preserve_paths and old is not None:
+                metadata = self._merge_v2_outline_metadata(
+                    document.metadata, old
                 )
+            else:
+                metadata = list(document.metadata)
+                known_names = {item.name for item in metadata}
+                if old is not None:
+                    metadata.extend(
+                        item for item in old.metadata
+                        if item.name not in Outline.__members__
+                        and item.name not in known_names
+                    )
             return replace(
                 document,
+                source_path=(
+                    old.source_path if old is not None
+                    else ""
+                ) if preserve_paths else document.source_path,
+                kind=(
+                    old.kind
+                    if preserve_paths and old is not None
+                    else document.kind
+                ),
+                source_format=(
+                    old.source_format
+                    if preserve_paths and old is not None
+                    else document.source_format
+                ),
+                raw_source=(
+                    old.raw_source
+                    if preserve_paths and old is not None
+                    else document.raw_source
+                ),
+                structured_metadata=(
+                    old.structured_metadata
+                    if preserve_paths and old is not None
+                    else document.structured_metadata
+                ),
                 metadata=tuple(metadata),
                 children=tuple(merge(child) for child in document.children),
             )
         return tuple(merge(item) for item in captured)
+
+    @staticmethod
+    def _merge_v2_outline_metadata(captured, old):
+        """Preserve untouched v2 metadata spelling, order, and raw source."""
+
+        identity_fields = {"ID", "title", "type"}
+        captured_fields = [
+            item for item in captured if item.name not in identity_fields
+        ]
+        captured_by_name = {item.name: item for item in captured_fields}
+        handled = set()
+        metadata = []
+        for previous in old.metadata:
+            if previous.name in identity_fields:
+                if old.source_format == "mmd":
+                    metadata.append(previous)
+                continue
+            current = captured_by_name.get(previous.name)
+            if current is None:
+                if previous.name not in Outline.__members__:
+                    metadata.append(previous)
+                continue
+            if LegacyApplicationModelAdapter._metadata_equivalent(
+                previous, current
+            ):
+                metadata.append(previous)
+            elif previous.name not in handled:
+                metadata.append(current)
+            handled.add(previous.name)
+
+        for current in captured_fields:
+            if current.name in handled:
+                continue
+            # Compile is checked by default in the legacy live model. Its
+            # absence in v2 therefore means the same thing as Qt.Checked.
+            if (
+                current.name == "compile"
+                and LegacyApplicationModelAdapter._truth_value(current.value)
+                is True
+            ):
+                continue
+            metadata.append(current)
+            handled.add(current.name)
+        return metadata
+
+    @staticmethod
+    def _metadata_equivalent(previous, current):
+        if previous.name != current.name:
+            return False
+        if previous.name == "compile":
+            return (
+                LegacyApplicationModelAdapter._truth_value(previous.value)
+                == LegacyApplicationModelAdapter._truth_value(current.value)
+            )
+        return previous.value == current.value
+
+    @staticmethod
+    def _truth_value(value):
+        normalized = str(value).strip().casefold()
+        if normalized in {"1", "2", "true", "yes", "on"}:
+            return True
+        if normalized in {"", "0", "false", "no", "off"}:
+            return False
+        return None
 
     @staticmethod
     def _walk_outline(records):

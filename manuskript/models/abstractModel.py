@@ -47,20 +47,32 @@ class abstractModel(QAbstractItemModel):
         QAbstractItemModel.__init__(self, parent)
         self.rootItem = None
         self.nextAvailableID = 1
+        self._usedIDs = set()
 
         # Stores removed item, in order to remove them on disk when saving, depending on the file format.
         self.removed = []
         self._removingRows = False
 
     def requestNewID(self):
+        while str(self.nextAvailableID) in self._usedIDs:
+            self.nextAvailableID += 1
         newID = self.nextAvailableID
         self.nextAvailableID += 1
+        self._usedIDs.add(str(newID))
         return str(newID)
 
     # Call this if loading an ID from file rather than assigning a new one.
     def updateAvailableIDs(self, addedID):
-        if int(addedID) >= self.nextAvailableID:
-            self.nextAvailableID = int(addedID) + 1
+        addedID = str(addedID)
+        self._usedIDs.add(addedID)
+        try:
+            numeric_id = int(addedID)
+        except (TypeError, ValueError):
+            # Format 2 identities are opaque stable strings. The legacy
+            # numeric allocator only needs to avoid the numeric subset.
+            return
+        if numeric_id >= self.nextAvailableID:
+            self.nextAvailableID = numeric_id + 1
 
     def index(self, row, column, parent):
         if not self.hasIndex(row, column, parent):

@@ -1965,6 +1965,7 @@
      <addaction name="actMarkdownSource"/>
      <addaction name="actMarkdownFormattedSource"/>
      <addaction name="actMarkdownLivePreview"/>
+     <addaction name="actMarkdownCleanEditing"/>
      <addaction name="actMarkdownReading"/>
     </widget>
     <addaction name="menuMode"/>
@@ -2281,6 +2282,17 @@
    </property>
    <property name="statusTip">
     <string>Show a fully rendered, read-only document</string>
+   </property>
+  </action>
+  <action name="actMarkdownCleanEditing">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Clean Editing</string>
+   </property>
+   <property name="statusTip">
+    <string>Render Markdown and hide its syntax while keeping the text editable</string>
    </property>
   </action>
   <action name="actViewCork">

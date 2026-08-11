@@ -23,9 +23,20 @@ class TextEditorContext:
     focus_received: Optional[Callable[[object], None]] = None
     #: Release a disappearing editor before its native widget is destroyed.
     focus_released: Optional[Callable[[object], None]] = None
+    #: Generic Format 2 wikilink operations. The editor sees commands, not
+    #: the project storage or a window.
+    complete_wikilink: Optional[Callable[[str], tuple]] = None
+    open_wikilink: Optional[Callable[[str], bool]] = None
 
 
-def text_editor_context_for(window, settings, models, buffers=None):
+def text_editor_context_for(
+    window,
+    settings,
+    models,
+    buffers=None,
+    reference_index=None,
+    open_document=None,
+):
     """Adapt the main UI to the text editor action boundary.
 
     Takes the project's models rather than reading them off the window.
@@ -80,11 +91,28 @@ def text_editor_context_for(window, settings, models, buffers=None):
         ):
             focus.focus_changed(editor, None)
 
+    def complete_wikilink(prefix):
+        return (
+            reference_index.complete(prefix)
+            if reference_index is not None
+            else ()
+        )
+
+    def open_wikilink(target):
+        if reference_index is None or open_document is None:
+            return False
+        _resolution, document = reference_index.resolve(target)
+        return bool(
+            document is not None and open_document(document.id)
+        )
+
     return TextEditorContext(
         settings=settings,
         document_buffers=buffers,
         focus_received=focus_received,
         focus_released=focus_released,
+        complete_wikilink=complete_wikilink,
+        open_wikilink=open_wikilink,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,

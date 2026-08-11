@@ -22,6 +22,15 @@ def test_detector_reads_plain_text_version_marker(tmp_path):
     )
 
 
+def test_detector_reads_format_two_marker(tmp_path):
+    project = tmp_path / "native.msk"
+    project.write_text("2", encoding="utf-8")
+
+    detected = ProjectFormatDetector().detect(str(project))
+
+    assert detected == DetectedProjectFormat(version=2, zipped=False)
+
+
 def test_detector_reads_zip_marker(tmp_path):
     project = tmp_path / "story.msk"
     with zipfile.ZipFile(project, "w") as archive:

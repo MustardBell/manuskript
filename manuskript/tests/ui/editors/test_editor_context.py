@@ -133,6 +133,11 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     assert state.mode is MarkdownPresentationMode.FORMATTED_SOURCE
     assert selector.currentText() == "Formatted Source"
 
+    window.actMarkdownCleanEditing.trigger()
+
+    assert state.mode is MarkdownPresentationMode.CLEAN_EDITING
+    assert selector.currentText() == "Clean Editing"
+
     window.actMarkdownReading.trigger()
 
     assert state.mode is MarkdownPresentationMode.READING

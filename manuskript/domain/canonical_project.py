@@ -44,6 +44,14 @@ class MetadataField:
 
 
 @dataclass(frozen=True)
+class StructuredMetadataField:
+    """Unknown structured metadata retained by newer textual formats."""
+
+    name: str
+    value: Any
+
+
+@dataclass(frozen=True)
 class LabelRecord:
     name: str
     color: str = ""
@@ -84,6 +92,7 @@ class OutlineDocument:
     source_path: str = ""
     source_format: str = "mmd"
     raw_source: Optional[str] = field(default=None, compare=False)
+    structured_metadata: Tuple[StructuredMetadataField, ...] = ()
 
     def metadata_value(self, name: str, default: str = "") -> str:
         for entry in reversed(self.metadata):
@@ -180,6 +189,7 @@ class CanonicalProject:
     unknown_files: Tuple[PreservedProjectFile, ...] = ()
     legacy_models: Tuple[LegacyModel, ...] = ()
     issues: Tuple[ProjectIssue, ...] = ()
+    structured_metadata: Tuple[StructuredMetadataField, ...] = ()
     source_files: Tuple[PreservedProjectFile, ...] = field(
         default=(), compare=False, repr=False
     )

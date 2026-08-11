@@ -26,6 +26,8 @@ class MarkdownMenuViews:
                     window.actMarkdownFormattedSource,
                 MarkdownPresentationMode.LIVE_PREVIEW:
                     window.actMarkdownLivePreview,
+                MarkdownPresentationMode.CLEAN_EDITING:
+                    window.actMarkdownCleanEditing,
                 MarkdownPresentationMode.READING:
                     window.actMarkdownReading,
             }),

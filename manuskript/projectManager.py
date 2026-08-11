@@ -555,6 +555,33 @@ class ProjectManager:
                 model.dataChanged,
                 self.startTimerNoChanges,
             )
+        self.modelConnections.connect(
+            self.models.outline.dataChanged,
+            self._outlineReferencesChanged,
+        )
+        for signal in (
+            self.models.outline.rowsInserted,
+            self.models.outline.rowsRemoved,
+            self.models.outline.modelReset,
+        ):
+            self.modelConnections.connect(
+                signal,
+                self._outlineReferenceStructureChanged,
+            )
+
+    def _outlineReferencesChanged(self, top_left, _bottom_right):
+        item = (
+            top_left.internalPointer()
+            if top_left is not None and top_left.isValid()
+            else None
+        )
+        self.storage.update_document_references(item)
+
+    def _outlineReferenceStructureChanged(self, *_args):
+        outline = getattr(self.models, "outline", None)
+        self.storage.rebuild_document_references(
+            outline.rootItem if outline is not None else None
+        )
 
     def _disconnectModelChanges(self):
         self.modelConnections.disconnect_all()

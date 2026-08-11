@@ -233,6 +233,10 @@ class MainWindowActionBinding:
                 MarkdownPresentationMode.LIVE_PREVIEW,
             ),
             (
+                window.actMarkdownCleanEditing,
+                MarkdownPresentationMode.CLEAN_EDITING,
+            ),
+            (
                 window.actMarkdownReading,
                 MarkdownPresentationMode.READING,
             ),

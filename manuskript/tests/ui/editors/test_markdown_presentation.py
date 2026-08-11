@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import QPoint, Qt, pyqtSignal
+from PyQt5.QtCore import QPoint, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import (
     QFont,
     QTextCharFormat,
@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import qApp, QWidget
 from PyQt5.QtTest import QSignalSpy, QTest
 
 from manuskript.enums import Outline
+from manuskript.domain.reference_index import ReferenceSuggestion
 from manuskript.models.outlineItem import outlineItem
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
@@ -25,7 +26,7 @@ from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.views.text_editor_context import TextEditorContext
 
 
-def make_context(settings):
+def make_context(settings, **commands):
     return TextEditorContext(
         settings=settings,
         reload_fonts=MagicMock(),
@@ -33,6 +34,7 @@ def make_context(settings):
         create_plot=MagicMock(),
         create_world_item=MagicMock(),
         invoke_outline_command=MagicMock(),
+        **commands,
     )
 
 
@@ -87,6 +89,10 @@ def test_markdown_presentation_mode_defines_display_policy():
     assert MarkdownPresentationMode.LIVE_PREVIEW.is_editable
     assert MarkdownPresentationMode.LIVE_PREVIEW.renders_markdown
     assert MarkdownPresentationMode.LIVE_PREVIEW.reveals_active_block
+
+    assert MarkdownPresentationMode.CLEAN_EDITING.is_editable
+    assert MarkdownPresentationMode.CLEAN_EDITING.renders_markdown
+    assert not MarkdownPresentationMode.CLEAN_EDITING.reveals_active_block
 
     assert not MarkdownPresentationMode.READING.is_editable
     assert MarkdownPresentationMode.READING.renders_markdown
@@ -473,6 +479,37 @@ def test_live_preview_formats_canonical_source_and_reveals_active_markup():
         host.hide()
 
 
+def test_clean_editing_hides_markup_including_the_active_block():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    host = host_editor(editor)
+    source = "**bold** and [[Characters/Mara|Mara]]"
+    editor.setPlainText(source)
+
+    editor.setPresentationMode(MarkdownPresentationMode.CLEAN_EDITING)
+    host.show()
+    try:
+        qApp.processEvents()
+        bold_marker = format_at(editor, 0)
+        link_marker = format_at(editor, source.index("[["))
+        bold_text = format_at(editor, source.index("bold"))
+
+        assert host.currentWidget() is editor
+        assert editor.toPlainText() == source
+        assert bold_marker.property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+        assert link_marker.property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+        assert bold_text.fontWeight() == QFont.Bold
+        assert not MarkdownPresentationMode.CLEAN_EDITING.reveals_active_block
+    finally:
+        host.hide()
+
+
 def test_live_preview_rehighlights_old_and_new_active_blocks():
     editor = MDEditView(
         spellcheck=False,
@@ -513,6 +550,97 @@ def test_live_preview_rehighlights_old_and_new_active_blocks():
         )
     finally:
         host.hide()
+
+
+def test_live_preview_projects_wikilink_display_without_mutating_source():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    host = host_editor(editor)
+    source = (
+        "Meet [[Characters/Olena|Олену]].\n"
+        "Then [[Places/Kyiv]]."
+    )
+    editor.setPlainText(source)
+    second = editor.document().findBlockByNumber(1)
+    cursor = editor.textCursor()
+    cursor.setPosition(second.position() + 8)
+    editor.setTextCursor(cursor)
+    editor.setPresentationMode(MarkdownPresentationMode.LIVE_PREVIEW)
+    host.show()
+    try:
+        qApp.processEvents()
+        opening = source.index("[[")
+        target = source.index("Characters/Olena")
+        display = source.index("Олену")
+        second_opening = source.index("[[", opening + 2)
+
+        assert editor.toPlainText() == source
+        assert format_at(editor, opening).property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+        assert format_at(editor, target).property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+        assert not format_at(editor, display).property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+        assert format_at(editor, display).fontUnderline()
+        assert not format_at(editor, second_opening).property(
+            MarkdownHighlighter.MarkupHiddenProperty
+        )
+    finally:
+        host.hide()
+
+
+def test_wikilinks_in_code_are_neither_projected_nor_clickable():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    host = host_editor(editor)
+    source = "```\n[[CodeExample]]\n```\n[[Actual]]"
+    editor.setPlainText(source)
+    editor.setPresentationMode(MarkdownPresentationMode.LIVE_PREVIEW)
+    host.show()
+    try:
+        qApp.processEvents()
+        editor.getClickRects()
+
+        code_target = format_at(editor, source.index("CodeExample"))
+        actual_target = format_at(editor, source.index("Actual"))
+        wikilink_targets = [
+            item.texts[1]
+            for item in editor.clickRects
+            if item.regex is editor.wikilinkRegex
+        ]
+
+        assert not code_target.fontUnderline()
+        assert actual_target.fontUnderline()
+        assert wikilink_targets == ["Actual"]
+        assert editor.toPlainText() == source
+    finally:
+        host.hide()
+
+
+def test_wikilink_completion_replaces_only_the_target_source_span():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    suggestions = (ReferenceSuggestion(
+        "mara", "Characters/Mara", "Mara", "Characters/Mara.md"
+    ),)
+    editor.set_text_editor_context(make_context(
+        editor.settings,
+        complete_wikilink=lambda prefix: suggestions
+        if prefix == "Mar" else (),
+    ))
+    editor.setPlainText("See [[Mar")
+    cursor = editor.textCursor()
+    cursor.movePosition(QTextCursor.End)
+    editor.setTextCursor(cursor)
+
+    menu = editor.buildWikilinkCompletionMenu()
+
+    assert menu is not None
+    assert editor.toPlainText() == "See [[Mar"
+    assert menu.actions()[0].text() == "Mara — Characters/Mara"
+    menu.actions()[0].trigger()
+    assert editor.toPlainText() == "See [[Characters/Mara]]"
+    assert editor.textCursor().position() == len("See [[Characters/Mara")
 
 
 def test_live_preview_keeps_list_markers_position_stable():
@@ -879,6 +1007,44 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
         assert "<ul" in rendered_html
         assert "font-weight:600" in rendered_html
         assert "text-decoration: underline" in rendered_html
+    finally:
+        host.hide()
+
+
+def test_reading_projection_renders_wikilink_display_and_routes_its_target():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    open_wikilink = MagicMock(return_value=True)
+    completions = (MagicMock(),)
+    host = host_editor(editor)
+    source = "Meet [[Characters/Olena|Олену]] in [[Places/Kyiv]]."
+    editor.setPlainText(source)
+    activated = QSignalSpy(editor.wikilinkActivated)
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+    host.show()
+    try:
+        assert wait_until(
+            lambda: editor.readingView.toPlainText()
+            == "Meet Олену in Places/Kyiv."
+        )
+
+        assert editor.toPlainText() == source
+        assert editor.readingView.toPlainText() == (
+            "Meet Олену in Places/Kyiv."
+        )
+        assert "[[" not in editor.readingView.toHtml()
+
+        editor.set_text_editor_context(make_context(
+            editor.settings,
+            open_wikilink=open_wikilink,
+            complete_wikilink=lambda _prefix: completions,
+        ))
+        editor.readingView._anchorClicked(
+            QUrl("manuskript:Characters/Olena")
+        )
+        assert list(activated[0]) == ["Characters/Olena"]
+        open_wikilink.assert_called_once_with("Characters/Olena")
+        assert editor.wikilinkCompletions("char") == completions
     finally:
         host.hide()
 
