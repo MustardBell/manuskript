@@ -243,6 +243,18 @@ class ProjectManager:
         self.autosave.schedule_after_change()
         return True
 
+    def createEntity(self, entity_type, title, aliases=()):
+        """Create one native generic entity and dirty the owning project."""
+
+        entity = self.storage.create_entity(entity_type, title, aliases)
+        self.startTimerNoChanges()
+        return entity
+
+    def updateEntity(self, entity_id, **changes):
+        entity = self.storage.update_entity(entity_id, **changes)
+        self.startTimerNoChanges()
+        return entity
+
     def saveDatas(
         self,
         projectName=None,

@@ -1,4 +1,5 @@
 import logging
+from dataclasses import replace
 
 from manuskript import loadSave
 from manuskript.domain.persistence import (
@@ -19,6 +20,11 @@ from manuskript.load_save.version_0_codec import Version0ProjectCodec
 from manuskript.load_save.version_2_codec import Version2ProjectCodec
 from manuskript.services.legacy_project_adapter import (
     LegacyApplicationModelAdapter,
+)
+from manuskript.services.legacy_entity_adapter import LegacyEntityAdapter
+from manuskript.domain.entity_catalog import (
+    EntityCatalog,
+    first_party_story_entity_schemas,
 )
 from manuskript.domain.project_features import compatibility_strategy
 from manuskript.domain.reference_index import (
@@ -43,6 +49,8 @@ class ProjectStorage:
         version_0_codec=None,
         version_2_codec=None,
         application_model_adapter=None,
+        entity_catalog=None,
+        legacy_entity_adapter=None,
     ):
         self._file_cache = (
             file_cache if file_cache is not None else {}
@@ -64,6 +72,12 @@ class ProjectStorage:
         self._application_model_adapter = (
             application_model_adapter or LegacyApplicationModelAdapter()
         )
+        self._entity_catalog = entity_catalog or EntityCatalog(
+            first_party_story_entity_schemas()
+        )
+        self._legacy_entity_adapter = (
+            legacy_entity_adapter or LegacyEntityAdapter()
+        )
         self._canonical_project = None
         self._reference_index = ReferenceIndex()
 
@@ -82,6 +96,32 @@ class ProjectStorage:
     @property
     def reference_index(self):
         return self._reference_index
+
+    @property
+    def entity_catalog(self):
+        return self._entity_catalog
+
+    def create_entity(self, entity_type, title, aliases=()):
+        entity = self._entity_catalog.create(entity_type, title, aliases)
+        self._reference_index.update(ReferenceDocument(
+            id=entity.id,
+            path=entity.document.source_path,
+            title=entity.title,
+            text=entity.document.text,
+            aliases=entity.aliases,
+        ))
+        return entity
+
+    def update_entity(self, entity_id, **changes):
+        entity = self._entity_catalog.update(entity_id, **changes)
+        self._reference_index.update(ReferenceDocument(
+            id=entity.id,
+            path=entity.document.source_path,
+            title=entity.title,
+            text=entity.document.text,
+            aliases=entity.aliases,
+        ))
+        return entity
 
     def update_document_references(self, item):
         """Incrementally re-index one live outline item after an edit."""
@@ -105,6 +145,16 @@ class ProjectStorage:
                 collect(child)
 
         collect(root_item)
+        documents.extend(
+            ReferenceDocument(
+                id=entity.id,
+                path=entity.document.source_path,
+                title=entity.title,
+                text=entity.document.text,
+                aliases=entity.aliases,
+            )
+            for entity in self._entity_catalog.native_entities
+        )
         self._reference_index.rebuild(documents)
 
     @staticmethod
@@ -198,6 +248,7 @@ class ProjectStorage:
         self._file_cache.clear()
         self._canonical_project = None
         self._reference_index.rebuild(())
+        self._entity_catalog.replace((), writable=False)
 
     def _load_version_1(self, context, *, zipped, file_access):
         read_result = file_access.read(
@@ -286,6 +337,10 @@ class ProjectStorage:
                 {}, zipped=bool(context.settings.saveToZip)
             )
         project = self._application_model_adapter.capture(context, before)
+        project = replace(
+            project,
+            entities=self._entity_catalog.native_entities,
+        )
         issues = tuple(
             issue for issue in self._version_2_codec.validate(project)
             if issue.severity == "error"
@@ -312,12 +367,26 @@ class ProjectStorage:
 
     def _adopt_canonical_project(self, project):
         self._canonical_project = project
+        legacy_entities = (
+            self._legacy_entity_adapter.project(project)
+            if project.format_version in (0, 1)
+            else ()
+        )
+        self._entity_catalog.replace(
+            project.entities,
+            legacy_entities,
+            writable=project.format_version == 2,
+        )
+        entity_aliases = {
+            entity.id: entity.aliases for entity in project.entities
+        }
         self._reference_index.rebuild(tuple(
             ReferenceDocument(
                 id=document.id,
                 path=document.source_path,
                 title=document.title,
                 text=document.text,
+                aliases=entity_aliases.get(document.id, ()),
             )
             for document in project.documents()
         ))

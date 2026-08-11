@@ -103,3 +103,19 @@ def test_reference_completion_is_deterministic_and_inserts_stable_paths():
     assert tuple(item.target for item in by_title) == ("Characters/Mara",)
     assert tuple(item.document_id for item in by_path) == ("vienna",)
     assert index.resolve(by_path[0].target)[1].id == "vienna"
+
+
+def test_aliases_resolve_and_complete_to_the_canonical_document_path():
+    index = ReferenceIndex()
+    index.rebuild((
+        ReferenceDocument(
+            "mara", "Characters/Mara Vale.md", "Mara Vale", "",
+            ("Ms Vale",),
+        ),
+        ReferenceDocument(
+            "scene", "Manuscript/Scene.md", "Scene", "[[Ms Vale]]",
+        ),
+    ))
+
+    assert index.references[0].resolved_target_id == "mara"
+    assert index.complete("ms")[0].target == "Characters/Mara Vale"

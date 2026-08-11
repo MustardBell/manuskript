@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from manuskript.commands import DocumentCommand
+
+
 @dataclass(frozen=True)
 class TextEditorContext:
     """Application actions available to project-bound text editors."""
@@ -27,6 +29,9 @@ class TextEditorContext:
     #: the project storage or a window.
     complete_wikilink: Optional[Callable[[str], tuple]] = None
     open_wikilink: Optional[Callable[[str], bool]] = None
+    entity_reference_choices: Optional[Callable[[str], tuple]] = None
+    entity_schemas: Optional[Callable[[], tuple]] = None
+    create_entity: Optional[Callable[[str, str], object]] = None
 
 
 def text_editor_context_for(
@@ -36,6 +41,9 @@ def text_editor_context_for(
     buffers=None,
     reference_index=None,
     open_document=None,
+    entity_catalog=None,
+    create_native_entity=None,
+    open_entity=None,
 ):
     """Adapt the main UI to the text editor action boundary.
 
@@ -99,12 +107,30 @@ def text_editor_context_for(
         )
 
     def open_wikilink(target):
-        if reference_index is None or open_document is None:
+        if reference_index is None:
             return False
         _resolution, document = reference_index.resolve(target)
-        return bool(
-            document is not None and open_document(document.id)
-        )
+        if document is None:
+            return False
+        if open_document is not None and open_document(document.id):
+            return True
+        return bool(open_entity is not None and open_entity(document.id))
+
+    def entity_reference_choices(surface):
+        if entity_catalog is None or not entity_catalog.writable:
+            return ()
+        return entity_catalog.reference_choices(surface)
+
+    def entity_schemas():
+        if entity_catalog is None or not entity_catalog.writable:
+            return ()
+        return entity_catalog.schemas.schemas
+
+    def create_entity(entity_type, title):
+        if create_native_entity is None or entity_catalog is None:
+            return None
+        entity = create_native_entity(entity_type, title)
+        return entity_catalog.reference_choice(entity, exact_match=True)
 
     return TextEditorContext(
         settings=settings,
@@ -113,6 +139,9 @@ def text_editor_context_for(
         focus_released=focus_released,
         complete_wikilink=complete_wikilink,
         open_wikilink=open_wikilink,
+        entity_reference_choices=entity_reference_choices,
+        entity_schemas=entity_schemas,
+        create_entity=create_entity,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,

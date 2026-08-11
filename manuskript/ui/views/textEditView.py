@@ -791,6 +791,13 @@ class textEditView(QTextEdit):
 
     def appendContextMenuEntriesForWord(self, popup_menu, selectedWord):
         # add "new <something>" buttons at end
+        entity_schemas = getattr(
+            self.text_editor_context, "entity_schemas", None
+        )
+        if callable(entity_schemas) and entity_schemas():
+            # Format 2 uses the generic Reference… interaction below the
+            # Markdown editor instead of three legacy model-specific actions.
+            return popup_menu
         if selectedWord != None:
             # new character
             charAction = QAction(self.tr("&New Character"), popup_menu)

@@ -92,6 +92,7 @@ class LegacyApplicationModelAdapter:
             summary=summary,
             labels=self._capture_labels(context.models.labels),
             statuses=self._capture_statuses(context.models.statuses),
+            entities=baseline.entities,
             characters=characters,
             outline=outline,
             world=self._merge_world_extensions(

@@ -271,6 +271,21 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     item.setData(Outline.text, "Changed through the UI adapter.\n")
     storage.update_document_references(item)
     assert not storage.reference_index.backlinks(document_id)
+    created_entity = storage.create_entity(
+        "character", "Mara Vale", ("Mara",)
+    )
+    assert storage.reference_index.resolve("Characters/Mara Vale")[1].id == (
+        created_entity.id
+    )
+    created_entity = storage.update_entity(
+        created_entity.id,
+        title="Mara Vane",
+        aliases=("M. Vane",),
+        text="Entity notes.\n",
+    )
+    assert storage.reference_index.resolve("M. Vane")[1].id == (
+        created_entity.id
+    )
     saved = storage.save(context)
     persisted = access.read(str(project_file), zipped=False).files
     reopened = codec.decode(persisted)
@@ -290,6 +305,10 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert tuple(reopened.documents())[1].structured_metadata == (
         StructuredMetadataField("external-tool", {"keep": True}),
     )
+    assert reopened.entities[0].id == created_entity.id
+    assert reopened.entities[0].title == "Mara Vane"
+    assert reopened.entities[0].aliases == ("M. Vane",)
+    assert reopened.entities[0].document.text == "Entity notes.\n"
 
     copy_file = tmp_path / "native-copy.msk"
     copy_context = ProjectPersistenceContext(

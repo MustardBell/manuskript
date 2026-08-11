@@ -121,6 +121,7 @@ class ProjectViewSet:
         from manuskript.ui.reference_navigation import (
             reference_navigation_for,
         )
+        from manuskript.ui.entity_editor import EntityEditorController
         from manuskript.ui.search_context import (
             SearchResultViewAdapter,
             SearchResultViews,
@@ -134,7 +135,16 @@ class ProjectViewSet:
         runtime = window.projectRuntime
         core = window.corePanels
         search_result_views = SearchResultViews.for_window(window)
-        navigation = reference_navigation_for(window, runtime.models)
+        entity_editor = EntityEditorController(
+            window,
+            runtime.projectManager.storage.entity_catalog,
+            runtime.projectManager.updateEntity,
+        )
+        navigation = reference_navigation_for(
+            window,
+            runtime.models,
+            entity_editor.open,
+        )
         return cls(
             models=runtime.models,
             navigation=navigation,
@@ -153,6 +163,9 @@ class ProjectViewSet:
                     runtime.documentBuffers,
                     runtime.projectManager.storage.reference_index,
                     navigation.open_text,
+                    runtime.projectManager.storage.entity_catalog,
+                    runtime.projectManager.createEntity,
+                    navigation.open_entity,
                 ),
                 open_index=core.project_tree.tree.setCurrentIndex,
                 open_indexes=partial(

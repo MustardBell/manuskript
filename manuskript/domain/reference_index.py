@@ -25,6 +25,7 @@ class ReferenceDocument:
     path: str
     title: str
     text: str
+    aliases: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,7 @@ class ReferenceIndex:
             previous is None
             or previous.path != document.path
             or previous.title != document.title
+            or previous.aliases != document.aliases
         ):
             self.rebuild(self._documents.values())
             return
@@ -165,6 +167,7 @@ class ReferenceIndex:
                 self._normalize(target),
                 self._normalize(posixpath.basename(target)),
                 self._normalize(document.title),
+                *(self._normalize(alias) for alias in document.aliases),
             }
             if any(
                 candidate.startswith(normalized_prefix)
@@ -231,6 +234,7 @@ class ReferenceIndex:
                 path,
                 posixpath.basename(path),
                 document.title,
+                *document.aliases,
             }
             for candidate in candidates:
                 normalized = cls._normalize(candidate)

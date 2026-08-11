@@ -2,6 +2,7 @@
 
 import posixpath
 import re
+from dataclasses import replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import yaml
@@ -9,6 +10,7 @@ import yaml
 from manuskript.domain.canonical_project import (
     CanonicalProject,
     CharacterRecord,
+    EntityRecord,
     LabelRecord,
     MetadataField,
     OutlineDocument,
@@ -22,6 +24,7 @@ from manuskript.domain.canonical_project import (
     StructuredMetadataField,
     WorldRecord,
 )
+from manuskript.domain.project_paths import normalize_project_path
 from manuskript.load_save.frontmatter import (
     encode_frontmatter,
     parse_frontmatter,
@@ -44,11 +47,24 @@ class Version2ProjectCodec:
         *,
         zipped: bool = False,
     ) -> CanonicalProject:
-        normalized = {
-            str(path).replace("\\", "/"): content
-            for path, content in files.items()
-        }
         issues: List[ProjectIssue] = []
+        normalized = {}
+        for raw_path, content in files.items():
+            try:
+                path = normalize_project_path(raw_path)
+            except ValueError as error:
+                issues.append(ProjectIssue(
+                    "error", str(error), SourceLocation(str(raw_path))
+                ))
+                continue
+            if path in normalized:
+                issues.append(ProjectIssue(
+                    "error",
+                    "Multiple project files normalize to the same path.",
+                    SourceLocation(path),
+                ))
+                continue
+            normalized[path] = content
         project_data = self._load_yaml(normalized, PROJECT_FILE, issues)
         root = project_data.get("manuskript", {})
         if not isinstance(root, dict):
@@ -79,7 +95,13 @@ class Version2ProjectCodec:
         outline = self._outline(
             root.get("outline", ()), documents_by_path, issues
         )
+        entities = self._entities(
+            root.get("entities", []), documents_by_path, issues
+        )
         listed_paths = {item.source_path for item in self._walk(outline)}
+        listed_paths.update(
+            entity.document.source_path for entity in entities
+        )
         unlisted = [
             document for path, document in documents_by_path.items()
             if path not in listed_paths
@@ -116,7 +138,8 @@ class Version2ProjectCodec:
         )
 
         known_root = {
-            "format", "metadata", "summary", "labels", "statuses", "outline"
+            "format", "metadata", "summary", "labels", "statuses",
+            "outline", "entities",
         }
         structured = [
             StructuredMetadataField(name, value)
@@ -151,6 +174,7 @@ class Version2ProjectCodec:
             summary=summary,
             labels=labels,
             statuses=statuses,
+            entities=entities,
             characters=characters,
             outline=outline,
             world=world,
@@ -170,6 +194,7 @@ class Version2ProjectCodec:
     def encode(self, project: CanonicalProject) -> EncodedProject:
         if project.format_version != 2:
             raise ValueError("Version 2 codec can only encode version 2 projects.")
+        self._validate_output_addresses(project)
         original = {item.path: item.content for item in project.source_files}
         if original and self.decode(original, zipped=project.zipped) == project:
             return EncodedProject(
@@ -177,6 +202,10 @@ class Version2ProjectCodec:
             )
 
         outline = self._assign_paths(project.outline)
+        entities = self._assign_entity_paths(
+            project.entities,
+            {document.source_path.casefold() for document in self._walk(outline)},
+        )
         top_level = {
             item.name: item.value
             for item in project.structured_metadata
@@ -192,6 +221,7 @@ class Version2ProjectCodec:
             ],
             "statuses": list(project.statuses),
             "outline": [self._outline_entry(item) for item in outline],
+            "entities": [self._entity_entry(item) for item in entities],
         }
         root.update({
             item.name[len("manuskript."):]: item.value
@@ -205,11 +235,20 @@ class Version2ProjectCodec:
             SETTINGS_FILE: project.settings_source or "{}",
             LEGACY_FILE: self._encode_legacy(project),
         }
-        assigned = set()
+        assigned = {path.casefold() for path in files}
         for index, document in enumerate(outline):
             self._encode_document(document, files, assigned, index)
+        for index, entity in enumerate(entities):
+            self._encode_entity(entity, files, assigned, index)
         for item in project.plugin_files + project.unknown_files:
-            files[item.path] = item.content
+            path = normalize_project_path(item.path)
+            key = path.casefold()
+            if key in assigned:
+                raise ValueError(
+                    "Preserved project file collides with {}.".format(path)
+                )
+            assigned.add(key)
+            files[path] = item.content
         return EncodedProject(
             2, tuple((path, files[path]) for path in sorted(files))
         )
@@ -217,7 +256,10 @@ class Version2ProjectCodec:
     def validate(self, project: CanonicalProject) -> Tuple[ProjectIssue, ...]:
         issues = list(project.issues)
         ids = set()
-        paths = set()
+        paths = {
+            path.casefold()
+            for path in ("MANUSKRIPT", PROJECT_FILE, SETTINGS_FILE, LEGACY_FILE)
+        }
         for document in project.documents():
             if not document.id:
                 issues.append(ProjectIssue(
@@ -230,13 +272,45 @@ class Version2ProjectCodec:
                     SourceLocation(document.source_path, "manuskript.id"),
                 ))
             ids.add(document.id)
-            normalized_path = posixpath.normpath(document.source_path).casefold()
+            if not document.source_path:
+                continue
+            try:
+                normalized_path = normalize_project_path(
+                    document.source_path
+                ).casefold()
+            except ValueError as error:
+                issues.append(ProjectIssue(
+                    "error", str(error), SourceLocation(document.source_path)
+                ))
+                continue
             if normalized_path in paths:
                 issues.append(ProjectIssue(
                     "error", "Duplicate document path.",
                     SourceLocation(document.source_path),
                 ))
             paths.add(normalized_path)
+        for item in project.plugin_files + project.unknown_files:
+            try:
+                normalized_path = normalize_project_path(item.path).casefold()
+            except ValueError as error:
+                issues.append(ProjectIssue(
+                    "error", str(error), SourceLocation(item.path)
+                ))
+                continue
+            if normalized_path in paths:
+                issues.append(ProjectIssue(
+                    "error", "Duplicate project path.",
+                    SourceLocation(item.path),
+                ))
+            paths.add(normalized_path)
+        for entity in project.entities:
+            if entity.document.kind != "entity":
+                issues.append(ProjectIssue(
+                    "error", "Entity document type must be 'entity'.",
+                    SourceLocation(
+                        entity.document.source_path, "manuskript.type"
+                    ),
+                ))
         return tuple(issues)
 
     def _documents(self, files, issues):
@@ -278,6 +352,11 @@ class Version2ProjectCodec:
                         raw_source=text,
                     )
                     continue
+                # Ordinary Obsidian/Markdown files without Manuskript
+                # identity metadata belong to the vault, not the outline.
+                continue
+            if "manuskript" not in parsed.metadata:
+                continue
             root = parsed.metadata.get("manuskript", {})
             if not isinstance(root, dict):
                 root = {}
@@ -328,12 +407,10 @@ class Version2ProjectCodec:
             if not isinstance(entry, dict):
                 return None
             path = str(entry.get("path", "")).replace("\\", "/")
-            document = documents.get(path)
+            document = self._manifest_document(
+                entry, documents, issues, "Outline"
+            )
             if document is None:
-                issues.append(ProjectIssue(
-                    "error", "Outline entry refers to a missing document.",
-                    SourceLocation(PROJECT_FILE, path),
-                ))
                 return None
             declared_id = str(entry.get("id", document.id))
             if declared_id != document.id:
@@ -353,9 +430,133 @@ class Version2ProjectCodec:
             if item is not None
         )
 
+    def _entities(self, entries, documents, issues):
+        if not isinstance(entries, list):
+            issues.append(ProjectIssue(
+                "error", "Project entities must be a list.",
+                SourceLocation(PROJECT_FILE, "manuskript.entities"),
+            ))
+            return ()
+        entities = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            document = self._manifest_document(
+                entry, documents, issues, "Entity"
+            )
+            if document is None:
+                continue
+            declared_id = str(entry.get("id", document.id))
+            if declared_id != document.id:
+                issues.append(ProjectIssue(
+                    "error", "Entity manifest and document IDs disagree.",
+                    SourceLocation(
+                        document.source_path, "manuskript.id"
+                    ),
+                ))
+            structured = {
+                item.name: item.value
+                for item in document.structured_metadata
+            }
+            aliases_value = structured.get("aliases", ())
+            if isinstance(aliases_value, str):
+                aliases = (aliases_value,)
+            elif isinstance(aliases_value, list):
+                aliases = tuple(str(value) for value in aliases_value)
+            else:
+                aliases = ()
+                if aliases_value:
+                    issues.append(ProjectIssue(
+                        "warning", "Entity aliases must be text or a list.",
+                        SourceLocation(document.source_path, "aliases"),
+                    ))
+            entity_value = structured.get("entity", {})
+            if not isinstance(entity_value, dict):
+                entity_value = {}
+                issues.append(ProjectIssue(
+                    "error", "Entity metadata must be a mapping.",
+                    SourceLocation(document.source_path, "entity"),
+                ))
+            entity_type = str(entity_value.get("type", "entity"))
+            entity_metadata = self._structured_fields(
+                entity_value.get("metadata"),
+                document.source_path,
+                "entity.metadata",
+                issues,
+            )
+            document = replace(
+                document,
+                structured_metadata=tuple(
+                    item for item in document.structured_metadata
+                    if item.name not in ("aliases", "entity")
+                ),
+            )
+            entities.append(EntityRecord(
+                document=document,
+                entity_type=entity_type,
+                aliases=tuple(dict.fromkeys(
+                    alias for alias in aliases if alias.strip()
+                )),
+                metadata=entity_metadata,
+            ))
+        return tuple(entities)
+
+    @staticmethod
+    def _manifest_document(entry, documents, issues, label):
+        path = str(entry.get("path", "")).replace("\\", "/")
+        document = documents.get(path)
+        if document is not None:
+            return document
+        declared_id = str(entry.get("id", ""))
+        candidates = tuple(
+            value for value in documents.values()
+            if declared_id and value.id == declared_id
+        )
+        if len(candidates) == 1:
+            issues.append(ProjectIssue(
+                "warning",
+                "{} document moved from {} to {}; stable ID recovered it.".format(
+                    label, path, candidates[0].source_path
+                ),
+                SourceLocation(PROJECT_FILE, path),
+            ))
+            return candidates[0]
+        issues.append(ProjectIssue(
+            "error", "{} entry refers to a missing document.".format(label),
+            SourceLocation(PROJECT_FILE, path),
+        ))
+        return None
+
+    @staticmethod
+    def _structured_fields(value, path, field, issues):
+        if value is None:
+            return ()
+        if isinstance(value, dict):
+            return tuple(
+                StructuredMetadataField(str(name), item)
+                for name, item in value.items()
+            )
+        if isinstance(value, list):
+            result = []
+            for item in value:
+                if not isinstance(item, dict) or "name" not in item:
+                    issues.append(ProjectIssue(
+                        "warning", "Invalid structured metadata entry.",
+                        SourceLocation(path, field),
+                    ))
+                    continue
+                result.append(StructuredMetadataField(
+                    str(item["name"]), item.get("value")
+                ))
+            return tuple(result)
+        issues.append(ProjectIssue(
+            "error", "Structured metadata must be a mapping or list.",
+            SourceLocation(path, field),
+        ))
+        return ()
+
     @staticmethod
     def _replace_children(document, children):
-        from dataclasses import replace
         return replace(document, children=children)
 
     @staticmethod
@@ -409,14 +610,21 @@ class Version2ProjectCodec:
             ],
         }
 
-    def _assign_paths(self, records):
-        from dataclasses import replace
+    @staticmethod
+    def _entity_entry(entity):
+        return {
+            "id": entity.id,
+            "path": entity.document.source_path,
+        }
 
+    def _assign_paths(self, records):
         used = set()
 
         def assign(document, index):
-            path = document.source_path or self._new_document_path(
-                document, index
+            path = (
+                normalize_project_path(document.source_path)
+                if document.source_path
+                else self._new_document_path(document, index)
             )
             candidate = path
             duplicate = 2
@@ -439,11 +647,35 @@ class Version2ProjectCodec:
             for index, document in enumerate(records)
         )
 
+    def _assign_entity_paths(self, entities, used_paths):
+        used = set(used_paths)
+        assigned = []
+        for index, entity in enumerate(entities):
+            document = entity.document
+            path = (
+                normalize_project_path(document.source_path)
+                if document.source_path
+                else self._new_entity_path(entity, index)
+            )
+            candidate = path
+            duplicate = 2
+            while candidate.casefold() in used:
+                stem, extension = posixpath.splitext(path)
+                candidate = "{}-{}{}".format(stem, duplicate, extension)
+                duplicate += 1
+            used.add(candidate.casefold())
+            assigned.append(replace(
+                entity,
+                document=replace(document, source_path=candidate),
+            ))
+        return tuple(assigned)
+
     def _encode_document(self, document, files, assigned, index):
         path = document.source_path or self._new_document_path(document, index)
-        if path in assigned:
+        key = path.casefold()
+        if key in assigned:
             raise ValueError("Two Format 2 documents use {}.".format(path))
-        assigned.add(path)
+        assigned.add(key)
         if document.raw_source is not None and self._document_source_is_current(
             document
         ):
@@ -475,6 +707,45 @@ class Version2ProjectCodec:
         files[path] = encode_frontmatter(top_level, document.text)
         for child_index, child in enumerate(document.children):
             self._encode_document(child, files, assigned, child_index)
+
+    def _encode_entity(self, entity, files, assigned, index):
+        document = entity.document
+        path = document.source_path or self._new_entity_path(entity, index)
+        key = path.casefold()
+        if key in assigned:
+            raise ValueError("Two Format 2 documents use {}.".format(path))
+        assigned.add(key)
+        if document.raw_source is not None and self._entity_source_is_current(
+            entity
+        ):
+            files[path] = document.raw_source
+            return
+        root = {
+            "id": document.id,
+            "type": "entity",
+            "title": document.title,
+            "metadata": self._encode_metadata(document.metadata),
+        }
+        root.update({
+            item.name[len("manuskript."):]: item.value
+            for item in document.structured_metadata
+            if item.name.startswith("manuskript.")
+        })
+        top_level = {
+            item.name: item.value
+            for item in document.structured_metadata
+            if not item.name.startswith("manuskript.")
+        }
+        top_level["aliases"] = list(entity.aliases)
+        top_level["entity"] = {
+            "type": entity.type,
+            "metadata": [
+                {"name": item.name, "value": item.value}
+                for item in entity.metadata
+            ],
+        }
+        top_level["manuskript"] = root
+        files[path] = encode_frontmatter(top_level, document.text)
 
     @staticmethod
     def _document_source_is_current(document):
@@ -530,10 +801,124 @@ class Version2ProjectCodec:
         )
 
     @staticmethod
+    def _entity_source_is_current(entity):
+        document = entity.document
+        try:
+            parsed = parse_frontmatter(document.raw_source)
+        except ValueError:
+            return False
+        if not parsed.has_frontmatter:
+            return False
+        root = parsed.metadata.get("manuskript", {})
+        entity_value = parsed.metadata.get("entity", {})
+        if not isinstance(root, dict) or not isinstance(entity_value, dict):
+            return False
+        aliases_value = parsed.metadata.get("aliases", ())
+        if isinstance(aliases_value, str):
+            aliases = (aliases_value,)
+        elif isinstance(aliases_value, list):
+            aliases = tuple(str(value) for value in aliases_value)
+        else:
+            return False
+        raw_entity_metadata = entity_value.get("metadata", ())
+        if isinstance(raw_entity_metadata, dict):
+            entity_metadata = tuple(
+                StructuredMetadataField(str(name), value)
+                for name, value in raw_entity_metadata.items()
+            )
+        elif isinstance(raw_entity_metadata, list):
+            entity_metadata = tuple(
+                StructuredMetadataField(
+                    str(item["name"]), item.get("value")
+                )
+                for item in raw_entity_metadata
+                if isinstance(item, dict) and "name" in item
+            )
+        else:
+            return False
+        known = {"id", "type", "title", "metadata"}
+        structured = [
+            StructuredMetadataField(name, value)
+            for name, value in parsed.metadata.items()
+            if name not in ("manuskript", "aliases", "entity")
+        ]
+        structured.extend(
+            StructuredMetadataField("manuskript." + name, value)
+            for name, value in root.items()
+            if name not in known
+        )
+        raw_fields = root.get("metadata", ())
+        if isinstance(raw_fields, dict):
+            document_metadata = tuple(
+                MetadataField(str(name), str(value))
+                for name, value in raw_fields.items()
+            )
+        elif isinstance(raw_fields, list):
+            document_metadata = tuple(
+                MetadataField(str(item["name"]), str(item.get("value", "")))
+                for item in raw_fields
+                if isinstance(item, dict) and "name" in item
+            )
+        else:
+            return False
+        return (
+            str(root.get("id", "")) == document.id
+            and str(root.get("title", "")) == document.title
+            and str(root.get("type", "")) == "entity"
+            and parsed.body == document.text
+            and document_metadata == document.metadata
+            and tuple(structured) == document.structured_metadata
+            and aliases == entity.aliases
+            and str(entity_value.get("type", "entity")) == entity.type
+            and entity_metadata == entity.metadata
+        )
+
+    @staticmethod
     def _new_document_path(document, index):
         slug = re.sub(r"[^\w.-]+", "-", document.title, flags=re.UNICODE).strip("-")
         slug = slug or "document"
         return "Manuscript/{:04d}-{}-{}.md".format(index, slug, document.id)
+
+    @staticmethod
+    def _new_entity_path(entity, index):
+        slug = re.sub(
+            r"[^\w.-]+", "-", entity.title, flags=re.UNICODE
+        ).strip("-") or "entity"
+        return "Entities/{:04d}-{}-{}.md".format(index, slug, entity.id)
+
+    @staticmethod
+    def _validate_output_addresses(project):
+        """Reject unsafe or colliding persisted addresses before encoding."""
+
+        paths = {
+            path.casefold()
+            for path in ("MANUSKRIPT", PROJECT_FILE, SETTINGS_FILE, LEGACY_FILE)
+        }
+        items = tuple(
+            document.source_path
+            for document in project.documents()
+            if document.source_path
+        ) + tuple(
+            item.path for item in project.plugin_files + project.unknown_files
+        )
+        for raw_path in items:
+            path = normalize_project_path(raw_path)
+            key = path.casefold()
+            if key in paths:
+                raise ValueError(
+                    "Project paths collide at {}.".format(path)
+                )
+            paths.add(key)
+
+        source_paths = set()
+        for item in project.source_files:
+            path = normalize_project_path(item.path)
+            key = path.casefold()
+            if key in source_paths:
+                raise ValueError(
+                    "Source project paths collide at {}.".format(path)
+                )
+            source_paths.add(key)
 
     def _decode_characters(self, values):
         return tuple(

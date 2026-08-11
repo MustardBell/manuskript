@@ -536,6 +536,108 @@ class MDEditView(textEditView):
         self.setTextCursor(cursor)
         self._wikilinkCompletionRange = None
 
+    def createStandardContextMenu(self):
+        menu = textEditView.createStandardContextMenu(self)
+        cursor = self.textCursor()
+        if not cursor.hasSelection() or self._markupBaseId != MARKDOWN_BASE_ID:
+            return menu
+        display = cursor.selectedText()
+        if any(character in display for character in ("\n", "\u2029", "|", "]")):
+            return menu
+        choice_provider = getattr(
+            self.text_editor_context, "entity_reference_choices", None
+        )
+        schema_provider = getattr(
+            self.text_editor_context, "entity_schemas", None
+        )
+        if not callable(choice_provider) or not callable(schema_provider):
+            return menu
+        choices = tuple(choice_provider(display))
+        schemas = tuple(schema_provider())
+        if not choices and not schemas:
+            return menu
+
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+        reference_menu = QMenu(self.tr("Reference…"), menu)
+        exact = tuple(choice for choice in choices if choice.exact_match)
+        if exact:
+            heading = reference_menu.addAction(self.tr("Exact matches"))
+            heading.setEnabled(False)
+            for choice in exact:
+                self._addEntityReferenceAction(
+                    reference_menu, choice, start, end, display
+                )
+            reference_menu.addSeparator()
+
+        grouped = {}
+        for choice in choices:
+            grouped.setdefault(choice.entity_type, []).append(choice)
+        labels = {schema.type: schema.label for schema in schemas}
+        for entity_type in sorted(grouped, key=lambda value: (
+            labels.get(value, value).casefold(), value
+        )):
+            label = labels.get(entity_type, entity_type.replace("-", " ").title())
+            group = reference_menu.addMenu(label)
+            for choice in grouped[entity_type]:
+                self._addEntityReferenceAction(
+                    group, choice, start, end, display
+                )
+
+        if schemas:
+            reference_menu.addSeparator()
+            create_menu = reference_menu.addMenu(self.tr("Create new…"))
+            for schema in schemas:
+                action = create_menu.addAction(schema.label)
+                action.triggered.connect(
+                    lambda _checked=False, entity_type=schema.type:
+                        self._createEntityReference(
+                            entity_type, start, end, display
+                        )
+                )
+
+        before = menu.actions()[0] if menu.actions() else None
+        menu.insertMenu(before, reference_menu)
+        if before is not None:
+            menu.insertSeparator(before)
+        return menu
+
+    def _addEntityReferenceAction(
+        self, menu, choice, start, end, display
+    ):
+        action = menu.addAction(
+            "{} — {}".format(choice.title, choice.target)
+        )
+        action.setStatusTip(
+            self.tr("Insert [[{}|{}]]").format(choice.target, display)
+        )
+        action.triggered.connect(
+            lambda _checked=False, selected=choice:
+                self._insertEntityReference(
+                    selected, start, end, display
+                )
+        )
+
+    def _createEntityReference(self, entity_type, start, end, display):
+        command = getattr(self.text_editor_context, "create_entity", None)
+        if not callable(command):
+            return False
+        choice = command(entity_type, display)
+        if choice is None:
+            return False
+        return self._insertEntityReference(choice, start, end, display)
+
+    def _insertEntityReference(self, choice, start, end, display):
+        cursor = QTextCursor(self.document())
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        if cursor.selectedText() != display:
+            return False
+        cursor.beginEditBlock()
+        cursor.insertText("[[{}|{}]]".format(choice.target, display))
+        cursor.endEditBlock()
+        self.setTextCursor(cursor)
+        return True
+
     ###########################################################################
     # KEYPRESS
     ###########################################################################

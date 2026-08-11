@@ -66,6 +66,7 @@ class ReferenceNavigation:
     open_text: Callable[[str], bool]
     open_plot: Callable[[str], bool]
     open_world: Callable[[str], bool]
+    open_entity: Optional[Callable[[str], bool]] = None
 
 
 def plotReference(identifier, searchable=False):

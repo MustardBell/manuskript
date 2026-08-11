@@ -1,7 +1,7 @@
 from manuskript.models.references import ReferenceNavigation
 
 
-def reference_navigation_for(window, models):
+def reference_navigation_for(window, models, open_entity=None):
     """Adapt one main window to the reference navigation interface.
 
     The window is what gets navigated -- tabs, lists, the editor. The
@@ -48,4 +48,5 @@ def reference_navigation_for(window, models):
         open_text=open_text,
         open_plot=open_plot,
         open_world=open_world,
+        open_entity=open_entity,
     )

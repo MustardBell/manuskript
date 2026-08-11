@@ -622,6 +622,33 @@ class TestTheProjectIsNotReadThroughAWindow(unittest.TestCase):
 
         self.storage.save.assert_called_once()
 
+    def test_creating_a_generic_entity_dirties_the_owning_project(self):
+        entity = self.storage.create_entity.return_value
+        self.manager.session.open("book.msk")
+
+        created = self.manager.createEntity("character", "Mara", ("M",))
+
+        self.assertIs(created, entity)
+        self.storage.create_entity.assert_called_once_with(
+            "character", "Mara", ("M",)
+        )
+        self.assertTrue(self.manager.projectDirty)
+        self.manager.autosave.schedule_after_change.assert_called_once_with()
+
+    def test_updating_a_generic_entity_dirties_the_owning_project(self):
+        entity = self.storage.update_entity.return_value
+        self.manager.session.open("book.msk")
+
+        updated = self.manager.updateEntity(
+            "mara", aliases=("Mara",), text="Notes."
+        )
+
+        self.assertIs(updated, entity)
+        self.storage.update_entity.assert_called_once_with(
+            "mara", aliases=("Mara",), text="Notes."
+        )
+        self.assertTrue(self.manager.projectDirty)
+
     def test_what_marks_the_project_dirty_comes_from_its_own_models(self):
         first, second = MagicMock(), MagicMock()
         models = MagicMock()

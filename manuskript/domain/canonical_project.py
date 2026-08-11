@@ -107,6 +107,28 @@ class OutlineDocument:
 
 
 @dataclass(frozen=True)
+class EntityRecord:
+    """A generic semantic identity backed by an ordinary project document."""
+
+    document: OutlineDocument
+    entity_type: str
+    aliases: Tuple[str, ...] = ()
+    metadata: Tuple[StructuredMetadataField, ...] = ()
+
+    @property
+    def id(self) -> str:
+        return self.document.id
+
+    @property
+    def type(self) -> str:
+        return self.entity_type
+
+    @property
+    def title(self) -> str:
+        return self.document.title
+
+
+@dataclass(frozen=True)
 class WorldRecord:
     fields: Tuple[MetadataField, ...]
     children: Tuple["WorldRecord", ...] = ()
@@ -179,6 +201,7 @@ class CanonicalProject:
     summary: Tuple[MetadataField, ...] = ()
     labels: Tuple[LabelRecord, ...] = ()
     statuses: Tuple[str, ...] = ()
+    entities: Tuple[EntityRecord, ...] = ()
     characters: Tuple[CharacterRecord, ...] = ()
     outline: Tuple[OutlineDocument, ...] = ()
     world: Tuple[WorldRecord, ...] = ()
@@ -197,6 +220,8 @@ class CanonicalProject:
     def documents(self) -> Iterable[OutlineDocument]:
         for document in self.outline:
             yield from document.walk()
+        for entity in self.entities:
+            yield entity.document
 
     def file(self, path: str) -> Optional[PreservedProjectFile]:
         for project_file in self.plugin_files + self.unknown_files:

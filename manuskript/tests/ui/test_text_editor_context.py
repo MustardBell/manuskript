@@ -143,6 +143,55 @@ def test_text_editor_context_exposes_project_wikilink_commands():
     open_document.assert_called_once_with("stable-document-id")
 
 
+def test_text_editor_context_routes_generic_entity_commands():
+    catalog = MagicMock()
+    catalog.writable = True
+    choices = (MagicMock(),)
+    schemas = (MagicMock(),)
+    catalog.reference_choices.return_value = choices
+    catalog.schemas.schemas = schemas
+    entity = MagicMock()
+    choice = MagicMock()
+    catalog.reference_choice.return_value = choice
+    create_entity = MagicMock(return_value=entity)
+    context = text_editor_context_for(
+        make_window(),
+        MagicMock(),
+        MagicMock(),
+        entity_catalog=catalog,
+        create_native_entity=create_entity,
+    )
+
+    assert context.entity_reference_choices("Mara") == choices
+    assert context.entity_schemas() == schemas
+    assert context.create_entity("character", "Mara") is choice
+    catalog.reference_choices.assert_called_once_with("Mara")
+    create_entity.assert_called_once_with("character", "Mara")
+    catalog.reference_choice.assert_called_once_with(
+        entity, exact_match=True
+    )
+
+
+def test_wikilink_navigation_falls_back_from_outline_to_entity_document():
+    reference_index = MagicMock()
+    document = MagicMock(id="entity-id")
+    reference_index.resolve.return_value = (MagicMock(), document)
+    open_document = MagicMock(return_value=False)
+    open_entity = MagicMock(return_value=True)
+    context = text_editor_context_for(
+        make_window(),
+        MagicMock(),
+        MagicMock(),
+        reference_index=reference_index,
+        open_document=open_document,
+        open_entity=open_entity,
+    )
+
+    assert context.open_wikilink("Characters/Mara")
+    open_document.assert_called_once_with("entity-id")
+    open_entity.assert_called_once_with("entity-id")
+
+
 def test_text_editor_click_reports_workspace_focus():
     context = MagicMock()
     context.settings = MagicMock()

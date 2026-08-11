@@ -35,6 +35,33 @@ are represented losslessly in `.manuskript/legacy.yaml`; that is a transitional
 codec representation, not a second authoritative story database. Plugin-owned
 portable data remains under `plugins/<plugin-id>/`.
 
+## Generic entities
+
+Entities are ordinary Markdown documents listed separately from the manuscript
+outline in `project.yaml`. Identity and document type stay under `manuskript`;
+the generic entity layer adds an open type string, structured metadata, and
+Obsidian-compatible top-level aliases:
+
+```yaml
+---
+aliases: [Mara, Ms Vale]
+entity:
+  type: character
+  metadata: []
+manuskript:
+  id: 018f1f42-c546-7d20-bf25-b8d70433c123
+  type: entity
+  title: Mara Vale
+  metadata: []
+---
+```
+
+Core does not infer fiction meaning from `entity.type`. Optional schemas supply
+labels and readable path conventions for character, place, object,
+organization, concept, event, plot, and user-defined types. Legacy Character,
+World, and Plot records are exposed through a read-only generic adapter; they
+are not silently migrated or duplicated in Format 1 storage.
+
 ## Markdown and DSL
 
 Ordinary Markdown is valid Format 2 source. The first core DSL primitive is an
@@ -57,6 +84,12 @@ While the caret is inside a wikilink target, `Ctrl+Space` opens the same
 deterministic completion as an accessible keyboard menu; choosing an entry
 replaces only that target span.
 
+Selecting prose and invoking `Reference…` offers deterministic exact
+title/alias matches, grouped explicit choices, and `Create new…`. Choosing an
+entry writes `[[path|selected surface]]` into the source. Exact scanners ignore
+code and existing links, prefer the longest surface at an overlap, preserve
+ambiguity for the writer to decide, and never infer pronouns or story roles.
+
 Editor projections never replace DSL annotations with hidden model entries.
 Live Preview hides delimiters outside the active block, Clean Editing hides
 them in every block while retaining the canonical editable `QTextDocument`,
@@ -68,7 +101,8 @@ remain available when an author wants to see all syntax.
 Untouched source is emitted byte-for-byte. A changed project retains unknown
 files and structured metadata. Stable IDs and document paths must be unique.
 Missing files, mismatched IDs, invalid YAML, and unlisted recovered Markdown
-documents are reported rather than silently discarded.
+documents are reported rather than silently discarded. Ordinary Markdown with
+no Manuskript identity frontmatter remains an unknown author-owned vault file.
 
 ## Current authoring boundary
 

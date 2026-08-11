@@ -12,6 +12,10 @@ from PyQt5.QtTest import QSignalSpy, QTest
 
 from manuskript.enums import Outline
 from manuskript.domain.reference_index import ReferenceSuggestion
+from manuskript.domain.entity_catalog import (
+    EntityReferenceChoice,
+    EntitySchema,
+)
 from manuskript.models.outlineItem import outlineItem
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
@@ -641,6 +645,82 @@ def test_wikilink_completion_replaces_only_the_target_source_span():
     menu.actions()[0].trigger()
     assert editor.toPlainText() == "See [[Characters/Mara]]"
     assert editor.textCursor().position() == len("See [[Characters/Mara")
+
+
+def test_selected_surface_can_become_an_explicit_entity_reference():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    choice = EntityReferenceChoice(
+        "olena",
+        "character",
+        "Олена Коваль",
+        "Characters/Олена Коваль",
+        ("Олени",),
+        True,
+    )
+    editor.set_text_editor_context(make_context(
+        editor.settings,
+        entity_reference_choices=lambda _surface: (choice,),
+        entity_schemas=lambda: (
+            EntitySchema("character", "Character", "Characters"),
+        ),
+    ))
+    editor.setPlainText("She spoke to Олени quietly.")
+    cursor = editor.textCursor()
+    start = editor.toPlainText().index("Олени")
+    cursor.setPosition(start)
+    cursor.setPosition(start + len("Олени"), QTextCursor.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    menu = editor.createStandardContextMenu()
+    reference_menu = next(
+        action.menu() for action in menu.actions()
+        if action.menu() is not None
+        and action.menu().title().replace("&", "") == "Reference…"
+    )
+    exact_action = next(
+        action for action in reference_menu.actions()
+        if action.text() == "Олена Коваль — Characters/Олена Коваль"
+    )
+    exact_action.trigger()
+
+    assert editor.toPlainText() == (
+        "She spoke to [[Characters/Олена Коваль|Олени]] quietly."
+    )
+
+
+def test_reference_menu_can_create_then_link_a_generic_entity():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    create_entity = MagicMock(return_value=EntityReferenceChoice(
+        "kyiv", "place", "Kyiv", "Places/Kyiv", (), True
+    ))
+    editor.set_text_editor_context(make_context(
+        editor.settings,
+        entity_reference_choices=lambda _surface: (),
+        entity_schemas=lambda: (
+            EntitySchema("place", "Place", "Places"),
+        ),
+        create_entity=create_entity,
+    ))
+    editor.setPlainText("Kyiv")
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.Document)
+    editor.setTextCursor(cursor)
+
+    menu = editor.createStandardContextMenu()
+    reference_menu = next(
+        action.menu() for action in menu.actions()
+        if action.menu() is not None
+        and action.menu().title().replace("&", "") == "Reference…"
+    )
+    create_menu = next(
+        action.menu() for action in reference_menu.actions()
+        if action.menu() is not None
+        and action.menu().title().replace("&", "") == "Create new…"
+    )
+    create_menu.actions()[0].trigger()
+
+    create_entity.assert_called_once_with("place", "Kyiv")
+    assert editor.toPlainText() == "[[Places/Kyiv|Kyiv]]"
 
 
 def test_live_preview_keeps_list_markers_position_stable():

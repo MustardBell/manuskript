@@ -1,0 +1,15 @@
+manuskript:
+  format: 2
+  metadata:
+    - name: Title
+      value: Shared vault
+  summary: []
+  labels: []
+  statuses: []
+  outline:
+    - id: scene-opening
+      path: Manuscript/Opening.md
+      children: []
+  entities:
+    - id: entity-mara
+      path: Characters/Mara Vale.md
