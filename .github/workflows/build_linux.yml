@@ -59,7 +59,7 @@ jobs:
       env:
         QT_QPA_PLATFORM: offscreen
       run: |
-        pytest -vs -o cache_dir=/tmp/pytest_cache --ignore=rpmbuild --ignore=dist
+        xvfb-run -s '-screen 0 640x480x24 +extension GLX' python .github/ci/run_pytest_batches.py
 
     - name: Build standalone Linux binary
       run: |

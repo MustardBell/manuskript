@@ -45,7 +45,7 @@ jobs:
 
     - name: Run Pytest
       run: |
-        python3 -B -m pytest -vs
+        python3 -B .github/ci/run_pytest_batches.py
 
     - name: Build macOS App Bundle and DMG
       env:
