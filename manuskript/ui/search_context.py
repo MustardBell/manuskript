@@ -191,7 +191,12 @@ class SearchResultViewAdapter:
         return self._entity_editor().propertiesTable
 
     def _entity_editor(self):
-        editor = self.views.entity_workspace.editorPanel.editor
+        """The form the last opened entity is being edited in.
+
+        Each browser edits in its own half, so which one that is depends
+        on what was opened rather than on one editor everything shares.
+        """
+        editor = self.views.entity_workspace.current_editor()
         if editor is None:
             raise RuntimeError("Entity search result did not open an editor.")
         return editor

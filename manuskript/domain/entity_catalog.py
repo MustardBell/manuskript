@@ -16,11 +16,63 @@ from manuskript.domain.morphology import MorphologyIndex
 from manuskript.domain.project_paths import normalize_project_path
 
 
+#: How a schema field is written, and therefore how it is edited. Core
+#: knows these four shapes and nothing about what any of them mean.
+LINE = "line"
+TEXT = "text"
+CHOICE = "choice"
+FLAG = "flag"
+
+
+@dataclass(frozen=True)
+class EntityFieldSpec:
+    """One metadata key a schema expects, and how it reads.
+
+    Entities stay generic: this says a character has an Importance, not
+    what importance is for. Without it the only editor anybody can build
+    is a table of raw keys, which is what a character editor stopped
+    being when characters became entities.
+    """
+
+    name: str
+    label: str
+    kind: str = LINE
+    #: Stored value paired with the label to show for it.
+    choices: Tuple[Tuple[str, str], ...] = ()
+    #: Which part of the form this belongs under. Empty is the first.
+    section: str = ""
+
+    def label_for(self, value):
+        """What to show for a stored value, which may be unknown to us."""
+        text = "" if value is None else str(value)
+        for stored, label in self.choices:
+            if stored == text:
+                return label
+        return text
+
+
 @dataclass(frozen=True)
 class EntitySchema:
     type: str
     label: str
     directory: str
+    #: The fields this kind of entity is expected to carry, in the order
+    #: they are read. Anything else an entity holds stays editable as
+    #: plain metadata -- a schema describes, it does not restrict.
+    fields: Tuple[EntityFieldSpec, ...] = ()
+    #: A field name whose value sorts entities into named groups. The
+    #: characters list has always been read as Main/Secondary/Minor
+    #: rather than as one alphabetical run.
+    group_by: str = ""
+
+    def field(self, name) -> Optional[EntityFieldSpec]:
+        return next(
+            (item for item in self.fields if item.name == name), None
+        )
+
+    @property
+    def grouping(self) -> Optional[EntityFieldSpec]:
+        return self.field(self.group_by) if self.group_by else None
 
 
 @dataclass(frozen=True)
@@ -78,12 +130,48 @@ class EntitySchemaRegistry:
         return self._schemas.get(str(entity_type))
 
 
+#: Stored exactly as Format 1 wrote it, so a project that has always
+#: said "2" for a main character still does.
+CHARACTER_IMPORTANCE = (
+    ("2", "Main"),
+    ("1", "Secondary"),
+    ("0", "Minor"),
+)
+
+#: The fields a character has had for as long as Manuskript has had
+#: characters, under the names the project file already uses.
+CHARACTER_FIELDS = (
+    EntityFieldSpec(
+        "Importance", "Importance", CHOICE, CHARACTER_IMPORTANCE,
+    ),
+    EntityFieldSpec("POV", "Allow POV", FLAG),
+    EntityFieldSpec("Motivation", "Motivation", TEXT),
+    EntityFieldSpec("Goal", "Goal", TEXT),
+    EntityFieldSpec("Conflict", "Conflict", TEXT),
+    EntityFieldSpec("Epiphany", "Epiphany", TEXT),
+    EntityFieldSpec(
+        "Phrase Summary", "One sentence summary", TEXT, section="Summary",
+    ),
+    EntityFieldSpec(
+        "Paragraph Summary", "One paragraph summary", TEXT,
+        section="Summary",
+    ),
+    EntityFieldSpec(
+        "Full Summary", "Full summary", TEXT, section="Summary",
+    ),
+)
+
+
 def first_party_story_entity_schemas() -> EntitySchemaRegistry:
     """Return optional story schemas without teaching core link syntax fiction."""
 
     return EntitySchemaRegistry((
         EntitySchema("project", "Project", "Project"),
-        EntitySchema("character", "Character", "Characters"),
+        EntitySchema(
+            "character", "Character", "Characters",
+            fields=CHARACTER_FIELDS,
+            group_by="Importance",
+        ),
         EntitySchema("place", "Place", "Places"),
         EntitySchema("object", "Object", "Objects"),
         EntitySchema("organization", "Organization", "Organizations"),

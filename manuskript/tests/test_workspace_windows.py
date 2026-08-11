@@ -244,7 +244,7 @@ def test_closing_a_secondary_flushes_and_primary_save_persists_entity_edit(
     note = "Written in the secondary immediately before it closed."
     try:
         assert other.entityWorkspace.open(character.id)
-        dialog = other.entityWorkspace.editor._dialogs[character.id]
+        dialog = other.entityWorkspace.dialog_for(character.id)
         dialog.bodyEdit.setPlainText(note)
         assert manager.storage.entity_catalog.find(
             character.id

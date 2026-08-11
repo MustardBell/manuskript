@@ -22,7 +22,6 @@ PROJECT_ENTITIES = "core.entities.project"
 CHARACTER_ENTITIES = "core.entities.characters"
 PLOT_ENTITIES = "core.entities.plots"
 WORLD_ENTITIES = "core.entities.world"
-ENTITY_EDITOR = "core.entities.editor"
 
 #: Where the metadata panel's revision list files its own arrangement.
 #: Its own key rather than part of the panel's, because that is how it
@@ -122,15 +121,6 @@ def core_panel_descriptors(redaction_group, factories=None):
             multiplicity=PER_WINDOW,
             default_visible=False,
             widget_factory=factories.get(WORLD_ENTITIES),
-        ),
-        PanelDescriptor(
-            id=ENTITY_EDITOR,
-            title="Entity editor",
-            placement=DOCK,
-            scope=PROJECT,
-            multiplicity=PER_WINDOW,
-            default_visible=True,
-            widget_factory=factories.get(ENTITY_EDITOR),
         ),
     )
 

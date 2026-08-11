@@ -27,7 +27,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 #: Bump when the stored shape changes, and add a migration step.
-WORKSPACE_STATE_VERSION = 1
+#:
+#: 2 -- the entity docks were first placed tabbed over one another and
+#: that arrangement was saved, so a layout written by 1 has to be laid
+#: out once more rather than leaving people with tabs they never chose.
+WORKSPACE_STATE_VERSION = 2
 
 #: Everything this module owns lives under here.
 ROOT = "workspace"
@@ -100,6 +104,19 @@ class WorkspaceStateStore:
             documents=self._json(window_id, "documents"),
             main_tab=self._int(window_id, "mainTab"),
         )
+
+    def stored_version(self):
+        """Which version of this application last wrote a layout.
+
+        Zero when nothing has been saved yet. Read so an arrangement
+        that a later version would no longer produce can be corrected
+        once, instead of being inherited for good.
+        """
+        value = self._settings.value("{}/version".format(ROOT), 0)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
 
     def save(self, state, window_id=PRIMARY):
         self._settings.setValue(

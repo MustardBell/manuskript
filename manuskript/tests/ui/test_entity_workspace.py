@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget
 
 from manuskript.domain.entity_catalog import (
@@ -60,7 +61,7 @@ def test_entity_workspace_routes_creation_to_the_matching_dock(
     assert catalog.find("new-character").title == "Olena"
     assert panels[1].tree.topLevelItemCount() == 1
     assert panels[2].tree.topLevelItemCount() == 0
-    dialog = controller.editor._dialogs["new-character"]
+    dialog = controller.dialog_for("new-character")
     assert dialog.morphologyButton.isEnabled()
     controller.unbind()
     connections.disconnect_all()
@@ -70,11 +71,59 @@ def test_entity_workspace_routes_creation_to_the_matching_dock(
 def test_format_one_story_models_appear_in_entity_docks(MWSampleProject):
     window = MWSampleProject
 
-    assert window.corePanels.project_entities.tree.topLevelItemCount() == 1
-    assert window.corePanels.character_entities.tree.topLevelItemCount() == 6
-    assert window.corePanels.plot_entities.tree.topLevelItemCount() == 3
-    assert window.corePanels.world_entities.tree.topLevelItemCount() > 0
+    assert len(window.corePanels.project_entities.entities) == 1
+    assert len(window.corePanels.character_entities.entities) == 6
+    assert len(window.corePanels.plot_entities.entities) == 3
+    assert len(window.corePanels.world_entities.entities) > 0
     assert not window.corePanels.character_entities.newButton.isEnabled()
+
+
+def test_characters_are_read_under_main_secondary_and_minor(MWSampleProject):
+    """The importance grouping is how a cast has always been read.
+
+    A flat alphabetical run says nothing about who the story is about,
+    which is what the generic entity list lost.
+    """
+    tree = MWSampleProject.corePanels.character_entities.tree
+
+    headings = [
+        tree.topLevelItem(i).text(0)
+        for i in range(tree.topLevelItemCount())
+    ]
+    assert headings == ["Main", "Secondary", "Minor"]
+
+    listed = {
+        tree.topLevelItem(i).text(0): [
+            tree.topLevelItem(i).child(j).text(0)
+            for j in range(tree.topLevelItem(i).childCount())
+        ]
+        for i in range(tree.topLevelItemCount())
+    }
+    assert listed["Main"] == ["Paul", "Peter"]
+    assert listed["Minor"] == ["Herod"]
+    # A heading stands for no entity, so nothing can be edited through it.
+    assert tree.topLevelItem(0).data(0, Qt.UserRole) is None
+
+
+def test_an_entity_is_edited_where_it_is_listed(MWEmptyProject):
+    """There is no entity editor to be left looking at on its own.
+
+    Editing a character is something done to a character, so the form is
+    the browser's other half rather than a surface of its own that can
+    be opened, moved or closed without the list it belongs to.
+    """
+    window = MWEmptyProject
+
+    assert not hasattr(window.corePanels, "entity_editor")
+    assert all(
+        "editor" not in panel_id
+        for panel_id in window.panelHost.instances
+    )
+
+    panel = window.corePanels.character_entities
+    assert panel.editor.isHidden()
+    for other in window.entityWorkspace.panels:
+        assert other.editor is not panel.editor or other is panel
 
 
 def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):

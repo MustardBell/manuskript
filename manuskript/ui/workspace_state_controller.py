@@ -80,6 +80,10 @@ class WorkspaceStateController:
         )
         self._dock_visibility = {}
         self._dock_visibility_locked = True
+        #: Which version of the application wrote the layout restored
+        #: here, so a window can tell an arrangement it chose from one
+        #: an earlier version left behind.
+        self.storedVersion = 0
         #: What each project-scoped panel was showing before the welcome
         #: screen put it away, by panel id. Panels are hidden through the
         #: host rather than the widget, so their toggles keep agreeing
@@ -102,6 +106,7 @@ class WorkspaceStateController:
     # --------------------------------------------------------- restore
 
     def restore(self):
+        self.storedVersion = self.store.stored_version()
         state = self.store.load(self.windowId)
         if state.geometry is not None:
             self.views.restore_geometry(state.geometry)

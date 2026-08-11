@@ -1,40 +1,21 @@
 """Window-local control of the canonical entity dock surfaces."""
 
-from functools import partial
-from weakref import ref
-
 from PyQt5.QtWidgets import QInputDialog, QMessageBox
 
 from manuskript.ui.connections import weak_callback
 from manuskript.ui.entity_editor import EntityEditorController
 
 
-def _reveal_panel(host_reference, panel_id):
-    host = host_reference()
-    if host is not None:
-        host.reveal(panel_id)
-
-
-def panel_revealer(host, panel_id):
-    """Return a reveal command that cannot retain its workspace window."""
-
-    return partial(_reveal_panel, ref(host), panel_id)
-
-
 class EntityWorkspaceController:
     """Bind one window's entity docks to the project-owned catalogue."""
 
-    def __init__(
-        self, parent, runtime, panels, editor_panel=None, reveal_editor=None
-    ):
+    def __init__(self, parent, runtime, panels):
         self.parent = parent
         self.runtime = runtime
         self.panels = tuple(panels)
-        self.editorPanel = editor_panel
-        self.revealEditor = reveal_editor
         self.catalog = None
         self.manager = None
-        self.editor = None
+        self.editors = {}
         self.bound = False
         # The catalogue belongs to the project and outlives every window
         # onto it, so what it holds must not be this window. A stale
@@ -51,14 +32,19 @@ class EntityWorkspaceController:
         if self.manager is None:
             raise RuntimeError("Entity workspace requires a project manager.")
         self.catalog = self.manager.storage.entity_catalog
-        self.editor = EntityEditorController(
-            self.parent,
-            self.catalog,
-            self.manager.updateEntity,
-            self.manager.storage.morphology_providers,
-            host_panel=self.editorPanel,
-            reveal=self.revealEditor,
-        )
+        # One editor per browser, mounted in that browser's own half.
+        # An entity is edited where it is listed, so there is no editor
+        # to be left looking at without the list it came from.
+        self.editors = {
+            panel: EntityEditorController(
+                self.parent,
+                self.catalog,
+                self.manager.updateEntity,
+                self.manager.storage.morphology_providers,
+                host_panel=panel.editor,
+            )
+            for panel in self.panels
+        }
         for panel in self.panels:
             connect(panel.createRequested, self.create)
             connect(panel.editRequested, self.open)
@@ -71,11 +57,11 @@ class EntityWorkspaceController:
         if not self.bound:
             return
         self.catalog.unsubscribe(self._onCatalogChanged)
-        if self.editor is not None:
-            self.editor.close_all()
+        for editor in self.editors.values():
+            editor.close_all()
+        self.editors = {}
         for panel in self.panels:
             panel.set_catalogue((), (), False)
-        self.editor = None
         self.catalog = None
         self.manager = None
         self.bound = False
@@ -120,12 +106,48 @@ class EntityWorkspaceController:
         return self.open(entity.id)
 
     def open(self, entity_id):
-        return bool(self.editor is not None and self.editor.open(entity_id))
+        """Edit an entity in the browser that lists it."""
+        panel = self.panel_for(entity_id)
+        if panel is None:
+            return False
+        editor = self.editors.get(panel)
+        if editor is None or not editor.open(entity_id):
+            return False
+        panel.show_editor()
+        return True
+
+    def dialog_for(self, entity_id):
+        """The open form for one entity, wherever it is being edited."""
+        panel = self.panel_for(entity_id)
+        editor = self.editors.get(panel) if panel is not None else None
+        if editor is None:
+            return None
+        return editor._dialogs.get(entity_id)
+
+    def current_editor(self):
+        """The entity form now on screen, if one is."""
+        for panel in self.panels:
+            editor = panel.editor.editor
+            if editor is not None and not panel.editor.isHidden():
+                return editor
+        return None
+
+    def panel_for(self, entity_id):
+        if self.catalog is None:
+            return None
+        entity = self.catalog.find(entity_id)
+        if entity is None:
+            return None
+        return next(
+            (panel for panel in self.panels if panel.accepts(entity)), None
+        )
 
     def pending_editors(self):
-        if self.editor is None:
-            return ()
-        return self.editor.pending_editors()
+        return tuple(
+            dialog
+            for editor in self.editors.values()
+            for dialog in editor.pending_editors()
+        )
 
     def delete(self, entity_id):
         if self.catalog is None:
@@ -162,7 +184,5 @@ class EntityWorkspaceController:
     def dispose(self):
         self.unbind()
         self.panels = ()
-        self.editorPanel = None
-        self.revealEditor = None
         self.parent = None
         self.runtime = None

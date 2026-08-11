@@ -16,7 +16,6 @@ from PyQt5.QtWidgets import (
 
 from manuskript.panels.core import (
     CHARACTER_ENTITIES,
-    ENTITY_EDITOR,
     METADATA,
     PLOT_ENTITIES,
     PROJECT_ENTITIES,
@@ -98,7 +97,6 @@ class CorePanelViewSet:
     character_entities: EntityBrowserPanel
     plot_entities: EntityBrowserPanel
     world_entities: EntityBrowserPanel
-    entity_editor: EntityEditorPanel
 
     @classmethod
     def from_host(cls, host):
@@ -118,8 +116,5 @@ class CorePanelViewSet:
             ),
             world_entities=_panel_widget(
                 host, WORLD_ENTITIES, EntityBrowserPanel
-            ),
-            entity_editor=_panel_widget(
-                host, ENTITY_EDITOR, EntityEditorPanel
             ),
         )

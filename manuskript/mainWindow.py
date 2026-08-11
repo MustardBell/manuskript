@@ -56,10 +56,7 @@ from manuskript.ui.project_binding import ProjectBinding
 from manuskript.ui.project_binding_views import ProjectBindingViews
 from manuskript.ui.project_context_binding import ProjectContextBinding
 from manuskript.ui.project_feature_binding import ProjectFeatureBinding
-from manuskript.ui.entity_workspace import (
-    EntityWorkspaceController,
-    panel_revealer,
-)
+from manuskript.ui.entity_workspace import EntityWorkspaceController
 from manuskript.ui.project_lifecycle import ProjectLifecycleView
 from manuskript.ui.project_lifecycle_views import ProjectLifecycleViews
 from manuskript.ui.project_view_set import ProjectViewSet
@@ -184,11 +181,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # safely once C++-owned child wrappers are involved.
             self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
+        # Without GroupedDragging: it is the only thing that builds a
+        # QDockWidgetGroupWindow, and closing every dock inside one
+        # leaves the frame behind -- an empty window wearing this
+        # window's own title, which nothing in the application owns or
+        # can put away.
         self.setDockOptions(
             QMainWindow.AnimatedDocks
             | QMainWindow.AllowNestedDocks
             | QMainWindow.AllowTabbedDocks
-            | QMainWindow.GroupedDragging
         )
         self.actUpgradeProjectFormat = QAction(
             self.tr("Upgrade Project Format…"), self
@@ -303,8 +304,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.corePanels.plot_entities,
                     self.corePanels.world_entities,
                 ),
-                self.corePanels.entity_editor,
-                panel_revealer(self.panelHost, core_panels.ENTITY_EDITOR),
             )
         )
         self.workspaceSelection = self.workspaceLifetime.own(
@@ -581,7 +580,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.CHARACTER_ENTITIES,
             core_panels.PLOT_ENTITIES,
             core_panels.WORLD_ENTITIES,
-            core_panels.ENTITY_EDITOR,
         )
 
     def navigateTo(self, row):
@@ -681,7 +679,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.CHARACTER_ENTITIES,
             core_panels.PLOT_ENTITIES,
             core_panels.WORLD_ENTITIES,
-            core_panels.ENTITY_EDITOR,
         ):
             instance = self.panelHost.open(
                 panel_id,

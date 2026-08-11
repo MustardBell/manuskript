@@ -8,7 +8,6 @@ QApplication exists.
 
 from manuskript.panels.core import (
     CHARACTER_ENTITIES,
-    ENTITY_EDITOR,
     METADATA,
     PLOT_ENTITIES,
     PROJECT_ENTITIES,
@@ -21,7 +20,6 @@ from manuskript.ui.panels.core.entities import (
     build_plot_entities,
     build_project_entities,
     build_world_entities,
-    build_entity_editor,
 )
 from manuskript.ui.panels.core.metadata import build_metadata
 from manuskript.ui.panels.core.project_tree import build_project_tree
@@ -40,7 +38,6 @@ def core_panel_factories():
         CHARACTER_ENTITIES: build_character_entities,
         PLOT_ENTITIES: build_plot_entities,
         WORLD_ENTITIES: build_world_entities,
-        ENTITY_EDITOR: build_entity_editor,
         METADATA: build_metadata,
         PROJECT_TREE: build_project_tree,
         STORYLINE: build_storyline,

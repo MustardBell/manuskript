@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import QDockWidget, QMainWindow
 from manuskript.panels import DOCK, PanelContext, PanelRegistry
 from manuskript.panels.core import (
     CHARACTER_ENTITIES,
-    ENTITY_EDITOR,
     METADATA,
     PLOT_ENTITIES,
     PROJECT_ENTITIES,
@@ -28,7 +27,6 @@ CORE_IDS = (
     CHARACTER_ENTITIES,
     PLOT_ENTITIES,
     WORLD_ENTITIES,
-    ENTITY_EDITOR,
 )
 
 
@@ -49,7 +47,6 @@ def test_core_surfaces_are_attached_as_registry_panels(MWEmptyProject):
         window.corePanels.character_entities,
         window.corePanels.plot_entities,
         window.corePanels.world_entities,
-        window.corePanels.entity_editor,
     )
     for panel_id, widget in zip(CORE_IDS, widgets):
         instance = window.panelHost.instance(panel_id)
@@ -70,7 +67,6 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
         "character_entities",
         "plot_entities",
         "world_entities",
-        "entity_editor",
     ]
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
@@ -143,7 +139,6 @@ ENTITY_IDS = (
     CHARACTER_ENTITIES,
     PLOT_ENTITIES,
     WORLD_ENTITIES,
-    ENTITY_EDITOR,
 )
 
 

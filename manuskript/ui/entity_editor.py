@@ -4,10 +4,12 @@ import json
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -20,8 +22,28 @@ from PyQt5.QtWidgets import (
 )
 
 from manuskript.domain.canonical_project import StructuredMetadataField
+from manuskript.domain.entity_catalog import CHOICE, FLAG, TEXT
 from manuskript.domain.morphology import MorphologyProfile
 from manuskript.ui.morphology_editor import MorphologyParadigmDialog
+
+#: What a stored flag may say for "yes". Format 1 wrote Python booleans.
+_TRUE = ("true", "1", "yes", "on")
+
+
+def _ordered_sections(fields):
+    """Section names in the order their first field declares them."""
+    names = []
+    for spec in fields:
+        if spec.section not in names:
+            names.append(spec.section)
+    return names
+
+
+def _make_read_only(widget):
+    if isinstance(widget, (QCheckBox, QComboBox)):
+        widget.setEnabled(False)
+    else:
+        widget.setReadOnly(True)
 
 
 class EntityEditorDialog(QDialog):
@@ -60,8 +82,8 @@ class EntityEditorDialog(QDialog):
         self.typeCombo = QComboBox(self)
         self.typeCombo.setObjectName("entityTypeCombo")
         self.typeCombo.setEditable(True)
-        for schema in schemas:
-            self.typeCombo.addItem(schema.label, schema.type)
+        for known in schemas:
+            self.typeCombo.addItem(known.label, known.type)
         type_index = self.typeCombo.findData(entity.type)
         if type_index < 0:
             self.typeCombo.addItem(entity.type, entity.type)
@@ -121,6 +143,14 @@ class EntityEditorDialog(QDialog):
         form.addRow(self.tr("Name forms:"), self.morphologyButton)
         form.addRow("", self.morphologySummary)
 
+        # What this kind of entity is expected to carry, laid out as its
+        # own fields. Without this the only editor possible is a table of
+        # raw keys, and a character editor stops being one.
+        self._schema = schema
+        self._fieldWidgets = {}
+        self._fieldPresent = set()
+        self._schemaSections = self._buildSchemaSections(entity)
+
         propertiesLabel = QLabel(self.tr("&Properties:"), self)
         self.propertiesTable = QTableWidget(0, 2, self)
         self.propertiesTable.setObjectName("entityPropertiesTable")
@@ -134,7 +164,9 @@ class EntityEditorDialog(QDialog):
         self.propertiesTable.verticalHeader().setVisible(False)
         propertiesLabel.setBuddy(self.propertiesTable)
         for field in entity.metadata:
-            if field.name == "morphology":
+            if field.name == "morphology" or field.name in self._fieldWidgets:
+                # Shown as its own field above. Repeating it here as a
+                # raw key would offer two places to edit one value.
                 continue
             self._appendProperty(field.name, field.value)
 
@@ -181,6 +213,8 @@ class EntityEditorDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        for section in self._schemaSections:
+            layout.addWidget(section)
         layout.addWidget(propertiesLabel)
         layout.addWidget(self.propertiesTable, 1)
         layout.addLayout(propertyButtons)
@@ -198,6 +232,93 @@ class EntityEditorDialog(QDialog):
             self.addPropertyButton.setVisible(False)
             self.removePropertyButton.setVisible(False)
             self.bodyEdit.setReadOnly(True)
+
+    def _buildSchemaSections(self, entity):
+        """One group box per section of fields this schema declares."""
+        schema = self._schema
+        if schema is None or not schema.fields:
+            return ()
+        stored = {field.name: field.value for field in entity.metadata}
+        #: Which declared fields the entity already carried, so saving
+        #: adds nothing it did not have and had nothing to say about.
+        self._fieldPresent = set(stored)
+        sections = []
+        for name in _ordered_sections(schema.fields):
+            box = QGroupBox(
+                name or self.tr("Details"), self,
+            )
+            box.setObjectName("entitySection." + (name or "details"))
+            box_form = QFormLayout(box)
+            for spec in schema.fields:
+                if spec.section != name:
+                    continue
+                widget = self._buildFieldWidget(spec, stored.get(spec.name))
+                self._fieldWidgets[spec.name] = (spec, widget)
+                if spec.kind == FLAG:
+                    box_form.addRow("", widget)
+                else:
+                    box_form.addRow(spec.label + ":", widget)
+            sections.append(box)
+        return tuple(sections)
+
+    def _buildFieldWidget(self, spec, value):
+        text = "" if value is None else str(value)
+        if spec.kind == FLAG:
+            widget = QCheckBox(spec.label, self)
+            widget.setChecked(text.strip().casefold() in _TRUE)
+        elif spec.kind == CHOICE:
+            widget = QComboBox(self)
+            for entry, label in spec.choices:
+                widget.addItem(label, entry)
+            index = widget.findData(text)
+            if index < 0 and text:
+                # A value this schema does not list is still the value
+                # the project holds; offering it keeps saving lossless.
+                widget.addItem(text, text)
+                index = widget.count() - 1
+            if index < 0:
+                # Nothing recorded. An empty choice says so, where
+                # falling back to the first would quietly make every
+                # character a main one the moment it was opened.
+                widget.insertItem(0, "", "")
+                index = 0
+            widget.setCurrentIndex(index)
+        elif spec.kind == TEXT:
+            widget = QPlainTextEdit(self)
+            widget.setPlainText(text)
+            widget.setMinimumHeight(56)
+        else:
+            widget = QLineEdit(self)
+            widget.setText(text)
+        widget.setObjectName("entityField." + spec.name)
+        widget.setAccessibleName(spec.label)
+        if self._readOnly:
+            _make_read_only(widget)
+        return widget
+
+    def _schemaValues(self):
+        """What the declared fields now say, by their stored names."""
+        values = {}
+        for name, (spec, widget) in self._fieldWidgets.items():
+            if spec.kind == FLAG:
+                # A box has no "not set", so an unticked one only says
+                # False where the entity already had an answer. On one
+                # that never did, it stays unanswered rather than
+                # writing a decision nobody made.
+                if widget.isChecked():
+                    values[name] = "True"
+                else:
+                    values[name] = "False" if name in self._fieldPresent else ""
+            elif spec.kind == CHOICE:
+                data = widget.currentData()
+                values[name] = (
+                    widget.currentText() if data is None else str(data)
+                )
+            elif spec.kind == TEXT:
+                values[name] = widget.toPlainText()
+            else:
+                values[name] = widget.text()
+        return values
 
     def _appendProperty(self, name, value):
         row = self.propertiesTable.rowCount()
@@ -244,7 +365,22 @@ class EntityEditorDialog(QDialog):
                         ).format(name, error)
                     )
             result.append(StructuredMetadataField(name, value))
-        metadata = tuple(result)
+        # The declared fields lead, in the order the schema names them,
+        # so a character's file reads the way a character reads.
+        declared = self._schemaValues()
+        ordered = [
+            StructuredMetadataField(spec.name, declared[spec.name])
+            for spec, _widget in self._fieldWidgets.values()
+            if spec.name in declared
+            # An empty field is an absent one. Writing all nine of them
+            # into every character would fill each file with keys that
+            # say nothing and rewrite files nobody edited.
+            and (
+                str(declared[spec.name]).strip()
+                or spec.name in self._fieldPresent
+            )
+        ]
+        metadata = tuple(ordered) + tuple(result)
         if self._morphologyProfile is not None:
             metadata = self._morphologyProfile.apply_to(metadata)
         return metadata
