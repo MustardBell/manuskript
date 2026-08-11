@@ -6,7 +6,6 @@ receive this port and cannot discover unrelated application or project state.
 """
 
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Callable, Optional
 
 from PyQt5.QtWidgets import QAction, QDockWidget, QSplitter
@@ -31,6 +30,21 @@ class PanelWindow:
     def for_window(cls, window):
         """Inventory panel capabilities without retaining the catalog."""
 
+        # Splitter slots are part of the composed window, not a dynamic
+        # discovery service. Resolve them once while the native tree is known
+        # to be intact. Re-entering QObject.findChild during later panel
+        # reparenting/deferred deletion made panel construction depend on Qt's
+        # native destruction timing and could crash inside SIP without a
+        # Python exception.
+        splitters = {
+            splitter.objectName(): splitter
+            for splitter in window.findChildren(QSplitter)
+            if splitter.objectName()
+        }
+
+        def find_splitter(name):
+            return splitters.get(name)
+
         def create_dock(title):
             return QDockWidget(window.tr(title), window)
 
@@ -45,7 +59,7 @@ class PanelWindow:
             presenter.show if presenter is not None else None
         )
         return cls(
-            find_splitter=partial(window.findChild, QSplitter),
+            find_splitter=find_splitter,
             create_dock=create_dock,
             restore_dock=window.restoreDockWidget,
             add_dock=window.addDockWidget,

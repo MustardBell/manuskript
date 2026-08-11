@@ -93,6 +93,28 @@ def test_a_splitter_mount_puts_a_panel_in_the_slot_it_names():
     window.close()
 
 
+def test_panel_window_inventories_splitters_once_at_composition():
+    class CountingWindow(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.splitter_searches = 0
+
+        def findChildren(self, *args, **kwargs):
+            self.splitter_searches += 1
+            return super().findChildren(*args, **kwargs)
+
+    window = CountingWindow()
+    splitter = QSplitter(window)
+    splitter.setObjectName("splitterStable")
+
+    views = PanelWindow.for_window(window)
+
+    assert views.find_splitter("splitterStable") is splitter
+    assert views.find_splitter("splitterStable") is splitter
+    assert window.splitter_searches == 1
+    window.close()
+
+
 def test_a_splitter_this_window_has_not_got_says_so():
     import pytest
 
