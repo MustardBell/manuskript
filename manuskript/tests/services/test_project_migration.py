@@ -86,6 +86,59 @@ def test_upgrade_writes_validated_format_two_copy_and_leaves_source_untouched(
     assert "Format 1 → Format 2" in report.render_text()
 
 
+def test_upgrade_converts_legacy_text_documents_to_markdown_paths(tmp_path):
+    source = tmp_path / "legacy-folders.msk"
+    destination = tmp_path / "upgraded.msk"
+    project = CanonicalProject(
+        format_version=1,
+        outline=(OutlineDocument(
+            "chapter-1",
+            "Chapter",
+            "folder",
+            "Chapter notes.",
+            metadata=(
+                MetadataField("ID", "chapter-1"),
+                MetadataField("title", "Chapter"),
+                MetadataField("type", "folder"),
+            ),
+            source_path="outline/chapter/folder.txt",
+            children=(OutlineDocument(
+                "scene-1",
+                "Opening",
+                "scene",
+                "Opening text.",
+                metadata=(
+                    MetadataField("ID", "scene-1"),
+                    MetadataField("title", "Opening"),
+                    MetadataField("type", "scene"),
+                ),
+                source_path="outline/chapter/opening.md",
+            ),),
+        ),),
+    )
+    encoded = Version1ProjectCodec().encode(project)
+    written = Version1ProjectFiles().write(
+        str(source),
+        zipped=False,
+        files=encoded.files,
+        moves=(),
+        cache={},
+        marker_version=1,
+    )
+    assert written.succeeded
+
+    report = ProjectMigrationService().upgrade_copy(source, destination)
+
+    files = Version1ProjectFiles().read(str(destination), zipped=False).files
+    reopened = Version2ProjectCodec().decode(files)
+    documents = tuple(reopened.documents())
+    assert report.succeeded
+    assert tuple(item.id for item in documents) == ("chapter-1", "scene-1")
+    assert documents[0].source_path == "outline/chapter/folder.md"
+    assert documents[1].source_path == "outline/chapter/opening.md"
+    assert all(item.source_path.casefold().endswith(".md") for item in documents)
+
+
 def test_upgrade_refuses_same_or_existing_destination_before_writing(tmp_path):
     source = tmp_path / "source.msk"
     _write_format_one(source)

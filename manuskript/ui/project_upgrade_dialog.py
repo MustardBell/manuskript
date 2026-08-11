@@ -1,5 +1,6 @@
 """Copy-only Project Format upgrade workflow and forensic report."""
 
+import logging
 import os
 
 from PyQt5.QtCore import Qt
@@ -14,6 +15,9 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ProjectUpgradeDialog(QDialog):
@@ -122,6 +126,7 @@ class ProjectUpgradeDialog(QDialog):
                 self.projectManager.currentProject, destination
             )
         except Exception as error:
+            LOGGER.exception("Project Format upgrade failed.")
             self._show_error(str(error))
             return False
         finally:
@@ -160,7 +165,11 @@ class ProjectUpgradeDialog(QDialog):
         return False
 
     def _show_error(self, message):
-        self.messageLabel.setText(
-            self.tr("Upgrade could not be completed: {}".format(str(message)))
+        detail = self.tr(
+            "Upgrade could not be completed: {}".format(str(message))
         )
-        self.reportEdit.setPlainText("")
+        self.messageLabel.setText(detail)
+        # Validation failures can be long. Keep the complete, selectable
+        # explanation in the report area instead of confining it to one label.
+        self.reportEdit.setPlainText(detail)
+        self.reportEdit.setFocus(Qt.OtherFocusReason)

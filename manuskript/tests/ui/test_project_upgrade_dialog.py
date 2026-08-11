@@ -49,6 +49,19 @@ def test_upgrade_dialog_does_not_migrate_unsaved_or_unsupported_project():
     unsupported.close()
 
 
+def test_upgrade_dialog_logs_and_displays_migration_failure(caplog):
+    dialog, _manager, service = _dialog()
+    service.upgrade_copy.side_effect = ValueError("reopen validation failed")
+
+    with caplog.at_level("ERROR"):
+        assert not dialog._upgrade()
+
+    assert "reopen validation failed" in dialog.messageLabel.text()
+    assert "reopen validation failed" in dialog.reportEdit.toPlainText()
+    assert "Project Format upgrade failed" in caplog.text
+    dialog.close()
+
+
 def test_open_upgraded_copy_closes_source_before_opening_destination():
     dialog, manager, _service = _dialog()
     dialog._upgradedFile = "/books/upgraded.msk"

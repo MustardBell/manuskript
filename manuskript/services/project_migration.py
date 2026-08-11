@@ -1,6 +1,7 @@
 """Validated copy-only project migration through canonical codecs."""
 
 import os
+import posixpath
 import shutil
 import tempfile
 from dataclasses import dataclass, replace
@@ -190,10 +191,33 @@ class ProjectMigrationService:
 
 
 def _native_format_2_project(project):
+    # Format 1 stores folder records in ``folder.txt`` while Format 2 only
+    # discovers native Markdown documents.  Reserve existing Markdown paths
+    # first so converting a legacy address can never displace one of them.
+    markdown_paths = {
+        item.source_path.casefold()
+        for item in project.documents()
+        if item.source_path.casefold().endswith(".md")
+    }
+
+    def markdown_path(path):
+        if not path or path.casefold().endswith(".md"):
+            return path
+        stem, _extension = posixpath.splitext(path)
+        candidate = stem + ".md"
+        key = candidate.casefold()
+        if key in markdown_paths:
+            # Leaving the address empty delegates collision-safe path
+            # generation to the Format 2 codec.
+            return ""
+        markdown_paths.add(key)
+        return candidate
+
     def document(item):
         return replace(
             item,
             children=tuple(document(child) for child in item.children),
+            source_path=markdown_path(item.source_path),
             source_format="markdown",
             raw_source=None,
         )
