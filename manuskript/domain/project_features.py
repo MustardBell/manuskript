@@ -186,6 +186,7 @@ class V2PersistenceStrategy(ProjectPersistenceStrategy):
             "assertions.write",
             "timeline.read",
             "timeline.write",
+            "rules.execute",
             "plugins.project-files",
         )
         super().__init__({
@@ -296,6 +297,25 @@ class TimelineDslPersistenceDecorator(PersistenceDecorator):
         ))
 
 
+class RuleDslPersistenceDecorator(PersistenceDecorator):
+    namespace = "rules"
+
+    def __init__(self, wrapped: ProjectPersistenceStrategy):
+        super().__init__(wrapped, (
+            _support(
+                "rules.execute",
+                PersistenceLevel.COMPATIBLE_ENCODING,
+                old_readable=False,
+                old_editable=False,
+                old_save_safe=True,
+                reason=(
+                    "Declarative rules remain safely preserved fenced "
+                    "Markdown in Format 1 projects."
+                ),
+            ),
+        ))
+
+
 class MorphologyPersistenceDecorator(PersistenceDecorator):
     namespace = "morphology"
 
@@ -339,12 +359,14 @@ class StoryOverlayPersistenceDecorator(PersistenceDecorator):
 def compatibility_strategy(version: int) -> ProjectPersistenceStrategy:
     if version == 1:
         return AssertionDslPersistenceDecorator(
-            TimelineDslPersistenceDecorator(
-                LegacyEntityReadPersistenceDecorator(
-                    StoryOverlayPersistenceDecorator(
-                        MorphologyPersistenceDecorator(
-                            WikilinkPersistenceDecorator(
-                                V1PersistenceStrategy()
+            RuleDslPersistenceDecorator(
+                TimelineDslPersistenceDecorator(
+                    LegacyEntityReadPersistenceDecorator(
+                        StoryOverlayPersistenceDecorator(
+                            MorphologyPersistenceDecorator(
+                                WikilinkPersistenceDecorator(
+                                    V1PersistenceStrategy()
+                                )
                             )
                         )
                     )

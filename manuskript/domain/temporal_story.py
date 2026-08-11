@@ -124,6 +124,15 @@ class ChronologyIndex:
     def record(self, reference):
         return self._records.get(_reference(reference))
 
+    def time_range(self, point):
+        """Return a known story-time range without exposing index internals."""
+
+        if not isinstance(point, TemporalPoint):
+            raise TypeError("A temporal point is required.")
+        if point.axis is not TemporalAxis.STORY:
+            return None
+        return self._time_range(point)
+
     def compare(self, left: TemporalPoint, right: TemporalPoint):
         if not isinstance(left, TemporalPoint) or not isinstance(
             right, TemporalPoint

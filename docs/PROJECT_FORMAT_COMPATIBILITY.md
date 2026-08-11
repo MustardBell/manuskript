@@ -19,6 +19,7 @@ rebuilding a project.
 | Explicit story assertions | compatible fenced Markdown | save-safe as text | native |
 | Temporal story state | compatible assertion fields | save-safe as text | native |
 | Queries and continuity reports | derived | not applicable | derived |
+| Declarative custom rules | compatible fenced Markdown | save-safe as text | native |
 
 Format 0 and Format 1 remain readable. Format 1 remains writable without a
 mandatory upgrade. Existing Format 2 projects remain Format 2 when saved. The

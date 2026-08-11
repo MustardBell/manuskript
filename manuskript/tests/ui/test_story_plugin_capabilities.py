@@ -27,6 +27,7 @@ from manuskript.ui.plugins.story_capabilities import (
     QueryExecuteCapability,
     ReferenceReadCapability,
     ReferenceWriteCapability,
+    RuleExecuteCapability,
     TimelineReadCapability,
     ProjectSourceGateway,
 )
@@ -229,6 +230,33 @@ def test_timeline_read_exposes_partial_order_and_temporal_fact_status(
     assert facts[0].status == "active"
     assert facts[0].assertion.validity.valid_from == point
     assert timeline.compare(point, point) == "same"
+
+
+def test_rule_execute_returns_immutable_evidence_snapshots(story_services):
+    manager, outline = story_services
+    identifiers = iter(("location-1", "location-2"))
+    writer = AssertionWriteCapability(
+        manager, outline, id_factory=lambda: next(identifiers)
+    )
+    subject = StoryReferenceValue("entity", "mara")
+    writer.append_relationship(
+        "scene", subject, "located_at",
+        StoryReferenceValue("entity", "vienna"),
+    )
+    writer.append_relationship(
+        "scene", subject, "located_at",
+        StoryReferenceValue("entity", "prague"),
+    )
+
+    capability = RuleExecuteCapability(manager)
+    report = capability.execute(("location.exclusive",))
+
+    assert report.evaluated_rule_ids == ("location.exclusive",)
+    assert report.findings[0].outcome == "conflict"
+    assert {item.assertion_id for item in report.findings[0].evidence} == {
+        "location-1", "location-2"
+    }
+    assert any(item.id == "location.exclusive" for item in capability.rules())
 
 
 def test_morphology_registration_is_namespaced_and_refreshes_surfaces(

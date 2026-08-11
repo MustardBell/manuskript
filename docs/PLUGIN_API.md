@@ -217,6 +217,7 @@ Both methods are optional, and returning nothing stays valid:
 | `references.read` / `references.write` | explicit wikilinks / guarded source insertion | in project panels and editor workspaces |
 | `assertions.read` / `assertions.write` | explicit source assertions / guarded source commands | in project panels and editor workspaces |
 | `timeline.read` | partial chronology and temporal assertion state | in project panels and editor workspaces |
+| `rules.execute` | deterministic continuity rules and evidence reports | in project panels and editor workspaces |
 | `query.execute` | the typed structural query engine | in project panels and editor workspaces |
 | `morphology.registry` | provider snapshots and namespaced registration | in project panels and editor workspaces |
 
@@ -271,6 +272,11 @@ and `facts(at, subject=..., predicate=..., include_unknown=True)`. Comparisons
 return `before`, `same`, `after`, or `unknown`; unknown chronology is not
 silently treated as false. The service is deliberately read-only. Timeline
 writes remain ordinary guarded assertion writes rather than a second database.
+
+`rules.execute` offers `rules()`, `diagnostics()`, and `execute(rule_ids=())`.
+It returns immutable finding snapshots containing an explicit `conflict` or
+`indeterminate` outcome and exact assertion/document source evidence. The
+service observes only explicit structured author data and never mutates source.
 
 `query.execute.execute(expression)` accepts the exported query nodes `All`,
 `AssertionsWhere`, `DocumentsReferencing`, `EntitiesWhere`,

@@ -37,6 +37,8 @@ from manuskript.domain.reference_index import (
     ReferenceIndex,
 )
 from manuskript.domain.story_query import StoryQueryEngine
+from manuskript.domain.rule_store import RuleDocument, RuleStore
+from manuskript.domain.story_rules import StoryRuleEngine
 from manuskript.domain.temporal_story import (
     ChronologyIndex,
     TemporalStoryIndex,
@@ -65,6 +67,7 @@ class ProjectStorage:
         morphology_providers=None,
         assertion_store=None,
         chronology_index=None,
+        rule_store=None,
     ):
         self._file_cache = (
             file_cache if file_cache is not None else {}
@@ -105,6 +108,13 @@ class ProjectStorage:
         self._chronology_index = chronology_index or ChronologyIndex()
         self._temporal_story = TemporalStoryIndex(
             self._assertion_store, self._chronology_index
+        )
+        self._rule_store = rule_store or RuleStore()
+        self._story_rules = StoryRuleEngine(
+            self._assertion_store,
+            self._chronology_index,
+            self._temporal_story,
+            self._rule_store,
         )
         self._story_query = StoryQueryEngine(
             self._entity_catalog,
@@ -151,6 +161,14 @@ class ProjectStorage:
     @property
     def temporal_story(self):
         return self._temporal_story
+
+    @property
+    def rule_store(self):
+        return self._rule_store
+
+    @property
+    def story_rules(self):
+        return self._story_rules
 
     def register_morphology_provider(self, provider):
         self._morphology_providers.register(provider)
@@ -321,6 +339,7 @@ class ProjectStorage:
         self._reference_index.rebuild(())
         self._assertion_store.rebuild(())
         self._chronology_index.rebuild(())
+        self._rule_store.rebuild(())
         self._entity_catalog.replace((), writable=False)
 
     def _load_version_1(self, context, *, zipped, file_access):
@@ -485,6 +504,10 @@ class ProjectStorage:
                 for document in self._reference_index.documents
             ),
             entity_ids=entity_ids,
+        )
+        self._rule_store.rebuild(
+            RuleDocument(document.id, document.path, document.text)
+            for document in self._reference_index.documents
         )
         self._chronology_index.rebuild(
             self._assertion_store.assertions,

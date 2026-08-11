@@ -41,6 +41,7 @@ CAPABILITY_REFERENCES_WRITE = "references.write"
 CAPABILITY_ASSERTIONS_READ = "assertions.read"
 CAPABILITY_ASSERTIONS_WRITE = "assertions.write"
 CAPABILITY_TIMELINE_READ = "timeline.read"
+CAPABILITY_RULES_EXECUTE = "rules.execute"
 CAPABILITY_QUERY_EXECUTE = "query.execute"
 CAPABILITY_MORPHOLOGY_REGISTRY = "morphology.registry"
 
@@ -200,6 +201,13 @@ CAPABILITIES = (
         summary=(
             "Read partial story chronology and evaluate explicit temporal "
             "assertions without treating unknown order as false."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_RULES_EXECUTE,
+        summary=(
+            "Run deterministic continuity rules and receive immutable "
+            "findings with source evidence and explicit uncertainty."
         ),
     ),
     Capability(

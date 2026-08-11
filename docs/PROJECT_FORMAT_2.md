@@ -109,6 +109,11 @@ recorded as explicit `occurs_at` assertions and may be unknown, relative,
 exact, a range, or a relation to another scene/event. No date is mandatory.
 See [Temporal story model](TEMPORAL_STORY_MODEL.md).
 
+Custom deterministic continuity constraints use source-owned
+`manuskript-rule` fenced blocks. They compile only into a small declarative
+rule vocabulary; they cannot execute Python or infer facts from prose. See
+[Story debugger](STORY_DEBUGGER.md).
+
 Selecting prose and invoking `Reference…` offers deterministic exact
 title/alias matches, grouped explicit choices, and `Create new…`. Choosing an
 entry writes `[[path|selected surface]]` into the source. Exact scanners ignore

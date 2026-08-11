@@ -23,6 +23,7 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_REFERENCES_READ,
     CAPABILITY_REFERENCES_WRITE,
     CAPABILITY_TIMELINE_READ,
+    CAPABILITY_RULES_EXECUTE,
     capability_catalogue,
     grant,
 )
@@ -136,6 +137,7 @@ def test_story_capabilities_are_named_deferred_api_promises():
         CAPABILITY_QUERY_EXECUTE,
         CAPABILITY_MORPHOLOGY_REGISTRY,
         CAPABILITY_TIMELINE_READ,
+        CAPABILITY_RULES_EXECUTE,
     ):
         assert name in catalogue
         assert catalogue[name].summary

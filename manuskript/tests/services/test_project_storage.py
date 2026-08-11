@@ -29,6 +29,11 @@ from manuskript.domain.story_query import (
     QueryResult,
     QueryScope,
 )
+from manuskript.domain.rule_dsl import (
+    CustomRuleDefinition,
+    CustomRuleKind,
+    encode_rule_block,
+)
 from manuskript.load_save.format_detection import DetectedProjectFormat
 from manuskript.load_save.project_codec import EncodedProject
 from manuskript.load_save.project_files import ProjectFileReadResult
@@ -332,10 +337,19 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     )
     item.setData(
         Outline.text,
-        item.text() + "\n" + encode_assertion_block(assertion),
+        item.text()
+        + "\n"
+        + encode_assertion_block(assertion)
+        + encode_rule_block(CustomRuleDefinition(
+            "custom-knows",
+            "Knowledge remains unique",
+            CustomRuleKind.EXCLUSIVE_OBJECT,
+            predicate="knows",
+        )),
     )
     storage.update_document_references(item)
     assert storage.assertion_store.assertions[0].id == assertion.id
+    assert storage.rule_store.rules[0].id == "custom-knows"
     assert storage.temporal_story.evaluate(
         storage.assertion_store.assertions[0],
         TemporalPoint.narrative("document", document_id),

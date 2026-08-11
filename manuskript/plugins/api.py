@@ -192,6 +192,48 @@ class TemporalFactSnapshot:
 
 
 @dataclass(frozen=True)
+class RuleSummarySnapshot:
+    id: str
+    label: str
+
+
+@dataclass(frozen=True)
+class RuleEvidenceSnapshot:
+    assertion_id: str
+    document_id: str
+    source_start: int
+    source_end: int
+    role: str = "evidence"
+
+
+@dataclass(frozen=True)
+class RuleFindingSnapshot:
+    id: str
+    rule_id: str
+    rule_label: str
+    outcome: str
+    severity: str
+    message: str
+    evidence: tuple[RuleEvidenceSnapshot, ...]
+
+
+@dataclass(frozen=True)
+class RuleReportSnapshot:
+    findings: tuple[RuleFindingSnapshot, ...]
+    evaluated_rule_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RuleDiagnosticSnapshot:
+    document_id: str
+    path: str
+    message: str
+    severity: str
+    source_start: int
+    source_end: int
+
+
+@dataclass(frozen=True)
 class ReferenceOccurrenceSnapshot:
     source_document_id: str
     source_path: str

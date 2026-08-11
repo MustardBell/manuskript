@@ -27,6 +27,11 @@ from manuskript.plugins.api import (
     MorphologyProviderSnapshot,
     ReferenceOccurrenceSnapshot,
     ReferenceSuggestionSnapshot,
+    RuleDiagnosticSnapshot,
+    RuleEvidenceSnapshot,
+    RuleFindingSnapshot,
+    RuleReportSnapshot,
+    RuleSummarySnapshot,
     StoryReferenceValue,
     TemporalDiagnosticSnapshot,
     TemporalFactSnapshot,
@@ -43,7 +48,9 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_QUERY_EXECUTE,
     CAPABILITY_REFERENCES_READ,
     CAPABILITY_REFERENCES_WRITE,
+    CAPABILITY_RULES_EXECUTE,
     CAPABILITY_TIMELINE_READ,
+    CAPABILITY_RULES_EXECUTE,
 )
 from manuskript.plugins.errors import PluginScopeError
 
@@ -150,6 +157,7 @@ def build_story_capability(
             manager, source
         ),
         CAPABILITY_TIMELINE_READ: lambda: TimelineReadCapability(manager),
+        CAPABILITY_RULES_EXECUTE: lambda: RuleExecuteCapability(manager),
         CAPABILITY_QUERY_EXECUTE: lambda: QueryExecuteCapability(manager),
         CAPABILITY_MORPHOLOGY_REGISTRY: lambda: (
             MorphologyRegistryCapability(manager, plugin_id)
@@ -639,6 +647,60 @@ class TimelineReadCapability:
                 predicate=str(predicate),
                 include_unknown=bool(include_unknown),
             )
+        )
+
+
+class RuleExecuteCapability:
+    """Evidence-only continuity service; it never changes author source."""
+
+    def __init__(self, manager):
+        self._engine = manager.storage.story_rules
+        self._store = manager.storage.rule_store
+
+    def rules(self):
+        return tuple(
+            RuleSummarySnapshot(item.id, item.label)
+            for item in self._engine.rules
+        )
+
+    def diagnostics(self):
+        return tuple(
+            RuleDiagnosticSnapshot(
+                item.document_id,
+                item.path,
+                item.message,
+                item.severity,
+                item.source_span.start,
+                item.source_span.end,
+            )
+            for item in self._store.issues
+        )
+
+    def execute(self, rule_ids=()):
+        report = self._engine.run(rule_ids)
+        return RuleReportSnapshot(
+            tuple(
+                RuleFindingSnapshot(
+                    item.id,
+                    item.rule_id,
+                    item.rule_label,
+                    item.outcome.value,
+                    item.severity,
+                    item.message,
+                    tuple(
+                        RuleEvidenceSnapshot(
+                            evidence.assertion_id,
+                            evidence.document_id,
+                            evidence.source_start,
+                            evidence.source_end,
+                            evidence.role,
+                        )
+                        for evidence in item.evidence
+                    ),
+                )
+                for item in report.findings
+            ),
+            report.evaluated_rule_ids,
         )
 
 

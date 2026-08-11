@@ -164,14 +164,19 @@ def assertions_from_source(source):
 
 
 def strip_assertion_blocks(source):
-    """Remove semantic blocks from an ordinary prose/export projection."""
+    """Remove valid story semantics from an ordinary prose projection.
+
+    The historical name remains as a compatibility surface. Custom rule
+    blocks are story semantics too and follow the same projection contract.
+    """
 
     result = AssertionDslExtension().parse(source)
     replacements = tuple((node.span, "") for node in result.nodes)
     rendered = source
     for span, value in reversed(replacements):
         rendered = rendered[:span.start] + value + rendered[span.end:]
-    return rendered
+    from manuskript.domain.rule_dsl import strip_rule_blocks
+    return strip_rule_blocks(rendered)
 
 
 def render_story_markdown(source):
