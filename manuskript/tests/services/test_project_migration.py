@@ -35,7 +35,10 @@ def _write_format_one(path, *, zipped=False):
         characters=(CharacterRecord(
             "mara",
             "Mara",
-            fields=(MetadataField("name", "Mara"),),
+            fields=(
+                MetadataField("Name", "Mara"),
+                MetadataField("ID", "mara"),
+            ),
         ),),
         plugin_files=(PreservedProjectFile(
             "plugins/example/data.json", '{"keep": true}', "plugin-owned"
@@ -131,12 +134,41 @@ def test_upgrade_converts_legacy_text_documents_to_markdown_paths(tmp_path):
 
     files = Version1ProjectFiles().read(str(destination), zipped=False).files
     reopened = Version2ProjectCodec().decode(files)
-    documents = tuple(reopened.documents())
+    documents = tuple(reopened.outline[0].walk())
     assert report.succeeded
     assert tuple(item.id for item in documents) == ("chapter-1", "scene-1")
     assert documents[0].source_path == "outline/chapter/folder.md"
     assert documents[1].source_path == "outline/chapter/opening.md"
     assert all(item.source_path.casefold().endswith(".md") for item in documents)
+
+
+def test_upgrade_promotes_legacy_story_records_to_native_entities(tmp_path):
+    source = tmp_path / "legacy-story.msk"
+    destination = tmp_path / "upgraded.msk"
+    _write_format_one(source)
+
+    report = ProjectMigrationService().upgrade_copy(source, destination)
+
+    files = Version1ProjectFiles().read(str(destination), zipped=False).files
+    reopened = Version2ProjectCodec().decode(files)
+    entities = {entity.id: entity for entity in reopened.entities}
+    assert reopened.characters == ()
+    assert reopened.world == ()
+    assert reopened.plots == ()
+    assert "legacy:project:summary" in entities
+    character = entities["legacy:character:mara"]
+    assert character.type == "character"
+    assert character.title == "Mara"
+    assert character.document.source_path.casefold().endswith(".md")
+    assert next(
+        item.value for item in character.metadata
+        if item.name == "legacy.id"
+    ) == "mara"
+    assert report.succeeded
+    assert next(
+        section for section in report.sections
+        if section.name == "Characters"
+    ).converted == 1
 
 
 def test_upgrade_refuses_same_or_existing_destination_before_writing(tmp_path):

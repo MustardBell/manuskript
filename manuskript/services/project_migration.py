@@ -2,6 +2,7 @@
 
 import os
 import posixpath
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, replace
@@ -11,6 +12,7 @@ from manuskript.load_save.format_detection import ProjectFormatDetector
 from manuskript.load_save.project_files import Version1ProjectFiles
 from manuskript.load_save.version_1_codec import Version1ProjectCodec
 from manuskript.load_save.version_2_codec import Version2ProjectCodec
+from manuskript.services.legacy_entity_adapter import LegacyEntityAdapter
 
 
 @dataclass(frozen=True)
@@ -222,45 +224,129 @@ def _native_format_2_project(project):
             raw_source=None,
         )
 
+    outline = tuple(document(item) for item in project.outline)
+    native_entities = tuple(
+        replace(entity, document=document(entity.document))
+        for entity in project.entities
+    )
+    reserved_paths = {
+        item.source_path.casefold()
+        for item in _walk_outline(outline)
+        if item.source_path
+    }
+    reserved_paths.update(
+        entity.document.source_path.casefold()
+        for entity in native_entities
+        if entity.document.source_path
+    )
+    converted_entities = tuple(
+        _native_entity(entity, reserved_paths)
+        for entity in LegacyEntityAdapter().project(project)
+    )
+
     return replace(
         project,
         format_version=2,
-        outline=tuple(document(item) for item in project.outline),
-        entities=tuple(
-            replace(entity, document=document(entity.document))
-            for entity in project.entities
-        ),
+        summary=(),
+        outline=outline,
+        entities=native_entities + converted_entities,
+        characters=(),
+        world=(),
+        plots=(),
         source_files=(),
         issues=(),
     )
 
 
+def _native_entity(entity, reserved_paths):
+    directory = {
+        "project": "Project",
+        "character": "Characters",
+        "plot": "Plots",
+        "world": "World",
+    }.get(entity.type, "Entities")
+    slug = re.sub(
+        r'[<>:"/\\|?*\[\]\x00-\x1f]+', "-", entity.title
+    ).strip(" .") or "Entity"
+    path = posixpath.join(directory, slug + ".md")
+    candidate = path
+    duplicate = 2
+    while candidate.casefold() in reserved_paths:
+        candidate = posixpath.join(
+            directory, "{}-{}.md".format(slug, duplicate)
+        )
+        duplicate += 1
+    reserved_paths.add(candidate.casefold())
+    return replace(
+        entity,
+        document=replace(
+            entity.document,
+            source_path=candidate,
+            source_format="yaml-frontmatter",
+            raw_source=None,
+        ),
+    )
+
+
 def _report(source_file, destination_file, source, reopened):
-    source_documents = tuple(source.documents())
-    destination_documents = tuple(reopened.documents())
+    source_outline = tuple(_walk_outline(source.outline))
+    destination_outline = tuple(_walk_outline(reopened.outline))
+    expected_legacy = LegacyEntityAdapter().project(source)
+    reopened_by_id = {entity.id: entity for entity in reopened.entities}
     references = ReferenceIndex()
     references.rebuild(tuple(
         ReferenceDocument(
             item.id, item.source_path, item.title, item.text
         )
-        for item in destination_documents
+        for item in reopened.documents()
     ))
     source_plot_steps = sum(len(item.steps) for item in source.plots)
-    destination_plot_steps = sum(len(item.steps) for item in reopened.plots)
+    destination_plot_steps = sum(
+        _projected_plot_step_count(entity)
+        for entity in reopened.entities
+        if entity.id.startswith("legacy:plot:")
+    )
     sections = (
-        MigrationSection("Outline", len(destination_documents), len(source_documents)),
-        MigrationSection("Characters", len(reopened.characters), len(source.characters)),
-        MigrationSection("World", _world_count(reopened.world), _world_count(source.world)),
-        MigrationSection("Plots", len(reopened.plots), len(source.plots)),
+        MigrationSection("Outline", len(destination_outline), len(source_outline)),
+        MigrationSection(
+            "Project summary",
+            int("legacy:project:summary" in reopened_by_id),
+            1,
+        ),
+        MigrationSection(
+            "Characters",
+            _entity_prefix_count(reopened.entities, "legacy:character:"),
+            len(source.characters),
+        ),
+        MigrationSection(
+            "World",
+            _entity_prefix_count(reopened.entities, "legacy:world:"),
+            _world_count(source.world),
+        ),
+        MigrationSection(
+            "Plots",
+            _entity_prefix_count(reopened.entities, "legacy:plot:"),
+            len(source.plots),
+        ),
         MigrationSection("Plot steps", destination_plot_steps, source_plot_steps),
         MigrationSection("Revisions", len(reopened.revisions), len(source.revisions)),
+        MigrationSection(
+            "Native entities",
+            sum(entity.id in reopened_by_id for entity in source.entities),
+            len(source.entities),
+        ),
     )
     warnings = tuple(
         "{}: {}".format(item.source.path, item.message)
         for item in reopened.issues if item.severity != "error"
-    ) + _preservation_warnings(source, reopened)
+    ) + _legacy_entity_warnings(expected_legacy, reopened_by_id) + (
+        _preservation_warnings(source, reopened)
+    )
     source_unknown_fields = _unknown_field_count(source)
-    reopened_unknown_fields = _unknown_field_count(reopened)
+    source_document_ids = {item.id for item in source.documents()}
+    reopened_unknown_fields = _unknown_field_count(
+        reopened, document_ids=source_document_ids
+    )
     return ProjectMigrationReport(
         source_file,
         destination_file,
@@ -282,10 +368,68 @@ def _world_count(items):
     return sum(1 + _world_count(item.children) for item in items)
 
 
-def _unknown_field_count(project):
+def _unknown_field_count(project, document_ids=None):
     return len(project.structured_metadata) + sum(
-        len(item.structured_metadata) for item in project.documents()
+        len(item.structured_metadata)
+        for item in project.documents()
+        if document_ids is None or item.id in document_ids
     )
+
+
+def _walk_outline(items):
+    for item in items:
+        yield item
+        yield from _walk_outline(item.children)
+
+
+def _entity_prefix_count(entities, prefix):
+    return sum(entity.id.startswith(prefix) for entity in entities)
+
+
+def _projected_plot_step_count(entity):
+    value = next(
+        (
+            item.value for item in entity.metadata
+            if item.name == "legacy.steps"
+        ),
+        (),
+    )
+    return len(value) if isinstance(value, list) else 0
+
+
+def _legacy_entity_warnings(expected, reopened_by_id):
+    warnings = []
+    for entity in expected:
+        reopened = reopened_by_id.get(entity.id)
+        if reopened is None:
+            warnings.append(
+                "PRESERVATION: converted entity {!r} is missing.".format(
+                    entity.id
+                )
+            )
+            continue
+        before = (
+            entity.id,
+            entity.type,
+            entity.title,
+            entity.aliases,
+            entity.document.text,
+            entity.metadata,
+        )
+        after = (
+            reopened.id,
+            reopened.type,
+            reopened.title,
+            reopened.aliases,
+            reopened.document.text,
+            reopened.metadata,
+        )
+        if before != after:
+            warnings.append(
+                "PRESERVATION: converted entity {!r} changed content."
+                .format(entity.id)
+            )
+    return tuple(warnings)
 
 
 def _preservation_warnings(source, reopened):
@@ -305,23 +449,31 @@ def _preservation_warnings(source, reopened):
                 warnings.append(
                     "PRESERVATION: {} {!r} changed content.".format(label, path)
                 )
-    if _structured_metadata(source) != _structured_metadata(reopened):
+    source_document_ids = {item.id for item in source.documents()}
+    source_entity_ids = {item.id for item in source.entities}
+    if _structured_metadata(source) != _structured_metadata(
+        reopened,
+        document_ids=source_document_ids,
+        entity_ids=source_entity_ids,
+    ):
         warnings.append(
             "PRESERVATION: unknown structured metadata changed during conversion."
         )
     return tuple(warnings)
 
 
-def _structured_metadata(project):
+def _structured_metadata(project, document_ids=None, entity_ids=None):
     return (
         project.structured_metadata,
         tuple(
             (item.id, item.structured_metadata)
             for item in project.documents()
+            if document_ids is None or item.id in document_ids
         ),
         tuple(
             (item.id, item.metadata)
             for item in project.entities
+            if entity_ids is None or item.id in entity_ids
         ),
     )
 
