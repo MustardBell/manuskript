@@ -115,3 +115,4 @@ class PluginProjectContext:
     files: PluginFileNamespace
     default_file: str
     show_status: object
+    capability: object = None

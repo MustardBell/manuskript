@@ -345,6 +345,9 @@ class EntityCatalog:
         if self.morphology_index is not None:
             self.morphology_index.rebuild(self.entities)
 
+    def refresh_derived_surfaces(self):
+        self._rebuild_morphology()
+
     @staticmethod
     def reference_target(entity: EntityRecord) -> str:
         path = entity.document.source_path.replace("\\", "/")

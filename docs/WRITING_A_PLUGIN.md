@@ -168,6 +168,29 @@ code never runs.
 
 ---
 
+## Asking for story data
+
+Put a service in `requires` when the plugin cannot run without it. Put it in
+`optional` when the plugin has a useful read-only or reduced mode:
+
+```json
+"requires": ["entities.read", "query.execute"],
+"optional": ["assertions.write"]
+```
+
+Inside a project panel or editor workspace, resolve it from the context that
+was handed to that widget:
+
+```python
+query = context.capability("query.execute")
+results = query.execute(EntitiesWhere(entity_type="character"))
+```
+
+Import `EntitiesWhere` and other contract values from `manuskript.plugins`.
+Do not import the entity catalog, assertion store, or Qt models. The service
+returns immutable snapshots and stable IDs; writes go through a separately
+declared write capability and preserve the Markdown source as authority.
+
 ## Where to go next
 
 - [PLUGIN_API.md](PLUGIN_API.md) — the full contract: every contribution

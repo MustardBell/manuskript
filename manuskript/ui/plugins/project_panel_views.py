@@ -18,6 +18,7 @@ class PluginProjectData:
     mark_changed: Callable[[], None]
     is_open: Callable[[], bool]
     show_status: Callable[[str, int, int], None]
+    story_services: Callable[[], Any]
 
     @classmethod
     def for_window(cls, window):
@@ -47,6 +48,7 @@ class PluginProjectData:
             mark_changed=mark_changed,
             is_open=is_open,
             show_status=show_status,
+            story_services=lambda: window.projectManager,
         )
 
 

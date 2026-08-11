@@ -62,6 +62,9 @@ class MarkdownDslNode:
     ):
         return cls(kind, span, tuple((attributes or {}).items()))
 
+    def attribute(self, name: str, default=None):
+        return dict(self.attributes).get(name, default)
+
 
 @dataclass(frozen=True)
 class MarkdownDslExtensionResult:

@@ -29,6 +29,8 @@ from manuskript.ui.editors.markdownPresentation import (
 from manuskript.ui.plugins.markup_profiles import MARKDOWN_BASE_ID
 from manuskript.plugins.api import RenderedDocument
 from manuskript.plugins.execution import run_page_renderer
+from manuskript.domain.assertion_dsl import encode_assertion_block
+from manuskript.domain.story_assertions import StoryReference
 from manuskript import functions as F
 
 import logging
@@ -538,8 +540,11 @@ class MDEditView(textEditView):
 
     def createStandardContextMenu(self):
         menu = textEditView.createStandardContextMenu(self)
+        if self._markupBaseId != MARKDOWN_BASE_ID:
+            return menu
+        self._addStoryAssertionAction(menu)
         cursor = self.textCursor()
-        if not cursor.hasSelection() or self._markupBaseId != MARKDOWN_BASE_ID:
+        if not cursor.hasSelection():
             return menu
         display = cursor.selectedText()
         if any(character in display for character in ("\n", "\u2029", "|", "]")):
@@ -600,6 +605,59 @@ class MDEditView(textEditView):
         if before is not None:
             menu.insertSeparator(before)
         return menu
+
+    def _addStoryAssertionAction(self, menu):
+        support = getattr(
+            self.text_editor_context, "can_write_assertions", None
+        )
+        if not callable(support) or not support():
+            return
+        action = menu.addAction(self.tr("Add story assertion…"))
+        action.setStatusTip(self.tr(
+            "Add an explicit source-owned claim at the current paragraph."
+        ))
+        action.setEnabled(
+            not self.isReadOnly() and bool(self._documentIdentity())
+        )
+        action.triggered.connect(self._addStoryAssertion)
+
+    def _addStoryAssertion(self):
+        document_id = str(self._documentIdentity() or "")
+        if not document_id:
+            return False
+        provider = getattr(
+            self.text_editor_context, "entity_reference_choices", None
+        )
+        choices = tuple(provider("")) if callable(provider) else ()
+        from manuskript.ui.assertion_editor import AssertionEditorDialog
+        dialog = AssertionEditorDialog(
+            StoryReference("document", document_id),
+            choices,
+            self,
+        )
+        if dialog.exec_() != dialog.Accepted:
+            return False
+        return self._insertStoryAssertion(dialog.assertion)
+
+    def _insertStoryAssertion(self, assertion):
+        block = encode_assertion_block(assertion)
+        cursor = self.textCursor()
+        cursor.clearSelection()
+        cursor.movePosition(QTextCursor.EndOfBlock)
+        position = cursor.position()
+        source = self.toPlainText()
+        before = source[:position]
+        after = source[position:]
+        prefix = "" if not before else (
+            "" if before.endswith("\n\n") else
+            "\n" if before.endswith("\n") else "\n\n"
+        )
+        suffix = "" if not after or after.startswith("\n") else "\n"
+        cursor.beginEditBlock()
+        cursor.insertText(prefix + block + suffix)
+        cursor.endEditBlock()
+        self.setTextCursor(cursor)
+        return True
 
     def _addEntityReferenceAction(
         self, menu, choice, start, end, display

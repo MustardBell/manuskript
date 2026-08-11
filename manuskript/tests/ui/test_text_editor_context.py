@@ -192,6 +192,20 @@ def test_wikilink_navigation_falls_back_from_outline_to_entity_document():
     open_entity.assert_called_once_with("entity-id")
 
 
+def test_text_editor_context_negotiates_assertion_writes_dynamically():
+    strategy = MagicMock()
+    strategy.supports.return_value = True
+    context = text_editor_context_for(
+        make_window(),
+        MagicMock(),
+        MagicMock(),
+        persistence_strategy=lambda: strategy,
+    )
+
+    assert context.can_write_assertions()
+    strategy.supports.assert_called_once_with("assertions.write", write=True)
+
+
 def test_text_editor_click_reports_workspace_focus():
     context = MagicMock()
     context.settings = MagicMock()

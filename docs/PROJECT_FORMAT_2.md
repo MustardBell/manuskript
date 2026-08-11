@@ -93,6 +93,16 @@ While the caret is inside a wikilink target, `Ctrl+Space` opens the same
 deterministic completion as an accessible keyboard menu; choosing an entry
 replaces only that target span.
 
+Explicit story meaning uses source-owned `manuskript-assertion` fenced blocks.
+Each assertion has stable identity, subject, predicate, reference or scalar
+object, open qualifiers, provenance, and an explicit canon state. Relationship
+assertions use a reference object; they are not copied into a separate
+relationship database. Valid blocks are stripped from Reading and native
+exports, while malformed blocks remain visible Markdown with diagnostics.
+The assertion index and typed structural query engine are disposable. See
+[Explicit story assertions](STORY_ASSERTIONS.md) for the syntax, candidate
+comparison, authority rules, and query nodes.
+
 Selecting prose and invoking `Reference…` offers deterministic exact
 title/alias matches, grouped explicit choices, and `Create new…`. Choosing an
 entry writes `[[path|selected surface]]` into the source. Exact scanners ignore

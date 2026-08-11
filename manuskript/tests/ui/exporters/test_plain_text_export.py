@@ -4,6 +4,12 @@ from unittest.mock import MagicMock
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
 
+from manuskript.domain.assertion_dsl import encode_assertion_block
+from manuskript.domain.story_assertions import (
+    Assertion,
+    AssertionTerm,
+    StoryReference,
+)
 from manuskript.enums import Outline
 from manuskript.exporter.manuskript.plainText import plainText
 from manuskript.exporter.pandoc.HTML import HTML as PandocHTML
@@ -152,6 +158,27 @@ def test_plain_text_export_starts_below_selected_parent():
     assert "Second" in output
 
 
+def test_exports_strip_valid_story_assertions_but_keep_the_prose():
+    model, _chapter, first, _second = make_outline()
+    first.setData(
+        Outline.text,
+        "Mara takes the key.\n\n" + encode_assertion_block(Assertion(
+            "mara-has-key",
+            StoryReference("entity", "mara"),
+            "possesses",
+            AssertionTerm.referencing("entity", "key"),
+        )),
+    )
+
+    output = make_format(model).concatenate(
+        model.rootItem, make_settings()
+    )
+
+    assert "Mara takes the key." in output
+    assert "manuskript-assertion" not in output
+    assert "mara-has-key" not in output
+
+
 def test_export_filter_settings_round_trip_selected_values():
     model, chapter, first, second = make_outline()
     labels = QStandardItemModel()
@@ -194,6 +221,13 @@ def test_export_filter_settings_round_trip_selected_values():
 
 
 def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
+    semantic_block = encode_assertion_block(Assertion(
+        "renderer-claim",
+        StoryReference("document", "page"),
+        "has_mode",
+        AssertionTerm.scalar("custom"),
+    ))
+
     class PageTypes:
         def __init__(self):
             self.targets = []
@@ -204,7 +238,7 @@ def test_pandoc_embeds_exact_text_fragments_and_falls_back_for_binary_formats():
             self.targets.append((target_format, route_id))
             if target_format == MARKDOWN:
                 return PageExportDocument(
-                    "semantic **Markdown**",
+                    "semantic **Markdown**\n\n" + semantic_block,
                     MARKDOWN,
                 )
             return PageExportDocument(

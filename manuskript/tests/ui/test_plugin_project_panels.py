@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from PyQt5.QtWidgets import QMainWindow, QMenu, QPlainTextEdit
 
 from manuskript.domain.plugin_data import ProjectPluginData
@@ -9,6 +11,8 @@ from manuskript.plugins.api import (
     ProjectPanelContribution,
 )
 from manuskript.plugins.registry import PluginRegistry
+from manuskript.plugins.capabilities import CAPABILITY_QUERY_EXECUTE
+from manuskript.plugins.errors import PluginScopeError
 from manuskript.panels import PanelRegistry
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
 from manuskript.ui.panels.window_port import PanelWindow
@@ -46,7 +50,7 @@ class PanelTestWindow(QMainWindow):
         return self.projectRuntime.models.plugin_data
 
 
-def panel_runtime(factory):
+def panel_runtime(factory, declared=()):
     registry = PluginRegistry()
     registrar = registry.registrar("example.notes")
     registrar.register_project_panel(
@@ -60,7 +64,12 @@ def panel_runtime(factory):
         )
     )
     registry.install("example.notes", registrar.contributions)
-    return SimpleNamespace(registry=registry)
+    return SimpleNamespace(
+        registry=registry,
+        declares=lambda plugin_id, name: (
+            plugin_id == "example.notes" and name in declared
+        ),
+    )
 
 
 def test_project_panel_receives_scoped_raw_file_context():
@@ -82,6 +91,8 @@ def test_project_panel_receives_scoped_raw_file_context():
     assert received[0].plugin_id == "example.notes"
     assert received[0].project_file == "/project/book.msk"
     assert received[0].default_file == "notes/main.txt"
+    with pytest.raises(PluginScopeError, match="did not declare"):
+        received[0].capability(CAPABILITY_QUERY_EXECUTE)
     assert received[0].files.write(
         received[0].default_file,
         "Project note\n",
@@ -92,6 +103,34 @@ def test_project_panel_receives_scoped_raw_file_context():
             "plugins/example.notes/notes/main.txt",
             "Project note\n",
         ),
+    )
+    host.close_all()
+
+
+def test_project_panel_can_resolve_a_declared_story_service():
+    received = []
+
+    def factory(context, parent):
+        received.append(context)
+        return QPlainTextEdit(parent)
+
+    window = PanelTestWindow()
+    window.projectManager.storage.story_query.execute.return_value = (
+        "result",
+    )
+    runtime = panel_runtime(factory, declared=(CAPABILITY_QUERY_EXECUTE,))
+    host = ProjectPanelHost(
+        ProjectPanelViews.for_window(window), runtime,
+    )
+
+    host.open_panel("example.notes.panel")
+    result = received[0].capability(CAPABILITY_QUERY_EXECUTE).execute(
+        "query"
+    )
+
+    assert result == ("result",)
+    window.projectManager.storage.story_query.execute.assert_called_once_with(
+        "query"
     )
     host.close_all()
 

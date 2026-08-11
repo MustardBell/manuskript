@@ -161,11 +161,37 @@ class MorphologyProviderRegistry:
         return tuple(self._providers.values())
 
     def register(self, provider: MorphologyProvider) -> None:
-        if not provider.id or provider.id in self._providers:
+        raw_identifier = getattr(provider, "id", "")
+        identifier = (
+            raw_identifier.strip()
+            if isinstance(raw_identifier, str) else ""
+        )
+        if (
+            not identifier
+            or identifier != raw_identifier
+            or identifier in self._providers
+        ):
             raise ValueError(
                 "Morphology provider IDs must be present and unique."
             )
-        self._providers[provider.id] = provider
+        missing = tuple(
+            name for name in ("generate", "analyse", "validate")
+            if not callable(getattr(provider, name, None))
+        )
+        if missing:
+            raise ValueError(
+                "Morphology providers must implement: {}.".format(
+                    ", ".join(missing)
+                )
+            )
+        for name in ("label", "language", "component_roles", "genders"):
+            if not hasattr(provider, name):
+                raise ValueError(
+                    "Morphology providers require a {} attribute.".format(
+                        name
+                    )
+                )
+        self._providers[identifier] = provider
 
     def get(self, provider_id: str) -> Optional[MorphologyProvider]:
         return self._providers.get(str(provider_id))
@@ -179,11 +205,23 @@ class MorphologyProviderRegistry:
                     profile.provider_id
                 ),
             ),)
-        return tuple(
-            MorphologyIssue(index, message)
-            for index, component in enumerate(profile.components)
-            for message in provider.validate(component)
-        )
+        issues = []
+        for index, component in enumerate(profile.components):
+            try:
+                messages = tuple(provider.validate(component))
+            except Exception as error:
+                return (MorphologyIssue(
+                    index,
+                    "Morphology provider {} failed validation: {}: {}"
+                    .format(
+                        provider.id, type(error).__name__, error
+                    ),
+                ),)
+            issues.extend(
+                MorphologyIssue(index, str(message))
+                for message in messages
+            )
+        return tuple(issues)
 
     def generate(
         self, profile: MorphologyProfile
@@ -191,7 +229,18 @@ class MorphologyProviderRegistry:
         provider = self.get(profile.provider_id)
         if provider is None or self.validate(profile):
             return ()
-        paradigms = [provider.generate(item) for item in profile.components]
+        try:
+            paradigms = [
+                tuple(provider.generate(item))
+                for item in profile.components
+            ]
+        except Exception:
+            return ()
+        if any(
+            not isinstance(form, GrammaticalForm)
+            for forms in paradigms for form in forms
+        ):
+            return ()
         keys = []
         labels = {}
         by_component = []

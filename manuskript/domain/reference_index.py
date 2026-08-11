@@ -71,6 +71,10 @@ class ReferenceIndex:
     def references(self) -> Tuple[ReferenceOccurrence, ...]:
         return self._references
 
+    @property
+    def documents(self) -> Tuple[ReferenceDocument, ...]:
+        return tuple(self._documents.values())
+
     def rebuild(
         self, documents: Iterable[ReferenceDocument]
     ) -> Tuple[ReferenceOccurrence, ...]:

@@ -10,10 +10,18 @@ import json
 import pytest
 
 from manuskript.plugins.capabilities import (
+    CAPABILITY_ASSERTIONS_READ,
+    CAPABILITY_ASSERTIONS_WRITE,
     CAPABILITY_EDITOR_CONTROL,
+    CAPABILITY_ENTITIES_READ,
+    CAPABILITY_ENTITIES_WRITE,
     CAPABILITY_MARKUP_BBCODE,
+    CAPABILITY_MORPHOLOGY_REGISTRY,
     CAPABILITY_OUTLINE_READ,
     CAPABILITY_OUTLINE_WRITE,
+    CAPABILITY_QUERY_EXECUTE,
+    CAPABILITY_REFERENCES_READ,
+    CAPABILITY_REFERENCES_WRITE,
     capability_catalogue,
     grant,
 )
@@ -26,7 +34,13 @@ from manuskript.services.plugin_preferences import (
 )
 
 
-def write_plugin(root, plugin_id="needs.capability", requires=(), source=""):
+def write_plugin(
+    root,
+    plugin_id="needs.capability",
+    requires=(),
+    optional=(),
+    source="",
+):
     directory = root / plugin_id
     directory.mkdir()
     manifest = {
@@ -38,6 +52,8 @@ def write_plugin(root, plugin_id="needs.capability", requires=(), source=""):
     }
     if requires:
         manifest["requires"] = list(requires)
+    if optional:
+        manifest["optional"] = list(optional)
     (directory / "plugin.json").write_text(
         json.dumps(manifest), encoding="utf-8"
     )
@@ -106,6 +122,24 @@ def test_a_workspace_can_declare_what_it_touches():
     assert granted == {}
 
 
+def test_story_capabilities_are_named_deferred_api_promises():
+    catalogue = capability_catalogue()
+
+    for name in (
+        CAPABILITY_ENTITIES_READ,
+        CAPABILITY_ENTITIES_WRITE,
+        CAPABILITY_REFERENCES_READ,
+        CAPABILITY_REFERENCES_WRITE,
+        CAPABILITY_ASSERTIONS_READ,
+        CAPABILITY_ASSERTIONS_WRITE,
+        CAPABILITY_QUERY_EXECUTE,
+        CAPABILITY_MORPHOLOGY_REGISTRY,
+    ):
+        assert name in catalogue
+        assert catalogue[name].summary
+        assert catalogue[name].deferred
+
+
 def test_the_runtime_answers_what_a_plugin_declared(tmp_path):
     """One place answers it: two hosts hand services over, and each used to
     read the manifest itself.
@@ -144,6 +178,7 @@ def test_requires_defaults_to_nothing(tmp_path):
     manifest = PluginManifest.load(directory / "plugin.json")
 
     assert manifest.requires == ()
+    assert manifest.optional == ()
 
 
 def test_requires_is_read_and_deduplicated(tmp_path):
@@ -154,6 +189,21 @@ def test_requires_is_read_and_deduplicated(tmp_path):
     manifest = PluginManifest.load(directory / "plugin.json")
 
     assert manifest.requires == ("markup.bbcode",)
+
+
+def test_optional_capabilities_are_declared_without_becoming_required(
+    tmp_path,
+):
+    directory = write_plugin(
+        tmp_path,
+        requires=[CAPABILITY_OUTLINE_READ],
+        optional=[CAPABILITY_ASSERTIONS_WRITE, CAPABILITY_OUTLINE_READ],
+    )
+
+    manifest = PluginManifest.load(directory / "plugin.json")
+
+    assert manifest.requires == (CAPABILITY_OUTLINE_READ,)
+    assert manifest.optional == (CAPABILITY_ASSERTIONS_WRITE,)
 
 
 @pytest.mark.parametrize("declared", ["markup.bbcode", 5, [1], [""], {}])
@@ -173,6 +223,20 @@ def test_a_malformed_requires_is_rejected_at_discovery(tmp_path, declared):
         PluginManifest.load(directory / "plugin.json")
 
     assert "requires" in str(failure.value)
+
+
+@pytest.mark.parametrize("declared", ["query.execute", 5, [1], [""], {}])
+def test_a_malformed_optional_list_is_rejected(tmp_path, declared):
+    directory = write_plugin(tmp_path)
+    manifest_file = directory / "plugin.json"
+    value = json.loads(manifest_file.read_text(encoding="utf-8"))
+    value["optional"] = declared
+    manifest_file.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(PluginManifestError) as failure:
+        PluginManifest.load(manifest_file)
+
+    assert "optional" in str(failure.value)
 
 
 # -------------------------------------------------------------- negotiation
@@ -208,6 +272,49 @@ def test_a_met_requirement_loads_and_hands_over_the_service(tmp_path):
 
     assert record.status is PluginStatus.LOADED
     assert record.error == ""
+
+
+def test_an_unavailable_optional_capability_does_not_block_loading(tmp_path):
+    write_plugin(
+        tmp_path,
+        optional=["future.story.service"],
+        source="def register(api):\n    return None\n",
+    )
+    runtime = runtime_for(tmp_path, "needs.capability")
+
+    record = runtime.load("needs.capability")
+
+    assert record.status is PluginStatus.LOADED
+    assert runtime.declares("needs.capability", "future.story.service")
+
+
+def test_one_missing_optional_capability_does_not_hide_an_available_one(
+        tmp_path):
+    write_plugin(
+        tmp_path,
+        optional=[CAPABILITY_MARKUP_BBCODE, "future.story.service"],
+        source=CAPTURES_CAPABILITY,
+    )
+    runtime = runtime_for(tmp_path, "needs.capability")
+
+    record = runtime.load("needs.capability")
+
+    assert record.status is PluginStatus.LOADED
+    assert record.error == ""
+
+
+def test_declared_but_unavailable_optional_service_is_reported_precisely():
+    registrar = PluginRegistry().registrar(
+        "some.plugin",
+        declared_capabilities=("future.story.service",),
+        unavailable_capabilities=("future.story.service",),
+    )
+
+    with pytest.raises(PluginScopeError) as failure:
+        registrar.capability("future.story.service")
+
+    assert "optional" in str(failure.value)
+    assert "cannot provide" in str(failure.value)
 
 
 def test_a_plugin_cannot_reach_an_undeclared_capability(tmp_path):

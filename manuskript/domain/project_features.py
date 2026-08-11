@@ -219,6 +219,53 @@ class WikilinkPersistenceDecorator(PersistenceDecorator):
         ))
 
 
+class LegacyEntityReadPersistenceDecorator(PersistenceDecorator):
+    namespace = "entities"
+
+    def __init__(self, wrapped: ProjectPersistenceStrategy):
+        super().__init__(wrapped, (
+            _support(
+                "entities.read",
+                PersistenceLevel.DERIVED,
+                writable=False,
+                reason=(
+                    "Legacy character, world, and plot records are exposed "
+                    "through read-only generic entity adapters."
+                ),
+            ),
+        ))
+
+
+class AssertionDslPersistenceDecorator(PersistenceDecorator):
+    namespace = "assertions"
+
+    def __init__(self, wrapped: ProjectPersistenceStrategy):
+        super().__init__(wrapped, (
+            _support(
+                "assertions.read",
+                PersistenceLevel.COMPATIBLE_ENCODING,
+                old_readable=False,
+                old_editable=False,
+                old_save_safe=True,
+                reason=(
+                    "Assertion fences remain ordinary manuscript Markdown "
+                    "to Format 1 clients."
+                ),
+            ),
+            _support(
+                "assertions.write",
+                PersistenceLevel.COMPATIBLE_ENCODING,
+                old_readable=False,
+                old_editable=False,
+                old_save_safe=True,
+                reason=(
+                    "Assertion fences remain ordinary manuscript Markdown "
+                    "to Format 1 clients."
+                ),
+            ),
+        ))
+
+
 class MorphologyPersistenceDecorator(PersistenceDecorator):
     namespace = "morphology"
 
@@ -261,9 +308,13 @@ class StoryOverlayPersistenceDecorator(PersistenceDecorator):
 
 def compatibility_strategy(version: int) -> ProjectPersistenceStrategy:
     if version == 1:
-        return StoryOverlayPersistenceDecorator(
-            MorphologyPersistenceDecorator(
-                WikilinkPersistenceDecorator(V1PersistenceStrategy())
+        return AssertionDslPersistenceDecorator(
+            LegacyEntityReadPersistenceDecorator(
+                StoryOverlayPersistenceDecorator(
+                    MorphologyPersistenceDecorator(
+                        WikilinkPersistenceDecorator(V1PersistenceStrategy())
+                    )
+                )
             )
         )
     if version == 2:

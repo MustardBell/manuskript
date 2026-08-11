@@ -251,9 +251,21 @@ class PluginRuntime:
             )
             return record
 
+        unavailable_optional = []
+        for name in manifest.optional:
+            optional_capabilities, unavailable = grant(
+                (name,), self.capabilityContext()
+            )
+            capabilities.update(optional_capabilities)
+            unavailable_optional.extend(unavailable)
+
         registrar = self.registry.registrar(
             plugin_id,
             capabilities=capabilities,
+            declared_capabilities=(
+                manifest.requires + manifest.optional
+            ),
+            unavailable_capabilities=tuple(unavailable_optional),
         )
         module_prefix = self._module_prefix(manifest)
         handle = None
@@ -388,7 +400,9 @@ class PluginRuntime:
         record = self.records.get(plugin_id)
         if record is None:
             return False
-        return capability in record.manifest.requires
+        return capability in (
+            record.manifest.requires + record.manifest.optional
+        )
 
     def _record(self, plugin_id):
         if plugin_id not in self.records:

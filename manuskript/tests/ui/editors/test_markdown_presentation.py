@@ -11,7 +11,13 @@ from PyQt5.QtWidgets import qApp, QWidget
 from PyQt5.QtTest import QSignalSpy, QTest
 
 from manuskript.enums import Outline
+from manuskript.domain.assertion_dsl import encode_assertion_block
 from manuskript.domain.reference_index import ReferenceSuggestion
+from manuskript.domain.story_assertions import (
+    Assertion,
+    AssertionTerm,
+    StoryReference,
+)
 from manuskript.domain.entity_catalog import (
     EntityReferenceChoice,
     EntitySchema,
@@ -723,6 +729,42 @@ def test_reference_menu_can_create_then_link_a_generic_entity():
     assert editor.toPlainText() == "[[Places/Kyiv|Kyiv]]"
 
 
+def test_story_assertion_command_inserts_source_block_at_current_paragraph():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    editor.set_text_editor_context(make_context(
+        editor.settings,
+        can_write_assertions=lambda: True,
+        entity_reference_choices=lambda _surface: (),
+    ))
+    editor._documentIdentity = lambda: "scene-18"
+    editor.setPlainText("First paragraph.\nSecond paragraph.")
+    cursor = editor.textCursor()
+    cursor.setPosition(4)
+    editor.setTextCursor(cursor)
+    assertion = Assertion(
+        "claim-1",
+        StoryReference("document", "scene-18"),
+        "weather",
+        AssertionTerm.scalar("rain"),
+    )
+
+    menu = editor.createStandardContextMenu()
+    editor._insertStoryAssertion(assertion)
+
+    assert any(
+        action.text().replace("&", "") == "Add story assertion…"
+        and action.isEnabled()
+        for action in menu.actions()
+    )
+    assert editor.toPlainText().startswith(
+        "First paragraph.\n\n```manuskript-assertion\n"
+    )
+    assert editor.toPlainText().endswith("\nSecond paragraph.")
+    assert "id: claim-1" in editor.toPlainText()
+    editor.undo()
+    assert editor.toPlainText() == "First paragraph.\nSecond paragraph."
+
+
 def test_live_preview_keeps_list_markers_position_stable():
     editor = MDEditView(
         spellcheck=False,
@@ -1087,6 +1129,30 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
         assert "<ul" in rendered_html
         assert "font-weight:600" in rendered_html
         assert "text-decoration: underline" in rendered_html
+    finally:
+        host.hide()
+
+
+def test_reading_projection_hides_valid_assertion_blocks_without_mutation():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    host = host_editor(editor)
+    assertion = Assertion(
+        "claim-1",
+        StoryReference("entity", "mara"),
+        "possesses",
+        AssertionTerm.referencing("entity", "key"),
+    )
+    source = "Mara takes the key.\n\n" + encode_assertion_block(assertion)
+    editor.setPlainText(source)
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+    host.show()
+    try:
+        assert wait_until(
+            lambda: editor.readingView.toPlainText() == "Mara takes the key."
+        )
+        assert editor.toPlainText() == source
+        assert "manuskript-assertion" not in editor.readingView.toHtml()
     finally:
         host.hide()
 

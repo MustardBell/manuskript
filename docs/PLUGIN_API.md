@@ -46,6 +46,7 @@ and the boundary test will refuse a plugin that reaches for it.
   "author": "You",
   "homepage": "https://example.com/thing",
   "requires": ["markup.bbcode"],
+  "optional": ["assertions.write"],
 
   "media_types": [
     "text/markdown",
@@ -64,15 +65,19 @@ and the boundary test will refuse a plugin that reaches for it.
 same convention; the registry **refuses** a duplicate and names the plugin
 that already owns it, so collisions are a load error rather than a surprise.
 
-`api_version` gates the whole surface. `requires` names individual services.
-The difference matters:
+`api_version` gates the whole surface. `requires` names services without
+which the plugin cannot run. `optional` names services the plugin can use when
+the current host and project provide them. Required and optional names are
+deduplicated; a name appearing in both is required. The difference matters:
 
 - wrong `api_version` → **Incompatible**: this Manuskript is not for you
 - unmet `requires` → **Unsatisfied**: everything else is fine, one service is
   absent
+- unmet `optional` → the plugin still loads; asking for that service raises
+  `PluginScopeError` with the current availability reason
 
-A malformed `requires` is rejected during discovery, so a typo is reported
-against the manifest rather than surfacing later as a missing service.
+A malformed `requires` or `optional` list is rejected during discovery, so a
+bad declaration is reported against the manifest rather than surfacing later.
 
 ---
 
@@ -208,10 +213,17 @@ Both methods are optional, and returning nothing stays valid:
 | `outline.read` | a manuscript you can read | in your editor workspace |
 | `outline.write` | a manuscript you can change | in your editor workspace |
 | `editor.control` | an editor pane factory | in your editor workspace |
+| `entities.read` / `entities.write` | immutable generic entity snapshots / entity commands | in project panels and editor workspaces |
+| `references.read` / `references.write` | explicit wikilinks / guarded source insertion | in project panels and editor workspaces |
+| `assertions.read` / `assertions.write` | explicit source assertions / guarded source commands | in project panels and editor workspaces |
+| `query.execute` | the typed structural query engine | in project panels and editor workspaces |
+| `morphology.registry` | provider snapshots and namespaced registration | in project panels and editor workspaces |
 
 `api.capability(name)` raises `PluginScopeError` for anything you did not
-declare, even a name core has. The surface you touch is the intersection of
-what core publishes and what your manifest advertises.
+declare, even a name core has. A declared optional service can still be
+unavailable for the open project's persistence strategy. The surface you
+touch is the intersection of what core publishes, what your manifest
+advertises, and what the current project can preserve.
 
 The three workspace services are not asked for by name — they arrive as
 fields of your `EditorWorkspaceContext`, or arrive as `None`. Declaring is
@@ -223,6 +235,48 @@ are loading, so you take those from `PluginSettingsContext.capability`
 inside your panel factory rather than from `api.capability` during
 registration. `requires` still gates them: a name core does not have leaves
 you **Unsatisfied** before your code runs either way.
+
+### Story model capabilities
+
+Project panels use `context.capability(name)` on `PluginProjectContext`;
+editor workspaces use the same call on `EditorWorkspaceContext`. Resolve a
+service when it is needed, not at module import time: the open project and its
+persistence strategy can change while the plugin remains loaded.
+
+Read services return copied, frozen API records such as `EntitySnapshot`,
+`ReferenceOccurrenceSnapshot`, and `AssertionSnapshot`; no Qt model or storage
+object crosses the boundary. Write services route mutations through project
+commands, flush pending shared document buffers first, and edit the
+authoritative Markdown source. A write service includes its corresponding
+read methods.
+
+`entities.read` offers `entities()`, `find(id)`, and `exact_matches(surface)`.
+`entities.write` adds `create(type, title, aliases=())` and
+`update(id, title=..., entity_type=..., aliases=..., text=...)`.
+
+`references.read` offers `occurrences()`, `backlinks(target_id)`, and
+`complete(prefix)`. `references.write.insert(document_id, start, end, target,
+display=None)` replaces the requested source span with a validated wikilink.
+
+`assertions.read` offers `assertions()`, `find(id)`,
+`relationships(predicate="")`, and `diagnostics()`. `assertions.write` adds
+`append_relationship`, `append_value`, `set_canon_state`, and `remove`; its
+arguments use the public `StoryReferenceValue(kind, id)` contract.
+
+`query.execute.execute(expression)` accepts the exported query nodes `All`,
+`AssertionsWhere`, `DocumentsReferencing`, `EntitiesWhere`,
+`EntitiesRelatedTo`, `And`, `Or`, and `Not`, and returns ordered `QueryResult`
+values. Queries operate only on explicit references and assertions.
+
+`morphology.registry.providers()` returns provider snapshots. `register()`
+accepts a deterministic provider whose ID starts with the registering plugin
+ID plus a dot. Registration refreshes disposable surface indexes; it never
+rewrites entity source.
+
+Format 2 provides native read/write story capabilities. Format 1 can expose
+legacy entities read-only and can safely encode wikilinks and assertion fences
+as ordinary Markdown. Ask the capability rather than branching on a format
+number.
 
 ### `ui.export_routing`
 

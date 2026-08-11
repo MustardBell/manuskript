@@ -2,7 +2,7 @@ from PyQt5.QtCore import QTimer, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QTextDocument
 from PyQt5.QtWidgets import QFrame, QTextBrowser
 
-from manuskript.domain.markdown_dsl import render_wikilinks_as_markdown
+from manuskript.domain.assertion_dsl import render_story_markdown
 
 
 class MarkdownReadingView(QTextBrowser):
@@ -89,7 +89,7 @@ class MarkdownReadingView(QTextBrowser):
         if self._renderer is None:
             document.setBaseUrl(QUrl())
             document.setMarkdown(
-                render_wikilinks_as_markdown(source),
+                render_story_markdown(source),
                 QTextDocument.MarkdownDialectGitHub,
             )
         else:

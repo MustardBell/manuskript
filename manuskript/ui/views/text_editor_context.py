@@ -32,6 +32,7 @@ class TextEditorContext:
     entity_reference_choices: Optional[Callable[[str], tuple]] = None
     entity_schemas: Optional[Callable[[], tuple]] = None
     create_entity: Optional[Callable[[str, str], object]] = None
+    can_write_assertions: Optional[Callable[[], bool]] = None
 
 
 def text_editor_context_for(
@@ -44,6 +45,7 @@ def text_editor_context_for(
     entity_catalog=None,
     create_native_entity=None,
     open_entity=None,
+    persistence_strategy=None,
 ):
     """Adapt the main UI to the text editor action boundary.
 
@@ -132,6 +134,17 @@ def text_editor_context_for(
         entity = create_native_entity(entity_type, title)
         return entity_catalog.reference_choice(entity, exact_match=True)
 
+    def can_write_assertions():
+        strategy = (
+            persistence_strategy()
+            if callable(persistence_strategy)
+            else persistence_strategy
+        )
+        return bool(
+            strategy is not None
+            and strategy.supports("assertions.write", write=True)
+        )
+
     return TextEditorContext(
         settings=settings,
         document_buffers=buffers,
@@ -142,6 +155,7 @@ def text_editor_context_for(
         entity_reference_choices=entity_reference_choices,
         entity_schemas=entity_schemas,
         create_entity=create_entity,
+        can_write_assertions=can_write_assertions,
         reload_fonts=reload_fonts,
         create_character=create_character,
         create_plot=create_plot,

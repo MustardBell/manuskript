@@ -15,7 +15,10 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_EDITOR_CONTROL,
     CAPABILITY_OUTLINE_READ,
     CAPABILITY_OUTLINE_WRITE,
+    CAPABILITY_QUERY_EXECUTE,
 )
+from manuskript.plugins.errors import PluginScopeError
+from manuskript.plugins import All, QueryScope
 from manuskript.plugins.manifest import PluginManifest
 from manuskript.plugins.runtime import PluginRecord, PluginStatus
 from manuskript.ui.editors.markdownPresentation import (
@@ -273,9 +276,24 @@ def test_a_workspace_that_declared_nothing_is_given_nothing(
         assert context is not None
         assert context.outline is None
         assert context.editors is None
+        with pytest.raises(PluginScopeError, match="did not declare"):
+            context.capability(CAPABILITY_QUERY_EXECUTE)
         # What it was opened on is the argument of the call, not a view of
         # the manuscript, so it arrives either way.
         assert len(context.selected_item_ids) == 1
+    finally:
+        _remove_workspace(window)
+
+
+def test_workspace_resolves_declared_story_capability_at_use_time(
+        MWEmptyProject):
+    window = MWEmptyProject
+    try:
+        context, _item = _open_with(window, (CAPABILITY_QUERY_EXECUTE,))
+
+        capability = context.capability(CAPABILITY_QUERY_EXECUTE)
+
+        assert capability.execute(All(QueryScope.ASSERTION)) == ()
     finally:
         _remove_workspace(window)
 

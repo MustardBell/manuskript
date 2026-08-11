@@ -167,6 +167,7 @@ class ProjectViewSet:
                     runtime.projectManager.storage.entity_catalog,
                     runtime.projectManager.createEntity,
                     navigation.open_entity,
+                    lambda: runtime.projectManager.storage.persistence_strategy,
                 ),
                 open_index=core.project_tree.tree.setCurrentIndex,
                 open_indexes=partial(

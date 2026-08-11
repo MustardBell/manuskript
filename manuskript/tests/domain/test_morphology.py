@@ -1,3 +1,5 @@
+import pytest
+
 from manuskript.domain.canonical_project import EntityRecord, OutlineDocument
 from manuskript.domain.morphology import (
     MorphologyComponent,
@@ -120,3 +122,40 @@ def test_missing_provider_leaves_profile_data_intact_but_generates_nothing():
 
     assert providers.generate(profile) == ()
     assert "unavailable" in issues[0].message
+
+
+def test_provider_extension_point_rejects_incomplete_and_contains_failures():
+    providers = first_party_morphology_providers()
+
+    class Incomplete:
+        id = "plugin.incomplete"
+
+    with pytest.raises(ValueError, match="implement"):
+        providers.register(Incomplete())
+
+    class Broken:
+        id = "plugin.broken"
+        label = "Broken"
+        language = "x-test"
+        component_roles = (("name", "Name"),)
+        genders = ()
+
+        @staticmethod
+        def validate(_component):
+            raise RuntimeError("provider defect")
+
+        @staticmethod
+        def generate(_component):
+            raise RuntimeError("provider defect")
+
+        @staticmethod
+        def analyse(_surface, _component):
+            return ()
+
+    providers.register(Broken())
+    profile = MorphologyProfile(
+        Broken.id, (_component("name", "Mara"),)
+    )
+
+    assert "provider defect" in providers.validate(profile)[0].message
+    assert providers.generate(profile) == ()

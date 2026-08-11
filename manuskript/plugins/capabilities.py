@@ -34,6 +34,15 @@ CAPABILITY_OUTLINE_WRITE = "outline.write"
 #: Put editor panes on screen and drive them.
 CAPABILITY_EDITOR_CONTROL = "editor.control"
 
+CAPABILITY_ENTITIES_READ = "entities.read"
+CAPABILITY_ENTITIES_WRITE = "entities.write"
+CAPABILITY_REFERENCES_READ = "references.read"
+CAPABILITY_REFERENCES_WRITE = "references.write"
+CAPABILITY_ASSERTIONS_READ = "assertions.read"
+CAPABILITY_ASSERTIONS_WRITE = "assertions.write"
+CAPABILITY_QUERY_EXECUTE = "query.execute"
+CAPABILITY_MORPHOLOGY_REGISTRY = "morphology.registry"
+
 
 @dataclass(frozen=True)
 class PluginCapabilityContext:
@@ -148,6 +157,55 @@ CAPABILITIES = (
             "Put editor panes in your workspace and drive them: cursor, "
             "selection, scrolling, presentation and the editing lock. "
             "Without it your workspace context has no editor factory."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_ENTITIES_READ,
+        summary="Read stable snapshots of generic project entities.",
+    ),
+    Capability(
+        name=CAPABILITY_ENTITIES_WRITE,
+        summary=(
+            "Create and update generic entities through project commands; "
+            "includes entities.read."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_REFERENCES_READ,
+        summary=(
+            "Read explicit wikilink occurrences, backlinks, and completion."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_REFERENCES_WRITE,
+        summary=(
+            "Insert source-owned wikilinks through a guarded outline edit; "
+            "includes references.read."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_ASSERTIONS_READ,
+        summary="Read explicit assertions, provenance, and diagnostics.",
+    ),
+    Capability(
+        name=CAPABILITY_ASSERTIONS_WRITE,
+        summary=(
+            "Append or remove fenced source-owned assertions through a "
+            "guarded outline edit; includes assertions.read."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_QUERY_EXECUTE,
+        summary=(
+            "Execute the stable typed query AST over entities, references, "
+            "and explicit assertions."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_MORPHOLOGY_REGISTRY,
+        summary=(
+            "Register a namespaced deterministic morphology provider and "
+            "inspect available providers."
         ),
     ),
 )

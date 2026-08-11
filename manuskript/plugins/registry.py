@@ -96,10 +96,20 @@ class RegisteredContribution:
 class PluginRegistrar:
     """Stage one plugin's contributions before atomically installing them."""
 
-    def __init__(self, plugin_id, capabilities=None):
+    def __init__(
+        self,
+        plugin_id,
+        capabilities=None,
+        declared_capabilities=(),
+        unavailable_capabilities=(),
+    ):
         self.plugin_id = plugin_id
         self._contributions = []
         self._capabilities = dict(capabilities or {})
+        self._declaredCapabilities = frozenset(declared_capabilities)
+        self._unavailableCapabilities = frozenset(
+            unavailable_capabilities
+        )
 
     def capability(self, name):
         """A service this plugin declared and core granted.
@@ -110,6 +120,20 @@ class PluginRegistrar:
         try:
             return self._capabilities[name]
         except KeyError:
+            if name in self._unavailableCapabilities:
+                raise PluginScopeError(
+                    "Plugin {} declared optional capability {!r}, but the "
+                    "current host cannot provide it.".format(
+                        self.plugin_id, name
+                    )
+                ) from None
+            if name in self._declaredCapabilities:
+                raise PluginScopeError(
+                    "Plugin {} declared capability {!r}; it is delivered "
+                    "only by its scoped UI context.".format(
+                        self.plugin_id, name
+                    )
+                ) from None
             raise PluginScopeError(
                 "Plugin {} did not declare capability {!r} in its "
                 "manifest.".format(self.plugin_id, name)
@@ -192,8 +216,19 @@ class PluginRegistry:
         self._by_kind = defaultdict(dict)
         self._by_plugin = defaultdict(list)
 
-    def registrar(self, plugin_id, capabilities=None):
-        return PluginRegistrar(plugin_id, capabilities=capabilities)
+    def registrar(
+        self,
+        plugin_id,
+        capabilities=None,
+        declared_capabilities=(),
+        unavailable_capabilities=(),
+    ):
+        return PluginRegistrar(
+            plugin_id,
+            capabilities=capabilities,
+            declared_capabilities=declared_capabilities,
+            unavailable_capabilities=unavailable_capabilities,
+        )
 
     def install(self, plugin_id, contributions):
         contributions = tuple(contributions)
@@ -306,4 +341,3 @@ class PluginRegistry:
         return self.contributions(
             ContributionKind.CONVERSION_AUGMENTATION
         )
-

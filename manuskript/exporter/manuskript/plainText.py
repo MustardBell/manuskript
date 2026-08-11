@@ -5,6 +5,7 @@ import re
 from PyQt5.QtGui import QFont, QTextCharFormat
 from PyQt5.QtWidgets import QPlainTextEdit, qApp, QFrame, QMessageBox
 
+from manuskript.domain.assertion_dsl import strip_assertion_blocks
 from manuskript.domain.exporting import ExportArtifact
 from manuskript.exporter.basic import basicFormat
 from manuskript.exporter.page_routes import page_renderer_route_id
@@ -241,7 +242,9 @@ class plainText(basicFormat):
         source = item.text()
         page_types = getattr(self.context, "page_types", None)
         if page_types is None:
-            return self.processText(source, settings)
+            return self.processText(
+                self.projectStorySource(source), settings
+            )
         target_format = self.pageRenderTarget()
         document = page_types.export_document(
             item,
@@ -250,7 +253,9 @@ class plainText(basicFormat):
             route_id=self.pageRendererRoute(),
         )
         if document.source_format == MARKDOWN:
-            return self.processText(document.content, settings)
+            return self.processText(
+                self.projectStorySource(document.content), settings
+            )
         if document.source_format == target_format:
             return self.processRenderedPageText(
                 document.content,
@@ -260,6 +265,16 @@ class plainText(basicFormat):
         raise ValueError(
             "Cannot include {} page content in a {} export."
             .format(document.source_format, target_format)
+        )
+
+    @staticmethod
+    def projectStorySource(source):
+        """Hide semantic blocks without leaving export-only blank tails."""
+
+        projected = strip_assertion_blocks(source)
+        return (
+            projected.rstrip("\r\n")
+            if projected != source else projected
         )
 
     def pageRenderTarget(self):

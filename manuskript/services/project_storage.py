@@ -26,12 +26,17 @@ from manuskript.domain.entity_catalog import (
     EntityCatalog,
     first_party_story_entity_schemas,
 )
+from manuskript.domain.assertion_store import (
+    AssertionDocument,
+    AssertionStore,
+)
 from manuskript.domain.morphology import MorphologyIndex
 from manuskript.domain.project_features import compatibility_strategy
 from manuskript.domain.reference_index import (
     ReferenceDocument,
     ReferenceIndex,
 )
+from manuskript.domain.story_query import StoryQueryEngine
 from manuskript.linguistics import first_party_morphology_providers
 
 
@@ -54,6 +59,7 @@ class ProjectStorage:
         entity_catalog=None,
         legacy_entity_adapter=None,
         morphology_providers=None,
+        assertion_store=None,
     ):
         self._file_cache = (
             file_cache if file_cache is not None else {}
@@ -90,6 +96,12 @@ class ProjectStorage:
         )
         self._canonical_project = None
         self._reference_index = ReferenceIndex()
+        self._assertion_store = assertion_store or AssertionStore()
+        self._story_query = StoryQueryEngine(
+            self._entity_catalog,
+            self._reference_index,
+            self._assertion_store,
+        )
 
     @property
     def canonical_project(self):
@@ -115,6 +127,32 @@ class ProjectStorage:
     def morphology_providers(self):
         return self._morphology_providers
 
+    @property
+    def assertion_store(self):
+        return self._assertion_store
+
+    @property
+    def story_query(self):
+        return self._story_query
+
+    def register_morphology_provider(self, provider):
+        self._morphology_providers.register(provider)
+        self._entity_catalog.refresh_derived_surfaces()
+        entity_by_id = {
+            entity.id: entity for entity in self._entity_catalog.entities
+        }
+        self._reference_index.rebuild(tuple(
+            replace(
+                document,
+                aliases=self._entity_reference_surfaces(
+                    entity_by_id[document.id]
+                ),
+            )
+            if document.id in entity_by_id else document
+            for document in self._reference_index.documents
+        ))
+        self._rebuild_assertions()
+
     def create_entity(self, entity_type, title, aliases=()):
         entity = self._entity_catalog.create(entity_type, title, aliases)
         self._reference_index.update(ReferenceDocument(
@@ -124,6 +162,7 @@ class ProjectStorage:
             text=entity.document.text,
             aliases=self._entity_reference_surfaces(entity),
         ))
+        self._rebuild_assertions()
         return entity
 
     def update_entity(self, entity_id, **changes):
@@ -135,6 +174,7 @@ class ProjectStorage:
             text=entity.document.text,
             aliases=self._entity_reference_surfaces(entity),
         ))
+        self._rebuild_assertions()
         return entity
 
     def update_document_references(self, item):
@@ -142,9 +182,8 @@ class ProjectStorage:
 
         if self._canonical_project is None or item is None:
             return
-        self._reference_index.update(
-            self._reference_document_from_item(item)
-        )
+        self._reference_index.update(self._reference_document_from_item(item))
+        self._rebuild_assertions()
 
     def rebuild_document_references(self, root_item):
         """Re-index live outline structure after inserts, moves, or removals."""
@@ -170,6 +209,7 @@ class ProjectStorage:
             for entity in self._entity_catalog.native_entities
         )
         self._reference_index.rebuild(documents)
+        self._rebuild_assertions()
 
     @staticmethod
     def _reference_document_from_item(item):
@@ -262,6 +302,7 @@ class ProjectStorage:
         self._file_cache.clear()
         self._canonical_project = None
         self._reference_index.rebuild(())
+        self._assertion_store.rebuild(())
         self._entity_catalog.replace((), writable=False)
 
     def _load_version_1(self, context, *, zipped, file_access):
@@ -405,11 +446,25 @@ class ProjectStorage:
             )
             for document in project.documents()
         ))
+        self._rebuild_assertions()
 
     def _entity_reference_surfaces(self, entity):
         return tuple(
             value for value in self._entity_catalog.surface_forms(entity.id)
             if value.casefold() != entity.title.casefold()
+        )
+
+    def _rebuild_assertions(self):
+        self._assertion_store.rebuild(
+            (
+                AssertionDocument(
+                    document.id, document.path, document.text
+                )
+                for document in self._reference_index.documents
+            ),
+            entity_ids=(
+                entity.id for entity in self._entity_catalog.entities
+            ),
         )
 
     @staticmethod

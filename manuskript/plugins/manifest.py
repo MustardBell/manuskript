@@ -37,6 +37,9 @@ class PluginManifest:
     homepage: str = ""
     #: Capability names this plugin cannot work without.
     requires: tuple = ()
+    #: Capability names the plugin can use when the current host/project
+    #: provides them. Missing optional capabilities never prevent loading.
+    optional: tuple = ()
     #: Formats this plugin knows about. Declaring is not a promise: it says
     #: the name exists and this plugin has an interest in what it resolves
     #: to. Entries are MediaType objects; one naming a format nobody has
@@ -122,7 +125,11 @@ class PluginManifest:
                 "Plugin entry_point must use 'module:callable' syntax."
             )
 
-        requires = cls._read_requires(value)
+        requires = cls._read_capabilities(value, "requires")
+        optional = tuple(
+            name for name in cls._read_capabilities(value, "optional")
+            if name not in requires
+        )
         media_types = cls._read_media_types(value)
         promises = {
             name: cls._read_promise(value, name)
@@ -142,29 +149,32 @@ class PluginManifest:
             author=str(value.get("author", "")).strip(),
             homepage=str(value.get("homepage", "")).strip(),
             requires=requires,
+            optional=optional,
             media_types=media_types,
             **promises,
         )
 
     @staticmethod
-    def _read_requires(value):
+    def _read_capabilities(value, key):
         """Read declared capability names, rejecting anything unusable.
 
         A typo here should surface at discovery, where it can be reported
         against the manifest, rather than as a missing service later.
         """
-        declared = value.get("requires", ())
+        declared = value.get(key, ())
         if isinstance(declared, str) or not isinstance(
             declared, (list, tuple)
         ):
             raise PluginManifestError(
-                "Plugin requires must be a list of capability names."
+                "Plugin {} must be a list of capability names.".format(key)
             )
         names = []
         for entry in declared:
             if not isinstance(entry, str) or not entry.strip():
                 raise PluginManifestError(
-                    "Plugin requires entries must be non-empty strings."
+                    "Plugin {} entries must be non-empty strings.".format(
+                        key
+                    )
                 )
             name = entry.strip()
             if name not in names:

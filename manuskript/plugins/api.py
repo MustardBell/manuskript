@@ -115,6 +115,82 @@ class WorkspaceDocument:
 
 
 @dataclass(frozen=True)
+class EntitySnapshot:
+    id: str
+    type: str
+    title: str
+    path: str
+    aliases: tuple[str, ...] = ()
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StoryReferenceValue:
+    kind: str
+    id: str
+
+
+@dataclass(frozen=True)
+class AssertionTermValue:
+    reference: Optional[StoryReferenceValue] = None
+    value: Any = None
+    is_reference: bool = False
+
+
+@dataclass(frozen=True)
+class AssertionSnapshot:
+    id: str
+    subject: StoryReferenceValue
+    predicate: str
+    object: AssertionTermValue
+    qualifiers: Mapping[str, Any]
+    document_id: str
+    source_start: int
+    source_end: int
+    anchor: str = ""
+    note: str = ""
+    canon_state: str = "canon"
+
+
+@dataclass(frozen=True)
+class ReferenceOccurrenceSnapshot:
+    source_document_id: str
+    source_path: str
+    source_start: int
+    source_end: int
+    raw_target: str
+    display_text: Optional[str]
+    resolution: str
+    resolved_target_id: Optional[str] = None
+    resolved_target_path: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ReferenceSuggestionSnapshot:
+    document_id: str
+    target: str
+    title: str
+    path: str
+
+
+@dataclass(frozen=True)
+class AssertionDiagnosticSnapshot:
+    document_id: str
+    path: str
+    message: str
+    severity: str
+    source_start: int
+    source_end: int
+
+
+@dataclass(frozen=True)
+class MorphologyProviderSnapshot:
+    id: str
+    label: str
+    language: str
+
+
+@dataclass(frozen=True)
 class EditorWorkspaceContext:
     """Project-scoped capabilities supplied to an editor workspace.
 
@@ -131,6 +207,7 @@ class EditorWorkspaceContext:
     editors: Any
     show_status: Callable[..., None]
     close_workspace: Callable[[], None]
+    capability: Callable[[str], Any]
 
 
 @dataclass(frozen=True)

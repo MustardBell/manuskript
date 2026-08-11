@@ -23,6 +23,9 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_OUTLINE_READ,
     CAPABILITY_OUTLINE_WRITE,
 )
+from manuskript.ui.plugins.story_capabilities import (
+    build_story_capability,
+)
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
@@ -670,6 +673,9 @@ class EditorWorkspaceHost(QObject):
             editors=self._granted_editors(record.plugin_id),
             show_status=self.views.project.show_status,
             close_workspace=self.close_workspace,
+            capability=partial(
+                self._workspace_capability, record.plugin_id
+            ),
         )
         try:
             workspace = contribution.workspace_factory(
@@ -767,6 +773,16 @@ class EditorWorkspaceHost(QObject):
         if self.runtime.declares(plugin_id, CAPABILITY_EDITOR_CONTROL):
             return self._editors
         return None
+
+    def _workspace_capability(self, plugin_id, name):
+        manager = self.views.project.story_services()
+        return build_story_capability(
+            self.runtime,
+            manager,
+            plugin_id,
+            name,
+            source_gateway=self._outline,
+        )
 
     def _install_services(self):
         if self._outline is not None:

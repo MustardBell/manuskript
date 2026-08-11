@@ -24,6 +24,7 @@ from manuskript.panels import (
     PanelDescriptor,
     PanelRegistry,
 )
+from manuskript.ui.plugins.story_capabilities import build_story_capability
 
 
 def project_panel_record(runtime, contribution_id):
@@ -264,6 +265,12 @@ class ProjectPanelHost:
             ),
             default_file=default_file,
             show_status=project.show_status,
+            capability=lambda name: build_story_capability(
+                self.runtime,
+                project.story_services(),
+                plugin_id,
+                name,
+            ),
         )
 
     def close_panel(self, contribution_id):

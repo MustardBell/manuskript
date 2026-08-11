@@ -15,6 +15,17 @@ from manuskript.domain.morphology import (
     MorphologyComponent,
     MorphologyProfile,
 )
+from manuskript.domain.assertion_dsl import encode_assertion_block
+from manuskript.domain.story_assertions import (
+    Assertion,
+    AssertionTerm,
+    StoryReference,
+)
+from manuskript.domain.story_query import (
+    AssertionsWhere,
+    QueryResult,
+    QueryScope,
+)
 from manuskript.load_save.format_detection import DetectedProjectFormat
 from manuskript.load_save.project_codec import EncodedProject
 from manuskript.load_save.project_files import ProjectFileReadResult
@@ -307,6 +318,21 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert storage.reference_index.complete("Олені")[0].document_id == (
         inflected_entity.id
     )
+    assertion = Assertion(
+        "mara-knows-olena",
+        StoryReference("entity", created_entity.id),
+        "knows",
+        AssertionTerm.referencing("entity", inflected_entity.id),
+    )
+    item.setData(
+        Outline.text,
+        item.text() + "\n" + encode_assertion_block(assertion),
+    )
+    storage.update_document_references(item)
+    assert storage.assertion_store.assertions[0].id == assertion.id
+    assert storage.story_query.execute(AssertionsWhere(predicate="knows")) == (
+        QueryResult(QueryScope.ASSERTION, assertion.id),
+    )
     saved = storage.save(context)
     persisted = access.read(str(project_file), zipped=False).files
     reopened = codec.decode(persisted)
@@ -317,7 +343,7 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
     assert storage.canonical_project.format_version == 2
     assert tuple(reopened.documents())[0].id == document_id
     assert tuple(reopened.documents())[0].kind == "scene"
-    assert tuple(reopened.documents())[0].text == (
+    assert tuple(reopened.documents())[0].text.startswith(
         "Changed through the UI adapter.\n"
     )
     assert persisted[untouched_path] == untouched_source
@@ -335,6 +361,7 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
         if entity.id == inflected_entity.id
     )
     assert MorphologyProfile.from_entity(reopened_inflected) == morphology
+    assert "mara-knows-olena" in tuple(reopened.documents())[0].text
 
     copy_file = tmp_path / "native-copy.msk"
     copy_context = ProjectPersistenceContext(
