@@ -1,0 +1,7 @@
+Name:               Олена Коваль
+ID:                 17
+Importance:         2
+Color:              #336699
+Language:           uk
+Alias:              Лена
+Alias:              Оленка

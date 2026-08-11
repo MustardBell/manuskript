@@ -1,0 +1,7 @@
+title:          Duplicate
+ID:             102
+type:           txt
+compile:        False
+
+
+Legacy plain text.

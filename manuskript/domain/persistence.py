@@ -21,6 +21,7 @@ class ProjectLoadResult:
 
     missing_files: tuple[str, ...] = ()
     unreadable_files: tuple[str, ...] = ()
+    diagnostics: tuple[str, ...] = ()
     fatal_errors: tuple[str, ...] = ()
 
     @property
@@ -29,6 +30,7 @@ class ProjectLoadResult:
             self.fatal_errors
             + self.missing_files
             + self.unreadable_files
+            + self.diagnostics
         )
 
     @property

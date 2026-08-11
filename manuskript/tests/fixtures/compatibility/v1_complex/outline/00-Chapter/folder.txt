@@ -1,0 +1,7 @@
+title:          Chapter
+ID:             100
+type:           folder
+compile:        True
+
+
+Folder notes.

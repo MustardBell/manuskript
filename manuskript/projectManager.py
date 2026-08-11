@@ -595,6 +595,8 @@ class ProjectManager:
                 LOGGER.warning(" * Missing file: %s", filename)
             for filename in result.unreadable_files:
                 LOGGER.warning(" * Unreadable file: %s", filename)
+            for diagnostic in result.diagnostics:
+                LOGGER.warning(" * %s", diagnostic)
             self.status_reporter(
                 self.ui.translate(
                     "Project {} loaded with some errors."
