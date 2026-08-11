@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from PyQt5.QtCore import QCoreApplication, QEvent
+
 from manuskript.services.workspace_state import PRIMARY
 
 
@@ -28,6 +30,7 @@ class WorkspaceWindowViews:
     current_id: str
     workspaces: Callable[[], tuple]
     identify: Callable[[Any], str]
+    settle_native_deletions: Callable[[], None]
     create: Callable[[str], Any]
     close_all: Callable[[], bool]
     state_store: Callable[[], Any]
@@ -52,6 +55,9 @@ class WorkspaceWindowViews:
             current_id=window.windowId,
             workspaces=lambda: registry.workspace_windows,
             identify=workspace_id,
+            settle_native_deletions=lambda: QCoreApplication.sendPostedEvents(
+                None, QEvent.DeferredDelete,
+            ),
             create=create,
             close_all=registry.close_all,
             state_store=lambda: state.store,
@@ -89,6 +95,12 @@ class WorkspaceWindowController:
         # QAction.triggered supplies a bool; it is not a workspace id.
         if isinstance(window_id, bool):
             window_id = None
+        # A just-closed secondary uses WA_DeleteOnClose. Synchronous callers
+        # can ask for another workspace before the event loop has delivered
+        # that DeferredDelete; letting it arrive halfway through composition
+        # interleaves destruction of one native tree with construction of the
+        # next. Establish the native lifetime boundary first.
+        self.views.settle_native_deletions()
         return self.views.create(window_id or self.next_id())
 
     def adopt_open_project(self):

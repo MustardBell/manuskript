@@ -21,6 +21,7 @@ def controller_fixture(
     controller_holder = {}
 
     def create(window_id):
+        events.append(("create", window_id))
         workspace = SimpleNamespace(windowId=window_id)
         workspaces.append(workspace)
         opened.append(workspace)
@@ -36,6 +37,7 @@ def controller_fixture(
         current_id=current_id,
         workspaces=lambda: tuple(workspaces),
         identify=lambda workspace: workspace.windowId,
+        settle_native_deletions=lambda: events.append(("settle",)),
         create=create,
         close_all=close_all,
         state_store=lambda: store,
@@ -66,6 +68,14 @@ def test_workspace_ids_are_stable_and_action_bool_is_not_an_id():
         "window-2",
         "window-3",
     ]
+
+
+def test_old_native_windows_are_destroyed_before_a_new_one_is_composed():
+    controller, _workspaces, _opened, _store, events = controller_fixture()
+
+    controller.open("window-2")
+
+    assert events == [("settle",), ("create", "window-2")]
 
 
 def test_new_workspace_adopts_the_running_project_in_order():
