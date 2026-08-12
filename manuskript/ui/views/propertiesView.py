@@ -12,10 +12,22 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 class propertiesView(QWidget, Ui_propertiesView):
+    #: How wide a field whose content has a known short bound may get.
+    #: A form layout hands its field column every pixel it has, and a
+    #: dock spanning the window is a lot of pixels: a point-of-view
+    #: chooser holding one name, or a word-count goal holding four
+    #: digits, became a metre-wide bar with its content at the far left.
+    #: Free text is left alone -- a title or a summary earns the width.
+    BOUNDED_FIELD_WIDTH = 300
+
     def __init__(self, parent=None):
         QWidget.__init__(self)
         self.setupUi(self)
         self.txtGoal.setColumn(Outline.setGoal)
+        for bounded in (
+            self.cmbPOV, self.cmbStatus, self.cmbLabel, self.txtGoal,
+        ):
+            bounded.setMaximumWidth(self.BOUNDED_FIELD_WIDTH)
         self._pageTypes = None
         self._pluginPropertyRows = []
         self._currentPropertyItems = ()

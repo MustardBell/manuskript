@@ -29,6 +29,9 @@ from manuskript.ui.morphology_editor import MorphologyParadigmDialog
 #: What a stored flag may say for "yes". Format 1 wrote Python booleans.
 _TRUE = ("true", "1", "yes", "on")
 
+#: How wide a field whose content has a known short bound may get.
+BOUNDED_FIELD_WIDTH = 300
+
 
 def _ordered_sections(fields):
     """Section names in the order their first field declares them."""
@@ -290,6 +293,10 @@ class EntityEditorDialog(QDialog):
         else:
             widget = QLineEdit(self)
             widget.setText(text)
+        if spec.kind in (CHOICE, FLAG):
+            # Its content has a known short bound, so it does not earn
+            # the whole field column the way prose does.
+            widget.setMaximumWidth(BOUNDED_FIELD_WIDTH)
         widget.setObjectName("entityField." + spec.name)
         widget.setAccessibleName(spec.label)
         if self._readOnly:
