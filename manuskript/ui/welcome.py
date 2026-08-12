@@ -6,7 +6,7 @@ import os
 
 from PyQt5.QtCore import QRegExp, Qt, QDir
 from PyQt5.QtGui import QIcon, QBrush, QColor
-from PyQt5.QtWidgets import QWidget, QAction, QFileDialog, QSpinBox, QLineEdit, QLabel, QPushButton, QTreeWidgetItem, \
+from PyQt5.QtWidgets import QVBoxLayout, QWidget, QAction, QFileDialog, QSpinBox, QLineEdit, QLabel, QPushButton, QTreeWidgetItem, \
     qApp, QMessageBox
 
 from manuskript.functions import appPath
@@ -22,6 +22,13 @@ except:
     pass
 
 class welcome(QWidget, Ui_welcome):
+    #: How wide the invitation to open or create a project may get. It
+    #: asks two questions and offers a short list of templates, so on a
+    #: wide screen the Designer file's "at least 500, no maximum" spread
+    #: it across the whole window with the controls stranded at the far
+    #: edges. Set here rather than in the .ui, which pyuic5 regenerates.
+    MAXIMUM_WIDTH = 900
+
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.setupUi(self)
@@ -38,6 +45,54 @@ class welcome(QWidget, Ui_welcome):
 
         self.populateTemplates()
         self._templates = self.templates()
+        # After the templates are in: the list has to be measured with
+        # something in it, or the card shrinks below it and the choice
+        # everything else depends on arrives already scrolled.
+        self._centreInvitation()
+
+    def _templateListHeight(self):
+        """Tall enough for every template, so the list never scrolls.
+
+        A tree's own size hint is a fixed default, not a measurement of
+        what is in it, so asking it produced a card that arrived already
+        scrolled past half the templates.
+        """
+        rows = 0
+        pending = [
+            self.tree.topLevelItem(index)
+            for index in range(self.tree.topLevelItemCount())
+        ]
+        while pending:
+            item = pending.pop()
+            rows += 1
+            pending.extend(
+                item.child(index) for index in range(item.childCount())
+            )
+        row_height = self.tree.sizeHintForRow(0) if rows else 0
+        return rows * max(row_height, 1) + 2 * self.tree.frameWidth()
+
+    def _centreInvitation(self):
+        """Sit the invitation in the middle at the size it asks for.
+
+        The Designer file gives it a minimum and no maximum in either
+        direction, so on a large screen it grows to fill the window: the
+        template list stretches to the full height with nothing in it,
+        and Open/Create end up in the far corner. Upstream reads as a
+        compact card because its content is all it ever wanted to be --
+        this restores that without editing the .ui, which pyuic5
+        regenerates.
+        """
+        self.frame_2.setMaximumWidth(self.MAXIMUM_WIDTH)
+        self.tree.setMinimumHeight(self._templateListHeight())
+        self.horizontalLayout.removeWidget(self.frame_2)
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addStretch(1)
+        column.addWidget(self.frame_2)
+        column.addStretch(1)
+        self.horizontalLayout.insertStretch(0, 1)
+        self.horizontalLayout.insertLayout(1, column)
+        self.horizontalLayout.addStretch(1)
 
     def set_context(self, context):
         self.context = context

@@ -89,12 +89,25 @@ def mainWindowSS():
         background: {backgroundHover};
     }}
 
-    /* Panels are docks now, and several of them sit side by side down
-       one edge. Without an edge of their own they read as one long
-       column of controls rather than as separate panels, and the title
-       is the only clue where one ends. */
+    /* Panels are docks now, and several of them stack down one edge.
+       Without a bar of its own each one runs into the next, so the only
+       clue where one ends is its title floating above the previous
+       panel's controls.
+
+       The bar is what does the separating -- the docks that were always
+       distinguishable were the ones that had one. The body then closes
+       the box: all four sides, since dropping the top edge is what left
+       panels underlined rather than framed. */
     QDockWidget{{
         font-weight: bold;
+        color: {titleText};
+    }}
+    QDockWidget::title{{
+        text-align: left;
+        padding: 5px 6px 5px 8px;
+        background: {titleBackground};
+        border: 1px solid {panelBorder};
+        border-bottom: 1px solid {panelBorder};
     }}
     QDockWidget > QWidget{{
         border: 1px solid {panelBorder};
@@ -104,6 +117,8 @@ def mainWindowSS():
         backgroundHover=highlightLight,
         borderHover=mid,
         panelBorder=mid,
+        titleBackground=midlighter,
+        titleText=text,
     )
 
 def styleMainWindow(mw):
