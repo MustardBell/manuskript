@@ -21,12 +21,14 @@ from PyQt5.QtWidgets import (
 from manuskript.ui.views.treeView import treeView
 
 
-def _flat_icon_button(parent, theme_name, object_name):
+def _flat_icon_button(parent, theme_name, object_name, label):
     button = QPushButton(parent)
     button.setText("")
     button.setIcon(QIcon.fromTheme(theme_name))
     button.setFlat(True)
     button.setObjectName(object_name)
+    button.setToolTip(label)
+    button.setAccessibleName(label)
     return button
 
 
@@ -45,9 +47,18 @@ def build_project_tree(context, parent):
     layout.addWidget(tree)
 
     buttons = QHBoxLayout()
-    add_folder = _flat_icon_button(panel, "folder-new", "btnRedacAddFolder")
-    add_text = _flat_icon_button(panel, "document-new", "btnRedacAddText")
-    remove = _flat_icon_button(panel, "list-remove", "btnRedacRemoveItem")
+    add_folder = _flat_icon_button(
+        panel, "folder-new", "btnRedacAddFolder", panel.tr("Add folder")
+    )
+    add_text = _flat_icon_button(
+        panel, "document-new", "btnRedacAddText", panel.tr("Add text")
+    )
+    remove = _flat_icon_button(
+        panel,
+        "list-remove",
+        "btnRedacRemoveItem",
+        panel.tr("Remove selected items"),
+    )
     buttons.addWidget(add_folder)
     buttons.addWidget(add_text)
     buttons.addWidget(remove)

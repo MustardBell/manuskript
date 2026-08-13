@@ -2,13 +2,17 @@
 
 from dataclasses import fields
 
+from PyQt5 import sip
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDockWidget, QMainWindow
+from PyQt5.QtWidgets import QDockWidget, QMainWindow, QTabBar, qApp
 
 from manuskript.panels import DOCK, PanelContext, PanelRegistry
 from manuskript.panels.core import (
     CHARACTER_ENTITIES,
+    EDITOR,
+    GENERAL,
     METADATA,
+    OUTLINE,
     PLOT_ENTITIES,
     PROJECT_ENTITIES,
     PROJECT_TREE,
@@ -20,6 +24,7 @@ from manuskript.panels.core import (
 
 
 CORE_IDS = (
+    GENERAL,
     PROJECT_TREE,
     METADATA,
     STORYLINE,
@@ -27,6 +32,8 @@ CORE_IDS = (
     CHARACTER_ENTITIES,
     PLOT_ENTITIES,
     WORLD_ENTITIES,
+    OUTLINE,
+    EDITOR,
 )
 
 
@@ -40,6 +47,7 @@ def test_panel_factories_receive_no_main_window_escape_hatch():
 def test_core_surfaces_are_attached_as_registry_panels(MWEmptyProject):
     window = MWEmptyProject
     widgets = (
+        window.corePanels.general,
         window.corePanels.project_tree.panel,
         window.corePanels.metadata,
         window.corePanels.storyline,
@@ -47,6 +55,8 @@ def test_core_surfaces_are_attached_as_registry_panels(MWEmptyProject):
         window.corePanels.character_entities,
         window.corePanels.plot_entities,
         window.corePanels.world_entities,
+        window.corePanels.outline,
+        window.corePanels.editor,
     )
     for panel_id, widget in zip(CORE_IDS, widgets):
         instance = window.panelHost.instance(panel_id)
@@ -60,6 +70,7 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
     assert [
         field.name for field in fields(type(MWEmptyProject.corePanels))
     ] == [
+        "general",
         "project_tree",
         "metadata",
         "storyline",
@@ -67,6 +78,8 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
         "character_entities",
         "plot_entities",
         "world_entities",
+        "outline",
+        "editor",
     ]
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
@@ -142,14 +155,14 @@ ENTITY_IDS = (
 )
 
 
-def test_entity_panels_belong_to_no_single_main_tab():
-    """They describe the whole project, so no tab may own their toggle."""
+def test_core_panels_belong_to_no_single_main_tab():
+    """Independent surfaces have no central tab owning their toggle."""
 
     groups = {
         descriptor.id: descriptor.group
         for descriptor in core_panel_descriptors(6)
     }
-    assert all(groups[panel_id] is None for panel_id in ENTITY_IDS)
+    assert all(groups[panel_id] is None for panel_id in CORE_IDS)
 
 
 def test_the_welcome_screen_shows_no_project_panel(MWNoProject):
@@ -172,30 +185,80 @@ def test_the_welcome_screen_shows_no_project_panel(MWNoProject):
         assert shown.isHidden(), panel_id
 
 
-def test_the_story_rows_stay_in_navigation_and_open_their_docks(
+def test_every_story_surface_is_a_navigator_backed_dock(
         MWEmptyProject):
-    """Summary, Characters, Plots and World became docks, but the list on
-    the left is still where one looks for them. The rows stay; what they
-    do changes from switching a page to revealing the dock.
-    """
+    """General through Editor share one descriptor-driven route."""
     window = MWEmptyProject
-    rows = range(window.lstTabs.count())
-    shown = [i for i in rows if not window.lstTabs.item(i).isHidden()]
-    assert window.TabSummary in shown
-    assert window.TabPersos in shown
-    assert window.TabPlots in shown
-    assert window.TabWorld in shown
+    for panel_id in (
+        GENERAL,
+        PROJECT_ENTITIES,
+        CHARACTER_ENTITIES,
+        PLOT_ENTITIES,
+        WORLD_ENTITIES,
+        OUTLINE,
+        EDITOR,
+    ):
+        row = window.navigator.row_for_panel(panel_id)
+        assert row is not None
+        assert not window.lstTabs.item(row).isHidden()
 
-    page = window.tabMain.currentIndex()
+    row = window.navigator.row_for_panel(CHARACTER_ENTITIES)
     window.panelHost.set_visible(CHARACTER_ENTITIES, False)
     dock = window.panelHost.instance(CHARACTER_ENTITIES).container
     assert dock.isHidden()
 
-    assert window.navigateTo(window.TabPersos)
+    assert window.navigateTo(row)
 
     assert not dock.isHidden()
-    # A dock row is not a page: it must not move the central area.
-    assert window.tabMain.currentIndex() == page
+    assert window._activePanelId == CHARACTER_ENTITIES
+    assert window.centralWidget() is None
+
+
+def test_navigator_selects_the_requested_tabified_work_surface(
+        MWEmptyProject):
+    """The highlighted navigator row and rendered dock must agree."""
+    window = MWEmptyProject
+    was_visible = window.isVisible()
+    window.show()
+    qApp.processEvents()
+    general = window.panelHost.instance(GENERAL).container
+    editor = window.panelHost.instance(EDITOR).container
+    try:
+        window.tabifyDockWidget(editor, general)
+        qApp.processEvents()
+        assert window.activatePanel(EDITOR)
+        assert window.activatePanel(GENERAL)
+        qApp.processEvents()
+
+        address = sip.unwrapinstance(general)
+        matching = [
+            tab_bar
+            for tab_bar in window.findChildren(QTabBar)
+            if any(
+                int(tab_bar.tabData(index)) == address
+                for index in range(tab_bar.count())
+            )
+        ]
+        assert len(matching) == 1
+        current = matching[0].currentIndex()
+        assert int(matching[0].tabData(current)) == address
+        assert window.lstTabs.currentRow() == window.navigator.row_for_panel(
+            GENERAL
+        )
+    finally:
+        if not was_visible:
+            window.hide()
+
+
+def test_designer_contains_no_legacy_story_pages(MWEmptyProject):
+    window = MWEmptyProject
+    assert window.tabMain.count() == 1
+    assert window.tabMain.widget(0).objectName() == "lytTabDebug"
+    for name in (
+        "lytTabSummary", "lytTabPersos", "lytTabPlot", "lytTabContext",
+        "lytTabOutline", "lytTabRedac",
+    ):
+        assert not hasattr(window, name)
 
 
 def test_entity_docks_land_as_neighbours_not_as_one_tabbed_dock(
@@ -233,19 +296,13 @@ def test_opening_a_project_brings_its_panels_back(MWEmptyProject):
     assert PROJECT_TREE in visible
 
 
-def test_switching_main_tab_keeps_ungrouped_panel_toggles_reachable(
+def test_every_core_panel_toggle_is_always_reachable(
         MWEmptyProject):
-    """An ungrouped toggle is shown all the time, per the toolbar contract.
-
-    The entity docks are closed by default, so hiding their buttons on a
-    tab change would leave no way to bring them back.
-    """
-
     window = MWEmptyProject
     toolbar = window.toolbar
 
-    for group in (window.TabRedac, window.TabOutline, window.TabRedac):
+    for group in ("anything", None, "plugin.surface"):
         toolbar.setCurrentGroup(group)
-        for panel_id in ENTITY_IDS:
+        for panel_id in CORE_IDS:
             entry = toolbar._panelToggles[panel_id][1]
             assert entry.isVisible(), (panel_id, group)

@@ -41,7 +41,9 @@ class WorkspaceTransferViews:
     @classmethod
     def for_window(cls, window):
         runtime = window.projectRuntime
-        dialog_parent = window.centralWidget() or window
+        # The central welcome widget is not present while a project is open.
+        # Import/export dialogs belong to the workspace for their lifetime.
+        dialog_parent = window
         tree = window.corePanels.project_tree.tree
 
         def current_outline_index():

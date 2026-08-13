@@ -20,7 +20,7 @@ class WorkspaceFocusViews:
         return cls(
             document_targets=(
                 window.corePanels.project_tree.tree,
-                window.mainEditor,
+                window.corePanels.editor.editor,
             )
         )
 

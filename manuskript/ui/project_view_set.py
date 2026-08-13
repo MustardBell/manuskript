@@ -145,9 +145,9 @@ class ProjectViewSet:
             editors=EditorViews(
                 outline_trees=(
                     core.project_tree.tree,
-                    window.treeOutlineOutline,
+                    core.outline.treeOutlineOutline,
                 ),
-                document_area=window.mainEditor,
+                document_area=core.editor.editor,
                 text_editors=lambda: window.findChildren(textEditView),
                 text_editor_context=lambda: text_editor_context_for(
                     window,
@@ -164,7 +164,7 @@ class ProjectViewSet:
                 ),
                 open_index=core.project_tree.tree.setCurrentIndex,
                 open_indexes=partial(
-                    window.mainEditor.openIndexes,
+                    core.editor.editor.openIndexes,
                     newTab=True,
                 ),
                 selection_changed=core.metadata.selectionChanged,
@@ -175,7 +175,7 @@ class ProjectViewSet:
             ),
             metadata=MetadataViews(
                 panel=core.metadata,
-                item_editor=window.outlineItemEditor,
+                item_editor=core.outline.outlineItemEditor,
                 page_types=lambda: (
                     window.pluginUi.pageTypes
                     if window.pluginUi is not None

@@ -75,6 +75,6 @@ class ProjectPanelViews:
             panel_host=window.panelHost,
             create_plugins_menu=create_plugins_menu,
             translate=window.tr,
-            dialog_parent=window.centralWidget() or window,
+            dialog_parent=window,
             project=project or PluginProjectData.for_window(window),
         )

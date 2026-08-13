@@ -1,33 +1,34 @@
-"""Semantic tab and selection history for one workspace."""
+"""Semantic surface and selection history for one workspace."""
 
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Tuple
 
-
-@dataclass(frozen=True)
-class WorkspaceSelectionTabs:
-    characters: int
-    plots: int
-    world: int
-    outline: int
-    editor: int
+from manuskript.panels.core import EDITOR, OUTLINE
 
 
 @dataclass(frozen=True)
 class WorkspaceSelectionViews:
     """Stable controls needed to interpret workspace selection changes."""
 
-    tabs: Any
     organize_action: Any
     editor_actions: Tuple[Any, ...]
+    resolve_surface: Callable[[Any], str]
+    surface_focused: Callable[[str], None]
     outline_tree: Any
     project_tree: Any
-    positions: WorkspaceSelectionTabs
 
     @classmethod
     def for_window(cls, window):
+        def resolve_surface(widget):
+            candidate = widget
+            while candidate is not None:
+                for panel_id, instance in window.panelHost.instances.items():
+                    if candidate in (instance.widget, instance.container):
+                        return panel_id
+                candidate = candidate.parent()
+            return ""
+
         return cls(
-            tabs=window.tabMain,
             organize_action=window.menuOrganize.menuAction(),
             editor_actions=(
                 window.actCut,
@@ -36,15 +37,10 @@ class WorkspaceSelectionViews:
                 window.actDelete,
                 window.actRename,
             ),
-            outline_tree=window.treeOutlineOutline,
+            resolve_surface=resolve_surface,
+            surface_focused=window.notePanelFocus,
+            outline_tree=window.corePanels.outline.treeOutlineOutline,
             project_tree=window.corePanels.project_tree.tree,
-            positions=WorkspaceSelectionTabs(
-                characters=window.TabPersos,
-                plots=window.TabPlots,
-                world=window.TabWorld,
-                outline=window.TabOutline,
-                editor=window.TabRedac,
-            ),
         )
 
 
@@ -75,45 +71,52 @@ class WorkspaceSelectionHistory:
 
 
 class WorkspaceSelectionController:
-    """Turn UI location changes into typed navigation-history entries.
-
-    Selection models can briefly become empty while moving between items.
-    That empty entry is transient: the next stable selection replaces it.
-    The policy used to live in a mutable ``MainWindow`` flag shared by tab
-    and tree callbacks.  Keeping it with the history events makes its state
-    transition explicit and independently testable.
-    """
+    """Turn panel locations and outline selections into history entries."""
 
     def __init__(
-            self,
-            views,
-            runtime,
-            history,
-            tab_recorders: Mapping[int, Callable[[], None]],
+        self,
+        views,
+        runtime,
+        history,
+        surface_recorders: Mapping[str, Any],
     ):
         self._views = views
         self._runtime = runtime
         self._history = history
-        self._tab_recorders = dict(tab_recorders)
+        self._surface_recorders = dict(surface_recorders)
+        self._active_surface = ""
 
-    def tab_changed(self, _index=None):
-        views = self._views
-        tab_index = views.tabs.currentIndex()
-        editor_active = tab_index == views.positions.editor
-        views.organize_action.setEnabled(editor_active)
-        for action in views.editor_actions:
-            action.setEnabled(editor_active)
+    @property
+    def active_surface(self):
+        return self._active_surface
 
-        recorder = self._tab_recorders.get(tab_index)
+    def surface_changed(self, panel_id):
+        """Record the semantic surface selected through Navigation."""
+        self._active_surface = str(panel_id or "")
+        self._set_editor_actions(self._active_surface == EDITOR)
+        recorder = self._surface_recorders.get(self._active_surface)
         if recorder is not None:
             recorder()
+        elif self._active_surface == OUTLINE:
+            self._record_surface_selection("outline", self._views.outline_tree)
+        elif self._active_surface == EDITOR:
+            self._record_surface_selection("redac", self._views.project_tree)
+        elif self._active_surface:
+            self._history.record_location(("panel", self._active_surface))
+
+    def focus_changed(self, _old, new):
+        """Make direct panel focus a semantic location, not visibility."""
+        panel_id = self._views.resolve_surface(new)
+        if panel_id and panel_id != self._active_surface:
+            self._views.surface_focused(panel_id)
+            self.surface_changed(panel_id)
             return
-        if tab_index == views.positions.outline:
-            self._record_tab_selection("outline", views.outline_tree)
-        elif tab_index == views.positions.editor:
-            self._record_tab_selection("redac", views.project_tree)
-        else:
-            self._history.record_location(("main", tab_index))
+        self._set_editor_actions(panel_id == EDITOR)
+
+    def _set_editor_actions(self, enabled):
+        self._views.organize_action.setEnabled(enabled)
+        for action in self._views.editor_actions:
+            action.setEnabled(enabled)
 
     def outline_selection_changed(self, *_args):
         self._record_selection("outline", self._views.outline_tree)
@@ -121,10 +124,8 @@ class WorkspaceSelectionController:
     def project_selection_changed(self, *_args):
         self._record_selection("redac", self._views.project_tree)
 
-    def _record_tab_selection(self, kind, tree):
+    def _record_surface_selection(self, kind, tree):
         valid, item_id = self._current_outline_selection(tree)
-        # A selection signal for the item already displayed by the newly
-        # active tab describes the same location, so it replaces this entry.
         self._history.record_location(
             (kind, item_id),
             replace_next=valid,
@@ -132,9 +133,6 @@ class WorkspaceSelectionController:
 
     def _record_selection(self, kind, tree):
         valid, item_id = self._current_outline_selection(tree)
-        # Clearing is often an intermediate selection-model event.  If a
-        # stable item follows, replace the empty entry rather than exposing
-        # it as an extra Back/Forward stop.
         self._history.record_selection(
             (kind, item_id),
             selection_empty=not valid,
@@ -150,4 +148,4 @@ class WorkspaceSelectionController:
         self._views = None
         self._runtime = None
         self._history = None
-        self._tab_recorders.clear()
+        self._surface_recorders.clear()

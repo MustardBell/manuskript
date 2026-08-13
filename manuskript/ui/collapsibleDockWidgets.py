@@ -72,9 +72,8 @@ class collapsibleDockWidgets(QToolBar):
 
         `text` is the name that will displayed on the button to switch visibility.
         `widget` is the widget to control from the toolbar.
-        `group` is an integer (or any hashable) if the current widget should not
-            be displayed all the time. Call `collapsibleDockWidgets.setCurrentGroup`
-            to switch to that group and hide other widgets.
+        `group` is a compatibility hook for older extensions. Core panels do
+            not use it because several independent surfaces may be visible.
         `defaultVisibility` is the default visibility of the item when it is added.
             This allows for the widget to be added to `collapsibleDockWidgets` after
             they've been created but before they are shown, and yet specify their
@@ -134,7 +133,7 @@ class collapsibleDockWidgets(QToolBar):
                 _btn.setChecked(visibility)
 
     def setCurrentGroup(self, group):
-        """Show this group's buttons, and everything belonging to no group.
+        """Show this legacy group's buttons, and every independent panel.
 
         A toggle without a group is one the whole window offers -- the
         entity docks describe the project rather than any single main

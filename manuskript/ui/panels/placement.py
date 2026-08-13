@@ -338,7 +338,7 @@ class PanelPlacementController:
         """Show a dock without letting a panel toggle disagree with it."""
         for instance in self.target.host.instances.values():
             if instance.container is dock:
-                self.target.host.visibility.set_visible(instance, True)
+                self.target.host.reveal(instance.descriptor.id)
                 break
         else:
             dock.show()

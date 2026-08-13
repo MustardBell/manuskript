@@ -43,7 +43,7 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.actToolTargets.triggered.connect.assert_called_once()
     window.viewSettingsMenu.rebuild.assert_called_once_with()
     (
-        window.mainEditor.activeMarkdownPresentationStateChanged.connect
+        window.corePanels.editor.editor.activeMarkdownPresentationStateChanged.connect
         .assert_called_once()
     )
     window.actModeSimple.setActionGroup.assert_called_once_with(
@@ -103,12 +103,11 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
         window.corePanels.project_tree.add_folder.clicked.connect
         .assert_called_once()
     )
-    assert window.tabMain.currentChanged.connect.call_count == 2
-    toolbar_slot = (
-        window.tabMain.currentChanged.connect.call_args_list[0].args[0]
+    (
+        window.corePanels.outline.btnOutlineAddFolder.clicked.connect
+        .assert_called_once()
     )
-    toolbar_slot(3)
-    window.toolbar.setCurrentGroup.assert_called_once_with(3)
+    window.tabMain.currentChanged.connect.assert_not_called()
     # Focus is application-wide, so the window registry watches it once
     # for the application and forwards to whichever workspace gained it.
     # Connecting here, per window, had every window react to every other

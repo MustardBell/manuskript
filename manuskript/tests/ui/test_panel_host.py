@@ -8,8 +8,9 @@ message, not the window.
 
 from unittest.mock import MagicMock
 
+from PyQt5 import sip
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow
+from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow, QTabBar, qApp
 
 from manuskript.panels import (
     PanelContext,
@@ -106,6 +107,47 @@ def test_revealing_a_dock_raises_its_tab():
 
     assert instance.action.isChecked()
     raised.assert_called_once_with()
+    window.close()
+
+
+def test_revealing_a_tabified_dock_selects_its_native_tab():
+    """Navigation must show the surface it names, not only its tab bar."""
+    window = QMainWindow()
+    registry = PanelRegistry()
+    for panel_id, title in (("core.first", "First"), ("core.second", "Second")):
+        registry.register(PanelDescriptor(
+            id=panel_id,
+            title=title,
+            widget_factory=label_factory,
+        ))
+    host = PanelHost(
+        PanelWindow.for_window(window),
+        registry,
+        PanelInstanceDirectory(),
+    )
+    first = host.open("core.first", PanelContext())
+    second = host.open("core.second", PanelContext())
+    window.tabifyDockWidget(first.container, second.container)
+    window.show()
+    qApp.processEvents()
+    host.reveal("core.second")
+    qApp.processEvents()
+
+    assert host.reveal("core.first")
+    qApp.processEvents()
+
+    address = sip.unwrapinstance(first.container)
+    matching = [
+        tab_bar
+        for tab_bar in window.findChildren(QTabBar)
+        if any(
+            int(tab_bar.tabData(index)) == address
+            for index in range(tab_bar.count())
+        )
+    ]
+    assert len(matching) == 1
+    current = matching[0].currentIndex()
+    assert int(matching[0].tabData(current)) == address
     window.close()
 
 

@@ -94,7 +94,8 @@ def test_real_focus_switches_the_active_split_pane(MWEmptyProject):
     window.raise_()
     window.activateWindow()
     assert QTest.qWaitForWindowActive(window)
-    window.tabMain.setCurrentIndex(window.TabRedac)
+    from manuskript.panels.core import EDITOR
+    window.activatePanel(EDITOR)
     root = window.mainEditor.tabSplitter
     model = window.projectRuntime.models.outline
     first_item = outlineItem(title="First focus", _type="md")

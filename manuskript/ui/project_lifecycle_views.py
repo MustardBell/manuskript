@@ -42,7 +42,6 @@ class LoadedSettingsViews:
 class ProjectWorkspaceViews:
     """Capabilities used while a workspace enters or leaves a project."""
 
-    tabs: Any
     writing_session: Any
     set_window_title: Callable[[str], None]
     reset_history: Callable[[], None]
@@ -58,6 +57,7 @@ class ProjectWorkspaceViews:
     undo_stack: Any
     editor: Any
     private_text_editors: Callable[[], Tuple[Any, ...]]
+    activate_surface: Callable[[], None]
 
 
 @dataclass(frozen=True)
@@ -125,7 +125,7 @@ class ProjectLifecycleViews:
             loaded_settings=LoadedSettingsViews(
                 view_state=window.windowState,
                 rebuild_view_menu=window.viewSettingsMenu.rebuild,
-                editor=window.mainEditor,
+                editor=window.corePanels.editor.editor,
                 spellcheck_action=window.actSpellcheck,
                 set_spellcheck=window.spellcheck.set_enabled,
                 rebuild_dictionary_menu=(
@@ -141,7 +141,6 @@ class ProjectLifecycleViews:
                 ),
             ),
             workspace=ProjectWorkspaceViews(
-                tabs=window.tabMain,
                 writing_session=window.writingSession,
                 set_window_title=window.setWindowTitle,
                 reset_history=window.selectionHistory.reset,
@@ -157,13 +156,18 @@ class ProjectLifecycleViews:
                 connect_project=window.workspaceProject.connect,
                 disconnect_project=window.workspaceProject.disconnect,
                 undo_stack=window.projectRuntime.undoStack,
-                editor=window.mainEditor,
+                editor=window.corePanels.editor.editor,
                 private_text_editors=private_text_editors,
+                activate_surface=lambda: window.workspaceSelection.surface_changed(
+                    window._activePanelId
+                ),
             ),
             dialogs=ProjectDialogViews(
-                # A QWidget parent is the capability dialogs need. Giving
-                # them the MainWindow would recreate the service locator.
-                parent=window.centralWidget(),
+                # The central welcome surface is detached while a project is
+                # open.  The workspace itself is the stable Qt owner; passing
+                # it here grants only QWidget parenting, not application
+                # services, because ProjectDialogViews exposes no window API.
+                parent=window,
                 translate=window.tr,
             ),
             show_status=window.statusPresenter.show,

@@ -17,10 +17,10 @@ def test_flat_data_binding_configures_general_fields_but_not_legacy_summary():
     FlatDataProjectBinding(views.flat_data, runtime).bind(MagicMock())
 
     window.txtSummarySituation.setModel.assert_not_called()
-    window.txtGeneralEmail.setModel.assert_called_once_with(
+    window.corePanels.general.email.setModel.assert_called_once_with(
         runtime.models.flat_data
     )
-    window.txtGeneralEmail.setColumn.assert_called_once_with(7)
+    window.corePanels.general.email.setColumn.assert_called_once_with(7)
     assert runtime.models.flat_data.index.call_count == 8
     runtime.models.flat_data.index.assert_any_call(0, 7)
 
@@ -43,7 +43,10 @@ def test_outline_selection_binding_registers_project_connections():
         window.workspaceSelection.project_selection_changed
         in connected_slots
     )
-    assert window.mainEditor.selectionChanged in connected_slots
+    assert (
+        window.corePanels.editor.editor.selectionChanged
+        in connected_slots
+    )
 
 
 def test_debug_binding_configures_models_and_named_selection_handlers():

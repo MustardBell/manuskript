@@ -19,6 +19,9 @@ from manuskript.panels.descriptor import (
 PROJECT_TREE = "core.project-tree"
 METADATA = "core.metadata"
 STORYLINE = "core.storyline"
+GENERAL = "core.general"
+OUTLINE = "core.outline"
+EDITOR = "core.editor"
 PROJECT_ENTITIES = "core.entities.project"
 CHARACTER_ENTITIES = "core.entities.characters"
 PLOT_ENTITIES = "core.entities.plots"
@@ -47,22 +50,33 @@ METADATA_STATE = (
 )
 
 
-def core_panel_descriptors(redaction_group, factories=None):
+def core_panel_descriptors(redaction_group=None, factories=None):
     """The workspace's movable core and canonical-entity panels.
 
-    Only the redaction panels still answer to a main tab. The entity
-    docks describe the whole project, so they claim no group and their
-    toggles stay offered whichever tab is in front.
+    ``redaction_group`` is accepted while third-party callers migrate from
+    the old tab-grouped API.  It is intentionally ignored: core surfaces are
+    independently movable now, so no main tab owns their visibility toggle.
     """
     factories = factories or {}
     return (
+        PanelDescriptor(
+            id=GENERAL,
+            title="General",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=False,
+            widget_factory=factories.get(GENERAL),
+            navigator=NavigatorEntry(
+                label="General", icon="stock_view-details", order=100,
+            ),
+        ),
         PanelDescriptor(
             id=PROJECT_TREE,
             title="Project tree",
             placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            group=redaction_group,
             default_visible=True,
             widget_factory=factories.get(PROJECT_TREE),
         ),
@@ -72,7 +86,6 @@ def core_panel_descriptors(redaction_group, factories=None):
             placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            group=redaction_group,
             default_visible=False,
             widget_factory=factories.get(METADATA),
             state=METADATA_STATE,
@@ -83,7 +96,6 @@ def core_panel_descriptors(redaction_group, factories=None):
             placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            group=redaction_group,
             default_visible=False,
             widget_factory=factories.get(STORYLINE),
         ),
@@ -135,10 +147,34 @@ def core_panel_descriptors(redaction_group, factories=None):
                 label="World", icon="world", order=500,
             ),
         ),
+        PanelDescriptor(
+            id=OUTLINE,
+            title="Outline",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=False,
+            widget_factory=factories.get(OUTLINE),
+            navigator=NavigatorEntry(
+                label="Outline", icon="outline", order=600,
+            ),
+        ),
+        PanelDescriptor(
+            id=EDITOR,
+            title="Editor",
+            placement=DOCK,
+            scope=PROJECT,
+            multiplicity=PER_WINDOW,
+            default_visible=True,
+            widget_factory=factories.get(EDITOR),
+            navigator=NavigatorEntry(
+                label="Editor", icon="gtk-edit", order=700,
+            ),
+        ),
     )
 
 
-def register_core_panels(registry, redaction_group, factories=None):
+def register_core_panels(registry, redaction_group=None, factories=None):
     """Idempotent: the registry is application scope, windows are not.
 
     The first window declares the core panels; every later window finds

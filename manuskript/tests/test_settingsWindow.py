@@ -68,7 +68,7 @@ def test_settings_window_uses_explicit_workspace_capabilities(
     window = MWSampleProject
     settings = window.workspaceDialogs.show_settings()
     try:
-        assert settings.parentWidget() is window.centralWidget()
+        assert settings.parentWidget() is window
         assert "mw" not in settings.__dict__
         assert "window" not in settings.__dict__
         assert settings._models() is window.projectRuntime.models

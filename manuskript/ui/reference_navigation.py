@@ -1,4 +1,5 @@
 from manuskript.models.references import ReferenceNavigation
+from manuskript.panels.core import EDITOR
 
 
 def reference_navigation_for(window, models, open_entity=None):
@@ -21,8 +22,10 @@ def reference_navigation_for(window, models, open_entity=None):
         index = models.outline.getIndexByID(text_id)
         if not index.isValid():
             return False
-        window.tabMain.setCurrentIndex(window.TabRedac)
-        window.mainEditor.setCurrentModelIndex(index, newTab=True)
+        window.activatePanel(EDITOR)
+        window.corePanels.editor.editor.setCurrentModelIndex(
+            index, newTab=True
+        )
         return True
 
     def open_plot(plot_id):

@@ -36,14 +36,15 @@ class WorkspaceStateViews:
     project_docks: Tuple[Any, ...]
     default_dock_visibility: Mapping[str, bool]
     document_area: Any
-    main_tabs: Any
+    active_panel: Callable[[], str]
+    select_panel: Callable[[str], bool]
+    legacy_panel_for_tab: Callable[[Any], str]
     find_splitter: Callable[[str], Any]
     panel_registry: Any
     panel_host: Any
 
     @classmethod
     def for_window(cls, window):
-        stack = window.stack
         project_docks = (
             window.dckNavigation,
             window.dckCheatSheet,
@@ -54,15 +55,17 @@ class WorkspaceStateViews:
             restore_window_state=window.restoreState,
             save_geometry=window.saveGeometry,
             save_window_state=window.saveState,
-            project_active=lambda: stack.currentIndex() == 1,
+            project_active=lambda: window._projectSurfaceActive,
             project_docks=project_docks,
             default_dock_visibility=MappingProxyType({
                 project_docks[0].objectName(): True,
                 project_docks[1].objectName(): False,
                 project_docks[2].objectName(): False,
             }),
-            document_area=window.mainEditor.tabSplitter,
-            main_tabs=window.tabMain,
+            document_area=window.corePanels.editor.editor.tabSplitter,
+            active_panel=lambda: window._activePanelId,
+            select_panel=window.activatePanel,
+            legacy_panel_for_tab=window.panelIdForLegacyTab,
             find_splitter=lambda name: window.findChild(QSplitter, name),
             panel_registry=window.panelRegistry,
             panel_host=window.panelHost,
@@ -90,11 +93,13 @@ class WorkspaceStateController:
         #: with them, and the ids never mix with dock object names.
         self._projectPanelVisibility = {}
         #: This window's own view of the project -- which documents were
-        #: open and which main tab it was on. Read at construction and
+        #: open and which independently movable surface was active. Read at
+        #: construction and
         #: applied when a project opens, since neither means anything
         #: until there is a project.
         self._documents = None
-        self._mainTab = None
+        self._activePanel = None
+        self._legacyMainTab = None
         #: Layout captured while a project was still open, for the parts
         #: of it that closing a project makes unknowable.
         self._remembered = {}
@@ -121,7 +126,8 @@ class WorkspaceStateController:
         self._dock_visibility_locked = True
 
         self._documents = state.documents
-        self._mainTab = state.main_tab
+        self._activePanel = state.active_panel
+        self._legacyMainTab = state.main_tab
         self._restore_panel_state(state)
         for name, value in (state.splitters or {}).items():
             splitter = self.views.find_splitter(name)
@@ -176,7 +182,7 @@ class WorkspaceStateController:
                 panel_state=self._panel_state(),
                 docks=dict(self._dock_visibility),
                 documents=self._open_documents(),
-                main_tab=self._current_main_tab(),
+                active_panel=self._current_active_panel(),
             ),
             self.windowId,
         )
@@ -192,11 +198,11 @@ class WorkspaceStateController:
             return self._documents
         return describe_area(self.views.document_area)
 
-    def _current_main_tab(self):
-        """Which main tab this window is on, while it has a project."""
+    def _current_active_panel(self):
+        """Which independently movable surface this window last used."""
         if not self.views.project_active():
-            return self._mainTab
-        return self.views.main_tabs.currentIndex()
+            return self._activePanel
+        return self.views.active_panel()
 
     def capture_view_state(self):
         """Remember this window's view of the project while it has one.
@@ -209,7 +215,7 @@ class WorkspaceStateController:
         if not self.views.project_active():
             return
         self._documents = describe_area(self.views.document_area)
-        self._mainTab = self.views.main_tabs.currentIndex()
+        self._activePanel = self.views.active_panel()
 
     def capture_layout(self):
         """Remember the arrangement while every panel is still in it.
@@ -252,9 +258,16 @@ class WorkspaceStateController:
             self.views.document_area.restoreOpenIndexes(
                 documents
             )
-        tab = self._mainTab if self._mainTab is not None else main_tab
-        if tab is not None:
-            self.views.main_tabs.setCurrentIndex(int(tab))
+        panel_id = self._activePanel
+        if panel_id is None:
+            legacy_tab = (
+                self._legacyMainTab
+                if self._legacyMainTab is not None
+                else main_tab
+            )
+            panel_id = self.views.legacy_panel_for_tab(legacy_tab)
+        if panel_id:
+            self.views.select_panel(panel_id)
 
     def _splitter_state(self):
         state = {}

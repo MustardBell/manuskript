@@ -74,7 +74,7 @@ class SearchResultViews:
     def for_window(cls, window):
         metadata = window.corePanels.metadata
         properties = metadata.properties
-        main_editor = window.mainEditor
+        main_editor = window.corePanels.editor.editor
         panel_host = window.panelHost
         return cls(
             entity_workspace=window.entityWorkspace,

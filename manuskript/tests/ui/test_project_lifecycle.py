@@ -59,6 +59,7 @@ def test_lifecycle_view_maps_qt_dialog_result_to_domain_decision():
         decision = view.confirm_unsaved_changes()
 
     assert decision is CloseDecision.SAVE
+    assert message_box.call_args.args[-1] is window
 
 
 def test_lifecycle_view_presents_failed_save_files():
@@ -76,7 +77,7 @@ def test_lifecycle_view_presents_failed_save_files():
         view.show_save_failures(failures)
 
     dialog = dialog_type.return_value
-    dialog_type.assert_called_once_with(window.centralWidget.return_value)
+    dialog_type.assert_called_once_with(window)
     dialog.open.assert_called_once_with()
     assert [call.args[0] for call in list_item.call_args_list] == list(
         failures
@@ -85,21 +86,23 @@ def test_lifecycle_view_presents_failed_save_files():
 
 def test_lifecycle_view_captures_project_state_before_cleanup():
     window = MagicMock()
-    window.tabMain.currentIndex.return_value = 6
     open_indexes = [1, ["scene-1"], None]
-    window.mainEditor.tabSplitter.openIndexes.return_value = open_indexes
+    editor = window.corePanels.editor.editor
+    editor.tabSplitter.openIndexes.return_value = open_indexes
+    original_last_tab = window.projectRuntime.settingsManager.lastTab
     view = lifecycle_for(window)
 
     view.capture_project_state()
     view.prepare_close()
 
-    # Captured onto the runtime's settings: they belong to the project,
-    # not to whichever window happened to be closing.
+    # Open documents remain project-compatible state. The active surface is
+    # window state now, so the obsolete tab number is preserved rather than
+    # rewritten into formats 0 and 1.
     settings = window.projectRuntime.settingsManager
-    assert settings.lastTab == 6
+    assert settings.lastTab is original_last_tab
     assert settings.openIndexes == open_indexes
-    window.mainEditor.close.assert_called_once_with()
-    window.mainEditor.closeAllTabs.assert_called_once_with()
+    editor.close.assert_called_once_with()
+    editor.closeAllTabs.assert_called_once_with()
     window.pluginUi.prepare_project_close.assert_called_once_with()
 
 
@@ -147,12 +150,13 @@ with tempfile.TemporaryDirectory() as directory:
     old_model = window.projectRuntime.models.outline
     old_index = old_model.indexFromItem(item)
     pov_index = old_index.sibling(old_index.row(), Outline.POV)
-    old_delegate = window.treeOutlineOutline.itemDelegateForColumn(Outline.POV)
+    outline = window.corePanels.outline.treeOutlineOutline
+    old_delegate = outline.itemDelegateForColumn(Outline.POV)
     window.projectManager.session.mark_clean()
 
     assert window.projectManager.closeProject()
     qApp.processEvents()
-    assert window.treeOutlineOutline.model() is None
+    assert outline.model() is None
     assert window.corePanels.project_tree.tree.model() is None
     assert old_delegate.mdlCharacter is None
     old_delegate.sizeHint(QStyleOptionViewItem(), pov_index)
@@ -161,9 +165,9 @@ with tempfile.TemporaryDirectory() as directory:
     window.welcome.createFile(str(next_project), overwrite=True)
     qApp.processEvents()
     assert window.currentProject == str(next_project)
-    assert window.treeOutlineOutline.model() is window.projectRuntime.models.outline
+    assert outline.model() is window.projectRuntime.models.outline
     assert window.corePanels.project_tree.tree.model() is window.projectRuntime.models.outline
-    assert window.treeOutlineOutline.itemDelegateForColumn(
+    assert outline.itemDelegateForColumn(
         Outline.POV
     ).mdlCharacter is window.projectRuntime.models.characters
 '''

@@ -2,7 +2,7 @@
 # --!-- coding: utf8 --!--
 import importlib
 
-from PyQt5.QtCore import (pyqtSignal, Qt,
+from PyQt5.QtCore import (pyqtSignal, QSignalBlocker, Qt,
                           QUrl, QSize)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
@@ -138,26 +138,13 @@ LOGGER = logging.getLogger(__name__)
 class MainWindow(QMainWindow, Ui_MainWindow):
     # dictChanged = pyqtSignal(str)
 
-    # Tab indexes
-    TabInfos = 0
-    TabSummary = 1
-    TabPersos = 2
-    TabPlots = 3
-    TabWorld = 4
-    TabOutline = 5
-    TabRedac = 6
-    TabDebug = 7
+    DebugPage = 0
 
-    #: The navigator rows this window states itself: the pages it still
-    #: keeps. Everything else in the list is contributed by a panel that
-    #: declared a navigator entry, core or plugin alike. Orders leave
-    #: gaps so a new row can land between these without renumbering.
+    #: The only central page left is the opt-in developer view. Every
+    #: project surface contributes its own row through its panel descriptor.
     NAVIGATOR_PAGES = (
-        NavigatorTarget("General", "stock_view-details", 100, page=TabInfos),
-        NavigatorTarget("Outline", "outline", 600, page=TabOutline),
-        NavigatorTarget("Editor", "gtk-edit", 700, page=TabRedac),
         NavigatorTarget(
-            "Debug", "applications-debugging", 800, page=TabDebug,
+            "Debug", "applications-debugging", 800, page=DebugPage,
         ),
     )
 
@@ -188,6 +175,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # safely once C++-owned child wrappers are involved.
             self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
+        # Welcome and the opt-in debug page are the only central content.
+        # Project surfaces are docks; the central widget is temporarily
+        # removed while a project is shown so those docks can occupy its
+        # space instead of surrounding an invisible placeholder.
+        self._centralSurface = self.centralWidget()
+        self._projectSurfaceActive = False
+        self._activePanelId = core_panels.EDITOR
         # Without GroupedDragging: it is the only thing that builds a
         # QDockWidgetGroupWindow, and closing every dock inside one
         # leaves the frame behind -- an empty window wearing this
@@ -326,6 +320,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 {},
             )
         )
+        self.workspaceFocus.subscribe(self.workspaceSelection.focus_changed)
         self.viewConfigurationController = self.workspaceLifetime.own(
             ViewConfigurationController(
                 MainViewConfiguration(
@@ -344,13 +339,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # saved sizes once every widget it splits is there, and panel
         # visibility is restored by panel id through the host.
         with timing.span("window.layout"):
-            restored_layout = self.windowState.restore()
-            entity_panel_ids = self._entityPanelIds()
-            if not any(
-                panel_id in restored_layout.panels
-                for panel_id in entity_panel_ids
-            ):
-                self._placeEntityDocks(entity_panel_ids)
+            self.windowState.restore()
+            if self.windowState.storedVersion < 3:
+                self._placeDefaultCoreDocks()
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
@@ -530,17 +521,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         so we store states.
         """
         self.windowState.hide_project_docks()
+        self._projectSurfaceActive = False
         # Hides the toolbar
         self.toolbar.setVisible(False)
         # Switch to welcome screen
+        if self.centralWidget() is None:
+            self.setCentralWidget(self._centralSurface)
+        self.stack.show()
         self.stack.setCurrentIndex(0)
 
     def switchToProject(self):
         """Restores docks and toolbar visibility, and switch to project."""
+        self._projectSurfaceActive = True
         self.windowState.restore_project_docks()
         # Show the toolbar
         self.toolbar.setVisible(True)
-        self.stack.setCurrentIndex(1)
+        # Project work happens in independently movable panels. With the
+        # central welcome/debug stack out of the layout, docks may use the
+        # whole window rather than orbiting an empty legacy page.
+        self.stack.hide()
+        if self.centralWidget() is self._centralSurface:
+            self.takeCentralWidget()
+        if not self._activePanelId:
+            self._activePanelId = core_panels.EDITOR
+        self.activatePanel(self._activePanelId)
 
     def closeEvent(self, event):
         """Close this window, and the project only with the last one.
@@ -612,9 +616,59 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if target is None:
             return False
         if target.opens_panel:
-            return self.panelHost.reveal(target.panel_id)
+            return self.activatePanel(target.panel_id)
+        self._activePanelId = ""
+        if self.centralWidget() is None:
+            self.setCentralWidget(self._centralSurface)
+        self.stack.show()
+        self.stack.setCurrentIndex(1)
         self.tabMain.setCurrentIndex(target.page)
         return False
+
+    def activatePanel(self, panel_id):
+        """Reveal a workspace surface and remember it by stable identity."""
+        if not panel_id or not self.panelHost.reveal(panel_id):
+            return False
+        self._activePanelId = panel_id
+        if self._projectSurfaceActive:
+            self.stack.hide()
+            if self.centralWidget() is self._centralSurface:
+                self.takeCentralWidget()
+        row = self.navigator.row_for_panel(panel_id)
+        if row is not None and self.lstTabs.currentRow() != row:
+            blocker = QSignalBlocker(self.lstTabs)
+            self.lstTabs.setCurrentRow(row)
+            del blocker
+        selection = getattr(self, "workspaceSelection", None)
+        if selection is not None:
+            selection.surface_changed(panel_id)
+        return True
+
+    def notePanelFocus(self, panel_id):
+        """Follow direct focus into a dock without showing it a second time."""
+        self._activePanelId = str(panel_id or "")
+        row = self.navigator.row_for_panel(self._activePanelId)
+        if row is not None and self.lstTabs.currentRow() != row:
+            blocker = QSignalBlocker(self.lstTabs)
+            self.lstTabs.setCurrentRow(row)
+            del blocker
+
+    @staticmethod
+    def panelIdForLegacyTab(tab):
+        """Translate old saved tab positions without perpetuating them."""
+        try:
+            tab = int(tab)
+        except (TypeError, ValueError):
+            return ""
+        return {
+            0: core_panels.GENERAL,
+            1: core_panels.PROJECT_ENTITIES,
+            2: core_panels.CHARACTER_ENTITIES,
+            3: core_panels.PLOT_ENTITIES,
+            4: core_panels.WORLD_ENTITIES,
+            5: core_panels.OUTLINE,
+            6: core_panels.EDITOR,
+        }.get(tab, "")
 
     def _selectNavigatorPage(self, page):
         """Follow a page change back to the row that stands for it."""
@@ -622,31 +676,66 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if row is not None:
             self.lstTabs.setCurrentRow(row)
 
-    def _placeEntityDocks(self, panel_ids=None):
-        """Give newly introduced entity docks a place of their own.
+    def _placeDefaultCoreDocks(self):
+        """Migrate tab-era layouts to an editor with real side surfaces.
 
-        Neighbours down the dock area, not tabs over one another. They
-        answer different questions and get read together, so stacking
-        them into a single frame put four of them behind a tab strip
-        and made one dock out of five.
-
-        This is only called when the saved layout predates entity
-        panels. Once those panel identifiers have been recorded, Qt's
-        restored arrangement is authoritative and this does nothing.
+        Main work surfaces share the large right area as dock tabs, so the
+        navigator raises General, Outline, or Editor without squeezing it.
+        Narrow catalogue browsers share the lower-left area, while the
+        project tree remains visible above them. Once version 3 has been
+        saved, the person's arrangement is authoritative and this never runs.
         """
 
-        panel_ids = tuple(panel_ids or self._entityPanelIds())
-        docks = []
-        for panel_id in panel_ids:
+        def dock(panel_id):
             instance = self.panelHost.instance(panel_id)
-            if instance is not None and instance.container is not None:
-                docks.append(instance.container)
-        if not docks:
+            return instance.container if instance is not None else None
+
+        project_tree = dock(core_panels.PROJECT_TREE)
+        editor = dock(core_panels.EDITOR)
+        characters = dock(core_panels.CHARACTER_ENTITIES)
+        if project_tree is None or editor is None or characters is None:
             return
-        previous = docks[0]
-        for dock in docks[1:]:
-            self.splitDockWidget(previous, dock, Qt.Vertical)
-            previous = dock
+
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.dckNavigation)
+        self.addDockWidget(Qt.LeftDockWidgetArea, project_tree)
+        self.splitDockWidget(
+            self.dckNavigation, project_tree, Qt.Horizontal
+        )
+        self.addDockWidget(Qt.LeftDockWidgetArea, characters)
+        self.splitDockWidget(project_tree, characters, Qt.Vertical)
+        self.addDockWidget(Qt.RightDockWidgetArea, editor)
+
+        previous_catalogue = characters
+        for panel_id in (
+            core_panels.PROJECT_ENTITIES,
+            core_panels.PLOT_ENTITIES,
+            core_panels.WORLD_ENTITIES,
+        ):
+            neighbour = dock(panel_id)
+            if neighbour is not None:
+                self.splitDockWidget(
+                    previous_catalogue, neighbour, Qt.Vertical
+                )
+                previous_catalogue = neighbour
+
+        for panel_id in (core_panels.GENERAL, core_panels.OUTLINE):
+            work_surface = dock(panel_id)
+            if work_surface is not None:
+                self.tabifyDockWidget(editor, work_surface)
+
+        for panel_id in (core_panels.METADATA, core_panels.STORYLINE):
+            companion = dock(panel_id)
+            if companion is not None:
+                self.tabifyDockWidget(project_tree, companion)
+
+        self.resizeDocks(
+            (self.dckNavigation, project_tree, editor),
+            (160, 340, 980),
+            Qt.Horizontal,
+        )
+        editor.raise_()
+        project_tree.raise_()
+        characters.raise_()
 
     def buildWorkspaceMenu(self):
         """Offer another window onto the same project.
@@ -695,7 +784,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
         register_core_panels(
             self.panelRegistry,
-            self.TabRedac,
             factories=core_panel_factories(),
         )
         # Every panel this window mounts is offered in the toolbar, not
@@ -704,6 +792,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # list every other panel appears in.
         self.panelHost.on_open = self._offerPanelToggle
         for panel_id in (
+            core_panels.GENERAL,
             core_panels.PROJECT_TREE,
             core_panels.METADATA,
             core_panels.STORYLINE,
@@ -711,10 +800,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.CHARACTER_ENTITIES,
             core_panels.PLOT_ENTITIES,
             core_panels.WORLD_ENTITIES,
+            core_panels.OUTLINE,
+            core_panels.EDITOR,
         ):
             self.panelHost.open(panel_id, PanelContext(translate=self.tr))
 
         self.corePanels = CorePanelViewSet.from_host(self.panelHost)
+        self._installCorePanelAliases()
 
         style.styleMainWindow(self)
 
@@ -731,9 +823,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actCloseProject,
             self.actGitRevisions,
         )
-        # Hides navigation dock title bar
-        self.dckNavigation.setTitleBarWidget(QWidget(None))
-
         # The navigator on the left. Rows come from the pages this window
         # still keeps and from every panel that asked for one, so what is
         # listed is no longer whatever the main tab widget happens to
@@ -755,75 +844,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.tabMain.setTabIcon(target.page, item.icon())
         self.tabMain.tabBar().hide()
         self.lstTabs.currentRowChanged.connect(self.navigateTo)
-        debug_row = self.navigator.row_for_page(self.TabDebug)
+        debug_row = self.navigator.row_for_page(self.DebugPage)
         if debug_row is not None:
             self.lstTabs.item(debug_row).setHidden(not self.SHOW_DEBUG_TAB)
-        self.tabMain.setTabEnabled(self.TabDebug, self.SHOW_DEBUG_TAB)
-        # The pages those story rows used to switch to are unreachable:
-        # their widgets no longer answer for the story.
-        for legacy_tab in (
-            self.TabSummary, self.TabPersos, self.TabPlots, self.TabWorld,
-        ):
-            self.tabMain.setTabVisible(legacy_tab, False)
+        self.tabMain.setTabEnabled(self.DebugPage, self.SHOW_DEBUG_TAB)
         self.tabMain.currentChanged.connect(self._selectNavigatorPage)
-
-        # Splitters
-        self.splitterPersos.setStretchFactor(0, 25)
-        self.splitterPersos.setStretchFactor(1, 75)
-
-        self.splitterPlot.setStretchFactor(0, 20)
-        self.splitterPlot.setStretchFactor(1, 60)
-        self.splitterPlot.setStretchFactor(2, 30)
-
-        self.splitterWorld.setStretchFactor(0, 25)
-        self.splitterWorld.setStretchFactor(1, 75)
-
-        self.splitterOutlineH.setStretchFactor(0, 25)
-        self.splitterOutlineH.setStretchFactor(1, 75)
-        self.splitterOutlineV.setStretchFactor(0, 75)
-        self.splitterOutlineV.setStretchFactor(1, 25)
-
-        self.splitterRedacV.setStretchFactor(0, 75)
-        self.splitterRedacV.setStretchFactor(1, 25)
-
-        self.splitterRedacH.setStretchFactor(0, 30)
-        self.splitterRedacH.setStretchFactor(1, 40)
-        self.splitterRedacH.setStretchFactor(2, 30)
-
-        # QFormLayout stretch
-        for w in [self.txtWorldDescription, self.txtWorldPassion, self.txtWorldConflict]:
-            s = w.sizePolicy()
-            s.setVerticalStretch(1)
-            w.setSizePolicy(s)
 
         # Help box
         references = [
-            (self.lytTabOverview,
+            (self.corePanels.general,
              self.tr("Enter information about your book, and yourself."),
              0),
-            (self.lytSituation,
-             self.tr(
-                     """The basic situation, in the form of a 'What if...?' question. Ex: 'What if the most dangerous
-                     evil wizard wasn't able to kill a baby?' (Harry Potter)"""),
-             1),
-            (self.lytSummary,
-             self.tr(
-                     """Take time to think about a one sentence (~50 words) summary of your book. Then expand it to
-                     a paragraph, then to a page, then to a full summary."""),
-             1),
-            (self.lytTabPersos,
-             self.tr("Create your characters."),
-             0),
-            (self.lytTabPlot,
-             self.tr("Develop plots."),
-             0),
-            (self.lytTabContext,
-             self.tr("Build worlds.  Create hierarchy of broad categories down to specific details."),
-             0),
-            (self.lytTabOutline,
+            (self.corePanels.outline,
              self.tr("Create the outline of your masterpiece."),
              0),
-            (self.lytTabRedac,
+            (self.corePanels.editor,
              self.tr("Write."),
              0),
             (self.lytTabDebug,
@@ -837,6 +872,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             widget.layout().insertWidget(pos, label)
 
         self.actShowHelp.setChecked(False)
+
+    def _installCorePanelAliases(self):
+        """Bridge old widget names while ports migrate to typed panels.
+
+        The objects are the factory-built panel widgets, not reparented
+        Designer pages. Keeping aliases for one migration window lets small
+        adapters move independently without there being two live surfaces.
+        """
+        general = self.corePanels.general
+        for name in (
+            "txtGeneralTitle", "txtGeneralSubtitle", "txtGeneralSerie",
+            "txtGeneralVolume", "txtGeneralGenre", "txtGeneralLicense",
+            "txtGeneralAuthor", "txtGeneralEmail",
+        ):
+            setattr(self, name, general.findChild(QWidget, name))
+
+        outline = self.corePanels.outline
+        for name in (
+            "splitterOutlineH", "splitterOutlineV", "lstOutlinePlots",
+            "treeOutlineOutline", "outlineItemEditor",
+            "btnOutlineAddFolder", "btnOutlineAddText",
+            "btnOutlineRemoveItem", "btnPlanShowDetails",
+        ):
+            setattr(self, name, getattr(outline, name))
+        self.mainEditor = self.corePanels.editor.editor
 
     def buildDeveloperMenu(self):
         """Tools that inspect Manuskript rather than the manuscript.

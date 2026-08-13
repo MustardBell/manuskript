@@ -65,22 +65,22 @@ class ProjectBindingViews:
         return cls(
             flat_data=FlatDataBindingViews(
                 general_fields=(
-                    (window.txtGeneralTitle, 0),
-                    (window.txtGeneralSubtitle, 1),
-                    (window.txtGeneralSerie, 2),
-                    (window.txtGeneralVolume, 3),
-                    (window.txtGeneralGenre, 4),
-                    (window.txtGeneralLicense, 5),
-                    (window.txtGeneralAuthor, 6),
-                    (window.txtGeneralEmail, 7),
+                    (window.corePanels.general.title, 0),
+                    (window.corePanels.general.subtitle, 1),
+                    (window.corePanels.general.series, 2),
+                    (window.corePanels.general.volume, 3),
+                    (window.corePanels.general.genre, 4),
+                    (window.corePanels.general.license, 5),
+                    (window.corePanels.general.author, 6),
+                    (window.corePanels.general.email, 7),
                 ),
             ),
             outline_selection=OutlineSelectionBindingViews(
-                outline_tree=window.treeOutlineOutline,
+                outline_tree=window.corePanels.outline.treeOutlineOutline,
                 project_tree=window.corePanels.project_tree.tree,
-                outline_item_editor=window.outlineItemEditor,
+                outline_item_editor=window.corePanels.outline.outlineItemEditor,
                 metadata=window.corePanels.metadata,
-                document_area=window.mainEditor,
+                document_area=window.corePanels.editor.editor,
                 outline_changed=(
                     window.workspaceSelection.outline_selection_changed
                 ),

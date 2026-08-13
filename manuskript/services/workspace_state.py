@@ -31,7 +31,9 @@ LOGGER = logging.getLogger(__name__)
 #: 2 -- the entity docks were first placed tabbed over one another and
 #: that arrangement was saved, so a layout written by 1 has to be laid
 #: out once more rather than leaving people with tabs they never chose.
-WORKSPACE_STATE_VERSION = 2
+#: 3 -- the last central story tab became a stable panel identity. The old
+#: integer is still read once so existing workspaces reopen where they were.
+WORKSPACE_STATE_VERSION = 3
 
 #: Everything this module owns lives under here.
 ROOT = "workspace"
@@ -61,8 +63,10 @@ class WorkspaceWindowState:
 
     #: Which documents this window had open, in its own split layout.
     documents: object = None
-    #: Which main tab this window was on.
+    #: Legacy tab index, read only as a migration input for pre-v3 layouts.
     main_tab: object = None
+    #: Which independently movable surface this window last used.
+    active_panel: object = None
 
 
 class WorkspaceStateStore:
@@ -103,6 +107,7 @@ class WorkspaceStateStore:
             docks=self._flags(window_id, "docks"),
             documents=self._json(window_id, "documents"),
             main_tab=self._int(window_id, "mainTab"),
+            active_panel=self._string(window_id, "activePanel"),
         )
 
     def stored_version(self):
@@ -130,7 +135,10 @@ class WorkspaceStateStore:
         self._write_group(window_id, "panelState", state.panel_state)
         self._write_group(window_id, "docks", state.docks)
         self._set_json(window_id, "documents", state.documents)
-        self._set_optional(window_id, "mainTab", state.main_tab)
+        # Stop writing the tab-era key. It remains readable above as a
+        # migration input, including from project settings in old files.
+        self._settings.remove(self._key(window_id, "mainTab"))
+        self._set_optional(window_id, "activePanel", state.active_panel)
         self._settings.sync()
 
     def forget(self, window_id):
@@ -232,6 +240,13 @@ class WorkspaceStateStore:
                 "Ignoring unreadable %s for window %s.", name, window_id,
             )
             return None
+
+    def _string(self, window_id, name):
+        stored = self._value(window_id, name)
+        if stored is None:
+            return None
+        value = str(stored).strip()
+        return value or None
 
     def _set_optional(self, window_id, name, value):
         if value is None:

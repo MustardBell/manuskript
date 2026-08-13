@@ -63,7 +63,7 @@ class ProjectLifecycleView:
         settings = self.settings
         views = self.views.loaded_settings
         # This window's own view of the project first -- which documents
-        # were open and which tab it was on. Two windows are two places
+        # were open and which surface was active. Two windows are two places
         # to be working, and both taking the project's single answer
         # would make them the same place. What this window never recorded
         # falls back to the project's.
@@ -103,11 +103,10 @@ class ProjectLifecycleView:
 
     def project_opened(self):
         workspace = self.views.workspace
-        # The tab this window actually landed on, which is its own where
-        # it recorded one and the project's otherwise.
-        workspace.tabs.currentChanged.emit(
-            workspace.tabs.currentIndex()
-        )
+        # Recompute action scope and history for the panel this window
+        # actually landed on. Visibility alone is not an active surface:
+        # several panels may be visible at once.
+        workspace.activate_surface()
         word_count = self.models.outline.rootItem.data(
             Outline.wordCount
         )
@@ -146,6 +145,7 @@ class ProjectLifecycleView:
             QMessageBox.Save
             | QMessageBox.Discard
             | QMessageBox.Cancel,
+            self.views.dialogs.parent,
         )
         result = message.exec()
         if result == QMessageBox.Save:
@@ -218,7 +218,6 @@ class ProjectLifecycleView:
     def capture_project_state(self):
         """Copy project-scoped view state into persisted settings."""
         workspace = self.views.workspace
-        self.settings.lastTab = workspace.tabs.currentIndex()
         self.settings.openIndexes = (
             workspace.editor.tabSplitter.openIndexes()
         )

@@ -1,75 +1,64 @@
-"""Apply navigation history to one workspace's explicit views."""
+"""Apply semantic navigation history to one workspace's panel surfaces."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Mapping
 
-from PyQt5.QtCore import QModelIndex
-
-
-@dataclass(frozen=True)
-class NavigationTabs:
-    """Tab positions used by semantic navigation targets."""
-
-    characters: int
-    plots: int
-    world: int
-    outline: int
-    project: int
+from manuskript.panels.core import (
+    CHARACTER_ENTITIES,
+    EDITOR,
+    OUTLINE,
+    PLOT_ENTITIES,
+    WORLD_ENTITIES,
+)
 
 
 @dataclass(frozen=True)
 class NavigationViews:
-    """The only widgets history navigation is allowed to change."""
+    """The only capabilities history navigation may change."""
 
-    tabs: Any
-    tab_selector: Any
-    characters: Any
-    plots: Any
-    world: Any
+    activate_panel: Callable[[str], bool]
+    entity_panels: Mapping[str, Any]
     outline: Any
     project_tree: Any
     back_action: Any
     forward_action: Any
-    positions: NavigationTabs
 
     @classmethod
     def for_window(cls, window):
-        """Translate a composed workspace into the navigation port."""
+        core = window.corePanels
         return cls(
-            tabs=window.tabMain,
-            tab_selector=window.lstTabs,
-            characters=window.lstCharacters,
-            plots=window.lstPlots,
-            world=window.treeWorld,
-            outline=window.treeOutlineOutline,
-            project_tree=window.corePanels.project_tree.tree,
+            activate_panel=window.activatePanel,
+            entity_panels={
+                "character": core.character_entities,
+                "plot": core.plot_entities,
+                "world": core.world_entities,
+            },
+            outline=core.outline.treeOutlineOutline,
+            project_tree=core.project_tree.tree,
             back_action=window.actBack,
             forward_action=window.actForward,
-            positions=NavigationTabs(
-                characters=window.TabPersos,
-                plots=window.TabPlots,
-                world=window.TabWorld,
-                outline=window.TabOutline,
-                project=window.TabRedac,
-            ),
         )
 
 
 class MainNavigationView:
-    """Apply a history target without access to the rest of MainWindow."""
+    """Resolve history entries through stable panel ids, never tab indexes."""
+
+    _ENTITY_PANELS = {
+        "character": CHARACTER_ENTITIES,
+        "plot": PLOT_ENTITIES,
+        "world": WORLD_ENTITIES,
+    }
 
     def __init__(self, views, runtime):
         self.views = views
-        # Models are resolved when navigation happens: another project can
-        # replace the complete model set while these stable widgets remain.
         self._runtime = runtime
         self._handlers = {
-            "character": self._navigate_character,
-            "plot": self._navigate_plot,
-            "world": self._navigate_world,
+            "character": self._navigate_entity,
+            "plot": self._navigate_entity,
+            "world": self._navigate_entity,
             "outline": self._navigate_outline,
             "redac": self._navigate_redaction,
-            "main": self._navigate_main,
+            "panel": self._navigate_panel,
         }
 
     @property
@@ -78,70 +67,35 @@ class MainNavigationView:
 
     def navigate(self, entry):
         handler = self._handlers.get(entry[0])
-        if handler is not None:
+        if handler is None:
+            return
+        if entry[0] in self._ENTITY_PANELS:
+            handler(entry[0], entry[1])
+        else:
             handler(entry[1])
 
     def set_history_actions(self, *, can_go_back, can_go_forward):
         self.views.back_action.setEnabled(can_go_back)
         self.views.forward_action.setEnabled(can_go_forward)
 
-    def _show_tab(self, index):
-        if self.views.tabs.currentIndex() != index:
-            self.views.tabs.setCurrentIndex(index)
-
-    def _navigate_character(self, character_id):
-        self._show_tab(self.views.positions.characters)
-        characters = self.views.characters
-        if character_id is None:
-            characters.setCurrentItem(None)
-            characters.clearSelection()
+    def _navigate_entity(self, kind, entity_id):
+        self.views.activate_panel(self._ENTITY_PANELS[kind])
+        panel = self.views.entity_panels[kind]
+        if entity_id is None:
+            panel.tree.clearSelection()
+            panel.tree.setCurrentItem(None)
             return
-        if characters.currentCharacterID() == character_id:
-            return
-        character = characters.getItemByID(character_id)
-        if character is not None:
-            characters.clearSelection()
-            characters.setCurrentItem(character)
-
-    def _navigate_plot(self, plot_id):
-        self._show_tab(self.views.positions.plots)
-        plots = self.views.plots
-        if plot_id is None:
-            plots.setCurrentItem(None)
-            return
-        if plots.currentPlotID() == plot_id:
-            return
-        plot = plots.getItemByID(plot_id)
-        if plot is not None:
-            plots.setCurrentItem(plot)
-
-    def _navigate_world(self, world_id):
-        self._show_tab(self.views.positions.world)
-        tree = self.views.world
-        selection = tree.selectionModel()
-        if world_id is None:
-            selection.clear()
-            return
-        current = (
-            tree.currentIndex()
-            if tree.selectedIndexes()
-            else QModelIndex()
-        )
-        if (
-            current.isValid()
-            and self._models.world.ID(current) == world_id
-        ):
-            return
-        target = self._models.world.indexByID(world_id)
-        if target.isValid():
-            tree.setCurrentIndex(target)
+        candidates = (str(entity_id), "legacy:{}:{}".format(kind, entity_id))
+        for candidate in candidates:
+            if panel.select_entity(candidate):
+                break
 
     def _navigate_outline(self, outline_id):
-        self._show_tab(self.views.positions.outline)
+        self.views.activate_panel(OUTLINE)
         self._select_outline(self.views.outline, outline_id)
 
     def _navigate_redaction(self, outline_id):
-        self._show_tab(self.views.positions.project)
+        self.views.activate_panel(EDITOR)
         self._select_outline(self.views.project_tree, outline_id)
 
     def _select_outline(self, tree, outline_id):
@@ -159,6 +113,5 @@ class MainNavigationView:
         if outline is not None:
             tree.setCurrentIndex(outline)
 
-    def _navigate_main(self, tab_index):
-        if self.views.tabs.currentIndex() != tab_index:
-            self.views.tab_selector.setCurrentRow(tab_index)
+    def _navigate_panel(self, panel_id):
+        self.views.activate_panel(panel_id)

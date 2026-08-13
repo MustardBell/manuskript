@@ -74,9 +74,9 @@ def test_a_window_supplies_its_own_views(MWEmptyProject):
     # This window's own views, in the group that binds each.
     assert views.editors.outline_trees == (
         window.corePanels.project_tree.tree,
-        window.treeOutlineOutline,
+        window.corePanels.outline.treeOutlineOutline,
     )
-    assert views.editors.document_area is window.mainEditor
+    assert views.editors.document_area is window.corePanels.editor.editor
     assert views.metadata.panel is window.corePanels.metadata
     assert views.reference_panels.storyline is window.corePanels.storyline
     assert views.search.view is window.widget

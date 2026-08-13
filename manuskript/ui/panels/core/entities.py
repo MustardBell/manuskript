@@ -173,6 +173,27 @@ class EntityBrowserPanel(QWidget):
         item = self.tree.currentItem()
         return str(item.data(0, Qt.UserRole)) if item is not None else ""
 
+    def select_entity(self, entity_id):
+        """Select one catalogue entry without exposing tree traversal."""
+        wanted = str(entity_id)
+
+        def find(parent):
+            for index in range(parent.childCount()):
+                item = parent.child(index)
+                if str(item.data(0, Qt.UserRole)) == wanted:
+                    return item
+                found = find(item)
+                if found is not None:
+                    return found
+            return None
+
+        item = find(self.tree.invisibleRootItem())
+        if item is None:
+            return False
+        self.tree.setCurrentItem(item)
+        self.tree.scrollToItem(item)
+        return True
+
     def _grouping(self):
         """The field this panel's one kind of entity is read under.
 

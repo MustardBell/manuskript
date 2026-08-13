@@ -202,7 +202,7 @@ class MainWindowActionBinding:
         window = self._window
         window.viewSettingsMenu.rebuild()
         self._connect(
-            window.mainEditor.activeMarkdownPresentationStateChanged,
+            window.corePanels.editor.editor.activeMarkdownPresentationStateChanged,
             window.markdownMenu.attach,
         )
         window.actModeGroup = QActionGroup(window)
@@ -278,36 +278,28 @@ class MainWindowActionBinding:
                 window.corePanels.project_tree.tree.addFolder,
             ),
             (
-                window.btnOutlineAddFolder.clicked,
-                window.treeOutlineOutline.addFolder,
+                window.corePanels.outline.btnOutlineAddFolder.clicked,
+                window.corePanels.outline.treeOutlineOutline.addFolder,
             ),
             (
                 window.corePanels.project_tree.add_text.clicked,
                 window.corePanels.project_tree.tree.addText,
             ),
             (
-                window.btnOutlineAddText.clicked,
-                window.treeOutlineOutline.addText,
+                window.corePanels.outline.btnOutlineAddText.clicked,
+                window.corePanels.outline.treeOutlineOutline.addText,
             ),
             (
                 window.corePanels.project_tree.remove_item.clicked,
                 window.corePanels.project_tree.tree.delete,
             ),
             (
-                window.btnOutlineRemoveItem.clicked,
-                window.treeOutlineOutline.delete,
+                window.corePanels.outline.btnOutlineRemoveItem.clicked,
+                window.corePanels.outline.treeOutlineOutline.delete,
             ),
         ]:
             self._connect(signal, slot, F.AUC)
 
-        self._connect(
-            window.tabMain.currentChanged,
-            window.toolbar.setCurrentGroup
-        )
-        self._connect(
-            window.tabMain.currentChanged,
-            window.workspaceSelection.tab_changed,
-        )
         self._connect(
             window.actNewWindow.triggered,
             window.workspaceWindows.open,

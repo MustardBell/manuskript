@@ -26,7 +26,7 @@ class WorkspaceSupportViews:
 
     @classmethod
     def for_window(cls, window):
-        parent = window.centralWidget() or window
+        parent = window
 
         def show_information(title, message):
             result = QMessageBox(

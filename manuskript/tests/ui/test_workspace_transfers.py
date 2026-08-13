@@ -95,8 +95,8 @@ def test_main_window_owns_import_and_export_without_transfer_methods(
     try:
         assert imported is window.workspaceTransfers.import_dialog
         assert exported is window.workspaceTransfers.export_dialog
-        assert imported.parentWidget() is window.centralWidget()
-        assert exported.parentWidget() is window.centralWidget()
+        assert imported.parentWidget() is window
+        assert exported.parentWidget() is window
         assert not hasattr(window, "dialog")
         assert not hasattr(window, "doImport")
         assert not hasattr(window, "doCompile")

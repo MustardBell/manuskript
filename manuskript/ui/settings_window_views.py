@@ -74,14 +74,14 @@ class SettingsWindowViews:
         runtime = window.projectRuntime
         manager = window.projectManager
         history = window.projectHistory
-        editor = window.mainEditor
+        editor = window.corePanels.editor.editor
         project_tree = window.corePanels.project_tree.tree
 
         return cls(
             parent=(
                 parent
                 if parent is not None
-                else (window.centralWidget() or window)
+                else window
             ),
             project=SettingsProjectViews(
                 models=lambda: runtime.models,

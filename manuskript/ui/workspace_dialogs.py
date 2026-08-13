@@ -58,7 +58,10 @@ class WorkspaceDialogViews:
         runtime = window.projectRuntime
         settings = runtime.settingsManager
         manager = window.projectManager
-        dialog_parent = window.centralWidget() or window
+        # Project surfaces are docks and the welcome central widget is
+        # detached during authoring.  Keep dialogs owned by the workspace
+        # window so modality and teardown do not depend on that hidden view.
+        dialog_parent = window
 
         def create_settings():
             return settingsWindow(

@@ -30,7 +30,9 @@ class PluginUiViews:
     @classmethod
     def for_window(cls, window):
         project = PluginProjectData.for_window(window)
-        parent = window.centralWidget() or window
+        # Plugins may open project dialogs while the welcome central widget
+        # is detached.  The workspace remains their stable Qt owner.
+        parent = window
 
         def refresh_card_styles():
             service = getattr(window, "cardStyles", None)
@@ -43,7 +45,7 @@ class PluginUiViews:
             tools_menu=window.menuTools,
             translate=window.tr,
             show_status=project.show_status,
-            editor_host=window.mainEditor,
+            editor_host=window.corePanels.editor.editor,
             export_context=window.workspaceTransfers.export_context,
             refresh_card_styles=refresh_card_styles,
             project_panels=ProjectPanelViews.for_window(

@@ -32,6 +32,7 @@ def test_a_layout_round_trips(tmp_path):
         panels={"core.metadata": True, "core.storyline": False},
         panel_state={"core.metadata": [True, False]},
         docks={"dckSearch": True},
+        active_panel="core.editor",
     )
 
     subject.save(state, PRIMARY)
@@ -44,6 +45,19 @@ def test_a_layout_round_trips(tmp_path):
         "core.metadata": True, "core.storyline": False,
     }
     assert loaded.docks == {"dckSearch": True}
+    assert loaded.active_panel == "core.editor"
+
+
+def test_saving_panel_identity_removes_obsolete_tab_key(tmp_path):
+    subject, settings = store(tmp_path)
+    settings.setValue("workspace/windows/main/mainTab", 6)
+
+    subject.save(
+        WorkspaceWindowState(active_panel="core.editor"), PRIMARY,
+    )
+
+    assert not settings.contains("workspace/windows/main/mainTab")
+    assert subject.load(PRIMARY).active_panel == "core.editor"
 
 
 def test_two_windows_do_not_overwrite_each_other(tmp_path):

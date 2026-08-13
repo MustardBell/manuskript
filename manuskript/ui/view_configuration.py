@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QAction, QActionGroup, QMenu
 
 from manuskript import functions as F
 from manuskript.enums import Outline
+from manuskript.panels.core import EDITOR
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.propertiesView import propertiesView
@@ -29,10 +30,8 @@ class ViewConfigurationViews:
     def for_window(cls, window):
         toolbar = window.toolbar
         navigation = window.dckNavigation
-        editor_tabs = window.tabMain
-        editor_index = window.TabRedac
-        main_editor = window.mainEditor
-        outline_tree = window.treeOutlineOutline
+        main_editor = window.corePanels.editor.editor
+        outline_tree = window.corePanels.outline.treeOutlineOutline
         project_tree = window.corePanels.project_tree.tree
 
         def refresh_outline():
@@ -40,7 +39,7 @@ class ViewConfigurationViews:
             outline_tree.viewport().update()
 
         return cls(
-            select_editor=lambda: editor_tabs.setCurrentIndex(editor_index),
+            select_editor=lambda: window.activatePanel(EDITOR),
             simple_action=window.actModeSimple,
             fiction_action=window.actModeFiction,
             set_navigation_visible=lambda visible: (

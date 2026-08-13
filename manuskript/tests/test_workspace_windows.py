@@ -971,7 +971,7 @@ def test_a_torn_off_panel_floats_free_of_the_layout(MWEmptyProject):
         assert floated.container is not None
         assert floated.container.isFloating()
         assert METADATA in window.panelHost.floating()
-        assert window.splitterRedacH.indexOf(original) == -1
+        assert not window.corePanels.editor.isAncestorOf(original)
     finally:
         window.panelPlacement.toggle_floating(METADATA)
 
@@ -1083,7 +1083,7 @@ def test_redocking_keeps_core_panels_out_of_editor_splitters(MWEmptyProject):
     redocked = window.panelPlacement.toggle_floating(METADATA)
 
     assert redocked.widget is original
-    assert window.splitterRedacH.indexOf(original) == -1
+    assert not window.corePanels.editor.isAncestorOf(original)
     assert window.dockWidgetArea(redocked.container) != Qt.NoDockWidgetArea
 
 
@@ -1159,13 +1159,13 @@ def test_the_welcome_screen_records_no_documents(MWEmptyProject):
     window = MWEmptyProject
     controller = window.windowState
     controller._documents = [0, ["kept"], None]
-    was_index = window.stack.currentIndex()
+    was_active = window._projectSurfaceActive
     try:
-        window.stack.setCurrentIndex(0)
+        window._projectSurfaceActive = False
 
         assert controller._open_documents() == [0, ["kept"], None]
     finally:
-        window.stack.setCurrentIndex(was_index)
+        window._projectSurfaceActive = was_active
 
 
 # ----------------------------------------- plugin UI is window scope
@@ -1287,52 +1287,52 @@ def test_a_newly_contributed_panel_appears_in_both_windows(
         other.close()
 
 
-def test_each_window_keeps_its_own_main_tab(MWEmptyProject):
-    """Two windows are two places to be working. The project holds one
-    answer for which tab was last, so whichever window captured last used
-    to win and the other's choice was lost.
-    """
+def test_each_window_keeps_its_own_active_panel(MWEmptyProject):
+    """Two windows keep independent semantic locations."""
+    from manuskript.panels.core import EDITOR, GENERAL, OUTLINE
+
     window = MWEmptyProject
     other = window.workspaceWindows.open()
     try:
-        window.tabMain.setCurrentIndex(2)
-        other.tabMain.setCurrentIndex(6)
+        window.activatePanel(GENERAL)
+        other.activatePanel(EDITOR)
 
         window.windowState.capture_view_state()
         other.windowState.capture_view_state()
 
-        assert window.windowState._mainTab == 2
-        assert other.windowState._mainTab == 6
+        assert window.windowState._activePanel == GENERAL
+        assert other.windowState._activePanel == EDITOR
 
         # And each is applied to its own window, not to both.
-        window.tabMain.setCurrentIndex(0)
-        other.tabMain.setCurrentIndex(0)
-        window.windowState.restore_view_state(main_tab=6)
-        other.windowState.restore_view_state(main_tab=2)
+        window.activatePanel(OUTLINE)
+        other.activatePanel(OUTLINE)
+        window.windowState.restore_view_state()
+        other.windowState.restore_view_state()
 
-        assert window.tabMain.currentIndex() == 2
-        assert other.tabMain.currentIndex() == 6
+        assert window._activePanelId == GENERAL
+        assert other._activePanelId == EDITOR
     finally:
         other.close()
 
 
-def test_a_window_with_no_recorded_tab_takes_the_projects(
+def test_a_window_with_no_recorded_panel_migrates_the_projects_tab(
         MWEmptyProject):
-    """Which is what a collaborator opening the file for the first time
-    gets, and what every window did before views were per window.
-    """
+    from manuskript.panels.core import OUTLINE
+
     window = MWEmptyProject
     controller = window.windowState
-    previous = controller._mainTab
+    previous_panel = controller._activePanel
+    previous_tab = controller._legacyMainTab
     try:
-        controller._mainTab = None
-        window.tabMain.setCurrentIndex(0)
+        controller._activePanel = None
+        controller._legacyMainTab = None
 
         controller.restore_view_state(main_tab=5)
 
-        assert window.tabMain.currentIndex() == 5
+        assert window._activePanelId == OUTLINE
     finally:
-        controller._mainTab = previous
+        controller._activePanel = previous_panel
+        controller._legacyMainTab = previous_tab
 
 
 def test_a_window_that_is_not_the_last_records_its_plugin_docks(

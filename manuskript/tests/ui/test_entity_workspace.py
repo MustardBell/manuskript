@@ -17,6 +17,7 @@ from manuskript.ui.panels.core.entities import (
     build_world_entities,
 )
 from manuskript.panels import PanelContext
+from manuskript.panels.core import EDITOR
 
 
 def _workspace(parent):
@@ -118,10 +119,11 @@ def test_entity_detail_is_browser_reachable_but_not_browser_embedded(
     window = MWEmptyProject
 
     assert not hasattr(window.corePanels, "entity_editor")
-    assert all(
-        "editor" not in panel_id
+    assert {
+        panel_id
         for panel_id in window.panelHost.instances
-    )
+        if "editor" in panel_id
+    } == {EDITOR}
 
     assert all(
         not hasattr(panel, "editor")
@@ -163,20 +165,16 @@ def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):
 
 
 def test_legacy_story_pages_are_not_user_interface(MWEmptyProject):
-    """The pages go; the navigation rows stay and open docks instead.
-
-    Only the old widgets are unreachable -- taking the rows away as well
-    would move where the person looks for characters, which is not what
-    replacing the surface behind them was meant to do.
-    """
+    """The pages are absent; descriptor-backed navigation remains."""
     window = MWEmptyProject
-    for index in (
-        window.TabSummary,
-        window.TabPersos,
-        window.TabPlots,
-        window.TabWorld,
+    assert window.tabMain.count() == 1
+    for panel_id in (
+        "core.entities.project",
+        "core.entities.characters",
+        "core.entities.plots",
+        "core.entities.world",
     ):
-        assert not window.tabMain.isTabVisible(index)
-        assert not window.lstTabs.item(index).isHidden()
-        # The row is still there and now opens the dock instead.
-        assert window.navigator.target(index).opens_panel
+        row = window.navigator.row_for_panel(panel_id)
+        assert row is not None
+        assert not window.lstTabs.item(row).isHidden()
+        assert window.navigator.target(row).opens_panel

@@ -107,8 +107,7 @@ class PanelHost:
         existing = self._instances.get(panel_id)
         if existing is not None:
             if existing.container is not None:
-                existing.container.show()
-                existing.container.raise_()
+                self.views.activate_dock(existing.container)
             return existing
         descriptor = self.registry.descriptor(panel_id)
         if not descriptor.per_window:
@@ -382,8 +381,7 @@ class PanelHost:
             return False
         self.visibility.set_visible(instance, True)
         if instance.container is not None:
-            instance.container.show()
-            instance.container.raise_()
+            self.views.activate_dock(instance.container)
         else:
             instance.widget.show()
             instance.widget.raise_()

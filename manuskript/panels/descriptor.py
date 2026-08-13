@@ -120,9 +120,10 @@ class PanelDescriptor:
     merely attached to its host. That is a state to migrate away from,
     not to design against.
 
-    ``group`` identifies the main tab whose toolbar offers the toggle,
-    for panels that only make sense beside one view. Dock panels leave
-    it None and are offered everywhere.
+    ``group`` is retained for compatibility with older extensions that
+    grouped toggles around a central tab. Independent dock surfaces leave it
+    None and are offered everywhere; new code should express reachability
+    with ``navigator`` and relationships with placement commands.
 
     ``scope`` and ``multiplicity`` say what a panel belongs to and how
     many of it there may be. They are stated rather than inferred

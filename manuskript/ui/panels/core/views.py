@@ -16,16 +16,22 @@ from PyQt5.QtWidgets import (
 
 from manuskript.panels.core import (
     CHARACTER_ENTITIES,
+    EDITOR,
+    GENERAL,
     METADATA,
+    OUTLINE,
     PLOT_ENTITIES,
     PROJECT_ENTITIES,
     PROJECT_TREE,
     STORYLINE,
     WORLD_ENTITIES,
 )
+from manuskript.ui.panels.core.editor import EditorPanel
 from manuskript.ui.panels.core.entities import (
     EntityBrowserPanel,
 )
+from manuskript.ui.panels.core.general import GeneralPanel
+from manuskript.ui.panels.core.outline import OutlinePanel
 from manuskript.ui.views.metadataView import metadataView
 from manuskript.ui.views.storylineView import storylineView
 from manuskript.ui.views.treeView import treeView
@@ -89,6 +95,7 @@ class ProjectTreePanelViews:
 class CorePanelViewSet:
     """The core panel views belonging to one workspace window."""
 
+    general: GeneralPanel
     project_tree: ProjectTreePanelViews
     metadata: metadataView
     storyline: storylineView
@@ -96,11 +103,14 @@ class CorePanelViewSet:
     character_entities: EntityBrowserPanel
     plot_entities: EntityBrowserPanel
     world_entities: EntityBrowserPanel
+    outline: OutlinePanel
+    editor: EditorPanel
 
     @classmethod
     def from_host(cls, host):
         project_tree = _panel_widget(host, PROJECT_TREE, QWidget)
         return cls(
+            general=_panel_widget(host, GENERAL, GeneralPanel),
             project_tree=ProjectTreePanelViews.from_panel(project_tree),
             metadata=_panel_widget(host, METADATA, metadataView),
             storyline=_panel_widget(host, STORYLINE, storylineView),
@@ -116,4 +126,6 @@ class CorePanelViewSet:
             world_entities=_panel_widget(
                 host, WORLD_ENTITIES, EntityBrowserPanel
             ),
+            outline=_panel_widget(host, OUTLINE, OutlinePanel),
+            editor=_panel_widget(host, EDITOR, EditorPanel),
         )
