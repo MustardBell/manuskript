@@ -90,8 +90,18 @@ to standard error and are logged with the plugin identity. The host owns the
 process group, applies message and deadline limits, sends cancellation for a
 timed-out request, and terminates the group when orderly shutdown does not
 finish. This supervisor is available in the draft; remote contribution
-registration is the next API milestone, so a process manifest is still shown
-as unsatisfied rather than partially loaded.
+registration uses it only after the runtime and protocol versions, executable,
+identity, and complete declaration set have validated.
+
+After `initialize`, a process returns its identity and an array of portable
+`ContributionDeclaration` values with supported operation names. Manuskript
+validates the complete array and binds those operations to local proxies; only
+then does it publish the contributions and send `initialized`. Failure in one
+declaration publishes none. The first RPC profile supports exporters,
+importers, converters, transforms, page parsing/rendering, and page-format
+renderers. Native Qt widgets, painters, and editor hooks are refused rather
+than silently degraded; remote capability services and host-rendered UI are
+separate API milestones.
 
 `api_version` gates the whole surface. `requires` names services without
 which the plugin cannot run. `optional` names services the plugin can use when

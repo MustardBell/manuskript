@@ -12,6 +12,7 @@ from manuskript.plugins import (
     OptionField,
     OptionKind,
     OutlineSnapshot,
+    PortableArtifact,
     PluginValueError,
     ProjectSnapshot,
     api_value_codec,
@@ -68,6 +69,16 @@ def test_text_and_binary_content_have_one_explicit_envelope():
     assert json_round_trip(text).unpack() == "hello"
     assert binary.encoding is ContentEncoding.BASE64
     assert json_round_trip(binary).unpack() == b"\x00\xff"
+
+
+def test_output_artifact_round_trips_text_or_binary_through_envelope():
+    artifact = PortableArtifact(
+        ContentEnvelope.from_content(b"\x00book", "application/book"),
+        "story.book",
+        ("warning",),
+    )
+
+    assert json_round_trip(artifact) == artifact
 
 
 def test_error_data_is_a_value_instead_of_an_exception_type():

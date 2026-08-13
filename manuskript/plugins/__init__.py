@@ -103,6 +103,7 @@ from manuskript.plugins.values import (
     ContentEncoding,
     ContentEnvelope,
     ErrorEnvelope,
+    PortableArtifact,
     RecordSchema,
     api_value_codec,
 )
@@ -117,6 +118,9 @@ from manuskript.plugins.runtimes import (
 )
 from manuskript.plugins.drivers import (
     PluginDriver,
+    PluginDriverContext,
+    ProcessDriverSession,
+    ProcessPluginDriver,
     PythonDriverSession,
     PythonPluginDriver,
 )
@@ -216,10 +220,14 @@ __all__ = [
     "ContentEncoding",
     "ContentEnvelope",
     "ErrorEnvelope",
+    "PortableArtifact",
     "RecordSchema",
     "PLATFORMS",
     "PluginRuntimeDescriptor",
     "PluginDriver",
+    "PluginDriverContext",
+    "ProcessDriverSession",
+    "ProcessPluginDriver",
     "ProcessRuntime",
     "PythonRuntime",
     "PythonDriverSession",

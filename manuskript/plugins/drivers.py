@@ -9,15 +9,30 @@ import types
 from dataclasses import dataclass
 
 from manuskript.plugins.api import PluginActivationContext
-from manuskript.plugins.errors import PluginLoadError
+from manuskript.plugins.contracts import (
+    CONTRIBUTION_CONTRACTS,
+    PLUGIN_PROTOCOL_VERSION,
+    ContractPortability,
+    ContributionKind,
+)
+from manuskript.plugins.errors import (
+    PluginCompatibilityError,
+    PluginLoadError,
+    PluginProtocolError,
+    PluginRegistrationError,
+)
+from manuskript.plugins.rpc import RpcProcess
 from manuskript.plugins.runtimes import (
+    ProcessRuntime,
     PythonRuntime,
     RuntimeAvailability,
     RuntimeKind,
 )
+from manuskript.plugins.values import PortableArtifact, api_value_codec
 
 
 LOGGER = logging.getLogger(__name__)
+MAX_REMOTE_CONTRIBUTIONS = 1024
 
 
 class PluginDriver:
@@ -28,7 +43,7 @@ class PluginDriver:
     def availability(self, manifest):
         raise NotImplementedError
 
-    def load(self, manifest, registrar):
+    def load(self, manifest, registrar, context=None):
         raise NotImplementedError
 
     def activate(self, manifest, session, registrar):
@@ -56,7 +71,7 @@ class PythonPluginDriver(PluginDriver):
             )
         return RuntimeAvailability(True)
 
-    def load(self, manifest, registrar):
+    def load(self, manifest, registrar, context=None):
         module_prefix = self._module_prefix(manifest)
         session = PythonDriverSession(module_prefix)
         try:
@@ -135,3 +150,360 @@ class PythonPluginDriver(PluginDriver):
             if name == prefix or name.startswith(prefix + ".")
         ]:
             sys.modules.pop(module_name, None)
+
+
+@dataclass(frozen=True)
+class PluginDriverContext:
+    api_version: int
+    project_format: object = None
+
+
+@dataclass
+class ProcessDriverSession:
+    rpc: RpcProcess
+    initialized: bool = False
+    activated: bool = False
+    closed: bool = False
+
+
+class ProcessPluginDriver(PluginDriver):
+    """Bind portable contribution declarations to one RPC process."""
+
+    kind = RuntimeKind.PROCESS
+
+    def __init__(self, initialize_timeout=10.0, request_timeout=30.0):
+        self.initialize_timeout = float(initialize_timeout)
+        self.request_timeout = float(request_timeout)
+        if min(self.initialize_timeout, self.request_timeout) <= 0:
+            raise ValueError("Process driver deadlines must be positive.")
+
+    def availability(self, manifest):
+        if not isinstance(manifest.runtime, ProcessRuntime):
+            return RuntimeAvailability(
+                False,
+                error="Process driver received a non-process runtime.",
+            )
+        if manifest.runtime.protocol_version != PLUGIN_PROTOCOL_VERSION:
+            return RuntimeAvailability(
+                False,
+                error=(
+                    "Plugin {} requires RPC protocol {}, but Manuskript "
+                    "provides protocol {}."
+                ).format(
+                    manifest.id,
+                    manifest.runtime.protocol_version,
+                    PLUGIN_PROTOCOL_VERSION,
+                ),
+            )
+        return manifest.runtime.availability(manifest.root)
+
+    def load(self, manifest, registrar, context=None):
+        context = context or PluginDriverContext(manifest.api_version)
+        if manifest.requires or manifest.optional:
+            raise PluginCompatibilityError(
+                "RPC capability services are not available until the API 1 "
+                "capability router is installed."
+            )
+        availability = self.availability(manifest)
+        if not availability.available:
+            raise PluginLoadError(availability.error)
+        rpc = RpcProcess(
+            manifest.id,
+            availability.command,
+            manifest.root,
+        )
+        session = ProcessDriverSession(rpc)
+        try:
+            result = rpc.request(
+                "initialize",
+                self._initialize_params(manifest, context),
+                timeout=self.initialize_timeout,
+            )
+            declarations = self._initialize_result(manifest, result)
+            for declaration, operations in declarations:
+                registrar.register_declaration(
+                    declaration,
+                    self._bind_handlers(session, declaration, operations),
+                )
+            session.initialized = True
+            return session
+        except Exception:
+            rpc.terminate(timeout=0.5)
+            session.closed = True
+            raise
+
+    def activate(self, manifest, session, registrar):
+        session.rpc.notify("initialized")
+        session.activated = True
+
+    def deactivate(self, manifest, session):
+        if session is None or session.closed:
+            return
+        if session.initialized:
+            try:
+                session.rpc.request(
+                    "deactivate",
+                    timeout=min(1.0, self.request_timeout),
+                )
+            except Exception:
+                LOGGER.exception(
+                    "Plugin %s failed while deactivating RPC session.",
+                    manifest.id,
+                )
+        session.rpc.shutdown(timeout=0.5)
+        session.closed = True
+
+    @staticmethod
+    def _initialize_params(manifest, context):
+        codec = api_value_codec()
+        return {
+            "plugin": {
+                "id": manifest.id,
+                "version": manifest.version,
+            },
+            "host": {
+                "api_version": context.api_version,
+                "protocol_version": PLUGIN_PROTOCOL_VERSION,
+                "project_format": context.project_format,
+            },
+            "contribution_kinds": {
+                contract.kind.value: contract.portability.value
+                for contract in CONTRIBUTION_CONTRACTS
+            },
+            "value_schema": codec.schema_document,
+        }
+
+    @staticmethod
+    def _initialize_result(manifest, result):
+        if not isinstance(result, dict):
+            raise PluginProtocolError(
+                "Plugin initialize result must be an object."
+            )
+        expected = {
+            "plugin_id", "api_version", "protocol_version", "contributions"
+        }
+        if set(result) != expected:
+            raise PluginProtocolError(
+                "Plugin initialize result fields must be exactly: {}."
+                .format(", ".join(sorted(expected)))
+            )
+        if result["plugin_id"] != manifest.id:
+            raise PluginCompatibilityError(
+                "Plugin process identified itself as {!r}, expected {!r}."
+                .format(result["plugin_id"], manifest.id)
+            )
+        if result["api_version"] != manifest.api_version:
+            raise PluginCompatibilityError(
+                "Plugin process initialized API {}, expected API {}."
+                .format(result["api_version"], manifest.api_version)
+            )
+        if result["protocol_version"] != PLUGIN_PROTOCOL_VERSION:
+            raise PluginCompatibilityError(
+                "Plugin process initialized protocol {}, expected {}."
+                .format(
+                    result["protocol_version"],
+                    PLUGIN_PROTOCOL_VERSION,
+                )
+            )
+        contributions = result["contributions"]
+        if not isinstance(contributions, list):
+            raise PluginProtocolError(
+                "Plugin initialize contributions must be an array."
+            )
+        if len(contributions) > MAX_REMOTE_CONTRIBUTIONS:
+            raise PluginProtocolError(
+                "Plugin initialize exceeds {} contributions."
+                .format(MAX_REMOTE_CONTRIBUTIONS)
+            )
+        codec = api_value_codec()
+        decoded = []
+        for item in contributions:
+            if not isinstance(item, dict) or set(item) != {
+                "declaration", "operations"
+            }:
+                raise PluginProtocolError(
+                    "Remote contribution fields must be declaration and "
+                    "operations."
+                )
+            declaration = codec.decode(item["declaration"])
+            from manuskript.plugins.api import ContributionDeclaration
+            if not isinstance(declaration, ContributionDeclaration):
+                raise PluginProtocolError(
+                    "Remote contribution did not decode to a declaration."
+                )
+            contract = next(
+                contract
+                for contract in CONTRIBUTION_CONTRACTS
+                if contract.kind is declaration.kind
+            )
+            if contract.portability is not ContractPortability.PORTABLE:
+                raise PluginRegistrationError(
+                    "Remote plugin {} cannot register {}: {}"
+                    .format(
+                        manifest.id,
+                        declaration.kind.value,
+                        contract.reason,
+                    )
+                )
+            operations = item["operations"]
+            if (
+                not isinstance(operations, list)
+                or not all(
+                    isinstance(operation, str) and operation
+                    for operation in operations
+                )
+                or len(operations) != len(set(operations))
+            ):
+                raise PluginProtocolError(
+                    "Remote contribution operations must be unique strings."
+                )
+            decoded.append((declaration, tuple(operations)))
+        return tuple(decoded)
+
+    def _bind_handlers(self, session, declaration, operations):
+        kind = declaration.kind
+        allowed = _REMOTE_OPERATIONS[kind]
+        unknown = set(operations) - set(allowed)
+        missing = set(allowed.required) - set(operations)
+        if unknown or missing:
+            details = []
+            if unknown:
+                details.append("unknown {}".format(", ".join(sorted(unknown))))
+            if missing:
+                details.append("missing {}".format(", ".join(sorted(missing))))
+            raise PluginRegistrationError(
+                "Remote {} operations are invalid: {}."
+                .format(kind.value, "; ".join(details))
+            )
+        contribution_id = declaration.descriptor.id
+        handlers = {}
+        if "export" in operations:
+            handlers["engine_factory"] = lambda: _RemoteEngine(
+                self, session, contribution_id
+            )
+        if "import_document" in operations:
+            handlers["engine_factory"] = lambda: _RemoteEngine(
+                self, session, contribution_id
+            )
+        if "convert" in operations:
+            handlers["engine_factory"] = lambda: _RemoteEngine(
+                self, session, contribution_id
+            )
+        if "transform" in operations:
+            handlers["engine_factory"] = lambda: _RemoteEngine(
+                self, session, contribution_id
+            )
+        if "detect" in operations:
+            handlers["detector"] = lambda source: self._call(
+                session, contribution_id, "detect", (source,)
+            )
+        if "parse" in operations:
+            handlers["parser_factory"] = lambda: _RemoteEngine(
+                self, session, contribution_id
+            )
+        if "render" in operations:
+            handlers["renderer_factory"] = lambda: _RemoteEngine(
+                self, session, contribution_id
+            )
+        if "activation_warning" in operations:
+            handlers["activation_warning"] = lambda source: self._call(
+                session, contribution_id, "activation_warning", (source,)
+            )
+        return handlers
+
+    def _call(self, session, contribution_id, operation, arguments):
+        codec = api_value_codec()
+        result = session.rpc.request(
+            "contribution/call",
+            {
+                "contribution_id": contribution_id,
+                "operation": operation,
+                "arguments": codec.encode(tuple(arguments)),
+            },
+            timeout=self.request_timeout,
+        )
+        return codec.decode(result)
+
+
+@dataclass(frozen=True)
+class _RemoteOperations:
+    names: tuple
+    required: tuple
+
+    def __iter__(self):
+        return iter(self.names)
+
+
+_REMOTE_OPERATIONS = {
+    ContributionKind.EXPORTER: _RemoteOperations(("export",), ("export",)),
+    ContributionKind.IMPORTER: _RemoteOperations(
+        ("import_document",), ("import_document",)
+    ),
+    ContributionKind.CONVERTER: _RemoteOperations(
+        ("convert",), ("convert",)
+    ),
+    ContributionKind.TRANSFORM: _RemoteOperations(
+        ("transform",), ("transform",)
+    ),
+    ContributionKind.PAGE_TYPE: _RemoteOperations(
+        ("detect", "parse", "render", "activation_warning"),
+        (),
+    ),
+    ContributionKind.PAGE_RENDERER: _RemoteOperations(
+        ("render",), ("render",)
+    ),
+}
+
+
+class _RemoteEngine:
+    def __init__(self, driver, session, contribution_id):
+        self._driver = driver
+        self._session = session
+        self._contribution_id = contribution_id
+
+    def export(self, snapshot, options):
+        from manuskript.domain.exporting import ExportArtifact
+
+        result = self._call("export", snapshot, options)
+        if not isinstance(result, PortableArtifact):
+            return result
+        return ExportArtifact(
+            result.content.unpack(),
+            result.suggested_name,
+            result.content.media_type,
+        )
+
+    def import_document(self, source, options):
+        return self._call("import_document", source, options)
+
+    def convert(self, content, source_format, target_format, options):
+        from manuskript.plugins.api import ConversionArtifact
+
+        result = self._call(
+            "convert", content, source_format, target_format, options
+        )
+        if not isinstance(result, PortableArtifact):
+            return result
+        return ConversionArtifact(
+            result.content.unpack(),
+            result.suggested_name,
+            result.content.media_type,
+            result.warnings,
+        )
+
+    def transform(self, content, media_type, options):
+        return self._call("transform", content, media_type, options)
+
+    def parse(self, source):
+        return self._call("parse", source)
+
+    def render(self, *arguments):
+        return self._call("render", *arguments)
+
+    def _call(self, operation, *arguments):
+        return self._driver._call(
+            self._session,
+            self._contribution_id,
+            operation,
+            arguments,
+        )

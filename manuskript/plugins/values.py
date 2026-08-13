@@ -73,6 +73,23 @@ class ContentEnvelope:
 
 
 @dataclass(frozen=True)
+class PortableArtifact:
+    """Transport form of an exported or converted document."""
+
+    content: ContentEnvelope
+    suggested_name: str
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        if not isinstance(self.content, ContentEnvelope):
+            raise TypeError("Portable artifacts require a content envelope.")
+        object.__setattr__(self, "suggested_name", str(self.suggested_name))
+        object.__setattr__(
+            self, "warnings", tuple(str(item) for item in self.warnings)
+        )
+
+
+@dataclass(frozen=True)
 class ErrorEnvelope:
     """Stable failure data; Python exception types are not a wire contract."""
 
@@ -619,6 +636,7 @@ def _default_record_types():
     )
     return (
         ("content", ContentEnvelope),
+        ("portable_artifact", PortableArtifact),
         ("error", ErrorEnvelope),
         ("media_type", MediaType),
     ) + tuple(zip(names, classes))

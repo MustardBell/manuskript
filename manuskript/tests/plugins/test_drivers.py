@@ -19,7 +19,7 @@ class RecordingProcessDriver(PluginDriver):
             error="runtime is deliberately absent" if not self.available else "",
         )
 
-    def load(self, manifest, registrar):
+    def load(self, manifest, registrar, context=None):
         self.events.append(("load", manifest.id))
         return {"plugin": manifest.id}
 

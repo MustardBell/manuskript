@@ -20,7 +20,11 @@ from manuskript.media_types import (
     core_registry,
 )
 from manuskript.plugins.manifest import PluginManifest
-from manuskript.plugins.drivers import PythonPluginDriver
+from manuskript.plugins.drivers import (
+    PluginDriverContext,
+    ProcessPluginDriver,
+    PythonPluginDriver,
+)
 from manuskript.plugins.registry import (
     PluginRegistry,
     contribution_media_types,
@@ -80,7 +84,8 @@ class PluginRuntime:
         self.discovery_issues = []
         self.projectFormat = project_format
         drivers = tuple(
-            (PythonPluginDriver(),) if drivers is None else drivers
+            (PythonPluginDriver(), ProcessPluginDriver())
+            if drivers is None else drivers
         )
         kinds = [driver.kind for driver in drivers]
         if len(kinds) != len(set(kinds)):
@@ -303,7 +308,14 @@ class PluginRuntime:
         )
         session = None
         try:
-            session = driver.load(manifest, registrar)
+            session = driver.load(
+                manifest,
+                registrar,
+                PluginDriverContext(
+                    api_version=self.api_version,
+                    project_format=self.projectFormat,
+                ),
+            )
             self._require_promised(manifest, registrar.contributions)
             self.registry.install(
                 plugin_id,

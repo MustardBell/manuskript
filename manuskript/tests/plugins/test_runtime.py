@@ -107,7 +107,7 @@ def test_incompatible_plugin_is_never_imported(tmp_path):
     assert "requires API 999" in record.error
 
 
-def test_process_plugin_is_refused_before_code_runs_until_driver_exists(
+def test_process_plugin_is_refused_before_code_runs_when_runtime_is_missing(
     tmp_path,
 ):
     create_plugin(
@@ -129,7 +129,8 @@ def test_process_plugin_is_refused_before_code_runs_until_driver_exists(
 
     record = runtime.records["example.plugin"]
     assert record.status is PluginStatus.UNSATISFIED
-    assert "process runtime" in record.error
+    assert "missing-plugin-process" in record.error
+    assert "was not found" in record.error
     assert runtime.registry.exporters == ()
 
 
