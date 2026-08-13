@@ -125,8 +125,9 @@ bad declaration is reported against the manifest rather than surfacing later.
   or registered against a newer project
 - without `maximum`, newer formats are tentatively allowed and the plugin
   manager displays a persistent compatibility warning
-- omitting `project_formats` is accepted for API-1 compatibility, but grants
-  no explicit support at all: every open project format carries that warning
+- omitting `project_formats` is a manifest error: a plugin must state the
+  project semantics it has actually tested rather than silently inheriting
+  access to every manuscript
 
 For example, `{ "minimum": 0, "tested_through": 1, "maximum": 1 }`
 is the closed set 0–1. `{ "minimum": 0, "tested_through": 2 }` explicitly
@@ -391,10 +392,12 @@ accepts a deterministic provider whose ID starts with the registering plugin
 ID plus a dot. Registration refreshes disposable surface indexes; it never
 rewrites entity source.
 
-Format 2 provides native read/write story capabilities. Format 1 can expose
-legacy entities read-only and can safely encode wikilinks and assertion fences
-as ordinary Markdown. Ask the capability rather than branching on a format
-number.
+Format 2 provides native read/write story capabilities. Formats 0 and 1 use
+the same editing surface but do not persist Format-2 references, assertions,
+morphology, or other story semantics. Their capabilities therefore omit those
+writes. Ask the capability rather than branching on a format number; a plugin
+must not smuggle unsupported data into ordinary Markdown merely because the
+legacy codec could preserve the characters.
 
 ### `ui.export_routing`
 

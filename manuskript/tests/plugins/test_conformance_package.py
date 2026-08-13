@@ -18,6 +18,7 @@ from manuskript.plugins.drivers import (
 from manuskript.plugins.rpc import RpcLimits
 from manuskript.plugins.specification import (
     api_schema_document,
+    manifest_schema_document,
     protocol_document,
 )
 from manuskript.plugins.values import api_value_codec
@@ -29,10 +30,13 @@ RUNNER = ROOT / "plugin_api" / "conformance" / "run.py"
 
 def test_checked_in_documents_are_the_runtime_source_of_truth():
     api = api_schema_document()
+    manifest = manifest_schema_document()
     protocol = protocol_document()
     limits = RpcLimits()
 
     assert api_value_codec().schema_document == api
+    assert manifest["properties"]["api_version"]["const"] == 1
+    assert "project_formats" in manifest["required"]
     assert api["api_version"] == PLUGIN_API_VERSION
     assert protocol["api_version"] == PLUGIN_API_VERSION
     assert protocol["protocol_version"] == PLUGIN_PROTOCOL_VERSION

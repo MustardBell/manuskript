@@ -51,6 +51,11 @@ def api_schema_document():
     return copy.deepcopy(_load_document("api-1.json"))
 
 
+def manifest_schema_document():
+    """Return an isolated copy of the canonical API-1 manifest schema."""
+    return copy.deepcopy(_load_document("manifest-1.schema.json"))
+
+
 def protocol_document():
     """Return an isolated copy of the canonical RPC protocol-1 document."""
     return copy.deepcopy(_load_document("protocol-1.json"))

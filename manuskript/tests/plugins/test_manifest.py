@@ -45,6 +45,7 @@ def test_manifest_parses_stable_identity_and_python_runtime(tmp_path):
     [
         ({"id": "../escape"}, "Invalid plugin ID"),
         ({"api_version": "one"}, "must be an integer"),
+        ({"project_formats": None}, "must be an object"),
         (
             {"runtime": {
                 "kind": "python",

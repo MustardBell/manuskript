@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://manuskript.app/plugin-api/manifest-1.schema.json",
+  "title": "Manuskript Plugin API 1 manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "api_version",
+    "project_formats",
+    "runtime"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "api_version": {"const": 1},
+    "project_formats": {
+      "type": "object",
+      "required": ["minimum", "tested_through"],
+      "additionalProperties": false,
+      "properties": {
+        "minimum": {"type": "integer", "minimum": 0},
+        "tested_through": {"type": "integer", "minimum": 0},
+        "maximum": {"type": "integer", "minimum": 0}
+      }
+    },
+    "runtime": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "module", "callable"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {"const": "python"},
+            "module": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+            },
+            "callable": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "protocol_version", "commands"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {"const": "process"},
+            "protocol_version": {"type": "integer", "minimum": 1},
+            "commands": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": false,
+              "properties": {
+                "linux": {"$ref": "#/$defs/command"},
+                "windows": {"$ref": "#/$defs/command"},
+                "macos": {"$ref": "#/$defs/command"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "description": {"type": "string"},
+    "author": {"type": "string"},
+    "homepage": {"type": "string"},
+    "requires": {"$ref": "#/$defs/uniqueStrings"},
+    "optional": {"$ref": "#/$defs/uniqueStrings"},
+    "media_types": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"type": "string", "minLength": 1},
+          {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "label": {"type": "string"},
+              "base": {"type": "string"},
+              "textual": {"type": "boolean"}
+            }
+          }
+        ]
+      }
+    },
+    "produces": {"$ref": "#/$defs/uniqueStrings"},
+    "consumes": {"$ref": "#/$defs/uniqueStrings"},
+    "transforms": {"$ref": "#/$defs/uniqueStrings"}
+  },
+  "$defs": {
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "uniqueStrings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

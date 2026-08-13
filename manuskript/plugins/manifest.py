@@ -47,7 +47,6 @@ class ProjectFormatCompatibility:
     minimum: int
     tested_through: int
     maximum: Optional[int] = None
-    declared: bool = True
 
     def supports(self, version):
         try:
@@ -67,8 +66,6 @@ class ProjectFormatCompatibility:
 
     @property
     def label(self):
-        if not self.declared:
-            return "not declared; all formats tentative"
         explicit = (
             str(self.minimum)
             if self.minimum == self.tested_through
@@ -149,6 +146,7 @@ class PluginManifest:
             "version",
             "api_version",
             "runtime",
+            "project_formats",
         )
         missing = [key for key in required if key not in value]
         if missing:
@@ -253,10 +251,6 @@ class PluginManifest:
 
     @staticmethod
     def _read_project_formats(value):
-        if "project_formats" not in value:
-            # Absence grants no explicit support. Tentative loading keeps the
-            # omission visible without pretending a hard maximum was stated.
-            return ProjectFormatCompatibility(0, -1, None, False)
         declared = value.get("project_formats")
         if not isinstance(declared, dict):
             raise PluginManifestError(
@@ -314,9 +308,7 @@ class PluginManifest:
                 "Plugin project_formats tested_through cannot exceed "
                 "maximum."
             )
-        return ProjectFormatCompatibility(
-            minimum, tested_through, maximum
-        )
+        return ProjectFormatCompatibility(minimum, tested_through, maximum)
 
     @staticmethod
     def _read_capabilities(value, key):

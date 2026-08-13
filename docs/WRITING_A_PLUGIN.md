@@ -96,8 +96,9 @@ Two naming rules, both enforced at load:
 `tested_through` say which project formats you explicitly support. With no
 `maximum`, later formats are tentatively allowed and Manuskript shows a
 compatibility warning until you publish a plugin version that tests them.
-Older API-1 plugins that omit `project_formats` still load, but every open
-format is tentative and the same warning remains visible.
+Omitting `project_formats` is a manifest error. API 1 requires an author to
+state what project semantics were tested; it never guesses from the plugin's
+runtime language or contribution kinds.
 Use a hard maximum when compatibility ends:
 
 ```json

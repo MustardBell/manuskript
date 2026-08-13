@@ -7,6 +7,7 @@ application content. Manuskript does not discover anything in this directory.
 The files under `schema/` are the contract:
 
 - `api-1.json` defines every portable value record and enum.
+- `manifest-1.schema.json` defines discovery and compatibility declarations.
 - `protocol-1.json` defines RPC framing, lifecycle, limits, contribution
   portability, and operation names.
 
@@ -14,6 +15,10 @@ Python dataclasses in Manuskript are bindings to `api-1.json`. At runtime the
 host refuses to advertise them if those bindings drift from the checked-in
 wire document. The process driver also takes protocol versions, limits,
 portability, and operation tables from `protocol-1.json`.
+
+Every manifest must declare `project_formats`. `tested_through` is explicit
+support, an absent `maximum` is tentative forward permission with a visible
+warning, and a present `maximum` is a hard stop. This is independent of API 1.
 
 ## Conformance profile
 

@@ -459,11 +459,6 @@ class PluginRuntime:
             )
         ):
             return ""
-        if not manifest.project_formats.declared:
-            return (
-                "Plugin {} does not declare project-format compatibility; "
-                "format {} is tentatively allowed."
-            ).format(manifest.id, self.projectFormat)
         return (
             "Plugin {} has only been explicitly tested through project "
             "format {}; format {} is tentatively allowed."
@@ -499,30 +494,6 @@ class PluginRuntime:
                         manifest.id,
                     )
                 )
-
-    def _load_entry_point(self, manifest, module_prefix):
-        package = types.ModuleType(module_prefix)
-        package.__path__ = [str(manifest.root)]
-        package.__package__ = module_prefix
-        sys.modules[module_prefix] = package
-        module_name = "{}.{}".format(
-            module_prefix,
-            manifest.runtime.module,
-        )
-        try:
-            module = importlib.import_module(module_name)
-        except Exception:
-            self._remove_modules(module_prefix)
-            raise
-        entry = getattr(module, manifest.runtime.callable, None)
-        if not callable(entry):
-            raise PluginLoadError(
-                "Entry point {}:{} is not callable.".format(
-                    manifest.runtime.module,
-                    manifest.runtime.callable,
-                )
-            )
-        return entry
 
     def capabilityContext(self):
         """What a capability may be built from, beyond nothing.

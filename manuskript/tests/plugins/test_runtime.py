@@ -217,7 +217,7 @@ def test_forward_compatible_plugin_loads_with_a_visible_warning(tmp_path):
     assert "format 2 is tentatively allowed" in record.warning
 
 
-def test_undeclared_project_compatibility_loads_with_a_warning(tmp_path):
+def test_undeclared_project_compatibility_is_rejected_before_import(tmp_path):
     plugin_root = create_plugin(
         tmp_path,
         source="def register(api):\n    return None\n",
@@ -235,9 +235,9 @@ def test_undeclared_project_compatibility_loads_with_a_warning(tmp_path):
     runtime.discover()
     runtime.load_enabled()
 
-    record = runtime.records["example.plugin"]
-    assert record.status is PluginStatus.LOADED
-    assert "does not declare project-format compatibility" in record.warning
+    assert "example.plugin" not in runtime.records
+    assert len(runtime.discovery_issues) == 1
+    assert "project_formats" in runtime.discovery_issues[0].error
 
 
 def test_failed_registration_leaves_no_partial_contributions(tmp_path):
