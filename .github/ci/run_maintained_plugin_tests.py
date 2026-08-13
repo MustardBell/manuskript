@@ -1,6 +1,7 @@
 """Run every maintained submodule's tests in isolated bounded processes."""
 
 import configparser
+import os
 import sys
 
 from pathlib import Path
@@ -24,6 +25,15 @@ def maintained_plugin_roots():
 
 
 def main():
+    # The main Linux suite runs inside xvfb-run, but that display is scoped to
+    # the preceding workflow step. Maintained plugins are intentionally run in
+    # fresh processes afterwards, so give their Qt tests an explicit headless
+    # platform when no desktop session exists.
+    if sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
     files = tuple(
         test_file
         for plugin_root in maintained_plugin_roots()

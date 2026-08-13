@@ -1,5 +1,7 @@
 import time
+from threading import Event
 
+from PyQt5.QtCore import QCoreApplication, QEvent
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -104,6 +106,38 @@ def test_renderer_uses_application_palette_with_legible_base_text():
 
     assert _contrast(text, base) >= 4.5
     widget.close()
+
+
+def test_pending_completion_cannot_reenter_a_destroyed_native_widget():
+    started = Event()
+    release = Event()
+
+    class BlockingController(StaticUiController):
+        def __init__(self):
+            super().__init__(document())
+            self.closed = False
+
+        def open(self, scope, session_id):
+            started.set()
+            assert release.wait(2.0)
+            return super().open(scope, session_id)
+
+        def close(self, session_id):
+            self.closed = True
+            return super().close(session_id)
+
+    controller = BlockingController()
+    widget = DeclarativeUiWidget(controller, "settings")
+    assert started.wait(2.0)
+
+    widget.close()
+    widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    release.set()
+    assert widget.threadPool.waitForDone(2000)
+    qApp.processEvents()
+
+    assert controller.closed
 
 
 def test_collections_validation_and_reordering_use_native_widgets():

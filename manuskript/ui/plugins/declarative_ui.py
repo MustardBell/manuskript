@@ -68,13 +68,14 @@ class StaticUiController:
 
 
 class _TaskSignals(QObject):
-    finished = pyqtSignal(object)
-    failed = pyqtSignal(object)
+    finished = pyqtSignal(object, object)
+    failed = pyqtSignal(object, object)
 
 
 class _Task(QRunnable):
-    def __init__(self, operation):
+    def __init__(self, token, operation):
         super().__init__()
+        self.token = token
         self.operation = operation
         self.signals = _TaskSignals()
 
@@ -82,9 +83,9 @@ class _Task(QRunnable):
         try:
             result = self.operation()
         except Exception as error:
-            self.signals.failed.emit(error)
+            self.signals.failed.emit(self.token, error)
         else:
-            self.signals.finished.emit(result)
+            self.signals.finished.emit(self.token, result)
 
 
 class DeclarativeUiWidget(QScrollArea):
@@ -100,7 +101,13 @@ class DeclarativeUiWidget(QScrollArea):
         self.controls = {}
         self._busy = False
         self._closed = False
-        self._tasks = set()
+        # Completion signals must target this QObject directly. Connecting a
+        # plain closure captures the widget without giving Qt a receiver whose
+        # destruction it can observe; a queued completion can then call that
+        # closure after the native widget has gone away. Keep the operation's
+        # callback as data and route every signal through bound QObject
+        # methods, which Qt disconnects during native teardown.
+        self._tasks = {}
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.NoFrame)
         self.setAccessibleName(self.tr("Plugin panel"))
@@ -406,28 +413,32 @@ class DeclarativeUiWidget(QScrollArea):
             return
         self._busy = True
         self.content.setEnabled(False)
-        task = _Task(operation)
-        self._tasks.add(task)
-
-        def finish(result):
-            self._tasks.discard(task)
-            self._busy = False
-            if self._closed:
-                return
-            self.content.setEnabled(True)
-            completed(result)
-
-        def fail(error):
-            self._tasks.discard(task)
-            self._busy = False
-            if self._closed:
-                return
-            self.content.setEnabled(True)
-            self._failed(error)
-
-        task.signals.finished.connect(finish)
-        task.signals.failed.connect(fail)
+        token = object()
+        task = _Task(token, operation)
+        self._tasks[token] = (task, completed)
+        task.signals.finished.connect(self._task_finished)
+        task.signals.failed.connect(self._task_failed)
         self.threadPool.start(task)
+
+    def _task_finished(self, token, result):
+        pending = self._tasks.pop(token, None)
+        if pending is None:
+            return
+        _task, completed = pending
+        self._busy = False
+        if self._closed:
+            return
+        self.content.setEnabled(True)
+        completed(result)
+
+    def _task_failed(self, token, error):
+        if self._tasks.pop(token, None) is None:
+            return
+        self._busy = False
+        if self._closed:
+            return
+        self.content.setEnabled(True)
+        self._failed(error)
 
     def _failed(self, error):
         LOGGER.exception(

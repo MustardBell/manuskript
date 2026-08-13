@@ -18,6 +18,8 @@ from typing import Iterable, List, Sequence, Tuple
 
 DEFAULT_BATCHES = 8
 DEFAULT_TIMEOUT_SECONDS = 90
+SLOW_TEST_TIMEOUT_SECONDS = 240
+SLOW_TEST_FILES = frozenset(("test_conformance_package.py",))
 WORKSPACE_FIXTURES = frozenset((
     "MW",
     "MWEmptyProject",
@@ -77,7 +79,25 @@ def uses_native_ui(path: Path) -> bool:
 
 
 def requires_isolated_process(path: Path) -> bool:
-    return uses_workspace_fixture(path) or uses_native_ui(path)
+    return (
+        uses_workspace_fixture(path)
+        or uses_native_ui(path)
+        or path.name in SLOW_TEST_FILES
+    )
+
+
+def batch_timeout(files: Sequence[Path], default: int) -> int:
+    """Return the hard ceiling for one process.
+
+    Cross-language conformance compiles the no-SDK C and Rust references on
+    the platform under test. A cold Windows toolchain legitimately needs more
+    than the normal UI/domain ceiling, so that file gets an isolated process
+    and an explicit larger limit rather than making every test less bounded.
+    """
+
+    if any(path.name in SLOW_TEST_FILES for path in files):
+        return max(default, SLOW_TEST_TIMEOUT_SECONDS)
+    return default
 
 
 def balanced_batches(
@@ -162,22 +182,23 @@ def main(argv: Sequence[str] = ()) -> int:
         raise RuntimeError("test batching lost or duplicated a file")
 
     print(
-        "Planned {} test files in {} batches ({}s hard limit each).".format(
+        "Planned {} test files in {} batches ({}s default hard limit).".format(
             len(files), len(batches), arguments.timeout_seconds
         ),
         flush=True,
     )
     for number, batch in enumerate(batches, 1):
         weight = sum(path.stat().st_size for path in batch)
+        timeout_seconds = batch_timeout(batch, arguments.timeout_seconds)
         print(
-            "Batch {}/{}: {} files, {} source bytes".format(
-                number, len(batches), len(batch), weight
+            "Batch {}/{}: {} files, {} source bytes, {}s hard limit".format(
+                number, len(batches), len(batch), weight, timeout_seconds
             ),
             flush=True,
         )
         if arguments.plan:
             continue
-        return_code = run_batch(batch, arguments.timeout_seconds)
+        return_code = run_batch(batch, timeout_seconds)
         if return_code:
             print(
                 "Batch {} failed with exit code {}.".format(
