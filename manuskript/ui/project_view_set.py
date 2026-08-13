@@ -156,7 +156,6 @@ class ProjectViewSet:
                     # The project's, so both windows type into one text.
                     runtime.documentBuffers,
                     runtime.projectManager.storage.reference_index,
-                    navigation.open_text,
                     runtime.projectManager.storage.entity_catalog,
                     runtime.projectManager.createEntity,
                     navigation.open_entity,

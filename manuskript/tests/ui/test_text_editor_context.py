@@ -95,28 +95,21 @@ def test_text_editor_context_leaves_an_unrelated_focus_target_alone():
     window.workspaceFocus.focus_changed.assert_not_called()
 
 
-def test_text_editor_context_exposes_project_wikilink_commands():
+def test_text_editor_context_exposes_project_reference_completion():
     window = make_window()
     reference_index = MagicMock()
     suggestions = (MagicMock(),)
     reference_index.complete.return_value = suggestions
-    document = MagicMock(id="stable-document-id")
-    reference_index.resolve.return_value = (MagicMock(), document)
-    open_document = MagicMock(return_value=True)
     context = text_editor_context_for(
         window,
         MagicMock(),
         MagicMock(),
         reference_index=reference_index,
-        open_document=open_document,
         persistence_strategy=lambda: compatibility_strategy(2),
     )
 
     assert context.complete_wikilink("mar") == suggestions
-    assert context.open_wikilink("Characters/Mara")
     reference_index.complete.assert_called_once_with("mar")
-    reference_index.resolve.assert_called_once_with("Characters/Mara")
-    open_document.assert_called_once_with("stable-document-id")
 
 
 def test_text_editor_context_routes_generic_entity_commands():
@@ -152,27 +145,6 @@ def test_text_editor_context_routes_generic_entity_commands():
     )
 
 
-def test_wikilink_navigation_falls_back_from_outline_to_entity_document():
-    reference_index = MagicMock()
-    document = MagicMock(id="entity-id")
-    reference_index.resolve.return_value = (MagicMock(), document)
-    open_document = MagicMock(return_value=False)
-    open_entity = MagicMock(return_value=True)
-    context = text_editor_context_for(
-        make_window(),
-        MagicMock(),
-        MagicMock(),
-        reference_index=reference_index,
-        open_document=open_document,
-        open_entity=open_entity,
-        persistence_strategy=lambda: compatibility_strategy(2),
-    )
-
-    assert context.open_wikilink("Characters/Mara")
-    open_document.assert_called_once_with("entity-id")
-    open_entity.assert_called_once_with("entity-id")
-
-
 def test_text_editor_context_does_not_interpret_wikilinks_in_legacy_formats():
     reference_index = MagicMock()
     context = text_editor_context_for(
@@ -186,7 +158,6 @@ def test_text_editor_context_does_not_interpret_wikilinks_in_legacy_formats():
     assert not context.wikilinks_enabled()
     assert not context.story_projection_enabled()
     assert context.complete_wikilink("Characters") == ()
-    assert not context.open_wikilink("Characters/Mara")
     reference_index.complete.assert_not_called()
     reference_index.resolve.assert_not_called()
 

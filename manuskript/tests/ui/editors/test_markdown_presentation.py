@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import QPoint, Qt, QUrl, pyqtSignal
+from PyQt5.QtCore import QPoint, Qt, pyqtSignal
 from PyQt5.QtGui import (
     QFont,
     QTextCharFormat,
@@ -569,7 +569,7 @@ def test_live_preview_rehighlights_old_and_new_active_blocks():
         host.hide()
 
 
-def test_live_preview_projects_wikilink_display_without_mutating_source():
+def test_live_preview_projects_reference_display_without_a_hyperlink():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
     editor.set_text_editor_context(format_2_context(editor.settings))
     host = host_editor(editor)
@@ -601,7 +601,8 @@ def test_live_preview_projects_wikilink_display_without_mutating_source():
         assert not format_at(editor, display).property(
             MarkdownHighlighter.MarkupHiddenProperty
         )
-        assert format_at(editor, display).fontUnderline()
+        assert not format_at(editor, display).fontUnderline()
+        assert format_at(editor, display).fontFixedPitch()
         assert not format_at(editor, second_opening).property(
             MarkdownHighlighter.MarkupHiddenProperty
         )
@@ -609,7 +610,7 @@ def test_live_preview_projects_wikilink_display_without_mutating_source():
         host.hide()
 
 
-def test_wikilinks_in_code_are_neither_projected_nor_clickable():
+def test_internal_references_are_semantic_marks_not_clickable_regions():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
     editor.set_text_editor_context(format_2_context(editor.settings))
     host = host_editor(editor)
@@ -623,15 +624,10 @@ def test_wikilinks_in_code_are_neither_projected_nor_clickable():
 
         code_target = format_at(editor, source.index("CodeExample"))
         actual_target = format_at(editor, source.index("Actual"))
-        wikilink_targets = [
-            item.texts[1]
-            for item in editor.clickRects
-            if item.regex is editor.wikilinkRegex
-        ]
-
         assert not code_target.fontUnderline()
-        assert actual_target.fontUnderline()
-        assert wikilink_targets == ["Actual"]
+        assert not actual_target.fontUnderline()
+        assert actual_target.fontFixedPitch()
+        assert editor.clickRects == []
         assert editor.toPlainText() == source
     finally:
         host.hide()
@@ -1163,15 +1159,13 @@ def test_reading_projection_hides_valid_assertion_blocks_without_mutation():
         host.hide()
 
 
-def test_reading_projection_renders_wikilink_display_and_routes_its_target():
+def test_reading_projection_renders_reference_text_without_an_anchor():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
     editor.set_text_editor_context(format_2_context(editor.settings))
-    open_wikilink = MagicMock(return_value=True)
     completions = (MagicMock(),)
     host = host_editor(editor)
     source = "Meet [[Characters/Olena|Олену]] in [[Places/Kyiv]]."
     editor.setPlainText(source)
-    activated = QSignalSpy(editor.wikilinkActivated)
 
     editor.setPresentationMode(MarkdownPresentationMode.READING)
     host.show()
@@ -1186,17 +1180,13 @@ def test_reading_projection_renders_wikilink_display_and_routes_its_target():
             "Meet Олену in Places/Kyiv."
         )
         assert "[[" not in editor.readingView.toHtml()
+        assert "manuskript:" not in editor.readingView.toHtml()
+        assert "href=" not in editor.readingView.toHtml()
 
         editor.set_text_editor_context(format_2_context(
             editor.settings,
-            open_wikilink=open_wikilink,
             complete_wikilink=lambda _prefix: completions,
         ))
-        editor.readingView._anchorClicked(
-            QUrl("manuskript:Characters/Olena")
-        )
-        assert list(activated[0]) == ["Characters/Olena"]
-        open_wikilink.assert_called_once_with("Characters/Olena")
         assert editor.wikilinkCompletions("char") == completions
     finally:
         host.hide()
@@ -1220,10 +1210,7 @@ def test_legacy_editor_treats_format_2_story_syntax_as_literal_markdown():
         target = format_at(editor, source.index("Characters/Olena"))
 
         assert not target.fontUnderline()
-        assert not any(
-            item.regex is editor.wikilinkRegex
-            for item in editor.clickRects
-        )
+        assert editor.clickRects == []
         assert editor.wikilinkCompletions("Char") == ()
 
         editor.setPresentationMode(MarkdownPresentationMode.READING)

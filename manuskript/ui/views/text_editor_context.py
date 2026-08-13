@@ -23,12 +23,11 @@ class TextEditorContext:
     focus_received: Optional[Callable[[object], None]] = None
     #: Release a disappearing editor before its native widget is destroyed.
     focus_released: Optional[Callable[[object], None]] = None
-    #: Generic Format 2 wikilink operations. The editor sees commands, not
-    #: the project storage or a window.
+    #: Generic Format 2 reference syntax. Completion helps insert an explicit
+    #: reference; presentation does not turn it into a hyperlink.
     wikilinks_enabled: Optional[Callable[[], bool]] = None
     story_projection_enabled: Optional[Callable[[], bool]] = None
     complete_wikilink: Optional[Callable[[str], tuple]] = None
-    open_wikilink: Optional[Callable[[str], bool]] = None
     entity_reference_choices: Optional[Callable[[str], tuple]] = None
     entity_schemas: Optional[Callable[[], tuple]] = None
     create_entity: Optional[Callable[[str, str], object]] = None
@@ -43,7 +42,6 @@ def text_editor_context_for(
     models,
     buffers=None,
     reference_index=None,
-    open_document=None,
     entity_catalog=None,
     create_native_entity=None,
     open_entity=None,
@@ -122,16 +120,6 @@ def text_editor_context_for(
             else ()
         )
 
-    def open_wikilink(target):
-        if not wikilinks_enabled() or reference_index is None:
-            return False
-        _resolution, document = reference_index.resolve(target)
-        if document is None:
-            return False
-        if open_document is not None and open_document(document.id):
-            return True
-        return bool(open_entity is not None and open_entity(document.id))
-
     def entity_reference_choices(surface):
         if entity_catalog is None or not entity_catalog.writable:
             return ()
@@ -194,7 +182,6 @@ def text_editor_context_for(
         wikilinks_enabled=wikilinks_enabled,
         story_projection_enabled=story_projection_enabled,
         complete_wikilink=complete_wikilink,
-        open_wikilink=open_wikilink,
         entity_reference_choices=entity_reference_choices,
         entity_schemas=entity_schemas,
         create_entity=create_entity,

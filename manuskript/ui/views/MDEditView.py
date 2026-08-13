@@ -44,16 +44,12 @@ LOGGER = logging.getLogger(__name__)
 class MDEditView(textEditView):
 
     presentationModeChanged = pyqtSignal(object)
-    wikilinkActivated = pyqtSignal(str)
 
     blockquoteRegex = QRegExp("^ {0,3}(>\\s*)+")
     listRegex = QRegExp(r"^(\s*)([+*-]|([0-9a-z])+([.\)]))(\s+)")
     inlineLinkRegex = QRegExp("\\[([^\n]+)\\]\\(([^\n]+)\\)")
     imageRegex = QRegExp("!\\[([^\n]*)\\]\\(([^\n]+)\\)")
     automaticLinkRegex = QRegExp("(<([a-zA-Z]+\\:[^\n]+)>)|(<([^\n]+@[^\n]+)>)")
-    wikilinkRegex = QRegExp(
-        "\\[\\[([^\\]|]+)(\\|([^\\]]+))?\\]\\]"
-    )
 
     def __init__(self, parent=None, index=None, html=None, spellcheck=None,
                  highlighting=False, dict="", autoResize=False,
@@ -103,7 +99,6 @@ class MDEditView(textEditView):
             self.setCurrentModelIndex(index)
 
         self.cursorPositionChanged.connect(self.cursorPositionHasChanged)
-        self.wikilinkActivated.connect(self._openWikilink)
         self.verticalScrollBar().rangeChanged.connect(
             self.scrollBarRangeChanged)
 
@@ -529,12 +524,6 @@ class MDEditView(textEditView):
             self.text_editor_context, "complete_wikilink", None
         )
         return tuple(provider(prefix)) if provider is not None else ()
-
-    def _openWikilink(self, target):
-        if not self.wikilinksEnabled():
-            return False
-        command = getattr(self.text_editor_context, "open_wikilink", None)
-        return bool(command(target)) if command is not None else False
 
     def buildWikilinkCompletionMenu(self):
         """Build an accessible completion menu for the current target."""
@@ -1485,27 +1474,14 @@ class MDEditView(textEditView):
         cursor = self.textCursor()
         refs = []
         text = self.toPlainText()
-        wikilink_positions = set()
         regexes = [
                 self.imageRegex,
                 self.automaticLinkRegex,
                 self.inlineLinkRegex,
         ]
-        if self.wikilinksEnabled():
-            wikilink_positions = {
-                link.span.start + (1 if link.embedded else 0)
-                for link in self._dslParser.parse(text).wikilinks
-            }
-            regexes.append(self.wikilinkRegex)
         for rx in regexes:
             pos = 0
             while rx.indexIn(text, pos) != -1:
-                if (
-                    rx is self.wikilinkRegex
-                    and rx.pos() not in wikilink_positions
-                ):
-                    pos = rx.pos() + max(1, rx.matchedLength())
-                    continue
                 cursor.setPosition(rx.pos())
                 r1 = self.cursorRect(cursor)
                 pos = rx.pos() + rx.matchedLength()
@@ -1569,9 +1545,6 @@ class MDEditView(textEditView):
         elif ct.regex == self.inlineLinkRegex:
             tooltip = ct.texts[1] or ct.texts[2]
 
-        elif ct.regex == self.wikilinkRegex:
-            tooltip = ct.texts[3] or ct.texts[1]
-
         if tooltip:
             tooltip = self.tr("{} (CTRL+Click to open)").format(tooltip)
             self.showTooltip(self.mapToGlobal(event.pos()), tooltip)
@@ -1588,11 +1561,6 @@ class MDEditView(textEditView):
                 url = ct.texts[2]
             elif ct.regex == self.inlineLinkRegex:
                 url = ct.texts[2]
-
-            elif ct.regex == self.wikilinkRegex:
-                self.wikilinkActivated.emit(ct.texts[1].strip())
-                qApp.restoreOverrideCursor()
-                return
 
             F.openURL(url)
             qApp.restoreOverrideCursor()

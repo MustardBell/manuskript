@@ -58,27 +58,30 @@ def test_source_transformations_are_ordered_and_reject_overlap():
         tree.replace(((SourceSpan(0, 4), "a"), (SourceSpan(3, 6), "b")))
 
 
-def test_reading_projection_hides_dsl_but_source_remains_authoritative():
+def test_reading_projection_shows_reference_text_without_making_a_link():
     source = "See [[Characters/Mara|her]] and [[Places/Vienna]]."
 
     rendered = render_wikilinks_as_markdown(source)
 
-    assert rendered == (
-        "See [her](manuskript:Characters/Mara) and "
-        "[Places/Vienna](manuskript:Places/Vienna)."
-    )
+    assert rendered == "See her and Places/Vienna."
     assert MarkdownDslParser().parse(source).source == source
 
 
-def test_embedded_wikilink_is_explicit_in_the_ast_and_projection():
+def test_embedded_reference_is_still_plain_display_text_in_projection():
     source = "![[Images/map.png|Map]]"
 
     link = MarkdownDslParser().parse(source).wikilinks[0]
 
     assert link.embedded
     assert link.span.extract(source) == source
+    assert render_wikilinks_as_markdown(source) == "Map"
+
+
+def test_reference_display_cannot_smuggle_a_markdown_hyperlink():
+    source = "[[Target|<https://example.invalid>]]"
+
     assert render_wikilinks_as_markdown(source) == (
-        "![Map](manuskript:Images/map.png)"
+        r"\<https://example\.invalid\>"
     )
 
 

@@ -638,8 +638,11 @@ class MarkdownHighlighter(BasicHighlighter):
         for link in tree.wikilinks:
             visible_span = link.display_span or link.target_span
             visible_format = QTextCharFormat(self.format(visible_span.start))
-            visible_format.setForeground(QBrush(self.linkColor))
-            visible_format.setFontUnderline(True)
+            visible_format.setFontFixedPitch(True)
+            visible_format.setFontWeight(QFont.DemiBold)
+            visible_format.setBackground(
+                self.editor.palette().alternateBase()
+            )
             self.setFormat(
                 visible_span.start, visible_span.length, visible_format
             )

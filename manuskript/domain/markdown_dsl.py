@@ -369,16 +369,14 @@ class MarkdownDslParser:
 
 
 def render_wikilinks_as_markdown(source: str) -> str:
-    """Project wikilinks into ordinary Markdown for read-only renderers."""
+    """Project reference display text without manufacturing hyperlinks."""
 
     tree = MarkdownDslParser().parse(source)
     replacements = []
     for link in tree.wikilinks:
-        display = link.rendered_text.replace("]", "\\]")
-        target = link.target.replace(" ", "%20").replace(")", "%29")
-        prefix = "!" if link.embedded else ""
-        replacements.append((
-            link.span,
-            "{}[{}](manuskript:{})".format(prefix, display, target),
-        ))
+        replacements.append((link.span, _escape_markdown(link.rendered_text)))
     return tree.replace(replacements)
+
+
+def _escape_markdown(value):
+    return re.sub(r"([\\`*{}\[\]()#+.!_<>~-])", r"\\\1", str(value))

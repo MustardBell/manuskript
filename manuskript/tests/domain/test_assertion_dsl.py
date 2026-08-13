@@ -83,7 +83,8 @@ def test_story_projection_strips_valid_semantics_and_renders_wikilinks():
     rendered = render_story_markdown(source)
 
     assert "manuskript-assertion" not in rendered
-    assert "[the key](manuskript:Objects/Key)" in rendered
+    assert "Mara held the key." in rendered
+    assert "manuskript:" not in rendered
 
 
 def test_scalar_assertion_preserves_null_as_an_explicit_value():

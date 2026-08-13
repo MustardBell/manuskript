@@ -44,7 +44,7 @@ def test_interaction_rectangle_updates_are_coalesced():
     assert updates == [True]
 
 
-def test_wikilink_geometry_does_not_depend_on_highlighter_internals():
+def test_internal_reference_syntax_does_not_create_click_geometry():
     editor = make_editor()
     context = MagicMock()
     context.settings = editor.settings
@@ -60,8 +60,7 @@ def test_wikilink_geometry_does_not_depend_on_highlighter_internals():
     try:
         editor.getClickRects()
 
-        assert len(editor.clickRects) == 1
-        assert editor.clickRects[0].texts[1] == "Target"
+        assert editor.clickRects == []
     finally:
         editor.dispose()
         editor.deleteLater()
