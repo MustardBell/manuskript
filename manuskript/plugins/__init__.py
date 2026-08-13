@@ -1,7 +1,6 @@
 """Public plugin contracts and the application plugin runtime."""
 
 from manuskript.plugins.api import (
-    PLUGIN_API_VERSION,
     AssertionDiagnosticSnapshot,
     AssertionSnapshot,
     AssertionTermValue,
@@ -58,6 +57,15 @@ from manuskript.plugins.api import (
     TransformContribution,
     WorkspaceDocument,
 )
+from manuskript.plugins.contracts import (
+    CONTRIBUTION_CONTRACTS,
+    PLUGIN_API_STABILITY,
+    PLUGIN_API_VERSION,
+    PLUGIN_PROTOCOL_VERSION,
+    ContractPortability,
+    ContributionKind,
+    contribution_contract,
+)
 from manuskript.domain.story_query import (
     All,
     And,
@@ -91,6 +99,11 @@ from manuskript.plugins.errors import PluginScopeError
 
 __all__ = [
     "PLUGIN_API_VERSION",
+    "PLUGIN_API_STABILITY",
+    "PLUGIN_PROTOCOL_VERSION",
+    "CONTRIBUTION_CONTRACTS",
+    "ContractPortability",
+    "ContributionKind",
     "All",
     "And",
     "AssertionDiagnosticSnapshot",
@@ -172,4 +185,5 @@ __all__ = [
     "TemporalPointValue",
     "TransformContribution",
     "WorkspaceDocument",
+    "contribution_contract",
 ]

@@ -1,6 +1,5 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from enum import Enum
 
 from manuskript.plugins.api import (
     Contribution,
@@ -18,26 +17,11 @@ from manuskript.plugins.api import (
     TransformContribution,
     contribution_descriptor,
 )
+from manuskript.plugins.contracts import ContributionKind
 from manuskript.plugins.errors import (
     PluginRegistrationError,
     PluginScopeError,
 )
-
-
-class ContributionKind(str, Enum):
-    EXPORTER = "exporter"
-    IMPORTER = "importer"
-    CONVERTER = "converter"
-    PROJECT_PANEL = "project_panel"
-    SETTINGS_PANEL = "settings_panel"
-    INDEX_CARD_STYLE = "index_card_style"
-    EDITOR_WORKSPACE = "editor_workspace"
-    PAGE_TYPE = "page_type"
-    PAGE_RENDERER = "page_renderer"
-    MARKUP = "markup"
-    TRANSFORM = "transform"
-    CONVERSION_AUGMENTATION = "conversion_augmentation"
-
 
 CONTRIBUTION_TYPES = {
     ContributionKind.EXPORTER: ExportContribution,

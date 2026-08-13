@@ -1,6 +1,13 @@
-# Manuskript plugin contract
+# Manuskript plugin contract — draft
 
-**API version 1.**
+**API version 1 is under development and is not yet a compatibility
+promise.** The number identifies the first contract being designed. Until it
+is explicitly frozen, current Python factories and other development shapes
+may be replaced rather than preserved.
+
+The stable API 1 will be transport-neutral. In-process Python and external
+processes will implement the same semantics; a protocol version concerns wire
+framing and lifecycle and is not an API patch version.
 
 Core decides what it presents. A plugin declares what it wants to create and
 what it needs to work. Nothing else is available, and nothing else is
@@ -22,9 +29,11 @@ the published surface.
 | **Service** | something you call | declare in `requires`, take from `api.capability()` |
 
 Contracts are plain frozen dataclasses and carry no Qt, so tooling can import
-them without a GUI. Bases necessarily bring Qt, which is why they live apart
-rather than letting Qt into the contract module. Services are negotiated,
-because they are the ones core might not be able to provide.
+them without a GUI. During the draft, they are Python bindings for the
+language-neutral value model rather than the definition of that model. Bases
+necessarily bring Qt, which is why they live apart rather than letting Qt into
+the contract module. Services are negotiated, because they are the ones core
+might not be able to provide.
 
 Anything not listed below is internal. It may move or vanish in any release,
 and the boundary test will refuse a plugin that reaches for it.

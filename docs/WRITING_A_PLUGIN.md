@@ -1,4 +1,8 @@
-# Writing a Manuskript plugin
+# Writing a Manuskript plugin — draft API
+
+Plugin API 1 is still being designed. This guide describes the current
+development checkout, not a compatibility promise. Maintained plugins will be
+migrated to the final, transport-neutral API 1 before it is frozen.
 
 A guide for people writing their first one. It walks a working plugin from
 an empty directory to something you can enable and see, then points at the

@@ -12,6 +12,8 @@ become part of the plugin contract for this ``api_version``.
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from manuskript.plugins.contracts import ContractPortability
+
 
 #: Markdown to forum BBCode conversion, extendable per plugin.
 CAPABILITY_MARKUP_BBCODE = "markup.bbcode"
@@ -82,6 +84,7 @@ class Capability:
 
     name: str
     summary: str
+    portability: ContractPortability = ContractPortability.PORTABLE
     factory: Optional[Callable[[], object]] = None
     #: Built from what the runtime knows -- the plugin registry, a way to
     #: report -- rather than from nothing. A capability that has to see what
@@ -119,6 +122,7 @@ CAPABILITIES = (
             "export format for one of your page types. Take it from your "
             "settings context and call panel(page_type_id, parent)."
         ),
+        portability=ContractPortability.DECLARATIVE,
     ),
     Capability(
         name=CAPABILITY_MEDIA_REGISTRY,
@@ -163,6 +167,7 @@ CAPABILITIES = (
             "selection, scrolling, presentation and the editing lock. "
             "Without it your workspace context has no editor factory."
         ),
+        portability=ContractPortability.NATIVE,
     ),
     Capability(
         name=CAPABILITY_ENTITIES_READ,

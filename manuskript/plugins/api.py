@@ -9,9 +9,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
 from manuskript.media_types import MARKDOWN
-
-
-PLUGIN_API_VERSION = 1
+from manuskript.plugins.contracts import PLUGIN_API_VERSION
 
 
 class OptionKind(str, Enum):
