@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 #define MAX_MESSAGE (16U * 1024U * 1024U)
 
 static const char *INITIALIZE_RESULT =
@@ -71,6 +76,13 @@ static int read_message(char **message) {
 }
 
 int main(void) {
+#ifdef _WIN32
+    /* Content-Length counts the exact UTF-8 bytes on the wire. Microsoft C
+       text streams translate CRLF on input and output, which both hides the
+       blank header line from fgets() and changes bytes after framing. */
+    if (_setmode(_fileno(stdin), _O_BINARY) == -1) return 4;
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1) return 4;
+#endif
     for (;;) {
         char *message = NULL;
         long id = 0;

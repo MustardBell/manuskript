@@ -111,6 +111,10 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     manuscript_editor = window.mainEditor.currentEditor().txtRedacText
+    # The one-sentence summary is deliberately a plain line edit.  Use the
+    # full-summary Markdown editor to prove that presentation changes remain
+    # scoped to the active manuscript editor.
+    summary_editor = window.corePanels.metadata.txtSummaryFull
     selector = window.mainEditor.cmbMarkdownMode
     state = window.mainEditor.currentEditor().markdownPresentation
 
@@ -145,10 +149,10 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
         is MarkdownPresentationMode.READING
     )
     assert (
-        window.txtSummarySentence.presentationMode
+        summary_editor.presentationMode
         is MarkdownPresentationMode.FORMATTED_SOURCE
     )
-    assert window.txtSummarySentence.readingView is None
+    assert summary_editor.readingView is None
     window.mainEditor.closeAllTabs()
 
 
