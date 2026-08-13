@@ -25,6 +25,11 @@ WORKSPACE_FIXTURES = frozenset((
     "MWSampleProject",
     "test_application",
 ))
+NATIVE_UI_IMPORTS = (
+    "PyQt5",
+    "PySide",
+    "manuskript.ui",
+)
 
 
 def test_files(root: Path) -> Tuple[Path, ...]:
@@ -46,6 +51,33 @@ def uses_workspace_fixture(path: Path) -> bool:
         if any(argument.arg in WORKSPACE_FIXTURES for argument in arguments):
             return True
     return False
+
+
+def uses_native_ui(path: Path) -> bool:
+    """Whether a file directly enters Qt or Manuskript's UI layer.
+
+    Qt owns native state beyond Python's object graph. Even files that do not
+    request the complete workspace can leave a widget, timer, or queued event
+    behind for the next file in the process. Keep such files individually
+    bounded; pure domain files can still share efficient batches.
+    """
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.append(node.module)
+    return any(
+        module.startswith(prefix)
+        for module in modules
+        for prefix in NATIVE_UI_IMPORTS
+    )
+
+
+def requires_isolated_process(path: Path) -> bool:
+    return uses_workspace_fixture(path) or uses_native_ui(path)
 
 
 def balanced_batches(
@@ -115,14 +147,15 @@ def main(argv: Sequence[str] = ()) -> int:
     arguments = parser.parse_args(argv or None)
 
     files = test_files(arguments.root)
-    workspace_files = tuple(path for path in files if uses_workspace_fixture(path))
-    shared_files = tuple(path for path in files if path not in workspace_files)
-    # A MainWindow is session-scoped inside pytest. Give each file requesting
-    # that fixture its own process; pure domain and lightweight widget files
+    isolated_files = tuple(path for path in files if requires_isolated_process(path))
+    shared_files = tuple(path for path in files if path not in isolated_files)
+    # A MainWindow is session-scoped inside pytest, and lighter Qt files can
+    # still leave native state outside Python's collector. Give every file
+    # that directly enters the UI boundary its own process; pure domain files
     # remain efficiently balanced into shared processes.
     batches = (
         *balanced_batches(shared_files, arguments.batches),
-        *((path,) for path in workspace_files),
+        *((path,) for path in isolated_files),
     )
     planned = tuple(path for batch in batches for path in batch)
     if len(planned) != len(files) or set(planned) != set(files):
