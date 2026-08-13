@@ -1,9 +1,9 @@
-# Manuskript plugin contract — draft
+# Manuskript Plugin API 1 release candidate
 
-**API version 1 is under development and is not yet a compatibility
-promise.** The number identifies the first contract being designed. Until it
-is explicitly frozen, current Python factories and other development shapes
-may be replaced rather than preserved.
+This document describes the API 1 contract being validated for its first
+stable release. The checked-in JSON documents under `plugin_api/schema/` are
+the authoritative portable value, manifest, and protocol definitions. Python
+dataclasses are one binding to those documents, not a second definition.
 
 The stable API 1 will be transport-neutral. In-process Python and external
 processes will implement the same semantics; a protocol version concerns wire
@@ -29,11 +29,11 @@ the published surface.
 | **Service** | something you call | declare in `requires`, take from `api.capability()` |
 
 Contracts are plain frozen dataclasses and carry no Qt, so tooling can import
-them without a GUI. During the draft, they are Python bindings for the
-language-neutral value model rather than the definition of that model. Bases
-necessarily bring Qt, which is why they live apart rather than letting Qt into
-the contract module. Services are negotiated, because they are the ones core
-might not be able to provide.
+them without a GUI. They are Python bindings for the language-neutral value
+model rather than the definition of that model. Bases necessarily bring Qt,
+which is why they live apart rather than letting Qt into the contract module.
+Services are negotiated, because they are the ones core might not be able to
+provide.
 
 Anything not listed below is internal. It may move or vanish in any release,
 and the boundary test will refuse a plugin that reaches for it.
@@ -89,8 +89,8 @@ standard input and output. Standard output is protocol-only; diagnostics go
 to standard error and are logged with the plugin identity. The host owns the
 process group, applies message and deadline limits, sends cancellation for a
 timed-out request, and terminates the group when orderly shutdown does not
-finish. This supervisor is available in the draft; remote contribution
-registration uses it only after the runtime and protocol versions, executable,
+finish. Remote contribution registration uses it only after the runtime and
+protocol versions, executable,
 identity, and complete declaration set have validated.
 
 After `initialize`, a process returns its identity and an array of portable
@@ -171,10 +171,10 @@ record and the attributes arrive when their owner does.
 | `consumes` | you grab an existing producer of it rather than implementing it | yes |
 | `transforms` | you are middleware: you grab an existing producer and add things on the way out | yes |
 
-SAMPLE Pages is the worked example. It *consumes* `text/x-bbcode`, because its
-renderer takes Manuskript's BBCode converter rather than implementing
-Markdown→BBCode itself, and it *produces* `text/markdown`, which it builds
-from its own page model. One plugin, different promises, different formats.
+A structured-page plugin may *consume* `text/x-bbcode` when its renderer takes
+Manuskript's BBCode converter rather than implementing Markdown→BBCode itself,
+while *producing* `text/markdown` from its own page model. One plugin can make
+different promises for different formats; the manifest must state each one.
 
 **Every format you promise must appear in your own `media_types`, or the
 plugin does not activate.** Both facts are in the manifest, so this is
@@ -323,7 +323,7 @@ plugin cannot register it. It is not the cross-language API.
 | `query.execute` | the typed structural query engine | in project panels and editor workspaces |
 | `analysis.prose` | bounded deterministic prose measurements and source evidence | in project panels and editor workspaces |
 | `workflow.read` / `workflow.write` | per-document revision passes / guarded Format 2 workflow updates | in project panels and editor workspaces |
-| `morphology.registry` | provider snapshots and namespaced registration | in project panels and editor workspaces |
+| `morphology.schemas` | declarative schema snapshots and namespaced XML registration | in project panels and editor workspaces |
 
 `api.capability(name)` raises `PluginScopeError` for anything you did not
 declare, even a name core has. A declared optional service can still be
@@ -387,10 +387,21 @@ service observes only explicit structured author data and never mutates source.
 `EntitiesRelatedTo`, `And`, `Or`, and `Not`, and returns ordered `QueryResult`
 values. Queries operate only on explicit references and assertions.
 
-`morphology.registry.providers()` returns provider snapshots. `register()`
-accepts a deterministic provider whose ID starts with the registering plugin
-ID plus a dot. Registration refreshes disposable surface indexes; it never
-rewrites entity source.
+`morphology.schemas.schemas()` returns immutable schema snapshots.
+`register_xml(source)` accepts a declarative XML morphology pack whose ID
+starts with the registering plugin ID plus a dot. Core does not contain
+language-specific feature names or algorithms: a pack supplies component
+roles, opaque attributes, forms, paradigms, transformations, and lexical
+exceptions. The same loader handles the shipped English, Ukrainian, and
+Russian packs, dropped-in user packs, and plugin-supplied packs.
+
+Language tags are normalized as BCP 47 namespaces without being interpreted.
+Registered tags, reserved ranges, and private-use tags such as `x-velari` are
+equally valid. A fictional-language pack therefore uses the same engine as an
+English noun pack. Author overrides remain in the entity's structured data
+and can still be inspected when the schema that described them is absent.
+Registering a schema refreshes disposable surface indexes; it never rewrites
+entity source.
 
 Format 2 provides native read/write story capabilities. Formats 0 and 1 use
 the same editing surface but do not persist Format-2 references, assertions,
@@ -464,8 +475,8 @@ yours, and only you know your format. Declare it rather than inspect it:
 from manuskript.plugins import ContentSignature, PageTypeContribution
 
 SIGNATURE = ContentSignature(
-    starts_with=r"^SAMPLE Interlude",
-    ends_with=r"^END SAMPLE Interlude",
+    starts_with=r"^BEGIN VENDOR NOTE$",
+    ends_with=r"^END VENDOR NOTE$",
 )
 ```
 

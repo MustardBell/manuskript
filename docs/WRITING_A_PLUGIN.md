@@ -1,8 +1,8 @@
-# Writing a Manuskript plugin — draft API
+# Writing a Manuskript Plugin API 1 plugin
 
-Plugin API 1 is still being designed. This guide describes the current
-development checkout, not a compatibility promise. Maintained plugins will be
-migrated to the final, transport-neutral API 1 before it is frozen.
+This guide describes the API 1 release candidate. The language-neutral schemas
+and conformance runner live under `plugin_api/`; the Python surface is one
+binding to the same contract used by external processes.
 
 A guide for people writing their first one. It walks a working plugin from
 an empty directory to something you can enable and see, then points at the
@@ -16,21 +16,25 @@ This one is the happy path.
 
 ## What a plugin is
 
-A directory with a `plugin.json` and some Python. Manuskript finds it,
-reads the manifest without running any of your code, and only imports the
-code once the reader has enabled it.
+A plugin is a directory with a `plugin.json` and one declared runtime.
+Manuskript reads the manifest without running any plugin code and only starts
+the runtime once the reader has enabled it. The runtime may be an in-process
+Python module or an external process written in any language that implements
+RPC protocol 1.
 
 A plugin adds things Manuskript then owns the presentation of: an
 exporter, a panel, a page type, a markup dialect. You describe what you
 are contributing; core decides where it appears.
 
-You never import Manuskript internals. Everything you need comes from
-`manuskript.plugins`, and there is a test in the repository that fails any
-plugin reaching past it.
+An in-process Python plugin never imports Manuskript internals. Everything it
+needs comes from `manuskript.plugins`, and there is a test in the repository
+that fails any plugin reaching past it. A process plugin imports no Manuskript
+code at all; it exchanges only the records defined in
+`plugin_api/schema/api-1.json`.
 
 ---
 
-## The smallest plugin that loads
+## The smallest in-process Python plugin
 
 Two files. Put them in a directory named after your plugin id, inside
 Manuskript's plugin folder — `manuskript/plugins/vendor.hello/`.
@@ -108,6 +112,57 @@ Use a hard maximum when compatibility ends:
 That plugin runs for formats 0 and 1 and is not imported or activated for a
 format 2 project. This is independent of `api_version`: one describes the
 host/plugin API, the other describes project data and semantics.
+
+## An external-process plugin
+
+Use a process runtime when the plugin is written in Node.js, Rust, C, Erlang,
+or another language, or when process crash isolation is preferable to loading
+code into Manuskript. Commands are argument arrays and are never interpreted
+by a shell:
+
+```json
+{
+  "id": "vendor.remote-hello",
+  "name": "Remote hello",
+  "version": "1.0.0",
+  "api_version": 1,
+  "project_formats": {"minimum": 0, "tested_through": 2},
+  "runtime": {
+    "kind": "process",
+    "protocol_version": 1,
+    "commands": {
+      "linux": ["node", "plugin.mjs"],
+      "macos": ["node", "plugin.mjs"],
+      "windows": ["node", "plugin.mjs"]
+    }
+  },
+  "description": "Adds a host-rendered command.",
+  "author": "You"
+}
+```
+
+The process speaks JSON-RPC 2.0 with byte-counted `Content-Length` framing on
+standard input and output. Standard output is protocol-only; write diagnostics
+to standard error. After `initialize`, return the complete contribution
+declaration set. Manuskript validates it atomically before publishing anything.
+Portable panels use host-rendered declarative UI; a process cannot return a
+`QWidget`, painter, Qt highlighter, or other native object.
+
+No SDK is required. `plugin_api/reference/` contains complete minimal Python,
+Node.js, Rust, C, and Erlang implementations that use only their language's
+normal I/O and JSON facilities. Validate a process against the independent
+runner while developing it:
+
+```sh
+python3 plugin_api/conformance/run.py \
+  --plugin-id vendor.remote-hello \
+  --language node \
+  --cwd path/to/plugin \
+  -- node plugin.mjs
+```
+
+The runner and the host consume the same files in `plugin_api/schema/`. An SDK
+may make those records more convenient, but it cannot redefine API 1.
 
 ---
 
@@ -218,10 +273,24 @@ Do not import the entity catalog, assertion store, or Qt models. The service
 returns immutable snapshots and stable IDs; writes go through a separately
 declared write capability and preserve the Markdown source as authority.
 
+Formats 0, 1, and 2 use the same editing surface. That does not make their
+persistence semantics identical. Formats 0 and 1 cannot persist format-2
+references, assertions, morphology, or similar structured story data, so the
+corresponding write capabilities are unavailable there. Do not encode those
+features into ordinary Markdown as a workaround: that would make new metadata
+leak into a legacy project that never opted into it.
+
+Morphology is data-driven. Request `morphology.schemas` to inspect the
+available schema snapshots or register a namespaced XML pack. Packs describe
+all roles, fields, forms, rules, and lexical exceptions; core does not have
+special English, Ukrainian, Russian, or fictional-language branches. A user
+can also drop a `*.morphology.xml` pack into Manuskript's morphology data
+directory without changing application code.
+
 ## Where to go next
 
 - [PLUGIN_API.md](PLUGIN_API.md) — the full contract: every contribution
   kind, the services you can request, media types in depth, and what is
   deliberately not published.
-- `manuskript/plugins/structured_pages/` in the repository — a real plugin that
-  uses a page type, two renderers, a settings panel and a service.
+- `plugin_api/README.md` — the canonical schemas, conformance runner, and
+  zero-SDK cross-language reference implementations.
