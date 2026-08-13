@@ -1,4 +1,4 @@
-"""One text buffer per document, shared by every view showing it.
+"""One text authority per document, projected into every view showing it.
 
 A document open in two windows -- or in two panes of one window, which the
 editor has always allowed -- used to mean two QTextDocuments. Each ran its
@@ -9,26 +9,22 @@ text: a change reaching the model from anywhere replaced whatever was being
 typed somewhere else, mid-word, with no way back.
 
 So the buffer belongs to the project, beside the models and the undo stack.
-Views attach and become viewports onto one text: a keystroke in one shows up
-in the other as it is typed, because there is only one thing to type into.
-Each view keeps its own cursor, scroll position and selection, which are the
-parts that are genuinely per view.
-
-One consequence worth knowing, and it is Qt's rather than ours: character
-formats live in the document, so anything a view paints by reformatting the
-text is shared too. Focus mode -- dimming everything but the paragraph under
-the cursor -- therefore follows whichever view the buffer's highlighter is
-pointed at, and cannot differ between two views of one document. It is off
-by default; where it is on, the buffer points its highlighter at the view
-that has focus, so the window being typed in is the one that reads correctly.
+It keeps one undisplayed QTextDocument as the text and undo authority. Each
+view receives its own projection document: keystrokes are mirrored through
+the authority immediately, while wrap width, layout, highlighting, cursor,
+scroll position, selection, and presentation mode remain local to the view.
 """
 
 import logging
 
 from PyQt5.QtCore import QObject, QPersistentModelIndex, QTimer
-from PyQt5.QtGui import QTextDocument
+from PyQt5.QtGui import QTextCursor, QTextDocument
 
-from manuskript.domain.text import as_text, plain_text
+from manuskript.domain.text import (
+    PLAIN_TRANSLATION_TABLE,
+    as_text,
+    plain_text,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -42,12 +38,9 @@ SUBMIT_DELAY = 500
 class TextBuffer(QObject):
     """One document's live text, and everything that is true of it once.
 
-    The timer, the dirty flag and the highlighter are here rather than on a
-    view precisely because there may be several views: two timers writing
-    the same text into the same cell is waste, and two highlighters on one
-    document corrupt each other's per-block state. Views build the
-    highlighter, as they always did, but hand it here and read it back
-    through a property rather than keeping a reference that goes stale.
+    The timer, dirty flag, and undo history live here because there may be
+    several views. Highlighting and layout do not: they are projections of
+    text at a particular width and in a particular presentation mode.
     """
 
     def __init__(self, model, index, column, parent=None):
@@ -62,14 +55,21 @@ class TextBuffer(QObject):
         )
         self.column = column
         self.document = QTextDocument(self)
-        self.highlighter = None
+        # QTextDocument only emits its granular contentsChange signal once
+        # it has a layout. The master is never painted, but its deltas are
+        # what let projections synchronize without replacing whole texts.
+        self.document.documentLayout()
         self._views = []
+        self._projections = {}
+        self._origin_view = None
+        self._applying_projection = False
         self._loading = False
         self._timer = QTimer(self)
         self._timer.setInterval(SUBMIT_DELAY)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.submit)
         self.document.contentsChanged.connect(self._touched)
+        self.document.contentsChange.connect(self._master_changed)
 
     # ------------------------------------------------------------ views
 
@@ -80,7 +80,24 @@ class TextBuffer(QObject):
     def attach(self, view):
         if view not in self._views:
             self._views.append(view)
-        return self.document
+        projection = self._projections.get(view)
+        if projection is None:
+            projection = QTextDocument(self)
+            projection.documentLayout()
+            # Undo belongs to the master. A view invokes it through the
+            # buffer; keeping a second stack here would make the same edit
+            # independently undoable in every pane.
+            projection.setUndoRedoEnabled(False)
+            self._replace_projection_text(projection, self.text())
+            projection.contentsChange.connect(
+                lambda position, removed, added, owner=view:
+                self._projection_changed(owner, position, removed, added)
+            )
+            self._projections[view] = projection
+        return projection
+
+    def document_for(self, view):
+        return self._projections.get(view)
 
     def detach(self, view):
         """Let a view go. The text stays as long as anybody is reading it.
@@ -91,19 +108,13 @@ class TextBuffer(QObject):
         """
         if view in self._views:
             self._views.remove(view)
+        projection = self._projections.pop(view, None)
+        if projection is not None:
+            projection.setParent(None)
+            projection.deleteLater()
         if not self._views:
             self.flush()
         return len(self._views)
-
-    def focused(self, view):
-        """Point the highlighter at the view being worked in.
-
-        Only matters for what the highlighter reads off a cursor, which is
-        focus mode and the skip-the-word-being-typed rule in spellcheck.
-        """
-        if self.highlighter is not None and view in self._views:
-            if getattr(self.highlighter, "editor", None) is not view:
-                self.highlighter.editor = view
 
     # ------------------------------------------------------- the text
 
@@ -116,6 +127,69 @@ class TextBuffer(QObject):
         if self._loading:
             return
         self._timer.start()
+
+    def _projection_changed(self, view, position, removed, added):
+        if self._applying_projection:
+            return
+        projection = self._projections.get(view)
+        if projection is None:
+            return
+        inserted = self._range_text(projection, position, added)
+        existing = self._range_text(self.document, position, removed)
+        # Qt reports block and character formatting changes through the same
+        # signal as text changes, with an equal removed/added span. Layout,
+        # syntax colour, and focus-mode dimming are projection state; do not
+        # turn them into shared text edits or master undo commands.
+        if existing == inserted:
+            return
+        self._origin_view = view
+        try:
+            self._replace_range(self.document, position, removed, inserted)
+        finally:
+            self._origin_view = None
+
+    def _master_changed(self, position, removed, added):
+        inserted = self._range_text(self.document, position, added)
+        self._applying_projection = True
+        try:
+            for view, projection in tuple(self._projections.items()):
+                if view is self._origin_view:
+                    continue
+                self._replace_range(projection, position, removed, inserted)
+        finally:
+            self._applying_projection = False
+
+    @staticmethod
+    def _range_text(document, position, length):
+        if not length:
+            return ""
+        cursor = QTextCursor(document)
+        limit = max(0, document.characterCount() - 1)
+        start = min(position, limit)
+        end = min(position + length, limit)
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        # QTextDocumentFragment.toPlainText() destroys non-breaking spaces.
+        # selectedText() retains them and only needs Qt's paragraph markers
+        # translated to the newlines the manuscript model stores.
+        return cursor.selectedText().translate(PLAIN_TRANSLATION_TABLE)
+
+    @staticmethod
+    def _replace_range(document, position, removed, inserted):
+        cursor = QTextCursor(document)
+        limit = max(0, document.characterCount() - 1)
+        start = min(position, limit)
+        end = min(position + removed, limit)
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        cursor.insertText(inserted)
+
+    def _replace_projection_text(self, projection, text):
+        self._applying_projection = True
+        try:
+            projection.setPlainText(text)
+        finally:
+            self._applying_projection = False
 
     def load(self, text):
         """Take text from the model into the buffer.

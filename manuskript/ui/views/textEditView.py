@@ -4,7 +4,7 @@ import re, textwrap
 
 from PyQt5.Qt import QApplication
 from PyQt5.QtCore import QTimer, QModelIndex, Qt, QEvent, pyqtSignal, QLocale, QPersistentModelIndex, QMutex
-from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QTextDocument, QFont, QColor, QIcon, QMouseEvent, QTextCursor
+from PyQt5.QtGui import QTextBlockFormat, QTextCharFormat, QTextDocument, QFont, QColor, QIcon, QKeySequence, QMouseEvent, QTextCursor
 from PyQt5.QtWidgets import (
     QAction,
     QMenu,
@@ -56,8 +56,9 @@ class textEditView(QTextEdit):
         #: What this view was showing when it stood down, so it can pick the
         #: same document up again when it is on screen once more.
         self._releasedIndex = None
-        #: This view's own highlighter, used only while it is not
-        #: sharing a buffer. Read through the highlighter property.
+        #: This view's own highlighter. Text may be shared, but character
+        #: formats are presentation state and therefore stay on this view's
+        #: projection document.
         self._ownHighlighter = None
         self._highlighting = highlighting
         self._textFormat = "text"
@@ -120,30 +121,11 @@ class textEditView(QTextEdit):
 
     @property
     def highlighter(self):
-        """The one highlighter painting the text this editor shows.
-
-        Resolved every time, never cached. Where this view shares a
-        project buffer the highlighter belongs to that buffer, because a
-        QTextDocument can only carry one set of character formats and two
-        highlighters on it would overwrite each other's per-block state.
-        A stored reference went stale as soon as the buffer replaced or
-        released it, and then something as ordinary as toggling
-        spellcheck -- which walks every editor in the window -- reached
-        into a deleted C++ object.
-        """
-        buffer = getattr(self, "_buffer", None)
-        if buffer is not None:
-            return buffer.highlighter
+        """The highlighter for this view's local document projection."""
         return self._ownHighlighter
 
     @highlighter.setter
     def highlighter(self, value):
-        buffer = getattr(self, "_buffer", None)
-        if buffer is not None:
-            # Built for this view, owned by the document it paints.
-            buffer.highlighter = value
-            self._ownHighlighter = None
-            return
         self._ownHighlighter = value
 
     def set_text_editor_context(self, context):
@@ -291,28 +273,18 @@ class textEditView(QTextEdit):
             self._ownHighlighter.deleteLater()
             self._ownHighlighter = None
         self._buffer = buffer
-        self.setDocument(buffer.document)
-        # The highlighter itself is built by setupEditorForIndex, which
-        # runs straight after this and now writes into the buffer, so the
-        # document ends up with exactly one however many views show it.
-        buffer.focused(self)
+        self.setDocument(buffer.document_for(self))
+        # The highlighter is built by setupEditorForIndex on this projection.
+        # Another pane showing the same text has another projection, so its
+        # wrap width and presentation formatting cannot alter this one.
         self.documentReplaced.emit()
         return True
 
     def standDown(self):
         """Let go of the document while nothing on screen shows this view.
 
-        A QTextDocument carries one wrap width, and the buffer gives every
-        view of a document the same QTextDocument. So a view laying it out
-        decides how it wraps *everywhere* -- and a hidden view is as
-        entitled to do that as a visible one. An editor left holding its
-        text behind a plugin workspace therefore wrapped that workspace's
-        panes to the hidden editor's width: prose clipped at the pane edge,
-        with a horizontal scrollbar under it.
-
-        Standing down is the ordinary "this view shows nothing" path, so
-        the buffer is flushed and released exactly as it is when a
-        selection empties. Answers whether there was anything to let go of.
+        This remains useful for releasing hidden tabs and their formatting
+        work even though each visible view now owns an independent layout.
         """
         index = self._index
         if index is None or not index.isValid():
@@ -345,7 +317,10 @@ class textEditView(QTextEdit):
         if buffer is None:
             return
         self._buffer = None
-        self._ownHighlighter = None
+        if self._ownHighlighter is not None:
+            self._ownHighlighter.setDocument(None)
+            self._ownHighlighter.deleteLater()
+            self._ownHighlighter = None
         self.disconnectDocument()
         self.setDocument(QTextDocument(self))
         self.reconnectDocument()
@@ -622,6 +597,14 @@ class textEditView(QTextEdit):
                     self._model.setData(i, text)
 
     def keyPressEvent(self, event):
+        if self._buffer is not None and event.matches(QKeySequence.Undo):
+            self._buffer.document.undo()
+            event.accept()
+            return
+        if self._buffer is not None and event.matches(QKeySequence.Redo):
+            self._buffer.document.redo()
+            event.accept()
+            return
         if event.key() == Qt.Key_V and event.modifiers() & Qt.ControlModifier:
             text = QApplication.clipboard().text()
             self.insertPlainText(text)
@@ -630,6 +613,20 @@ class textEditView(QTextEdit):
 
         if event.key() == Qt.Key_Space:
             self.submit()
+
+    def undo(self):
+        """Undo text at the shared authority, if this is a shared view."""
+        if self._buffer is not None:
+            self._buffer.document.undo()
+            return
+        QTextEdit.undo(self)
+
+    def redo(self):
+        """Redo text at the shared authority, if this is a shared view."""
+        if self._buffer is not None:
+            self._buffer.document.redo()
+            return
+        QTextEdit.redo(self)
 
     # -----------------------------------------------------------------------------------------------------
     # Resize stuff
@@ -805,6 +802,28 @@ class textEditView(QTextEdit):
     def createStandardContextMenu(self):
         popup_menu = QTextEdit.createStandardContextMenu(self)
 
+        # QTextEdit's standard Undo and Redo actions operate directly on the
+        # document installed in the widget. A shared editor's installed
+        # document is deliberately only a view-local projection and has no
+        # undo stack; history belongs to the buffer's master document. Keep
+        # the familiar menu positions while routing the commands correctly.
+        if self._buffer is not None:
+            actions = popup_menu.actions()
+            before = actions[2] if len(actions) > 2 else None
+            for action in actions[:2]:
+                popup_menu.removeAction(action)
+                action.deleteLater()
+            undo_action = QAction(self.tr("&Undo"), popup_menu)
+            undo_action.setShortcut(QKeySequence.Undo)
+            undo_action.setEnabled(self._buffer.document.isUndoAvailable())
+            undo_action.triggered.connect(self.undo)
+            redo_action = QAction(self.tr("&Redo"), popup_menu)
+            redo_action.setShortcut(QKeySequence.Redo)
+            redo_action.setEnabled(self._buffer.document.isRedoAvailable())
+            redo_action.triggered.connect(self.redo)
+            popup_menu.insertAction(before, undo_action)
+            popup_menu.insertAction(before, redo_action)
+
         cursor = self.textCursor()
         selectedWord = cursor.selectedText() if cursor.hasSelection() else None
 
@@ -961,17 +980,9 @@ class textEditView(QTextEdit):
     ###############################################################################
 
     def focusInEvent(self, event):
-        """Claim the shared buffer's highlighter for this view.
-
-        Character formats live in the document, so the parts of
-        highlighting that read a cursor -- focus mode, and skipping the
-        word being typed while spellchecking -- can only follow one view.
-        The one being worked in is the right one.
-        """
+        """Publish this editor as the workspace command target."""
         QTextEdit.focusInEvent(self, event)
         self._reportWorkspaceFocus()
-        if self._buffer is not None:
-            self._buffer.focused(self)
 
     def _reportWorkspaceFocus(self):
         """Publish this editor through its injected workspace focus port."""

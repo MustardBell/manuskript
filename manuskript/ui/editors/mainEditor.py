@@ -441,12 +441,12 @@ class mainEditor(QWidget, Ui_mainEditor):
         self.pluginWorkspaceClosed.emit()
 
     def _standTabsDown(self):
-        """Let the tabs release the documents a workspace is now showing.
+        """Let hidden tabs release their documents and formatting work.
 
-        The project shares one QTextDocument between every view of a
-        document, and a QTextDocument carries one wrap width. A tab left
-        holding its text behind a workspace goes on deciding how that text
-        wraps in the workspace's panes, which are a different width.
+        Visible views now have independent projection documents, so a hidden
+        tab can no longer impose its wrap width on a workspace pane. Standing
+        down remains worthwhile because an invisible editor need not keep a
+        layout and highlighter alive.
         """
         for tab in self.allAllTabs():
             stand_down = getattr(tab, "standDown", None)

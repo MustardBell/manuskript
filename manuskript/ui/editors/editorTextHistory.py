@@ -72,7 +72,8 @@ class EditorTextHistory(QObject):
         editor = self.activeEditor()
         if editor is None:
             return None
-        document = editor.document()
+        buffer = getattr(editor, "_buffer", None)
+        document = buffer.document if buffer is not None else editor.document()
         self._hook(document)
         return document
 

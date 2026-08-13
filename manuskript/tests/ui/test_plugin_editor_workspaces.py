@@ -445,14 +445,11 @@ def test_workspace_action_respects_selection_and_disable(MWEmptyProject):
 
 def test_a_workspace_pane_wraps_to_itself_not_to_the_editor_it_replaced(
         MWEmptyProject):
-    """The document a workspace shows is the project's, shared with the tabs.
+    """A workspace projection wraps to its own width.
 
-    One QTextDocument carries one wrap width, so a tab left holding the same
-    document behind the workspace goes on deciding how the workspace's panes
-    wrap. The panes are much narrower than the editor, so their prose came
-    out laid out wider than the pane: clipped at the edge, with a horizontal
-    scrollbar under it. Selecting the item in the outline brought the fault
-    back, because the hidden tab opened it again.
+    Text is shared with the native tabs, but QTextDocument layout is not.
+    The pane is much narrower than the native editor and must neither clip
+    prose nor acquire a horizontal scrollbar when outline selection changes.
     """
     window = MWEmptyProject
     received = []

@@ -1,4 +1,4 @@
-"""Two views of one document share one text.
+"""Two views of one document share one text authority.
 
 The editor has always been able to show a document twice -- split panes do
 it, and a second workspace window does it -- and each view used to hold its
@@ -6,8 +6,8 @@ own QTextDocument. Two buffers for one document meant text could be lost:
 whichever reached the model last won, and a view reloaded itself from the
 model whenever anything changed it, mid-sentence included.
 
-These tests are about the buffer that replaced them. The Qt-free ones are
-here; the ones that need real editors are in
+These tests are about the buffer that replaced them. The service-level ones
+are here; the ones that need real editors are in
 tests/ui/views/test_shared_text_buffers.py.
 """
 

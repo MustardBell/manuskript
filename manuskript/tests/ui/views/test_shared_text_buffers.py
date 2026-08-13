@@ -1,23 +1,29 @@
-"""Two real editors on one document, typing into one text.
+"""Two real editors on one document, typing into one text authority.
 
 The buffer's own behaviour is covered in
 tests/services/test_document_buffers.py. These are the tests that need
 actual textEditViews bound to an actual project, because what is being
 claimed is about widgets: a keystroke in one editor is visible in the other
-at once, and neither can overwrite the other.
+at once, neither can overwrite the other, and presentation stays local.
 """
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QTextBlockFormat
+from PyQt5.QtWidgets import QTextEdit, qApp
 
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
+from manuskript.ui.editors.markdownPresentation import (
+    MarkdownPresentationMode,
+)
+from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.ui.views.textEditView import textEditView
 
 
 def document(window, title="Scene"):
     """A fresh outline item, and the index of its text."""
     root = window.projectRuntime.models.outline.rootItem
-    item = outlineItem(title=title, parent=root)
+    item = outlineItem(title=title, _type="md", parent=root)
     index = window.projectRuntime.models.outline.getIndexByID(item.ID())
     return item, index.sibling(index.row(), Outline.text)
 
@@ -35,9 +41,9 @@ def discard(*views):
         view.setParent(None)
 
 
-def editor_on(window, index):
+def editor_on(window, index, editor_class=textEditView):
     """A text editor bound to a document, as a pane or a window would be."""
-    view = textEditView(
+    view = editor_class(
         window,
         settings=window.projectRuntime.settingsManager,
     )
@@ -50,14 +56,15 @@ def editor_on(window, index):
 
 def test_a_keystroke_in_one_editor_is_in_the_other_at_once(MWEmptyProject):
     """What two windows on one document are for. No timer, no round trip
-    through the model: there is one text, and both are looking at it.
+    through the model: there is one text authority, and both project it.
     """
     window = MWEmptyProject
     _item, index = document(window)
     first = editor_on(window, index)
     second = editor_on(window, index)
     try:
-        assert first.document() is second.document()
+        assert first._buffer is second._buffer
+        assert first.document() is not second.document()
 
         first.setPlainText("Chapter one.")
 
@@ -119,11 +126,8 @@ def test_a_change_from_elsewhere_does_not_eat_what_is_being_typed(
         discard(editor)
 
 
-def test_one_document_one_highlighter(MWEmptyProject):
-    """Two highlighters on one QTextDocument overwrite each other's
-    per-block state, which is where multi-line markup is tracked. So the
-    buffer hands out its one highlighter and refuses to make a second.
-    """
+def test_each_projection_has_its_own_highlighter(MWEmptyProject):
+    """Highlighting is presentation, not shared document state."""
     window = MWEmptyProject
     _item, index = document(window)
     first = editor_on(window, index)
@@ -133,22 +137,45 @@ def test_one_document_one_highlighter(MWEmptyProject):
     try:
         buffer = first._buffer
         assert buffer is second._buffer
-        highlighter = buffer.highlighter
-        assert highlighter is not None
+        second.setHighlighting(True)
+        second.setCurrentModelIndex(index)
 
-        # Both views resolve to that one, rather than each keeping its own
-        # reference to whatever it built.
-        assert first.highlighter is highlighter
-        assert second.highlighter is highlighter
+        assert first.highlighter is not None
+        assert second.highlighter is not None
+        assert first.highlighter is not second.highlighter
+        assert first.highlighter.document() is first.document()
+        assert second.highlighter.document() is second.document()
     finally:
         discard(first, second)
 
 
-def test_the_highlighter_follows_the_editor_being_worked_in(MWEmptyProject):
-    """Focus mode reads a cursor, and a shared document has only one set of
-    character formats, so the dimming can only follow one view. The one with
-    focus is the right one.
-    """
+def test_projection_formatting_is_not_a_shared_text_edit(MWEmptyProject):
+    """Line layout and highlighting must not dirty or enter master history."""
+    window = MWEmptyProject
+    _item, index = document(window)
+    first = editor_on(window, index)
+    second = editor_on(window, index)
+    try:
+        first.setPlainText("The same text remains the same text.")
+        first._buffer.flush()
+        first._buffer.settle()
+
+        cursor = first.textCursor()
+        block_format = QTextBlockFormat(cursor.blockFormat())
+        block_format.setTopMargin(27)
+        cursor.setBlockFormat(block_format)
+
+        assert first._buffer.text() == "The same text remains the same text."
+        assert second.toPlainText() == "The same text remains the same text."
+        assert first._buffer.dirty is False
+        assert first._buffer.document.isUndoAvailable() is False
+        assert second.textCursor().blockFormat().topMargin() != 27
+    finally:
+        discard(first, second)
+
+
+def test_each_highlighter_stays_with_its_own_editor(MWEmptyProject):
+    """Focusing one projection must not retarget another one's renderer."""
     window = MWEmptyProject
     _item, index = document(window)
     first = editor_on(window, index)
@@ -156,14 +183,130 @@ def test_the_highlighter_follows_the_editor_being_worked_in(MWEmptyProject):
     first.setCurrentModelIndex(index)
     second = editor_on(window, index)
     try:
-        buffer = first._buffer
-        assert buffer.highlighter is not None
+        second.setHighlighting(True)
+        second.setCurrentModelIndex(index)
 
-        buffer.focused(second)
-        assert buffer.highlighter.editor is second
+        second.setFocus(Qt.OtherFocusReason)
+        qApp.processEvents()
+        assert first.highlighter.editor is first
+        assert second.highlighter.editor is second
 
-        buffer.focused(first)
-        assert buffer.highlighter.editor is first
+        first.setFocus(Qt.OtherFocusReason)
+        qApp.processEvents()
+        assert first.highlighter.editor is first
+        assert second.highlighter.editor is second
+    finally:
+        discard(first, second)
+
+
+def test_two_widths_wrap_independently_while_text_stays_shared(
+        MWEmptyProject):
+    """The defect behind the split: text is shared; layout width is not."""
+    window = MWEmptyProject
+    _item, index = document(window)
+    first = editor_on(window, index)
+    second = editor_on(window, index)
+    try:
+        prose = "A paragraph of ordinary prose that needs to wrap. " * 30
+        first.setPlainText(prose)
+        for editor, width in ((first, 260), (second, 620)):
+            # Exercise two real top-level panes. As otherwise-unmanaged
+            # children of the session's MainWindow, Qt clamps both test
+            # widgets to the same leftover child geometry.
+            editor.setParent(None)
+            editor.setLineWrapMode(QTextEdit.WidgetWidth)
+            editor.resize(width, 400)
+            editor.show()
+        qApp.processEvents()
+
+        assert first.document() is not second.document()
+        assert first.toPlainText() == second.toPlainText() == prose
+        assert first.document().textWidth() != second.document().textWidth()
+        assert first.document().documentLayout().documentSize().height() > (
+            second.document().documentLayout().documentSize().height()
+        )
+
+        second.append("Written in the wide pane.")
+        assert "Written in the wide pane." in first.toPlainText()
+    finally:
+        discard(first, second)
+
+
+def test_two_markdown_modes_can_edit_the_same_text_at_once(MWEmptyProject):
+    """Presentation mode belongs to a pane even when text is shared."""
+    window = MWEmptyProject
+    _item, index = document(window)
+    source = editor_on(window, index, MDEditView)
+    live = editor_on(window, index, MDEditView)
+    try:
+        source.setPresentationMode(MarkdownPresentationMode.SOURCE)
+        live.setPresentationMode(MarkdownPresentationMode.LIVE_PREVIEW)
+
+        assert source.presentationMode is MarkdownPresentationMode.SOURCE
+        assert live.presentationMode is MarkdownPresentationMode.LIVE_PREVIEW
+        assert source.document() is not live.document()
+
+        source.insertPlainText("**Shared text, separate presentations.**")
+        assert live.toPlainText() == source.toPlainText()
+        assert live.presentationMode is MarkdownPresentationMode.LIVE_PREVIEW
+    finally:
+        discard(source, live)
+
+
+def test_undo_from_either_projection_reaches_both(MWEmptyProject):
+    """History belongs to the shared text authority, not either layout."""
+    window = MWEmptyProject
+    _item, index = document(window)
+    first = editor_on(window, index)
+    second = editor_on(window, index)
+    try:
+        first.insertPlainText("One change")
+        assert first.toPlainText() == second.toPlainText() == "One change"
+
+        second.undo()
+        assert first.toPlainText() == second.toPlainText() == ""
+
+        first.redo()
+        assert first.toPlainText() == second.toPlainText() == "One change"
+    finally:
+        discard(first, second)
+
+
+def test_projection_sync_preserves_manuscript_characters(MWEmptyProject):
+    """Mirroring deltas must not normalize prose on its way to another pane."""
+    window = MWEmptyProject
+    _item, index = document(window)
+    first = editor_on(window, index)
+    second = editor_on(window, index)
+    try:
+        text = "First paragraph.\n\nNBSP:\u00a0kept; astral: 🐁."
+        first.setPlainText(text)
+
+        assert first.toPlainText() == text
+        assert second.toPlainText() == text
+        assert first._buffer.text() == text
+
+        first._buffer.flush()
+        assert index.data() == text
+    finally:
+        discard(first, second)
+
+
+def test_shared_context_menu_undo_uses_authoritative_history(
+        MWEmptyProject):
+    """The standard menu must not target a projection's disabled stack."""
+    window = MWEmptyProject
+    _item, index = document(window)
+    first = editor_on(window, index)
+    second = editor_on(window, index)
+    try:
+        first.insertPlainText("Undo me")
+        menu = second.createStandardContextMenu()
+        undo_action = menu.actions()[0]
+
+        assert undo_action.isEnabled()
+        undo_action.trigger()
+        assert first.toPlainText() == second.toPlainText() == ""
     finally:
         discard(first, second)
 
