@@ -40,7 +40,7 @@ def test_every_capability_has_an_explicit_portability_value():
 def test_portable_contract_modules_do_not_import_qt():
     plugin_root = Path(__file__).parents[2] / "plugins"
 
-    for name in ("contracts.py", "values.py", "api.py"):
+    for name in ("contracts.py", "runtimes.py", "values.py", "api.py"):
         tree = ast.parse(
             (plugin_root / name).read_text(encoding="utf-8"),
             filename=name,

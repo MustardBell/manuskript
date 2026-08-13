@@ -6,6 +6,11 @@ from typing import Optional
 
 from manuskript.media_types import MediaType, MediaTypeError
 from manuskript.plugins.errors import PluginManifestError
+from manuskript.plugins.runtimes import (
+    PluginRuntimeDescriptor,
+    ProcessRuntime,
+    PythonRuntime,
+)
 
 
 #: The manifest keys that state a promise, and how to say each one.
@@ -15,12 +20,18 @@ PROMISE_VERBS = {
     "transforms": "transform",
 }
 
+
+def _shape_error(label, missing, unknown):
+    parts = []
+    if missing:
+        parts.append("missing {}".format(", ".join(sorted(missing))))
+    if unknown:
+        parts.append("unknown {}".format(", ".join(sorted(unknown))))
+    return "{} fields are invalid: {}.".format(label, "; ".join(parts))
+
+
 PLUGIN_ID = re.compile(
     r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
-)
-ENTRY_POINT = re.compile(
-    r"^(?P<module>[A-Za-z_][A-Za-z0-9_.]*):"
-    r"(?P<callable>[A-Za-z_][A-Za-z0-9_]*)$"
 )
 
 
@@ -78,8 +89,7 @@ class PluginManifest:
     name: str
     version: str
     api_version: int
-    entry_module: str
-    entry_callable: str
+    runtime: PluginRuntimeDescriptor
     root: Path
     project_formats: ProjectFormatCompatibility
     description: str = ""
@@ -138,7 +148,7 @@ class PluginManifest:
             "name",
             "version",
             "api_version",
-            "entry_point",
+            "runtime",
         )
         missing = [key for key in required if key not in value]
         if missing:
@@ -168,12 +178,7 @@ class PluginManifest:
                 "Plugin api_version must be an integer."
             ) from error
 
-        entry_point = str(value["entry_point"]).strip()
-        match = ENTRY_POINT.fullmatch(entry_point)
-        if match is None:
-            raise PluginManifestError(
-                "Plugin entry_point must use 'module:callable' syntax."
-            )
+        runtime = cls._read_runtime(value["runtime"])
 
         requires = cls._read_capabilities(value, "requires")
         project_formats = cls._read_project_formats(value)
@@ -193,8 +198,7 @@ class PluginManifest:
             name=name,
             version=version,
             api_version=api_version,
-            entry_module=match.group("module"),
-            entry_callable=match.group("callable"),
+            runtime=runtime,
             root=filename.parent.resolve(),
             project_formats=project_formats,
             description=str(value.get("description", "")).strip(),
@@ -210,12 +214,48 @@ class PluginManifest:
         return self.project_formats.supports(version)
 
     @staticmethod
+    def _read_runtime(value):
+        if not isinstance(value, dict):
+            raise PluginManifestError(
+                "Plugin runtime must be an object."
+            )
+        kind = value.get("kind")
+        try:
+            if kind == "python":
+                expected = {"kind", "module", "callable"}
+                unknown = set(value) - expected
+                missing = expected - set(value)
+                if unknown or missing:
+                    raise ValueError(
+                        _shape_error("Python runtime", missing, unknown)
+                    )
+                return PythonRuntime(
+                    module=value["module"],
+                    callable=value["callable"],
+                )
+            if kind == "process":
+                expected = {"kind", "protocol_version", "commands"}
+                unknown = set(value) - expected
+                missing = expected - set(value)
+                if unknown or missing:
+                    raise ValueError(
+                        _shape_error("Process runtime", missing, unknown)
+                    )
+                return ProcessRuntime(
+                    protocol_version=value["protocol_version"],
+                    commands=value["commands"],
+                )
+            raise ValueError(
+                "Plugin runtime kind must be 'python' or 'process'."
+            )
+        except (TypeError, ValueError) as error:
+            raise PluginManifestError(str(error)) from error
+
+    @staticmethod
     def _read_project_formats(value):
         if "project_formats" not in value:
-            # API 1 predates this manifest promise. Refusing every existing
-            # third-party plugin would turn an added safety rail into an
-            # ecosystem break; load it tentatively and make the omission
-            # visible until its author publishes an explicit declaration.
+            # Absence grants no explicit support. Tentative loading keeps the
+            # omission visible without pretending a hard maximum was stated.
             return ProjectFormatCompatibility(0, -1, None, False)
         declared = value.get("project_formats")
         if not isinstance(declared, dict):

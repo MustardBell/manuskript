@@ -23,6 +23,7 @@ from manuskript.plugins.manifest import (
     PluginManifest,
     ProjectFormatCompatibility,
 )
+from manuskript.plugins.runtimes import PythonRuntime
 from manuskript.plugins.runtime import PluginRecord, PluginStatus
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -66,8 +67,7 @@ def _declare(window, requires):
             name="Variant workspace",
             version="1.0.0",
             api_version=1,
-            entry_module="plugin",
-            entry_callable="register",
+            runtime=PythonRuntime("plugin", "register"),
             root=Path("."),
             project_formats=ProjectFormatCompatibility(0, 2),
             requires=tuple(requires),

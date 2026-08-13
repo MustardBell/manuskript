@@ -27,6 +27,7 @@ from manuskript.media_types import (
     core_registry,
 )
 from manuskript.plugins.manifest import PluginManifest
+from manuskript.plugins.runtimes import PythonRuntime
 from manuskript.plugins.registry import (
     PluginRegistry,
     contribution_media_types,
@@ -250,6 +251,15 @@ class PluginRuntime:
             record.warning = ""
             return record
 
+        if not isinstance(manifest.runtime, PythonRuntime):
+            record.status = PluginStatus.UNSATISFIED
+            record.error = (
+                "Plugin {} uses the {} runtime, which this development "
+                "build cannot execute yet."
+            ).format(plugin_id, manifest.runtime.kind.value)
+            record.warning = ""
+            return record
+
         # Negotiate before anything of the plugin's runs. A plugin whose
         # requirements core cannot meet is refused, not half-started.
         capabilities, missing = grant(
@@ -421,19 +431,19 @@ class PluginRuntime:
         sys.modules[module_prefix] = package
         module_name = "{}.{}".format(
             module_prefix,
-            manifest.entry_module,
+            manifest.runtime.module,
         )
         try:
             module = importlib.import_module(module_name)
         except Exception:
             self._remove_modules(module_prefix)
             raise
-        entry = getattr(module, manifest.entry_callable, None)
+        entry = getattr(module, manifest.runtime.callable, None)
         if not callable(entry):
             raise PluginLoadError(
                 "Entry point {}:{} is not callable.".format(
-                    manifest.entry_module,
-                    manifest.entry_callable,
+                    manifest.runtime.module,
+                    manifest.runtime.callable,
                 )
             )
         return entry

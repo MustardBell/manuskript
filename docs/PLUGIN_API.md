@@ -51,7 +51,11 @@ and the boundary test will refuse a plugin that reaches for it.
   "version": "1.0.0",
   "api_version": 1,
   "project_formats": {"minimum": 0, "tested_through": 2},
-  "entry_point": "plugin:register",
+  "runtime": {
+    "kind": "python",
+    "module": "plugin",
+    "callable": "register"
+  },
   "description": "One sentence.",
   "author": "You",
   "homepage": "https://example.com/thing",
@@ -74,6 +78,11 @@ and the boundary test will refuse a plugin that reaches for it.
 `^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$`. Contribution IDs follow the
 same convention; the registry **refuses** a duplicate and names the plugin
 that already owns it, so collisions are a load error rather than a surprise.
+
+`runtime` declares how the host starts the plugin without encoding a language
+assumption into discovery. A Python plugin names its module and callable as
+separate values. External-process runtimes use an argument array and never a
+shell; their protocol is being implemented while API 1 remains draft.
 
 `api_version` gates the whole surface. `requires` names services without
 which the plugin cannot run. `optional` names services the plugin can use when

@@ -105,6 +105,15 @@ from manuskript.plugins.values import (
     RecordSchema,
     api_value_codec,
 )
+from manuskript.plugins.runtimes import (
+    PLATFORMS,
+    PluginRuntimeDescriptor,
+    ProcessRuntime,
+    PythonRuntime,
+    RuntimeAvailability,
+    RuntimeKind,
+    current_platform,
+)
 
 __all__ = [
     "PLUGIN_API_VERSION",
@@ -201,6 +210,13 @@ __all__ = [
     "ContentEnvelope",
     "ErrorEnvelope",
     "RecordSchema",
+    "PLATFORMS",
+    "PluginRuntimeDescriptor",
+    "ProcessRuntime",
+    "PythonRuntime",
+    "RuntimeAvailability",
+    "RuntimeKind",
     "api_value_codec",
+    "current_platform",
     "contribution_contract",
 ]

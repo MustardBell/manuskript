@@ -44,7 +44,11 @@ Manuskript's plugin folder — `manuskript/plugins/vendor.hello/`.
   "version": "1.0.0",
   "api_version": 1,
   "project_formats": {"minimum": 0, "tested_through": 2},
-  "entry_point": "plugin:register",
+  "runtime": {
+    "kind": "python",
+    "module": "plugin",
+    "callable": "register"
+  },
   "description": "Adds a panel that says hello.",
   "author": "You"
 }
@@ -78,8 +82,9 @@ def register(api):
     ))
 ```
 
-That is a complete plugin. `entry_point` says "in `plugin.py`, call
-`register`". `register` is handed an `api` object and describes one panel.
+That is a complete plugin. `runtime` says to use the in-process Python driver
+and, in `plugin.py`, call `register`. `register` is handed an `api` object and
+describes one panel.
 
 Two naming rules, both enforced at load:
 

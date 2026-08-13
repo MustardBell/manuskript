@@ -53,7 +53,11 @@ def write_plugin(
         "name": "Needs a capability",
         "version": "1.0",
         "api_version": 1,
-        "entry_point": "plugin:register",
+        "runtime": {
+            "kind": "python",
+            "module": "plugin",
+            "callable": "register",
+        },
         "project_formats": {"minimum": 0, "tested_through": 2},
     }
     if requires:
@@ -226,7 +230,11 @@ def test_a_malformed_requires_is_rejected_at_discovery(tmp_path, declared):
         "name": "Bad",
         "version": "1.0",
         "api_version": 1,
-        "entry_point": "plugin:register",
+        "runtime": {
+            "kind": "python",
+            "module": "plugin",
+            "callable": "register",
+        },
         "project_formats": {"minimum": 0, "tested_through": 2},
         "requires": declared,
     }), encoding="utf-8")

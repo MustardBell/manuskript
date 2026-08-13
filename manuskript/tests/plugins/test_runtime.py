@@ -19,7 +19,11 @@ def create_plugin(
         "name": "Test plugin",
         "version": "1.0",
         "api_version": api_version,
-        "entry_point": "plugin:register",
+        "runtime": {
+            "kind": "python",
+            "module": "plugin",
+            "callable": "register",
+        },
         "project_formats": {"minimum": 0, "tested_through": 2},
     }
     declared.update(manifest or {})
@@ -101,6 +105,32 @@ def test_incompatible_plugin_is_never_imported(tmp_path):
     record = runtime.records["example.plugin"]
     assert record.status is PluginStatus.INCOMPATIBLE
     assert "requires API 999" in record.error
+
+
+def test_process_plugin_is_refused_before_code_runs_until_driver_exists(
+    tmp_path,
+):
+    create_plugin(
+        tmp_path,
+        source="raise RuntimeError('process plugin was imported')\n",
+        manifest={"runtime": {
+            "kind": "process",
+            "protocol_version": 1,
+            "commands": {"linux": ["missing-plugin-process"]},
+        }},
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.UNSATISFIED
+    assert "process runtime" in record.error
+    assert runtime.registry.exporters == ()
 
 
 def test_project_format_exclusion_prevents_import(tmp_path):
@@ -465,7 +495,11 @@ def test_refresh_unloads_plugin_when_manifest_becomes_duplicate(tmp_path):
             "name": "Duplicate",
             "version": "1.0",
             "api_version": 1,
-            "entry_point": "plugin:register",
+            "runtime": {
+                "kind": "python",
+                "module": "plugin",
+                "callable": "register",
+            },
             "project_formats": {"minimum": 0, "tested_through": 2},
         }),
         encoding="utf-8",

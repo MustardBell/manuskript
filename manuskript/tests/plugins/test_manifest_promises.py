@@ -38,7 +38,11 @@ def manifest(tmp_path, **extra):
         "name": "Thing",
         "version": "1.0",
         "api_version": 1,
-        "entry_point": "plugin:register",
+        "runtime": {
+            "kind": "python",
+            "module": "plugin",
+            "callable": "register",
+        },
         "project_formats": {"minimum": 0, "tested_through": 2},
     }
     declared.update(extra)
@@ -99,7 +103,11 @@ def test_undeclared_project_formats_remain_tentative_for_api_1(tmp_path):
         "name": "Legacy plugin",
         "version": "1.0",
         "api_version": 1,
-        "entry_point": "plugin:register",
+        "runtime": {
+            "kind": "python",
+            "module": "plugin",
+            "callable": "register",
+        },
     }), encoding="utf-8")
 
     loaded = PluginManifest.load(path)

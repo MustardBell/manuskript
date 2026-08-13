@@ -85,7 +85,11 @@ def test_manager_reports_invalid_manifests(tmp_path):
             "name": "Broken",
             "version": "1.0",
             "api_version": 1,
-            "entry_point": "plugin:register",
+            "runtime": {
+                "kind": "python",
+                "module": "plugin",
+                "callable": "register",
+            },
         }),
         encoding="utf-8",
     )
