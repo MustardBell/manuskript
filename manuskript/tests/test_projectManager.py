@@ -303,7 +303,7 @@ class TestProjectManager(unittest.TestCase):
     def test_revision_restore_replaces_models_through_project_owner(self):
         self.project_manager.session.open("project.msk")
         self.window.tabMain.currentIndex.return_value = 0
-        self.window.mainEditor.tabSplitter.openIndexes.return_value = []
+        self.window.corePanels.editor.editor.tabSplitter.openIndexes.return_value = []
         previous_models = MagicMock()
         replacement_models = MagicMock()
         self.project_manager.models = previous_models
@@ -352,7 +352,7 @@ class TestProjectManager(unittest.TestCase):
     ):
         self.project_manager.session.open("project.msk")
         self.window.tabMain.currentIndex.return_value = 0
-        self.window.mainEditor.tabSplitter.openIndexes.return_value = []
+        self.window.corePanels.editor.editor.tabSplitter.openIndexes.return_value = []
         previous_models = MagicMock()
         replacement_models = MagicMock()
         self.project_manager.models = previous_models
