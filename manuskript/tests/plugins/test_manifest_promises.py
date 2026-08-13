@@ -94,7 +94,7 @@ def test_invalid_project_format_contract_is_refused(tmp_path, declaration):
         manifest(tmp_path, project_formats=declaration)
 
 
-def test_undeclared_project_formats_remain_tentative_for_api_1(tmp_path):
+def test_project_formats_must_be_declared_for_api_1(tmp_path):
     root = tmp_path / "legacy-plugin"
     root.mkdir()
     path = root / "plugin.json"
@@ -110,13 +110,8 @@ def test_undeclared_project_formats_remain_tentative_for_api_1(tmp_path):
         },
     }), encoding="utf-8")
 
-    loaded = PluginManifest.load(path)
-
-    assert loaded.supports_project_format(2)
-    assert loaded.project_formats.is_tentative(2)
-    assert loaded.project_formats.label == (
-        "not declared; all formats tentative"
-    )
+    with pytest.raises(PluginManifestError, match="project_formats"):
+        PluginManifest.load(path)
 
 
 # ------------------------------------------------------------- declaring
@@ -125,7 +120,7 @@ def test_a_bare_string_re_declares_a_format_somebody_else_names(tmp_path):
     loaded = manifest(tmp_path, media_types=[BBCODE, MARKDOWN])
 
     assert loaded.declared_media_type_ids == (BBCODE, MARKDOWN)
-    # No attributes needed: SAMPLE did not invent BBCode, it just cares.
+    # No attributes are needed when another declarer owns the vocabulary.
     assert all(not mt.named for mt in loaded.media_types)
 
 
