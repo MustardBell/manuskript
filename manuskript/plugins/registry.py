@@ -14,6 +14,7 @@ from manuskript.plugins.api import (
     ImportContribution,
     IndexCardStyleContribution,
     MarkupContribution,
+    NativeMarkupContribution,
     PageRendererContribution,
     PageTypeContribution,
     PluginSettingsContribution,
@@ -39,6 +40,7 @@ CONTRIBUTION_TYPES = {
     ContributionKind.PAGE_TYPE: PageTypeContribution,
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
+    ContributionKind.NATIVE_MARKUP: NativeMarkupContribution,
     ContributionKind.TRANSFORM: TransformContribution,
     ContributionKind.CONVERSION_AUGMENTATION: (
         ConversionAugmentationContribution
@@ -74,6 +76,9 @@ CONTRIBUTION_HANDLER_FIELDS = {
         "renderer_factory", "options_view_factory",
     ),
     ContributionKind.MARKUP: (
+        "analyze", "cancel_analysis",
+    ),
+    ContributionKind.NATIVE_MARKUP: (
         "highlighter_factory", "behavior_factory",
     ),
     ContributionKind.TRANSFORM: (
@@ -96,6 +101,15 @@ MEDIA_TYPE_FIELDS = {
     ContributionKind.PAGE_RENDERER: ("target_formats",),
     ContributionKind.TRANSFORM: ("media_type",),
 }
+
+
+def _id_namespace(kind):
+    """Kinds whose IDs address the same user-facing routing slot."""
+
+    kind = ContributionKind(kind)
+    if kind in (ContributionKind.MARKUP, ContributionKind.NATIVE_MARKUP):
+        return (ContributionKind.MARKUP, ContributionKind.NATIVE_MARKUP)
+    return (kind,)
 
 
 def contribution_media_types(kind, contribution):
@@ -345,6 +359,9 @@ class PluginRegistrar:
     def register_markup(self, contribution):
         self._add(ContributionKind.MARKUP, contribution)
 
+    def register_native_markup(self, contribution):
+        self._add(ContributionKind.NATIVE_MARKUP, contribution)
+
     def register_transform(self, contribution):
         self._add(ContributionKind.TRANSFORM, contribution)
 
@@ -377,7 +394,7 @@ class PluginRegistrar:
 
     def _stage(self, declaration, binding):
         if any(
-            existing.kind is declaration.kind
+            existing.kind in _id_namespace(declaration.kind)
             and existing.id == declaration.descriptor.id
             for existing in self._contributions
         ):
@@ -425,23 +442,21 @@ class PluginRegistry:
                 "A plugin cannot install another plugin's contributions."
             )
 
-        collisions = [
-            (record.kind.value, record.id)
-            for record in contributions
+        collisions = []
+        for record in contributions:
             # A plugin's own records are about to be replaced, so only
             # somebody else holding the ID is a conflict: reinstalling a
             # plugin over itself must not refuse the plugin.
-            if record.id in self._by_kind[record.kind]
-            and self._by_kind[record.kind][record.id].plugin_id != plugin_id
-        ]
+            for related_kind in _id_namespace(record.kind):
+                owner = self._by_kind[related_kind].get(record.id)
+                if owner is not None and owner.plugin_id != plugin_id:
+                    collisions.append((related_kind, record.id, owner.plugin_id))
+                    break
         if collisions:
-            kind, contribution_id = collisions[0]
-            owner = self._by_kind[
-                ContributionKind(kind)
-            ][contribution_id].plugin_id
+            kind, contribution_id, owner = collisions[0]
             raise PluginRegistrationError(
                 "{} ID {!r} is already registered by {}.".format(
-                    kind,
+                    kind.value,
                     contribution_id,
                     owner,
                 )
@@ -523,6 +538,10 @@ class PluginRegistry:
     @property
     def markup(self):
         return self.contributions(ContributionKind.MARKUP)
+
+    @property
+    def native_markup(self):
+        return self.contributions(ContributionKind.NATIVE_MARKUP)
 
     @property
     def transforms(self):

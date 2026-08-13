@@ -9,12 +9,17 @@ from manuskript.plugins import (
     ContentEncoding,
     ContentEnvelope,
     ErrorEnvelope,
+    MarkupAnalysisRequest,
+    MarkupAnalysisResult,
     OptionField,
     OptionKind,
     OutlineSnapshot,
     PortableArtifact,
     PluginValueError,
     ProjectSnapshot,
+    SemanticRole,
+    SemanticSpan,
+    TextRange,
     api_value_codec,
 )
 
@@ -79,6 +84,27 @@ def test_output_artifact_round_trips_text_or_binary_through_envelope():
     )
 
     assert json_round_trip(artifact) == artifact
+
+
+def test_markup_offsets_explicitly_count_utf16_units_across_languages():
+    request = MarkupAnalysisRequest(
+        "analysis-1",
+        "document-1",
+        7,
+        TextRange(0, 6),
+        "🪶TODO",
+        (TextRange(2, 4),),
+    )
+    value = MarkupAnalysisResult(
+        request.analysis_id,
+        request.document_id,
+        request.document_revision,
+        request.window,
+        (SemanticSpan(TextRange(2, 4), SemanticRole.HIGHLIGHT),),
+    )
+
+    assert json_round_trip(request) == request
+    assert json_round_trip(value) == value
 
 
 def test_error_data_is_a_value_instead_of_an_exception_type():

@@ -159,6 +159,7 @@ def test_projection_formatting_is_not_a_shared_text_edit(MWEmptyProject):
         first.setPlainText("The same text remains the same text.")
         first._buffer.flush()
         first._buffer.settle()
+        source_revision = first._buffer.revision
 
         cursor = first.textCursor()
         block_format = QTextBlockFormat(cursor.blockFormat())
@@ -169,6 +170,7 @@ def test_projection_formatting_is_not_a_shared_text_edit(MWEmptyProject):
         assert second.toPlainText() == "The same text remains the same text."
         assert first._buffer.dirty is False
         assert first._buffer.document.isUndoAvailable() is False
+        assert first._buffer.revision == source_revision
         assert second.textCursor().blockFormat().topMargin() != 27
     finally:
         discard(first, second)

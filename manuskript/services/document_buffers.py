@@ -54,6 +54,10 @@ class TextBuffer(QObject):
             else QPersistentModelIndex(index)
         )
         self.column = column
+        # Monotonic source revision shared by every projection.  Layout and
+        # highlighting never advance it; only changes to the canonical text
+        # do.  Portable analyzers use it to reject results for older prose.
+        self.revision = 0
         self.document = QTextDocument(self)
         # QTextDocument only emits its granular contentsChange signal once
         # it has a layout. The master is never painted, but its deltas are
@@ -149,6 +153,7 @@ class TextBuffer(QObject):
             self._origin_view = None
 
     def _master_changed(self, position, removed, added):
+        self.revision += 1
         inserted = self._range_text(self.document, position, added)
         self._applying_projection = True
         try:

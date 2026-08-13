@@ -99,9 +99,9 @@ validates the complete array and binds those operations to local proxies; only
 then does it publish the contributions and send `initialized`. Failure in one
 declaration publishes none. The first RPC profile supports exporters,
 importers, converters, transforms, page parsing/rendering, and page-format
-renderers. Native Qt widgets, painters, and editor hooks are refused rather
-than silently degraded; remote capability services and host-rendered UI are
-separate API milestones.
+renderers, host-rendered project/settings panels, commands, and batched
+semantic markup analysis. Native Qt widgets, painters, and editor hooks are
+refused rather than silently degraded.
 
 `api_version` gates the whole surface. `requires` names services without
 which the plugin cannot run. `optional` names services the plugin can use when
@@ -255,12 +255,51 @@ Both methods are optional, and returning nothing stays valid:
 | `register_page_type` | `PageTypeContribution` |
 | `register_page_renderer` | `PageRendererContribution` |
 | `register_markup` | `MarkupContribution` |
+| `register_native_markup` | `NativeMarkupContribution` (in-process only) |
 | `register_conversion_augmentation` | `ConversionAugmentationContribution` |
 | `register_project_panel` | `ProjectPanelContribution` |
 | `register_settings_panel` | `PluginSettingsContribution` |
 | `register_editor_workspace` | `EditorWorkspaceContribution` |
 | `register_index_card_style` | `IndexCardStyleContribution` |
 | `register_transform` | `TransformContribution` |
+
+---
+
+## Portable markup analysis
+
+`MarkupContribution` does not receive an editor, a `QTextDocument`, a
+highlighter, a key event, or a path. Its `analyze(request)` operation receives
+one bounded source window after typing has paused and returns a
+`MarkupAnalysisResult` containing `SemanticSpan` values. The source remains
+owned by Manuskript; spans only affect presentation.
+
+Every request carries an opaque analysis ID, opaque document ID, monotonic
+document revision, analyzed window, changed subranges, and an explicit
+`utf-16` position encoding. The encoding is named because Python, Node.js,
+Rust, C, and Erlang otherwise disagree about whether a string offset counts
+bytes, Unicode scalars, UTF-16 units, or graphemes. A result must echo the
+request identity and stay inside its window. Manuskript discards a result if
+the source revision has advanced.
+
+The host debounces keystrokes, expands the changed area to source-line
+boundaries, and splits large areas into bounded windows. It does not issue one
+RPC request per key. When new text supersedes running work, the optional
+`cancel_analysis(analysis_id)` operation is notified and the late result is
+ignored even if the plugin does not cooperate. Process plugins must expose
+that operation; an in-process contribution may omit it because Manuskript can
+still discard its return value without tying up an RPC request.
+
+Plugins assign host-defined semantic roles such as `strong`, `code`, `link`,
+`keyword`, `warning`, and `error`; Manuskript maps them through the current
+palette and paints them in each view's own document projection. A span may be
+excluded from the plain-text/statistics projection without deleting its raw
+delimiter. This is presentation only and does not change what formats 0 or 1
+save.
+
+`NativeMarkupContribution` is a separately named, explicitly local escape
+hatch for a Python plugin that genuinely needs Qt highlighter or key-behaviour
+objects. Its ID occupies the same markup-profile namespace, but a process
+plugin cannot register it. It is not the cross-language API.
 
 ---
 

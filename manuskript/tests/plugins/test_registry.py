@@ -6,6 +6,9 @@ from manuskript.plugins.api import (
     EditorWorkspaceContribution,
     ExportContribution,
     ExtensionDescriptor,
+    MarkupContribution,
+    MarkupMode,
+    NativeMarkupContribution,
 )
 from manuskript.plugins.contracts import ContributionKind
 from manuskript.plugins.errors import PluginRegistrationError
@@ -139,6 +142,29 @@ def test_registry_rejects_cross_plugin_ids_without_partial_install():
         contribution.descriptor.id
         for contribution in registry.exporters
     ] == ["example.fb2"]
+
+
+def test_portable_and_native_markup_share_one_routing_id_namespace():
+    registry = PluginRegistry()
+    first = registry.registrar("example.first")
+    first.register_markup(MarkupContribution(
+        ExtensionDescriptor("example.markup", "Portable markup"),
+        MarkupMode.REPLACE,
+        analyze=lambda request: None,
+    ))
+    registry.install("example.first", first.contributions)
+    second = registry.registrar("example.second")
+    second.register_native_markup(NativeMarkupContribution(
+        ExtensionDescriptor("example.markup", "Native markup"),
+        MarkupMode.REPLACE,
+        highlighter_factory=lambda editor: None,
+    ))
+
+    with pytest.raises(PluginRegistrationError, match="already registered"):
+        registry.install("example.second", second.contributions)
+
+    assert len(registry.markup) == 1
+    assert registry.native_markup == ()
 
 
 def test_a_plugin_may_reinstall_over_its_own_contributions():

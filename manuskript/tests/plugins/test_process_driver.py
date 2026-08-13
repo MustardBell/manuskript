@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 
 from pathlib import Path
 
@@ -11,8 +12,12 @@ from manuskript.plugins.api import (
     ExtensionDescriptor,
     ImportNode,
     ImportResult,
+    MarkupAnalysisRequest,
+    MarkupAnalysisResult,
+    MarkupMode,
     PageExportDocument,
     RenderedDocument,
+    TextRange,
 )
 from manuskript.plugins.contracts import ContributionKind
 from manuskript.plugins.execution import (
@@ -113,6 +118,21 @@ while True:
                 host_response["result"]["value"]["fields"]["title"]
                 == "Mara"
             )
+        elif operation == "analyze":
+            request = call["arguments"]["items"][0]
+            fields = request["fields"]
+            result = {
+                "$kind": "record",
+                "name": "markup_analysis_result",
+                "version": 1,
+                "fields": {
+                    "analysis_id": fields["analysis_id"],
+                    "document_id": fields["document_id"],
+                    "document_revision": fields["document_revision"],
+                    "window": fields["window"],
+                    "spans": {"$kind": "tuple", "items": []},
+                },
+            }
         elif operation == "transform":
             arguments = call["arguments"]["items"]
             result = arguments[0].upper()
@@ -127,6 +147,14 @@ while True:
         else:
             result = DATA["results"][operation]
         send({"jsonrpc": "2.0", "id": request_id, "result": result})
+    elif method == "contribution/notify":
+        call = message["params"]
+        if call["operation"] == "cancel_analysis":
+            json.dump(
+                call,
+                open(os.path.join(ROOT, "cancel_seen.json"), "w", encoding="utf-8"),
+                ensure_ascii=False,
+            )
     elif method == "deactivate":
         send({"jsonrpc": "2.0", "id": request_id, "result": None})
     elif method == "shutdown":
@@ -339,6 +367,60 @@ def test_all_first_release_computational_contributions_execute(tmp_path):
     assert page_export.content == "<p>page export</p>"
 
 
+def test_remote_markup_analysis_uses_values_and_cancellation_notification(
+        tmp_path):
+    markup = declaration(
+        ContributionKind.MARKUP,
+        "markup",
+        {"mode": MarkupMode.AUGMENT, "base_ids": ("markdown",)},
+    )
+    plugin_root, runtime = load_process_plugin(
+        tmp_path,
+        contributions=((markup, ("analyze", "cancel_analysis")),),
+    )
+    request = MarkupAnalysisRequest(
+        "analysis-remote",
+        "document-remote",
+        3,
+        TextRange(0, 4),
+        "TODO",
+        (TextRange(0, 4),),
+    )
+    try:
+        contribution_value = runtime.registry.markup[0]
+        value = contribution_value.analyze(request)
+        contribution_value.cancel_analysis(request.analysis_id)
+        deadline = time.monotonic() + 2
+        cancel_file = plugin_root / "cancel_seen.json"
+        while not cancel_file.exists():
+            assert time.monotonic() < deadline
+            time.sleep(0.005)
+    finally:
+        runtime.disable("example.remote")
+
+    assert isinstance(value, MarkupAnalysisResult)
+    assert value.document_revision == 3
+    assert value.window == TextRange(0, 4)
+    seen = json.loads(cancel_file.read_text(encoding="utf-8"))
+    assert seen["arguments"]["items"] == ["analysis-remote"]
+
+
+def test_remote_markup_must_support_cooperative_cancellation(tmp_path):
+    markup = declaration(
+        ContributionKind.MARKUP,
+        "markup",
+        {"mode": MarkupMode.AUGMENT, "base_ids": ("markdown",)},
+    )
+    _root, runtime = load_process_plugin(
+        tmp_path,
+        contributions=((markup, ("analyze",)),),
+    )
+
+    record = runtime.records["example.remote"]
+    assert record.status is PluginStatus.FAILED
+    assert "missing cancel_analysis" in record.error
+
+
 def test_remote_panel_without_ui_operations_refuses_the_whole_plugin(tmp_path):
     panel = declaration(
         ContributionKind.PROJECT_PANEL,
@@ -353,6 +435,23 @@ def test_remote_panel_without_ui_operations_refuses_the_whole_plugin(tmp_path):
     record = runtime.records["example.remote"]
     assert record.status is PluginStatus.FAILED
     assert "missing ui_event, ui_open" in record.error
+    assert runtime.registry.plugin_records("example.remote") == ()
+
+
+def test_remote_plugin_cannot_register_native_qt_markup(tmp_path):
+    native = declaration(
+        ContributionKind.NATIVE_MARKUP,
+        "native-markup",
+        {"mode": MarkupMode.REPLACE, "base_ids": ("markdown",)},
+    )
+    _root, runtime = load_process_plugin(
+        tmp_path,
+        contributions=((native, ("highlighter_factory",)),),
+    )
+
+    record = runtime.records["example.remote"]
+    assert record.status is PluginStatus.FAILED
+    assert "cannot register native_markup" in record.error
     assert runtime.registry.plugin_records("example.remote") == ()
 
 

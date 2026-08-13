@@ -33,16 +33,21 @@ class MarkupProfileService(QObject):
     def replacements(self):
         return {
             contribution.descriptor.id: contribution
-            for contribution in self.registry.markup
+            for contribution in self._contributions()
             if contribution.mode is MarkupMode.REPLACE
         }
 
     def augmentations(self):
         return {
             contribution.descriptor.id: contribution
-            for contribution in self.registry.markup
+            for contribution in self._contributions()
             if contribution.mode is MarkupMode.AUGMENT
         }
+
+    def _contributions(self):
+        return tuple(self.registry.markup) + tuple(
+            self.registry.native_markup
+        )
 
     def compatible_augmentations(self, base_id):
         return {

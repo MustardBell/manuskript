@@ -13,8 +13,8 @@ from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.plugins.api import (
     ExtensionDescriptor,
-    MarkupContribution,
     MarkupMode,
+    NativeMarkupContribution,
 )
 from manuskript.plugins.qt import (
     MarkupBehavior,
@@ -72,12 +72,12 @@ class TodoHighlight(MarkupHighlighterExtension):
 
 def install_markup(registry, plugin_id, contribution):
     registrar = registry.registrar(plugin_id)
-    registrar.register_markup(contribution)
+    registrar.register_native_markup(contribution)
     registry.install(plugin_id, registrar.contributions)
 
 
 def replacement_contribution(behavior=True):
-    return MarkupContribution(
+    return NativeMarkupContribution(
         descriptor=ExtensionDescriptor(
             id="example.bbcode",
             name="BBCode",
@@ -179,7 +179,7 @@ def test_additive_profile_layers_onto_markdown_highlighter():
     install_markup(
         registry,
         "example.todo",
-        MarkupContribution(
+        NativeMarkupContribution(
             descriptor=ExtensionDescriptor(
                 id="example.todo.highlight",
                 name="TODO highlight",
@@ -226,7 +226,7 @@ def test_invalid_replacement_isolated_behind_plain_highlighter():
     install_markup(
         registry,
         "example.broken",
-        MarkupContribution(
+        NativeMarkupContribution(
             descriptor=ExtensionDescriptor(
                 id="example.broken.markup",
                 name="Broken markup",

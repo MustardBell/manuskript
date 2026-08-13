@@ -524,9 +524,28 @@ class ProcessPluginDriver(PluginDriver):
             handlers["invoke"] = lambda: self._call(
                 session, contribution_id, "invoke", ()
             )
+        if "analyze" in operations:
+            handlers["analyze"] = lambda request: self._call(
+                session,
+                contribution_id,
+                "analyze",
+                (request,),
+                timeout=min(5.0, self.request_timeout),
+            )
+        if "cancel_analysis" in operations:
+            handlers["cancel_analysis"] = lambda analysis_id: (
+                self._notify_contribution(
+                    session,
+                    contribution_id,
+                    "cancel_analysis",
+                    (analysis_id,),
+                )
+            )
         return handlers
 
-    def _call(self, session, contribution_id, operation, arguments):
+    def _call(
+            self, session, contribution_id, operation, arguments,
+            timeout=None):
         codec = api_value_codec()
         result = session.rpc.request(
             "contribution/call",
@@ -535,9 +554,19 @@ class ProcessPluginDriver(PluginDriver):
                 "operation": operation,
                 "arguments": codec.encode(tuple(arguments)),
             },
-            timeout=self.request_timeout,
+            timeout=(self.request_timeout if timeout is None else timeout),
         )
         return codec.decode(result)
+
+    @staticmethod
+    def _notify_contribution(
+            session, contribution_id, operation, arguments):
+        codec = api_value_codec()
+        session.rpc.notify("contribution/notify", {
+            "contribution_id": contribution_id,
+            "operation": operation,
+            "arguments": codec.encode(tuple(arguments)),
+        })
 
 
 @dataclass(frozen=True)
@@ -577,6 +606,9 @@ _REMOTE_OPERATIONS = {
     ),
     ContributionKind.COMMAND: _RemoteOperations(
         ("invoke",), ("invoke",)
+    ),
+    ContributionKind.MARKUP: _RemoteOperations(
+        ("analyze", "cancel_analysis"), ("analyze", "cancel_analysis")
     ),
 }
 

@@ -27,7 +27,11 @@ from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
 from manuskript.ui.plugins.markup_profiles import MARKDOWN_BASE_ID
-from manuskript.plugins.api import RenderedDocument
+from manuskript.plugins.api import (
+    MarkupContribution,
+    NativeMarkupContribution,
+    RenderedDocument,
+)
 from manuskript.plugins.execution import run_page_renderer
 from manuskript.domain.assertion_dsl import encode_assertion_block
 from manuskript.domain.markdown_dsl import MarkdownDslParser
@@ -65,6 +69,7 @@ class MDEditView(textEditView):
         self._pageTypeState = None
         self._markupBaseId = MARKDOWN_BASE_ID
         self._markupBehaviors = ()
+        self._semanticMarkup = None
         self._readingRenderer = None
         self._wikilinkCompletionRange = None
         self._wikilinkCompletionMenu = None
@@ -122,6 +127,7 @@ class MDEditView(textEditView):
         self.clickRects = []
         self._wikilinkCompletionRange = None
         self._wikilinkCompletionMenu = None
+        self._disposeSemanticMarkup()
         textEditView.dispose(self)
 
     @property
@@ -268,6 +274,7 @@ class MDEditView(textEditView):
         self._applyPageType()
 
     def _applyMarkupProfile(self):
+        self._disposeSemanticMarkup()
         state = self._markupProfileState
         self._markupBaseId = (
             state.base_id if state is not None else MARKDOWN_BASE_ID
@@ -275,25 +282,36 @@ class MDEditView(textEditView):
         base_contribution = (
             state.base_contribution if state is not None else None
         )
-        if base_contribution is None:
+        if isinstance(base_contribution, NativeMarkupContribution):
+            self._installHighlighter(
+                base_contribution.highlighter_factory,
+                contribution=base_contribution,
+            )
+        elif base_contribution is None:
             self._installHighlighter(
                 lambda editor: MarkdownHighlighter(editor),
                 contribution=None,
             )
         else:
             self._installHighlighter(
-                base_contribution.highlighter_factory,
+                lambda editor: BasicHighlighter(editor),
                 contribution=base_contribution,
             )
 
         extensions = []
         behaviors = []
+        portable = []
+        if isinstance(base_contribution, MarkupContribution):
+            portable.append(base_contribution)
         contributions = (
             state.additive_contributions
             if state is not None
             else ()
         )
         for contribution in contributions:
+            if isinstance(contribution, MarkupContribution):
+                portable.append(contribution)
+                continue
             try:
                 extension = contribution.highlighter_factory(self)
                 if not callable(
@@ -316,13 +334,43 @@ class MDEditView(textEditView):
             if behavior is not None:
                 behaviors.append(behavior)
 
-        if base_contribution is not None:
+        if isinstance(base_contribution, NativeMarkupContribution):
             behavior = self._createMarkupBehavior(base_contribution)
             if behavior is not None:
                 behaviors.insert(0, behavior)
         self._markupBehaviors = tuple(behaviors)
-        if isinstance(self.highlighter, MarkdownHighlighter):
-            self.highlighter.setPluginExtensions(extensions)
+        if portable:
+            from manuskript.ui.plugins.semantic_markup import (
+                SemanticMarkupSession,
+            )
+            self._semanticMarkup = SemanticMarkupSession(
+                self,
+                portable,
+                report_error=self._reportMarkupError,
+                parent=self,
+            )
+            self._semanticMarkup.changed.connect(
+                self._semanticMarkupChanged
+            )
+            extensions.append(self._semanticMarkup)
+        self.highlighter.setPluginExtensions(extensions)
+        self.scheduleInteractionRectUpdate()
+
+    def _disposeSemanticMarkup(self):
+        session = getattr(self, "_semanticMarkup", None)
+        self._semanticMarkup = None
+        if session is None:
+            return
+        try:
+            session.changed.disconnect(self._semanticMarkupChanged)
+        except (RuntimeError, TypeError):
+            pass
+        session.dispose()
+        session.deleteLater()
+
+    def _semanticMarkupChanged(self):
+        if self.highlighter is not None and self.highlighter.document() is not None:
+            self.highlighter.rehighlight()
         self.scheduleInteractionRectUpdate()
 
     def _applyPageType(self):
@@ -435,6 +483,10 @@ class MDEditView(textEditView):
         return self._markupBaseId != MARKDOWN_BASE_ID
 
     def _pluginPlainText(self, text, remove_comments):
+        if self._semanticMarkup is not None:
+            value = self._semanticMarkup.plain_text(text)
+            if value is not None:
+                return value
         for behavior in self._markupBehaviors:
             value = behavior.plain_text(
                 self,

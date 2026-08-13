@@ -266,9 +266,7 @@ class MarkdownHighlighter(BasicHighlighter):
                 previous = self.currentBlock().previous()
                 self.highlightBlockAtPosition.emit(previous.position())
 
-        for extension in self.pluginExtensions:
-            extension.highlight_block(self, text)
-
+        self.applyPluginExtensions(text)
         self._highlightWikilinks(text)
 
         if self.spellCheckEnabled:

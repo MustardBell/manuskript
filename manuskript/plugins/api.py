@@ -760,8 +760,163 @@ class MarkupMode(str, Enum):
     REPLACE = "replace"
 
 
+class TextPositionEncoding(str, Enum):
+    """How offsets in portable text ranges are counted.
+
+    Qt and JavaScript both address text in UTF-16 code units.  Naming the
+    encoding in the request keeps Rust, C, Erlang, and other runtimes from
+    having to guess whether an offset means bytes, scalars, or graphemes.
+    """
+
+    UTF16 = "utf-16"
+
+
+class SemanticRole(str, Enum):
+    """Theme-owned meanings a plugin may assign to a source range."""
+
+    MARKUP = "markup"
+    EMPHASIS = "emphasis"
+    STRONG = "strong"
+    CODE = "code"
+    LINK = "link"
+    HEADING = "heading"
+    COMMENT = "comment"
+    KEYWORD = "keyword"
+    STRING = "string"
+    NUMBER = "number"
+    VARIABLE = "variable"
+    HIGHLIGHT = "highlight"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+@dataclass(frozen=True)
+class TextRange:
+    start: int
+    length: int
+
+    def __post_init__(self):
+        if (
+            isinstance(self.start, bool)
+            or isinstance(self.length, bool)
+            or not isinstance(self.start, int)
+            or not isinstance(self.length, int)
+            or self.start < 0
+            or self.length < 0
+        ):
+            raise ValueError("Text ranges require non-negative integer offsets.")
+
+    @property
+    def end(self):
+        return self.start + self.length
+
+
+@dataclass(frozen=True)
+class MarkupAnalysisRequest:
+    analysis_id: str
+    document_id: str
+    document_revision: int
+    window: TextRange
+    source: str
+    changed_ranges: tuple[TextRange, ...]
+    position_encoding: TextPositionEncoding = TextPositionEncoding.UTF16
+
+    def __post_init__(self):
+        object.__setattr__(
+            self, "position_encoding", TextPositionEncoding(
+                self.position_encoding
+            )
+        )
+        object.__setattr__(self, "source", str(self.source))
+        object.__setattr__(self, "changed_ranges", tuple(self.changed_ranges))
+        if not str(self.analysis_id) or not str(self.document_id):
+            raise ValueError("Markup analysis requires analysis and document IDs.")
+        if (
+            isinstance(self.document_revision, bool)
+            or not isinstance(self.document_revision, int)
+            or self.document_revision < 0
+        ):
+            raise ValueError("Document revisions are non-negative integers.")
+        if _utf16_length(self.source) != self.window.length:
+            raise ValueError(
+                "Markup analysis source must exactly fill its UTF-16 window."
+            )
+        if not self.changed_ranges or any(
+            value.start < self.window.start or value.end > self.window.end
+            for value in self.changed_ranges
+        ):
+            raise ValueError(
+                "Changed ranges must be nonempty and contained in the window."
+            )
+
+
+@dataclass(frozen=True)
+class SemanticSpan:
+    range: TextRange
+    role: SemanticRole
+    message: str = ""
+    exclude_from_plain_text: bool = False
+
+    def __post_init__(self):
+        object.__setattr__(self, "role", SemanticRole(self.role))
+        object.__setattr__(self, "message", str(self.message))
+        if self.range.length == 0:
+            raise ValueError("Semantic spans must cover at least one UTF-16 unit.")
+
+
+@dataclass(frozen=True)
+class MarkupAnalysisResult:
+    analysis_id: str
+    document_id: str
+    document_revision: int
+    window: TextRange
+    spans: tuple[SemanticSpan, ...] = ()
+
+    def __post_init__(self):
+        object.__setattr__(self, "spans", tuple(self.spans))
+        if not str(self.analysis_id) or not str(self.document_id):
+            raise ValueError("Markup results require analysis and document IDs.")
+        if (
+            isinstance(self.document_revision, bool)
+            or not isinstance(self.document_revision, int)
+            or self.document_revision < 0
+        ):
+            raise ValueError("Document revisions are non-negative integers.")
+        if any(
+            span.range.start < self.window.start
+            or span.range.end > self.window.end
+            for span in self.spans
+        ):
+            raise ValueError("Semantic spans must stay inside the result window.")
+
+
 @dataclass(frozen=True)
 class MarkupContribution:
+    descriptor: ExtensionDescriptor
+    mode: MarkupMode
+    analyze: Callable[[MarkupAnalysisRequest], MarkupAnalysisResult]
+    cancel_analysis: Optional[Callable[[str], Any]] = None
+    base_ids: tuple[str, ...] = ("markdown",)
+
+    def __post_init__(self):
+        object.__setattr__(self, "mode", MarkupMode(self.mode))
+        object.__setattr__(
+            self,
+            "base_ids",
+            tuple(str(value) for value in self.base_ids),
+        )
+        if self.mode is MarkupMode.AUGMENT and not self.base_ids:
+            raise ValueError(
+                "Additive markup contributions must declare at least "
+                "one compatible base markup ID."
+            )
+
+
+@dataclass(frozen=True)
+class NativeMarkupContribution:
+    """Explicitly local Qt markup extension; never an RPC contribution."""
+
     descriptor: ExtensionDescriptor
     mode: MarkupMode
     highlighter_factory: Callable[..., Any]
@@ -777,9 +932,13 @@ class MarkupContribution:
         )
         if self.mode is MarkupMode.AUGMENT and not self.base_ids:
             raise ValueError(
-                "Additive markup contributions must declare at least "
+                "Additive native markup contributions must declare at least "
                 "one compatible base markup ID."
             )
+
+
+def _utf16_length(value):
+    return len(str(value).encode("utf-16-le")) // 2
 
 
 @dataclass(frozen=True)
@@ -898,6 +1057,8 @@ Contribution = Union[
     PageRendererContribution,
     TransformContribution,
     MarkupContribution,
+    NativeMarkupContribution,
+    CommandContribution,
 ]
 
 

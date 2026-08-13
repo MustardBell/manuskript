@@ -37,6 +37,7 @@ class ContributionKind(str, Enum):
     PAGE_TYPE = "page_type"
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
+    NATIVE_MARKUP = "native_markup"
     TRANSFORM = "transform"
     CONVERSION_AUGMENTATION = "conversion_augmentation"
     COMMAND = "command"
@@ -99,8 +100,13 @@ CONTRIBUTION_CONTRACTS = (
     ),
     ContributionContract(
         ContributionKind.MARKUP,
+        ContractPortability.PORTABLE,
+        "Plugins return revisioned semantic spans for bounded source ranges.",
+    ),
+    ContributionContract(
+        ContributionKind.NATIVE_MARKUP,
         ContractPortability.NATIVE,
-        "The current contract exposes Qt highlighters and key behaviour.",
+        "This explicitly local contract exposes Qt highlighters and keys.",
     ),
     ContributionContract(
         ContributionKind.TRANSFORM,

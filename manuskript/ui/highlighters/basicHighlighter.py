@@ -27,6 +27,8 @@ class BasicHighlighter(QSyntaxHighlighter):
         self.editor = editor
         self._defaultBlockFormat = QTextBlockFormat()
         self._defaultCharFormat = QTextCharFormat()
+        self.pluginExtensions = ()
+        self._pluginExtensionsApplied = False
         self.defaultTextColor = QColor(S.text)
         self.backgroundColor = QColor(S.base)
         self.markupColor = QColor(S.textLight)
@@ -138,9 +140,24 @@ class BasicHighlighter(QSyntaxHighlighter):
     def highlightBlock(self, text):
         """Apply syntax highlighting to the given block of text.
         """
+        self._pluginExtensionsApplied = False
         self.highlightBlockBefore(text)
         self.doHighlightBlock(text)
+        if not self._pluginExtensionsApplied:
+            self.applyPluginExtensions(text)
         self.highlightBlockAfter(text)
+
+    def applyPluginExtensions(self, text):
+        self._pluginExtensionsApplied = True
+        for extension in self.pluginExtensions:
+            extension.highlight_block(self, text)
+
+    def setPluginExtensions(self, extensions):
+        extensions = tuple(extensions)
+        if extensions == self.pluginExtensions:
+            return
+        self.pluginExtensions = extensions
+        self.rehighlight()
 
     def doHighlightBlock(self, text):
         """
