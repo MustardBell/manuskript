@@ -542,6 +542,7 @@ def _default_record_types():
     names = (
         "option_field",
         "extension_descriptor",
+        "contribution_declaration",
         "outline_snapshot",
         "project_snapshot",
         "workspace_document",
@@ -580,6 +581,7 @@ def _default_record_types():
     classes = (
         api.OptionField,
         api.ExtensionDescriptor,
+        api.ContributionDeclaration,
         api.OutlineSnapshot,
         api.ProjectSnapshot,
         api.WorkspaceDocument,
@@ -630,6 +632,7 @@ def api_value_codec():
         record_types=_default_record_types(),
         enum_types=(
             ("content_encoding", ContentEncoding),
+            ("contribution_kind", api.ContributionKind),
             ("option_kind", api.OptionKind),
             ("markup_mode", api.MarkupMode),
         ),

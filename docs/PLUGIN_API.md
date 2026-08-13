@@ -199,6 +199,13 @@ def register(api):
 Nothing you register takes effect until every contribution validates.
 Registration is atomic: one rejected contribution installs none of them.
 
+The Python classes shown here are bindings, not the registry's stored
+contract. The driver separates each one into a portable
+`ContributionDeclaration` and named executable handlers. Core validates and
+stores the declaration; local Python callables or future RPC proxies are bound
+to those names separately. Consequently a callable can never appear in the
+wire declaration merely because a Python plugin supplied one.
+
 Every `ExtensionDescriptor` ID must be a dotted name — letters, digits,
 `.`, `_` and `-`, with at least one dot — and should start with your
 plugin's namespace: `vendor.notes.panel`, not `panel`. IDs are addressed

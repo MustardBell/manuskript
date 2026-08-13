@@ -5,11 +5,12 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import PurePosixPath
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
 from manuskript.media_types import MARKDOWN
-from manuskript.plugins.contracts import PLUGIN_API_VERSION
+from manuskript.plugins.contracts import ContributionKind, PLUGIN_API_VERSION
 
 
 class OptionKind(str, Enum):
@@ -67,6 +68,31 @@ class ExtensionDescriptor:
                 "digits, '.', '_' and '-', prefixed with your plugin's "
                 "namespace, like 'vendor.notes.panel'.".format(self.id)
             )
+
+
+@dataclass(frozen=True)
+class ContributionDeclaration:
+    """The portable half of a contribution, without executable handlers."""
+
+    kind: ContributionKind
+    descriptor: ExtensionDescriptor
+    configuration: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        object.__setattr__(self, "kind", ContributionKind(self.kind))
+        if not isinstance(self.descriptor, ExtensionDescriptor):
+            raise TypeError(
+                "Contribution declarations require an extension descriptor."
+            )
+        if not isinstance(self.configuration, Mapping):
+            raise TypeError(
+                "Contribution declaration configuration must be a map."
+            )
+        object.__setattr__(
+            self,
+            "configuration",
+            MappingProxyType(dict(self.configuration)),
+        )
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,7 @@
 """The draft boundary must stay explicit while API 1 is being designed."""
 
 import ast
+from dataclasses import fields
 from pathlib import Path
 
 from manuskript.plugins.capabilities import CAPABILITIES
@@ -12,7 +13,10 @@ from manuskript.plugins.contracts import (
     ContractPortability,
     ContributionKind,
 )
-from manuskript.plugins.registry import CONTRIBUTION_TYPES
+from manuskript.plugins.registry import (
+    CONTRIBUTION_HANDLER_FIELDS,
+    CONTRIBUTION_TYPES,
+)
 
 
 def test_api_and_protocol_are_independent_integer_contracts():
@@ -27,6 +31,16 @@ def test_every_registered_contribution_has_one_portability_decision():
     assert len(inventoried) == len(set(inventoried))
     assert set(inventoried) == set(ContributionKind)
     assert set(inventoried) == set(CONTRIBUTION_TYPES)
+
+
+def test_every_contribution_kind_separates_its_executable_handlers():
+    assert set(CONTRIBUTION_HANDLER_FIELDS) == set(CONTRIBUTION_TYPES)
+    for kind, handler_names in CONTRIBUTION_HANDLER_FIELDS.items():
+        declared_names = {
+            field.name
+            for field in fields(CONTRIBUTION_TYPES[kind])
+        }
+        assert set(handler_names) <= declared_names
 
 
 def test_every_capability_has_an_explicit_portability_value():

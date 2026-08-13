@@ -6,6 +6,7 @@ from manuskript.plugins.api import (
     AssertionTermValue,
     ChronologySnapshot,
     ConversionContribution,
+    ContributionDeclaration,
     ContentSignature,
     ConversionArtifact,
     CountedPatternSnapshot,
@@ -114,6 +115,11 @@ from manuskript.plugins.runtimes import (
     RuntimeKind,
     current_platform,
 )
+from manuskript.plugins.drivers import (
+    PluginDriver,
+    PythonDriverSession,
+    PythonPluginDriver,
+)
 
 __all__ = [
     "PLUGIN_API_VERSION",
@@ -142,6 +148,7 @@ __all__ = [
     "PLAIN",
     "RST",
     "ConversionContribution",
+    "ContributionDeclaration",
     "ContentSignature",
     "ConversionArtifact",
     "CountedPatternSnapshot",
@@ -212,8 +219,11 @@ __all__ = [
     "RecordSchema",
     "PLATFORMS",
     "PluginRuntimeDescriptor",
+    "PluginDriver",
     "ProcessRuntime",
     "PythonRuntime",
+    "PythonDriverSession",
+    "PythonPluginDriver",
     "RuntimeAvailability",
     "RuntimeKind",
     "api_value_codec",

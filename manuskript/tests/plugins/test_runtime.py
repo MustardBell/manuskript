@@ -431,7 +431,7 @@ def test_a_failing_activate_unwinds_the_whole_load(tmp_path):
     record = runtime.records["example.plugin"]
     assert record.status is PluginStatus.FAILED
     assert "activation exploded" in record.error
-    assert record.handle is None
+    assert record.session is None
     assert runtime.registry.exporters == ()
     assert (tmp_path / "example.plugin" / "deactivated").exists()
 

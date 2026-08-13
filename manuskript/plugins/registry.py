@@ -1,8 +1,11 @@
 from collections import defaultdict
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import MISSING, dataclass, field, fields
+from types import MappingProxyType
 
 from manuskript.plugins.api import (
     Contribution,
+    ContributionDeclaration,
     ConversionContribution,
     EditorWorkspaceContribution,
     ExportContribution,
@@ -22,6 +25,7 @@ from manuskript.plugins.errors import (
     PluginRegistrationError,
     PluginScopeError,
 )
+from manuskript.plugins.values import api_value_codec
 
 CONTRIBUTION_TYPES = {
     ContributionKind.EXPORTER: ExportContribution,
@@ -41,6 +45,44 @@ CONTRIBUTION_TYPES = {
 }
 
 
+#: Executable bindings supplied by the Python driver or an RPC proxy. Every
+#: other dataclass field is portable declaration data.
+CONTRIBUTION_HANDLER_FIELDS = {
+    ContributionKind.EXPORTER: (
+        "engine_factory", "options_view_factory",
+    ),
+    ContributionKind.IMPORTER: (
+        "engine_factory", "options_view_factory",
+    ),
+    ContributionKind.CONVERTER: (
+        "engine_factory", "options_view_factory",
+    ),
+    ContributionKind.PROJECT_PANEL: ("widget_factory",),
+    ContributionKind.SETTINGS_PANEL: ("widget_factory",),
+    ContributionKind.INDEX_CARD_STYLE: ("style_factory",),
+    ContributionKind.EDITOR_WORKSPACE: ("workspace_factory",),
+    ContributionKind.PAGE_TYPE: (
+        "detector",
+        "parser_factory",
+        "renderer_factory",
+        "wizard_factory",
+        "activation_warning",
+    ),
+    ContributionKind.PAGE_RENDERER: (
+        "renderer_factory", "options_view_factory",
+    ),
+    ContributionKind.MARKUP: (
+        "highlighter_factory", "behavior_factory",
+    ),
+    ContributionKind.TRANSFORM: (
+        "engine_factory", "options_view_factory",
+    ),
+    ContributionKind.CONVERSION_AUGMENTATION: (
+        "augmentation_factory",
+    ),
+}
+
+
 #: Where each kind of contribution names the media types it works with.
 #:
 #: ExportContribution is deliberately absent: its ``output_format`` falls
@@ -56,8 +98,17 @@ MEDIA_TYPE_FIELDS = {
 def contribution_media_types(kind, contribution):
     """Every media type one contribution names."""
     names = set()
+    configuration = (
+        contribution.configuration
+        if isinstance(contribution, ContributionDeclaration)
+        else None
+    )
     for attribute in MEDIA_TYPE_FIELDS.get(ContributionKind(kind), ()):
-        value = getattr(contribution, attribute, ())
+        value = (
+            configuration.get(attribute, ())
+            if configuration is not None
+            else getattr(contribution, attribute, ())
+        )
         if isinstance(value, str):
             if value:
                 names.add(value)
@@ -67,14 +118,145 @@ def contribution_media_types(kind, contribution):
 
 
 @dataclass(frozen=True)
+class ContributionBinding:
+    """Local executable handlers attached to one portable declaration."""
+
+    declaration: ContributionDeclaration
+    handlers: object
+    contribution: Contribution = field(init=False)
+
+    def __post_init__(self):
+        if not isinstance(self.handlers, Mapping) or not all(
+            isinstance(name, str) for name in self.handlers
+        ):
+            raise PluginRegistrationError(
+                "Contribution handlers must be a string-keyed map."
+            )
+        handlers = MappingProxyType(dict(self.handlers or {}))
+        object.__setattr__(self, "handlers", handlers)
+        object.__setattr__(
+            self,
+            "contribution",
+            _materialize_contribution(self.declaration, handlers),
+        )
+
+
+@dataclass(frozen=True)
 class RegisteredContribution:
     plugin_id: str
-    kind: ContributionKind
-    contribution: Contribution
+    declaration: ContributionDeclaration
+    binding: ContributionBinding
+
+    @property
+    def kind(self):
+        return self.declaration.kind
+
+    @property
+    def contribution(self):
+        return self.binding.contribution
 
     @property
     def id(self):
-        return contribution_descriptor(self.contribution).id
+        return self.declaration.descriptor.id
+
+
+def _split_contribution(kind, contribution):
+    expected = CONTRIBUTION_TYPES[kind]
+    if not isinstance(contribution, expected):
+        raise PluginRegistrationError(
+            "{} contributions must be {} objects.".format(
+                kind.value,
+                expected.__name__,
+            )
+        )
+    handler_names = frozenset(CONTRIBUTION_HANDLER_FIELDS[kind])
+    configuration = {}
+    handlers = {}
+    for declared_field in fields(contribution):
+        name = declared_field.name
+        value = getattr(contribution, name)
+        if name == "descriptor":
+            continue
+        if name in handler_names:
+            if value is not None:
+                handlers[name] = value
+        else:
+            configuration[name] = value
+    declaration = ContributionDeclaration(
+        kind=kind,
+        descriptor=contribution_descriptor(contribution),
+        configuration=configuration,
+    )
+    return declaration, handlers
+
+
+def _materialize_contribution(declaration, handlers):
+    kind = ContributionKind(declaration.kind)
+    expected = CONTRIBUTION_TYPES[kind]
+    expected_handlers = frozenset(CONTRIBUTION_HANDLER_FIELDS[kind])
+    unknown_handlers = set(handlers) - expected_handlers
+    if unknown_handlers:
+        raise PluginRegistrationError(
+            "Unknown {} handlers: {}.".format(
+                kind.value,
+                ", ".join(sorted(unknown_handlers)),
+            )
+        )
+    if any(not callable(handler) for handler in handlers.values()):
+        raise PluginRegistrationError(
+            "{} contribution handlers must be callable.".format(kind.value)
+        )
+
+    declared_fields = {
+        declared_field.name: declared_field
+        for declared_field in fields(expected)
+    }
+    configuration_fields = (
+        set(declared_fields) - expected_handlers - {"descriptor"}
+    )
+    unknown_configuration = (
+        set(declaration.configuration) - configuration_fields
+    )
+    if unknown_configuration:
+        raise PluginRegistrationError(
+            "Unknown {} declaration fields: {}.".format(
+                kind.value,
+                ", ".join(sorted(unknown_configuration)),
+            )
+        )
+    required_configuration = {
+        name for name in configuration_fields
+        if declared_fields[name].default is MISSING
+        and declared_fields[name].default_factory is MISSING
+    }
+    missing_configuration = (
+        required_configuration - set(declaration.configuration)
+    )
+    required_handlers = {
+        name for name in expected_handlers
+        if declared_fields[name].default is MISSING
+        and declared_fields[name].default_factory is MISSING
+    }
+    missing_handlers = required_handlers - set(handlers)
+    if missing_configuration or missing_handlers:
+        missing = sorted(missing_configuration | missing_handlers)
+        raise PluginRegistrationError(
+            "{} declaration requires: {}.".format(
+                kind.value,
+                ", ".join(missing),
+            )
+        )
+    arguments = {
+        "descriptor": declaration.descriptor,
+        **dict(declaration.configuration),
+        **dict(handlers),
+    }
+    try:
+        return expected(**arguments)
+    except (TypeError, ValueError) as error:
+        raise PluginRegistrationError(
+            "Invalid {} declaration: {}".format(kind.value, error)
+        ) from error
 
 
 class PluginRegistrar:
@@ -163,32 +345,48 @@ class PluginRegistrar:
     def register_conversion_augmentation(self, contribution):
         self._add(ContributionKind.CONVERSION_AUGMENTATION, contribution)
 
-    def _add(self, kind, contribution):
-        expected = CONTRIBUTION_TYPES[kind]
-        if not isinstance(contribution, expected):
+    def register_declaration(self, declaration, handlers):
+        """Stage a declaration from any driver with its local proxies."""
+        if not isinstance(declaration, ContributionDeclaration):
             raise PluginRegistrationError(
-                "{} contributions must be {} objects.".format(
-                    kind.value,
-                    expected.__name__,
-                )
+                "Drivers must register ContributionDeclaration objects."
             )
-        descriptor = contribution_descriptor(contribution)
+        try:
+            # Encoding is validation: only records explicitly present in the
+            # API value schema can be declaration data.
+            api_value_codec().encode(declaration)
+            binding = ContributionBinding(declaration, handlers)
+        except (TypeError, ValueError) as error:
+            raise PluginRegistrationError(
+                "Invalid {} declaration: {}".format(
+                    declaration.kind.value,
+                    error,
+                )
+            ) from error
+        self._stage(declaration, binding)
+
+    def _add(self, kind, contribution):
+        declaration, handlers = _split_contribution(kind, contribution)
+        self.register_declaration(declaration, handlers)
+
+    def _stage(self, declaration, binding):
         if any(
-            existing.kind is kind and existing.id == descriptor.id
+            existing.kind is declaration.kind
+            and existing.id == declaration.descriptor.id
             for existing in self._contributions
         ):
             raise PluginRegistrationError(
                 "Plugin {} registered duplicate {} ID {!r}.".format(
                     self.plugin_id,
-                    kind.value,
-                    descriptor.id,
+                    declaration.kind.value,
+                    declaration.descriptor.id,
                 )
             )
         self._contributions.append(
             RegisteredContribution(
                 plugin_id=self.plugin_id,
-                kind=kind,
-                contribution=contribution,
+                declaration=declaration,
+                binding=binding,
             )
         )
 

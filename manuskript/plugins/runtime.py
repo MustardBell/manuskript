@@ -1,16 +1,9 @@
-import hashlib
-import importlib
 import logging
-import sys
-import types
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from manuskript.plugins.api import (
-    PLUGIN_API_VERSION,
-    PluginActivationContext,
-)
+from manuskript.plugins.api import PLUGIN_API_VERSION
 from manuskript.plugins.capabilities import (
     PluginCapabilityContext,
     grant,
@@ -27,7 +20,7 @@ from manuskript.media_types import (
     core_registry,
 )
 from manuskript.plugins.manifest import PluginManifest
-from manuskript.plugins.runtimes import PythonRuntime
+from manuskript.plugins.drivers import PythonPluginDriver
 from manuskript.plugins.registry import (
     PluginRegistry,
     contribution_media_types,
@@ -53,8 +46,8 @@ class PluginRecord:
     loadable: bool = True
     error: str = ""
     warning: str = ""
-    handle: object = None
-    module_prefix: str = ""
+    driver: object = None
+    session: object = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +67,7 @@ class PluginRuntime:
         api_version=PLUGIN_API_VERSION,
         media_types=None,
         project_format=None,
+        drivers=None,
     ):
         self.roots = tuple(Path(root).resolve() for root in roots)
         self.preferences = preferences
@@ -85,6 +79,13 @@ class PluginRuntime:
         self.records = {}
         self.discovery_issues = []
         self.projectFormat = project_format
+        drivers = tuple(
+            (PythonPluginDriver(),) if drivers is None else drivers
+        )
+        kinds = [driver.kind for driver in drivers]
+        if len(kinds) != len(set(kinds)):
+            raise ValueError("Plugin driver kinds must be unique.")
+        self.drivers = {driver.kind: driver for driver in drivers}
 
     def discover(self):
         enabled = set(self.preferences.enabled_plugin_ids)
@@ -251,12 +252,19 @@ class PluginRuntime:
             record.warning = ""
             return record
 
-        if not isinstance(manifest.runtime, PythonRuntime):
+        driver = self.drivers.get(manifest.runtime.kind)
+        if driver is None:
             record.status = PluginStatus.UNSATISFIED
             record.error = (
                 "Plugin {} uses the {} runtime, which this development "
                 "build cannot execute yet."
             ).format(plugin_id, manifest.runtime.kind.value)
+            record.warning = ""
+            return record
+        availability = driver.availability(manifest)
+        if not availability.available:
+            record.status = PluginStatus.UNSATISFIED
+            record.error = availability.error
             record.warning = ""
             return record
 
@@ -293,27 +301,21 @@ class PluginRuntime:
             ),
             unavailable_capabilities=tuple(unavailable_optional),
         )
-        module_prefix = self._module_prefix(manifest)
-        handle = None
+        session = None
         try:
-            entry = self._load_entry_point(
-                manifest,
-                module_prefix,
-            )
-            handle = entry(registrar)
+            session = driver.load(manifest, registrar)
             self._require_promised(manifest, registrar.contributions)
             self.registry.install(
                 plugin_id,
                 registrar.contributions,
             )
-            self._activate_handle(plugin_id, handle, registrar)
+            driver.activate(manifest, session, registrar)
         except Exception as error:
             # The entry point already ran and may have connected signals or
             # started timers. Whatever it started has to be told to stop,
             # and while its modules are still importable.
-            self._deactivate_handle(plugin_id, handle)
+            driver.deactivate(manifest, session)
             self.registry.remove_plugin(plugin_id)
-            self._remove_modules(module_prefix)
             failure = PluginLoadError(
                 "Cannot load plugin {}: {}: {}".format(
                     plugin_id,
@@ -327,8 +329,8 @@ class PluginRuntime:
             LOGGER.exception("%s", failure)
             return record
 
-        record.handle = handle
-        record.module_prefix = module_prefix
+        record.driver = driver
+        record.session = session
         record.status = PluginStatus.LOADED
         record.error = ""
         record.warning = self._project_format_warning(manifest)
@@ -410,7 +412,7 @@ class PluginRuntime:
         for record in contributions:
             named = contribution_media_types(
                 record.kind,
-                record.contribution,
+                record.declaration,
             )
             unpromised = sorted(named - promised)
             if unpromised:
@@ -503,54 +505,7 @@ class PluginRuntime:
     def _deactivate_record(self, record):
         plugin_id = record.manifest.id
         self.registry.remove_plugin(plugin_id)
-        self._deactivate_handle(plugin_id, record.handle)
-        self._remove_modules(record.module_prefix)
-        record.handle = None
-        record.module_prefix = ""
-
-    @staticmethod
-    def _activate_handle(plugin_id, handle, registrar):
-        """Run the handle's side effects, now that refusal is behind us.
-
-        An activate that raises unwinds the whole load: the plugin is
-        deactivated, uninstalled and reported FAILED, exactly as if the
-        install itself had been refused.
-        """
-        if handle is None or not hasattr(handle, "activate"):
-            return
-        handle.activate(PluginActivationContext(
-            plugin_id=plugin_id,
-            capability=registrar.capability,
-        ))
-
-    @staticmethod
-    def _deactivate_handle(plugin_id, handle):
-        """Let a handle undo its side effects, and never let that call
-        mask whatever brought us here."""
-        if handle is None or not hasattr(handle, "deactivate"):
-            return
-        try:
-            handle.deactivate()
-        except Exception:
-            LOGGER.exception(
-                "Plugin %s failed while deactivating.",
-                plugin_id,
-            )
-
-    @staticmethod
-    def _module_prefix(manifest):
-        digest = hashlib.sha256(
-            str(manifest.root).encode("utf-8")
-        ).hexdigest()[:16]
-        return "_manuskript_plugin_{}".format(digest)
-
-    @staticmethod
-    def _remove_modules(prefix):
-        if not prefix:
-            return
-        for module_name in [
-            name
-            for name in sys.modules
-            if name == prefix or name.startswith(prefix + ".")
-        ]:
-            sys.modules.pop(module_name, None)
+        if record.driver is not None:
+            record.driver.deactivate(record.manifest, record.session)
+        record.driver = None
+        record.session = None

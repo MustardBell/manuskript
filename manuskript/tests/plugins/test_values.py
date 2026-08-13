@@ -107,6 +107,23 @@ def test_schema_document_describes_types_without_python_objects():
     assert entity_fields["aliases"]["type"] == {"sequence": "string"}
     assert entity_fields["metadata"]["type"] == {"map": "value"}
     assert schema["enums"]["content_encoding"] == ["utf-8", "base64"]
+    assert schema["records"]["contribution_declaration"]["fields"] == [
+        {
+            "name": "kind",
+            "type": {"enum": "contribution_kind"},
+            "required": True,
+        },
+        {
+            "name": "descriptor",
+            "type": {"record": "extension_descriptor"},
+            "required": True,
+        },
+        {
+            "name": "configuration",
+            "type": {"map": "value"},
+            "required": False,
+        },
+    ]
     json.dumps(schema)
 
 

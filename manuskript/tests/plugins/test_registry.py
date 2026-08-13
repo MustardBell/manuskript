@@ -1,12 +1,16 @@
 import pytest
+import json
 
 from manuskript.plugins.api import (
+    ContributionDeclaration,
     EditorWorkspaceContribution,
     ExportContribution,
     ExtensionDescriptor,
 )
+from manuskript.plugins.contracts import ContributionKind
 from manuskript.plugins.errors import PluginRegistrationError
 from manuskript.plugins.registry import PluginRegistry
+from manuskript.plugins.values import api_value_codec
 
 
 def exporter(extension_id):
@@ -43,6 +47,77 @@ def test_registry_installs_one_plugin_atomically():
     assert registry.exporters == (
         registrar.contributions[0].contribution,
     )
+
+
+def test_registry_separates_portable_declaration_from_local_handlers():
+    registry = PluginRegistry()
+    registrar = registry.registrar("example.first")
+    contribution = exporter("example.fb2")
+
+    registrar.register_exporter(contribution)
+    record = registrar.contributions[0]
+    wire = api_value_codec().encode(record.declaration)
+
+    assert record.declaration.kind is ContributionKind.EXPORTER
+    assert record.declaration.configuration["output_format"] == "example.fb2"
+    assert "engine_factory" not in record.declaration.configuration
+    assert record.binding.handlers["engine_factory"] is object
+    assert record.contribution.engine_factory is object
+    assert "engine_factory" not in json.dumps(wire)
+
+
+def test_driver_can_register_a_declaration_with_proxy_handlers():
+    registrar = PluginRegistry().registrar("example.remote")
+    declaration = ContributionDeclaration(
+        ContributionKind.EXPORTER,
+        ExtensionDescriptor("example.remote.export", "Remote"),
+        {"options": (), "output_format": "text/example"},
+    )
+
+    registrar.register_declaration(
+        declaration,
+        {"engine_factory": object},
+    )
+
+    contribution = registrar.contributions[0].contribution
+    assert contribution.descriptor == declaration.descriptor
+    assert contribution.output_format == "text/example"
+    assert contribution.engine_factory is object
+
+
+def test_declaration_requires_the_handlers_its_kind_promises():
+    registrar = PluginRegistry().registrar("example.remote")
+    declaration = ContributionDeclaration(
+        ContributionKind.EXPORTER,
+        ExtensionDescriptor("example.remote.export", "Remote"),
+        {"options": (), "output_format": "text/example"},
+    )
+
+    with pytest.raises(PluginRegistrationError, match="engine_factory"):
+        registrar.register_declaration(declaration, {})
+
+
+def test_declaration_rejects_unknown_or_nonportable_configuration():
+    registrar = PluginRegistry().registrar("example.remote")
+    descriptor = ExtensionDescriptor("example.remote.export", "Remote")
+    unknown = ContributionDeclaration(
+        ContributionKind.EXPORTER,
+        descriptor,
+        {"options": (), "output_format": "text/example", "surprise": 1},
+    )
+    nonportable = ContributionDeclaration(
+        ContributionKind.EXPORTER,
+        descriptor,
+        {"options": (), "output_format": object()},
+    )
+
+    with pytest.raises(PluginRegistrationError, match="Unknown.*fields"):
+        registrar.register_declaration(unknown, {"engine_factory": object})
+    with pytest.raises(PluginRegistrationError, match="portable"):
+        registrar.register_declaration(
+            nonportable,
+            {"engine_factory": object},
+        )
 
 
 def test_registry_rejects_cross_plugin_ids_without_partial_install():
