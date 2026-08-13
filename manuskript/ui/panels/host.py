@@ -182,8 +182,10 @@ class PanelHost:
         # actually sitting in.
         self.visibility.bind(instance)
         self._instances[descriptor.id] = instance
-        if container is not None:
-            container.show()
+        # PanelVisibility.bind() has already applied default_visible to the
+        # mounted thing. Showing every container here overruled that policy
+        # while leaving its action unchecked: a supposedly hidden panel was
+        # on screen and the first click on its toggle did nothing useful.
         if callable(self.on_open):
             self.on_open(instance)
         return instance

@@ -602,6 +602,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             instance.descriptor.group,
             panel_id=instance.descriptor.id,
         )
+        placement = getattr(self, "panelPlacement", None)
+        if placement is not None:
+            placement.watch_dock(instance.container)
 
     def navigateTo(self, row):
         """Open what a navigator row stands for: a page, or a panel."""

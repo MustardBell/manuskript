@@ -877,6 +877,85 @@ def test_a_move_menu_does_not_retain_a_closed_target(MWEmptyProject):
         assert destination() is None
 
 
+# ---------------------------------------- arranging docks in one window
+
+def test_every_existing_dock_gets_precise_context_commands(MWEmptyProject):
+    window = MWEmptyProject
+
+    assert window.dckSearch.contextMenuPolicy() == Qt.CustomContextMenu
+    assert (
+        window.panelHost.instance(PROJECT_TREE).container.contextMenuPolicy()
+        == Qt.CustomContextMenu
+    )
+
+
+def test_a_late_plugin_dock_gets_the_same_context_commands(MWEmptyProject):
+    window = MWEmptyProject
+
+    with movable_panel(window) as panel:
+        assert panel.container.contextMenuPolicy() == Qt.CustomContextMenu
+        assert panel.container in window.panelPlacement._dock_context_slots
+
+
+def test_arrange_menu_discovers_late_panels_without_a_hardcoded_list(
+        MWEmptyProject):
+    window = MWEmptyProject
+
+    with movable_panel(window) as panel:
+        window.dckSearch.show()
+        window.panelPlacement.build_arrange_menu()
+        offered = {
+            action.data()
+            for action in window.panelPlacement.arrange_menu.actions()
+            if action.menu() is not None
+        }
+
+        assert panel.container.objectName() in offered
+        assert window.dckSearch.objectName() in offered
+
+
+def test_edge_command_moves_a_panel_and_saved_state_remembers_it(
+        MWEmptyProject):
+    window = MWEmptyProject
+    dock = window.panelHost.instance(METADATA).container
+    before = window.saveState()
+    try:
+        assert window.panelPlacement.move_to_edge(
+            dock, Qt.LeftDockWidgetArea,
+        )
+        assert window.dockWidgetArea(dock) == Qt.LeftDockWidgetArea
+        assert window.panelHost.instance(METADATA).action.isChecked()
+
+        arranged = window.saveState()
+        window.panelPlacement.move_to_edge(dock, Qt.RightDockWidgetArea)
+        assert window.restoreState(arranged)
+        assert window.dockWidgetArea(dock) == Qt.LeftDockWidgetArea
+    finally:
+        window.restoreState(before)
+
+
+def test_tab_command_uses_qt_layout_and_survives_state_restore(
+        MWEmptyProject):
+    window = MWEmptyProject
+    tree = window.panelHost.instance(PROJECT_TREE).container
+    metadata = window.panelHost.instance(METADATA).container
+    before = window.saveState()
+    try:
+        window.panelHost.reveal(PROJECT_TREE)
+        window.panelHost.reveal(METADATA)
+        assert window.panelPlacement.tab_with(metadata, tree)
+        assert metadata in window.tabifiedDockWidgets(tree)
+
+        arranged = window.saveState()
+        window.panelPlacement.move_to_edge(
+            metadata, Qt.LeftDockWidgetArea,
+        )
+        assert window.restoreState(arranged)
+        assert metadata in window.tabifiedDockWidgets(tree)
+    finally:
+        window.restoreState(before)
+
+
 # ------------------------------------------------- tearing a panel off
 
 def test_a_torn_off_panel_floats_free_of_the_layout(MWEmptyProject):

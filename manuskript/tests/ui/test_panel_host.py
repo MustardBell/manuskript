@@ -202,6 +202,21 @@ def test_syncing_visibility_makes_the_toggle_say_what_is_showing():
     window.close()
 
 
+def test_a_panel_declared_hidden_starts_hidden_and_in_agreement():
+    host, window = make_host(PanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        default_visible=False,
+        widget_factory=label_factory,
+    ))
+
+    instance = host.open("core.notes", PanelContext())
+
+    assert instance.container.isHidden()
+    assert not instance.action.isChecked()
+    window.close()
+
+
 def test_a_failing_factory_reports_instead_of_raising():
     """The action that opens a panel must survive the panel being
     broken; the person gets told, the caller gets None.
