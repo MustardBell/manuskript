@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+import time
 
 import pytest
 
 from PyQt5.QtWidgets import QMainWindow, QMenu, QPlainTextEdit
+from PyQt5.QtWidgets import qApp
 
 from manuskript.domain.plugin_data import ProjectPluginData
 from manuskript.plugins.api import (
@@ -13,6 +15,12 @@ from manuskript.plugins.api import (
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.plugins.capabilities import CAPABILITY_QUERY_EXECUTE
 from manuskript.plugins.errors import PluginScopeError
+from manuskript.plugins.ui_contract import (
+    UiControl,
+    UiControlKind,
+    UiDocument,
+    UiNavigatorEntry,
+)
 from manuskript.panels import PanelRegistry
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
 from manuskript.ui.panels.window_port import PanelWindow
@@ -104,6 +112,43 @@ def test_project_panel_receives_scoped_raw_file_context():
             "Project note\n",
         ),
     )
+    host.close_all()
+
+
+def test_declarative_project_panel_supplies_its_navigator_and_host_widget():
+    registry = PluginRegistry()
+    registrar = registry.registrar("example.notes")
+    registrar.register_project_panel(ProjectPanelContribution(
+        descriptor=ExtensionDescriptor(
+            id="example.notes.panel",
+            name="Project notes",
+        ),
+        default_file="notes/main.txt",
+        navigator=UiNavigatorEntry("Notes", "document-edit", 250),
+        ui=UiDocument("example.notes.panel", 0, (
+            UiControl(
+                "message",
+                UiControlKind.MESSAGE,
+                value="No notes yet.",
+            ),
+        )),
+    ))
+    registry.install("example.notes", registrar.contributions)
+    runtime = SimpleNamespace(registry=registry, declares=lambda *_args: False)
+    window = PanelTestWindow()
+    host = ProjectPanelHost(ProjectPanelViews.for_window(window), runtime)
+
+    panel_id = host._panelIds["example.notes.panel"]
+    descriptor = window.panelRegistry.descriptor(panel_id)
+    assert descriptor.navigator.label == "Notes"
+    assert descriptor.navigator.icon == "document-edit"
+    dock = host.open_panel("example.notes.panel")
+    deadline = time.monotonic() + 2
+    while dock.widget().document is None:
+        assert time.monotonic() < deadline
+        qApp.processEvents()
+        time.sleep(0.005)
+    assert dock.widget().document.id == "example.notes.panel"
     host.close_all()
 
 

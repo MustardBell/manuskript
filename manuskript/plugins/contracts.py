@@ -39,6 +39,7 @@ class ContributionKind(str, Enum):
     MARKUP = "markup"
     TRANSFORM = "transform"
     CONVERSION_AUGMENTATION = "conversion_augmentation"
+    COMMAND = "command"
 
 
 @dataclass(frozen=True)
@@ -68,13 +69,13 @@ CONTRIBUTION_CONTRACTS = (
     ),
     ContributionContract(
         ContributionKind.PROJECT_PANEL,
-        ContractPortability.DECLARATIVE,
-        "A remote plugin cannot return a QWidget; core must render it.",
+        ContractPortability.PORTABLE,
+        "Core renders a bounded declarative UI document and events.",
     ),
     ContributionContract(
         ContributionKind.SETTINGS_PANEL,
-        ContractPortability.DECLARATIVE,
-        "Settings require a host-rendered form contract.",
+        ContractPortability.PORTABLE,
+        "Core renders a bounded declarative settings document and events.",
     ),
     ContributionContract(
         ContributionKind.INDEX_CARD_STYLE,
@@ -110,6 +111,11 @@ CONTRIBUTION_CONTRACTS = (
         ContributionKind.CONVERSION_AUGMENTATION,
         ContractPortability.NATIVE,
         "The current factory returns converter-specific Python objects.",
+    ),
+    ContributionContract(
+        ContributionKind.COMMAND,
+        ContractPortability.PORTABLE,
+        "Core owns the action and invokes a bounded value operation.",
     ),
 )
 

@@ -382,7 +382,15 @@ class PluginManagerDialog(QDialog):
             group = QGroupBox(contribution.descriptor.name, container)
             group_layout = QVBoxLayout(group)
             try:
-                widget = contribution.widget_factory(context, group)
+                if contribution.widget_factory is not None:
+                    widget = contribution.widget_factory(context, group)
+                else:
+                    from manuskript.ui.plugins.declarative_ui import (
+                        build_static_ui_widget,
+                    )
+                    widget = build_static_ui_widget(
+                        contribution.ui, group
+                    )
                 if not isinstance(widget, QWidget):
                     raise TypeError(
                         "Plugin settings factories must return QWidget "

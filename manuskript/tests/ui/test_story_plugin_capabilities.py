@@ -11,12 +11,14 @@ from manuskript.domain.canonical_project import (
 )
 from manuskript.domain.reference_index import ReferenceDocument
 from manuskript.domain.morphology import MorphologyComponent, MorphologyProfile
+from manuskript.domain.plugin_data import ProjectPluginData
 from manuskript.domain.story_query import AssertionsWhere
 from manuskript.plugins.api import (
     StoryReferenceValue,
     TemporalPointValue,
     WorkspaceDocument,
 )
+from manuskript.plugins.values import ContentEnvelope
 from manuskript.models import outlineItem, outlineModel
 from manuskript.services.project_storage import ProjectStorage
 from manuskript.ui.plugins.story_capabilities import (
@@ -25,6 +27,7 @@ from manuskript.ui.plugins.story_capabilities import (
     EntityReadCapability,
     EntityWriteCapability,
     MorphologySchemaCapability,
+    ProjectDataCapability,
     QueryExecuteCapability,
     ReferenceReadCapability,
     ReferenceWriteCapability,
@@ -45,6 +48,7 @@ class _ProjectManager:
         self.dirty = False
         self.flush_count = 0
         self.document_buffers = SimpleNamespace(flush=self._flush)
+        self.models = SimpleNamespace(plugin_data=ProjectPluginData())
 
     def _flush(self):
         self.flush_count += 1
@@ -56,6 +60,9 @@ class _ProjectManager:
     def updateEntity(self, entity_id, **changes):
         self.dirty = True
         return self.storage.update_entity(entity_id, **changes)
+
+    def startTimerNoChanges(self):
+        self.dirty = True
 
 
 class _Outline:
@@ -113,6 +120,24 @@ def story_services():
         WorkspaceDocument("scene", "Scene", "scene", "Mara waits."),
     )
     return manager, outline
+
+
+def test_project_data_capability_is_namespaced_and_preserves_binary_content(
+        story_services):
+    manager, _outline = story_services
+    first = ProjectDataCapability(manager, "example.first")
+    second = ProjectDataCapability(manager, "example.second")
+
+    written = first.write(
+        "state/data.bin",
+        ContentEnvelope.from_content(b"\x00\xff", "application/octet-stream"),
+    )
+
+    assert written.content.unpack() == b"\x00\xff"
+    assert first.paths() == ("state/data.bin",)
+    assert second.paths() == ()
+    assert second.read("state/data.bin") is None
+    assert manager.dirty
 
 
 def test_entity_capabilities_publish_snapshots_and_keep_mutation_commanded(

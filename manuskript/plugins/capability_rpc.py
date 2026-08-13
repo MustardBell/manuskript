@@ -14,6 +14,8 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_ENTITIES_WRITE,
     CAPABILITY_MORPHOLOGY_SCHEMAS,
     CAPABILITY_PROSE_ANALYSIS,
+    CAPABILITY_PLUGIN_OPTIONS,
+    CAPABILITY_PROJECT_DATA,
     CAPABILITY_REFERENCES_READ,
     CAPABILITY_RULES_EXECUTE,
     CAPABILITY_TIMELINE_READ,
@@ -37,6 +39,7 @@ class CapabilityMethod:
     keyword: tuple = ()
     mutates: bool = False
     revision_reader: str = ""
+    allow_missing_revision: bool = False
 
     @property
     def schema(self):
@@ -48,7 +51,11 @@ class CapabilityMethod:
             "returns": "api_value",
             "mutates": self.mutates,
             "revision": (
-                "required" if self.revision_reader else "not_accepted"
+                (
+                    "required_current_or_null"
+                    if self.allow_missing_revision else "required"
+                )
+                if self.revision_reader else "not_accepted"
             ),
         }
 
@@ -152,6 +159,34 @@ CAPABILITY_METHODS = (
         "register_xml",
         ("source",),
         mutates=True,
+    ),
+    CapabilityMethod(CAPABILITY_PROJECT_DATA, "paths"),
+    CapabilityMethod(CAPABILITY_PROJECT_DATA, "read", ("path",)),
+    CapabilityMethod(
+        CAPABILITY_PROJECT_DATA,
+        "write",
+        ("path", "content"),
+        mutates=True,
+        revision_reader="read",
+        allow_missing_revision=True,
+    ),
+    CapabilityMethod(
+        CAPABILITY_PLUGIN_OPTIONS, "read", ("extension_id",)
+    ),
+    CapabilityMethod(
+        CAPABILITY_PLUGIN_OPTIONS,
+        "write",
+        ("extension_id", "values"),
+        mutates=True,
+        revision_reader="read",
+    ),
+    CapabilityMethod(
+        CAPABILITY_PROJECT_DATA,
+        "delete",
+        ("path",),
+        mutates=True,
+        revision_reader="read",
+        allow_missing_revision=True,
     ),
 )
 
@@ -476,6 +511,8 @@ class CapabilityRpcRouter:
         else:
             current = reader(arguments[0])
         if current is None:
+            if specification.allow_missing_revision:
+                return None
             raise KeyError(arguments[0])
         return revision_token(current, self.codec)
 
@@ -519,4 +556,10 @@ def _record_key(value):
         )
     if hasattr(value, "id"):
         return "{}:{}".format(type(value).__name__, getattr(value, "id"))
+    if hasattr(value, "path"):
+        return "{}:{}".format(type(value).__name__, getattr(value, "path"))
+    if hasattr(value, "extension_id"):
+        return "{}:{}".format(
+            type(value).__name__, getattr(value, "extension_id")
+        )
     return ""

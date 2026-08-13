@@ -70,7 +70,11 @@ def build_project_panel_widget(runtime, contribution_id, context, parent):
         record.plugin_id,
         contribution.default_file,
     )
-    return contribution.widget_factory(plugin_context, parent)
+    if contribution.widget_factory is not None:
+        return contribution.widget_factory(plugin_context, parent)
+    from manuskript.ui.plugins.declarative_ui import build_static_ui_widget
+
+    return build_static_ui_widget(contribution.ui, parent)
 
 
 class ProjectPanelHost:
@@ -177,6 +181,14 @@ class ProjectPanelHost:
             contribution_id,
         )
         if panel_id not in self.panelRegistry:
+            navigator = record.contribution.navigator
+            if navigator is not None:
+                from manuskript.panels import NavigatorEntry
+                navigator = NavigatorEntry(
+                    navigator.label,
+                    navigator.icon,
+                    navigator.order,
+                )
             self.panelRegistry.register(PanelDescriptor(
                 id=panel_id,
                 title=record.contribution.descriptor.name,
@@ -197,6 +209,7 @@ class ProjectPanelHost:
                     self.runtime,
                     contribution_id,
                 ),
+                navigator=navigator,
             ))
         self._panelIds[contribution_id] = panel_id
         self._owners[contribution_id] = record.plugin_id

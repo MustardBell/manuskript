@@ -6,6 +6,7 @@ from types import MappingProxyType
 from manuskript.plugins.api import (
     Contribution,
     ContributionDeclaration,
+    CommandContribution,
     ConversionContribution,
     EditorWorkspaceContribution,
     ExportContribution,
@@ -42,6 +43,7 @@ CONTRIBUTION_TYPES = {
     ContributionKind.CONVERSION_AUGMENTATION: (
         ConversionAugmentationContribution
     ),
+    ContributionKind.COMMAND: CommandContribution,
 }
 
 
@@ -80,6 +82,7 @@ CONTRIBUTION_HANDLER_FIELDS = {
     ContributionKind.CONVERSION_AUGMENTATION: (
         "augmentation_factory",
     ),
+    ContributionKind.COMMAND: ("invoke",),
 }
 
 
@@ -324,6 +327,9 @@ class PluginRegistrar:
     def register_settings_panel(self, contribution):
         self._add(ContributionKind.SETTINGS_PANEL, contribution)
 
+    def register_command(self, contribution):
+        self._add(ContributionKind.COMMAND, contribution)
+
     def register_index_card_style(self, contribution):
         self._add(ContributionKind.INDEX_CARD_STYLE, contribution)
 
@@ -493,6 +499,10 @@ class PluginRegistry:
     @property
     def settings_panels(self):
         return self.contributions(ContributionKind.SETTINGS_PANEL)
+
+    @property
+    def commands(self):
+        return self.contributions(ContributionKind.COMMAND)
 
     @property
     def index_card_styles(self):

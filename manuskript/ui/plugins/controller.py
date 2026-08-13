@@ -1,5 +1,7 @@
 from functools import partial
 
+from PyQt5.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QAction
 
 from manuskript.media_types import MediaTypeView
@@ -17,6 +19,26 @@ from manuskript.ui.plugins.page_types import PageTypeService
 from manuskript.ui.plugins.routing_panel import ExportRoutingService
 from manuskript.ui.plugins.project_panels import ProjectPanelHost
 from manuskript.ui.plugins.editor_workspaces import EditorWorkspaceHost
+
+
+class _CommandSignals(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(object)
+
+
+class _CommandTask(QRunnable):
+    def __init__(self, operation):
+        super().__init__()
+        self.operation = operation
+        self.signals = _CommandSignals()
+
+    def run(self):
+        try:
+            result = self.operation()
+        except Exception as error:
+            self.signals.failed.emit(error)
+        else:
+            self.signals.finished.emit(result)
 
 
 class PluginUiController:
@@ -105,6 +127,10 @@ class PluginUiController:
             self.runtime,
             menu=self.menu,
         )
+        self._projectOpen = views.project_panels.project.is_open()
+        self._commandActions = []
+        self._commandTasks = set()
+        self.refresh_commands()
 
     def _page_source(self, item):
         editor_host = self.views.editor_host
@@ -234,17 +260,97 @@ class PluginUiController:
         self.manager = None
 
     def refresh_contributions(self):
+        self._clear_commands()
         self.projectPanels.refresh()
         self.editorWorkspaces.refresh()
         self.markupProfiles.refresh()
         self.pageTypes.refresh()
         self.views.refresh_card_styles()
+        self.refresh_commands()
+
+    def refresh_commands(self):
+        records = sorted(
+            self.runtime.registry.records("command"),
+            key=lambda record: record.contribution.descriptor.name.casefold(),
+        )
+        if not records:
+            return
+        separator = self.menu.addSeparator()
+        self._commandActions.append(separator)
+        for record in records:
+            contribution = record.contribution
+            action = QAction(
+                contribution.descriptor.name,
+                self.views.object_parent,
+            )
+            action.setObjectName(
+                "pluginCommand." + contribution.descriptor.id
+            )
+            action.setStatusTip(contribution.descriptor.description)
+            if contribution.shortcut:
+                action.setShortcut(QKeySequence(contribution.shortcut))
+            action.setEnabled(
+                self._projectOpen or not contribution.project_required
+            )
+            action.triggered.connect(
+                partial(self._invoke_command, contribution)
+            )
+            self.menu.addAction(action)
+            self._commandActions.append(action)
+
+    def _clear_commands(self):
+        for action in self._commandActions:
+            self.menu.removeAction(action)
+            action.deleteLater()
+        self._commandActions = []
+
+    def _invoke_command(self, contribution, _checked=False):
+        task = _CommandTask(contribution.invoke)
+        self._commandTasks.add(task)
+
+        def finished(result):
+            self._commandTasks.discard(task)
+            if self.views is not None and result:
+                self.views.show_status(str(result))
+
+        def failed(error):
+            self._commandTasks.discard(task)
+            if self.views is None:
+                return
+            self.views.show_status(
+                self.views.translate("Plugin command failed.")
+                + " {}: {}".format(type(error).__name__, error),
+                importance=2,
+            )
+
+        task.signals.finished.connect(finished)
+        task.signals.failed.connect(failed)
+        QThreadPool.globalInstance().start(task)
+
+    def _update_command_scope(self):
+        commands = {
+            contribution.descriptor.id: contribution
+            for contribution in self.runtime.registry.commands
+        }
+        for action in self._commandActions:
+            name = action.objectName()
+            if not name.startswith("pluginCommand."):
+                continue
+            contribution = commands.get(name[len("pluginCommand."):])
+            if contribution is not None:
+                action.setEnabled(
+                    self._projectOpen or not contribution.project_required
+                )
 
     def project_opened(self):
+        self._projectOpen = True
+        self._update_command_scope()
         self.projectPanels.project_opened()
         self.editorWorkspaces.project_opened()
 
     def prepare_project_close(self):
+        self._projectOpen = False
+        self._update_command_scope()
         self.editorWorkspaces.prepare_project_close()
         self.projectPanels.prepare_project_close()
 
@@ -261,6 +367,7 @@ class PluginUiController:
             pass
         self.editorWorkspaces.prepare_project_close()
         self.projectPanels.prepare_project_close()
+        self._clear_commands()
         manager = self.manager
         self.manager = None
         if manager is not None:

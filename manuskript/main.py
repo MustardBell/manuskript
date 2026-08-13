@@ -219,6 +219,27 @@ def prepare(arguments, tests=False):
     with timing.span("startup.plugins.load"):
         plugin_runtime.load_enabled()
     plugin_option_store = PluginOptionStore(plugin_settings)
+    from manuskript.plugins.capabilities import CAPABILITY_PLUGIN_OPTIONS
+    from manuskript.plugins.errors import PluginScopeError
+    from manuskript.services.plugin_option_capability import (
+        PluginOptionsCapability,
+    )
+
+    def application_plugin_capability(plugin_id, name):
+        if name != CAPABILITY_PLUGIN_OPTIONS:
+            raise PluginScopeError(
+                "Capability {!r} is not an application plugin service."
+                .format(name)
+            )
+        return PluginOptionsCapability(
+            plugin_id,
+            plugin_runtime.registry,
+            plugin_option_store,
+        )
+
+    plugin_runtime.set_application_capability_resolver(
+        application_plugin_capability
+    )
     # What plugins contribute is one application-wide fact, and so is the
     # news that it changed. Windows subscribe rather than each telling
     # itself.

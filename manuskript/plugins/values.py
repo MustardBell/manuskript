@@ -555,6 +555,16 @@ def _default_record_types():
     # Imports stay local so api.py can remain independent of codec setup.
     from manuskript.media_types import MediaType
     from manuskript.plugins import api
+    from manuskript.plugins.ui_contract import (
+        UiChoice,
+        UiColumn,
+        UiControl,
+        UiDocument,
+        UiEvent,
+        UiItem,
+        UiNavigatorEntry,
+        UiResponse,
+    )
 
     names = (
         "option_field",
@@ -588,6 +598,8 @@ def _default_record_types():
         "reference_suggestion",
         "assertion_diagnostic",
         "morphology_schema",
+        "plugin_file",
+        "plugin_options",
         "rendered_document",
         "page_export_document",
         "import_node",
@@ -627,6 +639,8 @@ def _default_record_types():
         api.ReferenceSuggestionSnapshot,
         api.AssertionDiagnosticSnapshot,
         api.MorphologySchemaSnapshot,
+        api.PluginFileSnapshot,
+        api.PluginOptionsSnapshot,
         api.RenderedDocument,
         api.PageExportDocument,
         api.ImportNode,
@@ -639,12 +653,21 @@ def _default_record_types():
         ("portable_artifact", PortableArtifact),
         ("error", ErrorEnvelope),
         ("media_type", MediaType),
+        ("ui_choice", UiChoice),
+        ("ui_column", UiColumn),
+        ("ui_item", UiItem),
+        ("ui_control", UiControl),
+        ("ui_document", UiDocument),
+        ("ui_event", UiEvent),
+        ("ui_navigator_entry", UiNavigatorEntry),
+        ("ui_response", UiResponse),
     ) + tuple(zip(names, classes))
 
 
 @lru_cache(maxsize=1)
 def api_value_codec():
     from manuskript.plugins import api
+    from manuskript.plugins.ui_contract import UiControlKind, UiEventKind
 
     return ApiValueCodec(
         record_types=_default_record_types(),
@@ -653,5 +676,7 @@ def api_value_codec():
             ("contribution_kind", api.ContributionKind),
             ("option_kind", api.OptionKind),
             ("markup_mode", api.MarkupMode),
+            ("ui_control_kind", UiControlKind),
+            ("ui_event_kind", UiEventKind),
         ),
     )

@@ -72,6 +72,7 @@ class PluginRuntime:
         api_version=PLUGIN_API_VERSION,
         media_types=None,
         project_format=None,
+        application_capability_resolver=None,
         project_capability_resolver=None,
         drivers=None,
     ):
@@ -86,6 +87,7 @@ class PluginRuntime:
         self.discovery_issues = []
         self.projectFormat = project_format
         self.projectGeneration = 0
+        self._applicationCapabilityResolver = application_capability_resolver
         self._projectCapabilityResolver = project_capability_resolver
         drivers = tuple(
             (PythonPluginDriver(), ProcessPluginDriver())
@@ -406,6 +408,13 @@ class PluginRuntime:
             raise TypeError("Project capability resolver must be callable.")
         self._projectCapabilityResolver = resolver
 
+    def set_application_capability_resolver(self, resolver):
+        """Install scoped services that do not require an open project."""
+
+        if resolver is not None and not callable(resolver):
+            raise TypeError("Application capability resolver must be callable.")
+        self._applicationCapabilityResolver = resolver
+
     def publish_project_event(self, topic, payload):
         """Send an ordered event only to live subscribed process plugins."""
 
@@ -423,9 +432,14 @@ class PluginRuntime:
         try:
             return registrar.capability(name)
         except PluginScopeError as local_error:
-            if self._projectCapabilityResolver is None:
-                raise local_error
-            return self._projectCapabilityResolver(plugin_id, name)
+            if self._applicationCapabilityResolver is not None:
+                try:
+                    return self._applicationCapabilityResolver(plugin_id, name)
+                except PluginScopeError:
+                    pass
+            if self._projectCapabilityResolver is not None:
+                return self._projectCapabilityResolver(plugin_id, name)
+            raise local_error
 
     def _project_format_error(self, manifest):
         return (

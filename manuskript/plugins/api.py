@@ -356,6 +356,22 @@ class MorphologySchemaSnapshot:
 
 
 @dataclass(frozen=True)
+class PluginFileSnapshot:
+    path: str
+    content: Any = None
+    deleted: bool = False
+
+
+@dataclass(frozen=True)
+class PluginOptionsSnapshot:
+    extension_id: str
+    values: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        object.__setattr__(self, "values", dict(self.values))
+
+
+@dataclass(frozen=True)
 class EditorWorkspaceContext:
     """Project-scoped capabilities supplied to an editor workspace.
 
@@ -471,8 +487,10 @@ class ConversionContribution:
 @dataclass(frozen=True)
 class ProjectPanelContribution:
     descriptor: ExtensionDescriptor
-    widget_factory: Callable[..., Any]
     default_file: str
+    ui: Any = None
+    navigator: Any = None
+    widget_factory: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         path = PurePosixPath(str(self.default_file).replace("\\", "/"))
@@ -484,6 +502,10 @@ class ProjectPanelContribution:
             raise ValueError(
                 "Project panels must declare a safe relative raw "
                 "project file."
+            )
+        if self.ui is None and self.widget_factory is None:
+            raise ValueError(
+                "Project panels require declarative UI or a native factory."
             )
 
 
@@ -517,7 +539,22 @@ class PluginSettingsContribution:
     """
 
     descriptor: ExtensionDescriptor
-    widget_factory: Callable[..., Any]
+    ui: Any = None
+    widget_factory: Optional[Callable[..., Any]] = None
+
+    def __post_init__(self):
+        if self.ui is None and self.widget_factory is None:
+            raise ValueError(
+                "Settings panels require declarative UI or a native factory."
+            )
+
+
+@dataclass(frozen=True)
+class CommandContribution:
+    descriptor: ExtensionDescriptor
+    invoke: Callable[[], Any]
+    shortcut: str = ""
+    project_required: bool = True
 
 
 @dataclass(frozen=True)

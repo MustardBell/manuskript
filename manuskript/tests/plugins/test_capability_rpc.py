@@ -2,10 +2,11 @@ from dataclasses import replace
 
 import pytest
 
-from manuskript.plugins.api import EntitySnapshot
+from manuskript.plugins.api import EntitySnapshot, PluginFileSnapshot
 from manuskript.plugins.capabilities import (
     CAPABILITY_ENTITIES_READ,
     CAPABILITY_ENTITIES_WRITE,
+    CAPABILITY_PROJECT_DATA,
 )
 from manuskript.plugins.capability_rpc import (
     CapabilityRpcRouter,
@@ -16,7 +17,7 @@ from manuskript.plugins.errors import (
     PluginProtocolError,
     PluginScopeError,
 )
-from manuskript.plugins.values import api_value_codec
+from manuskript.plugins.values import ContentEnvelope, api_value_codec
 
 
 class EntityService:
@@ -222,3 +223,47 @@ def test_capability_call_shape_is_closed_not_extensible_by_accident():
             "expected_revision": None,
             "python_object": "please reflect over this",
         })
+
+
+def test_new_plugin_file_accepts_null_revision_then_requires_current_token():
+    class Files:
+        value = None
+
+        def read(self, path):
+            return self.value if self.value and self.value.path == path else None
+
+        def write(self, path, content):
+            self.value = PluginFileSnapshot(path, content)
+            return self.value
+
+    files = Files()
+    capability_router = router(files, (CAPABILITY_PROJECT_DATA,))
+    content = ContentEnvelope("first", "text/plain")
+    created = call(
+        capability_router,
+        CAPABILITY_PROJECT_DATA,
+        "write",
+        ("state.txt", content),
+        revision=None,
+    )
+    snapshot = api_value_codec().decode(created["value"])
+    current = revision_token(snapshot)
+
+    with pytest.raises(PluginConflictError):
+        call(
+            capability_router,
+            CAPABILITY_PROJECT_DATA,
+            "write",
+            ("state.txt", ContentEnvelope("stale", "text/plain")),
+            revision=None,
+        )
+    changed = call(
+        capability_router,
+        CAPABILITY_PROJECT_DATA,
+        "write",
+        ("state.txt", ContentEnvelope("second", "text/plain")),
+        revision=current,
+    )
+    assert api_value_codec().decode(changed["value"]).content.content == (
+        "second"
+    )

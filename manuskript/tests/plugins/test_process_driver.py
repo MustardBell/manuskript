@@ -256,6 +256,7 @@ def create_process_plugin(tmp_path, contributions=None, requires=()):
             "page_export": codec.encode(
                 PageExportDocument("<p>page export</p>", "text/html")
             ),
+            "invoke": codec.encode("Remote command completed"),
         },
     }
     (plugin_root / "fixture_data.json").write_text(
@@ -294,7 +295,7 @@ def test_process_driver_negotiates_and_installs_atomically(tmp_path):
     }
     assert seen["capabilities"] == {}
     assert seen["contribution_kinds"]["exporter"] == "portable"
-    assert seen["contribution_kinds"]["project_panel"] == "declarative"
+    assert seen["contribution_kinds"]["project_panel"] == "portable"
     assert seen["value_schema"]["api_version"] == 1
     assert (plugin_root / "initialized").exists()
 
@@ -338,20 +339,20 @@ def test_all_first_release_computational_contributions_execute(tmp_path):
     assert page_export.content == "<p>page export</p>"
 
 
-def test_native_remote_contribution_refuses_the_whole_plugin(tmp_path):
-    native = declaration(
+def test_remote_panel_without_ui_operations_refuses_the_whole_plugin(tmp_path):
+    panel = declaration(
         ContributionKind.PROJECT_PANEL,
         "panel",
         {"default_file": "remote/panel.txt"},
     )
     _root, runtime = load_process_plugin(
         tmp_path,
-        contributions=((native, ()),),
+        contributions=((panel, ()),),
     )
 
     record = runtime.records["example.remote"]
     assert record.status is PluginStatus.FAILED
-    assert "cannot register project_panel" in record.error
+    assert "missing ui_event, ui_open" in record.error
     assert runtime.registry.plugin_records("example.remote") == ()
 
 
@@ -421,5 +422,23 @@ def test_remote_contribution_can_call_a_granted_host_capability(tmp_path):
         assert runtime.registry.page_types[0].detector(
             "CALL CAPABILITY"
         ) is True
+    finally:
+        runtime.disable("example.remote")
+
+
+def test_remote_command_uses_the_same_host_owned_action_contract(tmp_path):
+    command = declaration(
+        ContributionKind.COMMAND,
+        "command",
+        {"shortcut": "", "project_required": False},
+    )
+    _root, runtime = load_process_plugin(
+        tmp_path,
+        contributions=((command, ("invoke",)),),
+    )
+    try:
+        assert runtime.registry.commands[0].invoke() == (
+            "Remote command completed"
+        )
     finally:
         runtime.disable("example.remote")

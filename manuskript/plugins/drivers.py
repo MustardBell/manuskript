@@ -505,6 +505,25 @@ class ProcessPluginDriver(PluginDriver):
             handlers["activation_warning"] = lambda source: self._call(
                 session, contribution_id, "activation_warning", (source,)
             )
+        if "ui_open" in operations:
+            scope = (
+                "project"
+                if kind is ContributionKind.PROJECT_PANEL
+                else "settings"
+            )
+            handlers["widget_factory"] = lambda _context, parent=None: (
+                _build_remote_ui_widget(
+                    _RemoteUiController(
+                        self, session, contribution_id
+                    ),
+                    scope,
+                    parent,
+                )
+            )
+        if "invoke" in operations:
+            handlers["invoke"] = lambda: self._call(
+                session, contribution_id, "invoke", ()
+            )
         return handlers
 
     def _call(self, session, contribution_id, operation, arguments):
@@ -547,6 +566,17 @@ _REMOTE_OPERATIONS = {
     ),
     ContributionKind.PAGE_RENDERER: _RemoteOperations(
         ("render",), ("render",)
+    ),
+    ContributionKind.PROJECT_PANEL: _RemoteOperations(
+        ("ui_open", "ui_event", "ui_close"),
+        ("ui_open", "ui_event"),
+    ),
+    ContributionKind.SETTINGS_PANEL: _RemoteOperations(
+        ("ui_open", "ui_event", "ui_close"),
+        ("ui_open", "ui_event"),
+    ),
+    ContributionKind.COMMAND: _RemoteOperations(
+        ("invoke",), ("invoke",)
     ),
 }
 
@@ -603,3 +633,42 @@ class _RemoteEngine:
             operation,
             arguments,
         )
+
+
+class _RemoteUiController:
+    def __init__(self, driver, session, contribution_id):
+        self._driver = driver
+        self._session = session
+        self._contributionId = contribution_id
+
+    def open(self, scope, session_id):
+        return self._driver._call(
+            self._session,
+            self._contributionId,
+            "ui_open",
+            (scope, session_id),
+        )
+
+    def event(self, event):
+        return self._driver._call(
+            self._session,
+            self._contributionId,
+            "ui_event",
+            (event,),
+        )
+
+    def close(self, session_id):
+        codec = api_value_codec()
+        self._session.rpc.notify("contribution/notify", {
+            "contribution_id": self._contributionId,
+            "operation": "ui_close",
+            "arguments": codec.encode((session_id,)),
+        })
+
+
+def _build_remote_ui_widget(controller, scope, parent):
+    # Imported only when a window asks to display the declaration. Drivers
+    # and the portable plugin contract remain importable without Qt.
+    from manuskript.ui.plugins.declarative_ui import DeclarativeUiWidget
+
+    return DeclarativeUiWidget(controller, scope, parent=parent)

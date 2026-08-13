@@ -33,6 +33,7 @@ from manuskript.plugins.api import (
     DocumentRevisionWorkflowSnapshot,
     EntitySnapshot,
     MorphologySchemaSnapshot,
+    PluginFileSnapshot,
     ProseAnalysisSnapshot,
     ProseOccurrenceSnapshot,
     ReferenceOccurrenceSnapshot,
@@ -55,6 +56,7 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_ASSERTIONS_READ,
     CAPABILITY_ASSERTIONS_WRITE,
     CAPABILITY_PROSE_ANALYSIS,
+    CAPABILITY_PROJECT_DATA,
     CAPABILITY_ENTITIES_READ,
     CAPABILITY_ENTITIES_WRITE,
     CAPABILITY_MORPHOLOGY_SCHEMAS,
@@ -67,6 +69,7 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_WORKFLOW_WRITE,
 )
 from manuskript.plugins.errors import PluginScopeError
+from manuskript.plugins.values import ContentEnvelope
 
 
 _PERSISTED_CAPABILITIES = frozenset((
@@ -175,6 +178,9 @@ def build_story_capability(
         CAPABILITY_TIMELINE_READ: lambda: TimelineReadCapability(manager),
         CAPABILITY_RULES_EXECUTE: lambda: RuleExecuteCapability(manager),
         CAPABILITY_PROSE_ANALYSIS: lambda: ProseAnalysisCapability(manager),
+        CAPABILITY_PROJECT_DATA: lambda: ProjectDataCapability(
+            manager, plugin_id
+        ),
         CAPABILITY_WORKFLOW_READ: lambda: RevisionWorkflowReadCapability(
             manager
         ),
@@ -319,6 +325,46 @@ def _diagnostic_snapshot(issue):
         issue.source_span.start,
         issue.source_span.end,
     )
+
+
+class ProjectDataCapability:
+    """One plugin's raw project-file namespace, never another plugin's."""
+
+    def __init__(self, manager, plugin_id):
+        self._namespace = manager.models.plugin_data.namespace(
+            plugin_id,
+            on_change=manager.startTimerNoChanges,
+        )
+
+    def paths(self):
+        return self._namespace.paths()
+
+    def read(self, path):
+        path = str(path)
+        content = self._namespace.read(path)
+        if content is None:
+            return None
+        media_type = (
+            "text/plain"
+            if isinstance(content, str)
+            else "application/octet-stream"
+        )
+        return PluginFileSnapshot(
+            path,
+            ContentEnvelope.from_content(content, media_type),
+        )
+
+    def write(self, path, content):
+        if not isinstance(content, ContentEnvelope):
+            raise TypeError("Plugin project writes require a content envelope.")
+        path = str(path)
+        self._namespace.write(path, content.unpack())
+        return self.read(path)
+
+    def delete(self, path):
+        path = str(path)
+        self._namespace.delete(path)
+        return PluginFileSnapshot(path, None, deleted=True)
 
 
 class EntityReadCapability:

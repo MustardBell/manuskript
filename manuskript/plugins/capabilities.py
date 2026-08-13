@@ -49,6 +49,8 @@ CAPABILITY_WORKFLOW_READ = "workflow.read"
 CAPABILITY_WORKFLOW_WRITE = "workflow.write"
 CAPABILITY_QUERY_EXECUTE = "query.execute"
 CAPABILITY_MORPHOLOGY_SCHEMAS = "morphology.schemas"
+CAPABILITY_PROJECT_DATA = "project.data"
+CAPABILITY_PLUGIN_OPTIONS = "plugin.options"
 
 
 @dataclass(frozen=True)
@@ -249,6 +251,20 @@ CAPABILITIES = (
             "and explicit assertions."
         ),
         portability=ContractPortability.DECLARATIVE,
+    ),
+    Capability(
+        name=CAPABILITY_PLUGIN_OPTIONS,
+        summary=(
+            "Read and update host-persisted options for this plugin's own "
+            "contributions, with resource revisions."
+        ),
+    ),
+    Capability(
+        name=CAPABILITY_PROJECT_DATA,
+        summary=(
+            "Read and update portable raw project files inside this "
+            "plugin's own namespace, with resource revisions."
+        ),
     ),
     Capability(
         name=CAPABILITY_MORPHOLOGY_SCHEMAS,
