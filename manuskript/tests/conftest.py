@@ -24,6 +24,17 @@ def test_application():
     yield application
     _app, window = application
     closeProjectDiscardingChanges(window)
+    # QApplication is process-global, but its MainWindow must not be left for
+    # Python and Qt DLL finalizers to dismantle in an arbitrary order. This is
+    # particularly visible on Windows after tests open floating entity docks:
+    # every assertion passes and the interpreter then exits with 0xC0000005.
+    # Finish the native ownership graph while the event dispatcher is alive.
+    from PyQt5.QtCore import QCoreApplication, QEvent
+
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _app.processEvents()
 
 
 @pytest.fixture(scope="session")
