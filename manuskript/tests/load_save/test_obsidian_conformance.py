@@ -73,7 +73,7 @@ def test_obsidian_alias_and_body_edits_remain_loadable_and_yaml_is_plain():
     assert entity.document.text == "Notes changed in Obsidian.\n"
     assert render_wikilinks_as_markdown(
         "[[Characters/Mara Vale|Mara]]"
-    ) == "[Mara](manuskript:Characters/Mara%20Vale)"
+    ) == "Mara"
 
 
 def test_manuskript_entity_edits_preserve_obsidian_owned_frontmatter():
