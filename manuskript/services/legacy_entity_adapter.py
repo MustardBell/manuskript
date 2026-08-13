@@ -183,10 +183,13 @@ class LegacyEntityAdapter:
     def _updated_plot(self, record, entity):
         values = self._editable_values(entity)
         known = set(PLOT_FIELD_NAMES) | {item.name for item in record.fields}
+        body_field = (
+            "description" if record.value("description") else "summary"
+        )
         values.update({
             "ID": record.value("ID"),
             "name": entity.title,
-            "description": entity.document.text,
+            body_field: entity.document.text,
         })
         return PlotRecord(
             self._replace_named_fields(
@@ -299,6 +302,7 @@ class LegacyEntityAdapter:
             metadata=self._metadata(
                 record.fields + record.custom_fields,
                 legacy_id=record.id,
+                excluded=("name", "id", "notes"),
             ) + (
                 StructuredMetadataField("legacy.color", record.color),
             ),
@@ -309,7 +313,11 @@ class LegacyEntityAdapter:
         identifier = values.get("ID", "")
         title = values.get("name", "Untitled world entity")
         stable_id = self._id("world", identifier or title)
-        metadata = self._metadata(record.fields, legacy_id=identifier)
+        metadata = self._metadata(
+            record.fields,
+            legacy_id=identifier,
+            excluded=("id", "name", "description"),
+        )
         if parent_id:
             metadata = metadata + (
                 StructuredMetadataField("legacy.parent", parent_id),
@@ -336,18 +344,23 @@ class LegacyEntityAdapter:
         values = {item.name: item.value for item in record.fields}
         identifier = values.get("ID", "")
         title = values.get("name", "Untitled plot")
+        body_field = "description" if values.get("description") else "summary"
         return EntityRecord(
             document=OutlineDocument(
                 id=self._id("plot", identifier or title),
                 title=title,
                 kind="entity",
-                text=values.get("description", values.get("summary", "")),
+                text=values.get(body_field, ""),
                 source_path=posixpath.join(
                     "Legacy", "Plots", str(identifier or title) + ".md"
                 ),
             ),
             entity_type="plot",
-            metadata=self._metadata(record.fields, legacy_id=identifier) + (
+            metadata=self._metadata(
+                record.fields,
+                legacy_id=identifier,
+                excluded=("id", "name", body_field),
+            ) + (
                 StructuredMetadataField(
                     "legacy.character_ids", list(record.character_ids)
                 ),
@@ -380,10 +393,11 @@ class LegacyEntityAdapter:
         return tuple(aliases)
 
     @staticmethod
-    def _metadata(fields: Iterable, legacy_id=""):
+    def _metadata(fields: Iterable, legacy_id="", excluded=()):
+        excluded = {str(name).casefold() for name in excluded}
         metadata = []
         for item in fields:
-            if item.name.casefold() in ("alias", "aliases"):
+            if item.name.casefold() in excluded | {"alias", "aliases"}:
                 continue
             value = item.value
             if item.name.casefold() == "morphology":

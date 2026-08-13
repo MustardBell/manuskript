@@ -2,14 +2,13 @@
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
+    QApplication,
     QHeaderView,
-    QSplitter,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMenu,
     QPushButton,
-    QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -21,7 +20,8 @@ class EntityBrowserPanel(QWidget):
     """A model-free entity list suitable for a narrow QDockWidget."""
 
     createRequested = pyqtSignal(str)
-    editRequested = pyqtSignal(str)
+    editRequested = pyqtSignal(str, bool)
+    selectionActivated = pyqtSignal(str, bool)
     deleteRequested = pyqtSignal(str)
 
     def __init__(
@@ -76,6 +76,13 @@ class EntityBrowserPanel(QWidget):
         self.newButton.setObjectName("newEntityButton")
         self.editButton = QPushButton(self.tr("&Edit…"), self)
         self.editButton.setObjectName("editEntityButton")
+        detail_hint = self.tr(
+            "Open details. Hold Alt while opening to keep the current "
+            "detail window and open another."
+        )
+        self.editButton.setToolTip(detail_hint)
+        self.editButton.setAccessibleDescription(detail_hint)
+        self.tree.setToolTip(detail_hint)
         self.deleteButton = QPushButton(self.tr("&Delete"), self)
         self.deleteButton.setObjectName("deleteEntityButton")
         self.editButton.setEnabled(False)
@@ -95,27 +102,13 @@ class EntityBrowserPanel(QWidget):
         browser_layout.addWidget(self.countLabel)
         browser_layout.addLayout(actions)
 
-        # The editor is this panel's other half, not a surface of its
-        # own: editing a character is something one does to a character,
-        # so there is nowhere to reach it from except the list it
-        # belongs to, and no way to be left looking at it alone.
-        self.editor = EntityEditorPanel(self)
-        self.editor.hide()
-
-        self.splitter = QSplitter(Qt.Horizontal, self)
-        self.splitter.setObjectName("entityBrowserSplitter")
-        self.splitter.setChildrenCollapsible(False)
-        self.splitter.addWidget(browser)
-        self.splitter.addWidget(self.editor)
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 2)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.addWidget(self.splitter)
+        layout.addWidget(browser)
 
         self.filterEdit.textChanged.connect(self._apply_filter)
         self.tree.itemSelectionChanged.connect(self._selection_changed)
+        self.tree.itemClicked.connect(self._item_clicked)
         self.tree.itemDoubleClicked.connect(self._edit_item)
         self.editButton.clicked.connect(self._edit_current)
         self.deleteButton.clicked.connect(self._delete_current)
@@ -179,13 +172,6 @@ class EntityBrowserPanel(QWidget):
     def current_entity_id(self):
         item = self.tree.currentItem()
         return str(item.data(0, Qt.UserRole)) if item is not None else ""
-
-    def show_editor(self):
-        """Bring this panel's editing half into view."""
-        self.editor.show()
-        if self.splitter.sizes()[1] == 0:
-            width = max(self.width(), 1)
-            self.splitter.setSizes([width // 3, width - width // 3])
 
     def _grouping(self):
         """The field this panel's one kind of entity is read under.
@@ -320,85 +306,28 @@ class EntityBrowserPanel(QWidget):
     def _edit_item(self, item, _column):
         identifier = str(item.data(0, Qt.UserRole))
         if identifier:
-            self.editRequested.emit(identifier)
+            self.editRequested.emit(identifier, self._new_window_requested())
+
+    def _item_clicked(self, item, _column):
+        identifier = str(item.data(0, Qt.UserRole))
+        if identifier:
+            self.selectionActivated.emit(
+                identifier, self._new_window_requested()
+            )
 
     def _edit_current(self):
         identifier = self.current_entity_id()
         if identifier:
-            self.editRequested.emit(identifier)
+            self.editRequested.emit(identifier, self._new_window_requested())
 
     def _delete_current(self):
         identifier = self.current_entity_id()
         if identifier:
             self.deleteRequested.emit(identifier)
 
-
-class EntityEditorPanel(QWidget):
-    """Stable dock content into which the selected entity form is mounted."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("entityEditorPanel")
-        self.setMinimumSize(260, 180)
-        self._editor = None
-        self.placeholder = QLabel(
-            self.tr(
-                "Select an entity from an entity browser, then choose Edit."
-            ),
-            self,
-        )
-        self.placeholder.setObjectName("entityEditorPlaceholder")
-        self.placeholder.setWordWrap(True)
-        self.placeholder.setAlignment(Qt.AlignCenter)
-        self.placeholder.setAccessibleName(self.tr("No entity selected"))
-        self.scrollArea = QScrollArea(self)
-        self.scrollArea.setObjectName("entityEditorScrollArea")
-        self.scrollArea.setAccessibleName(self.tr("Entity editor form"))
-        self.scrollArea.setWidgetResizable(True)
-        self.scrollArea.setFrameShape(QScrollArea.NoFrame)
-        self.scrollArea.hide()
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.addWidget(self.placeholder, 1)
-        self._layout.addWidget(self.scrollArea, 1)
-
-    @property
-    def editor(self):
-        return self._editor
-
-    def set_editor(self, editor):
-        self.clear()
-        self._editor = editor
-        self.placeholder.hide()
-        editor.setParent(self)
-        editor.setWindowFlags(Qt.Widget)
-        editor.setWindowModality(Qt.NonModal)
-        # A dialog sizes itself for a dialog. Inside a dock it has to be
-        # allowed to be narrow, or its own minimum forces a horizontal
-        # scroll bar on top of the vertical one and the form is read
-        # through a letterbox.
-        editor.setMinimumSize(0, 0)
-        self.scrollArea.setWidget(editor)
-        self.scrollArea.show()
-        editor.destroyed.connect(self._editor_destroyed)
-        editor.show()
-
-    def clear(self):
-        editor = self._editor
-        self._editor = None
-        if editor is not None:
-            if self.scrollArea.widget() is editor:
-                self.scrollArea.takeWidget()
-            editor.setParent(None)
-            editor.deleteLater()
-        self.scrollArea.hide()
-        self.placeholder.show()
-
-    def _editor_destroyed(self, _object=None):
-        self._editor = None
-        self.scrollArea.hide()
-        self.placeholder.show()
-
+    @staticmethod
+    def _new_window_requested():
+        return bool(QApplication.keyboardModifiers() & Qt.AltModifier)
 
 
 def build_project_entities(context, parent):

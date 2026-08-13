@@ -145,12 +145,10 @@ def test_project_search_context_opens_and_highlights_character(
 
     search_widget.openItem(matches[0])
 
-    # Edited in the browser that lists it, not in a surface of its own.
-    panel = window.corePanels.character_entities
-    editor = panel.editor.editor
+    # Search reaches the same browser-owned detail workflow as a list row.
+    editor = window.entityWorkspace.current_editor()
     assert editor is not None
     assert editor.titleEdit.selectedText() == "Peter"
-    assert not panel.editor.isHidden()
     assert not window.panelHost.instance(
         CHARACTER_ENTITIES
     ).container.isHidden()

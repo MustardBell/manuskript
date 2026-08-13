@@ -45,13 +45,13 @@ class EntityWorkspaceController:
                 .persistence_strategy.supports(
                     "morphology.entities", write=True
                 ),
-                host_panel=panel.editor,
             )
             for panel in self.panels
         }
         for panel in self.panels:
             connect(panel.createRequested, self.create)
             connect(panel.editRequested, self.open)
+            connect(panel.selectionActivated, self.retarget)
             connect(panel.deleteRequested, self.delete)
         self.catalog.subscribe(self._onCatalogChanged)
         self.bound = True
@@ -118,16 +118,22 @@ class EntityWorkspaceController:
             return False
         return self.open(entity.id)
 
-    def open(self, entity_id):
-        """Edit an entity in the browser that lists it."""
+    def open(self, entity_id, new_window=False):
+        """Open a browser-reachable detail window for an entity."""
         panel = self.panel_for(entity_id)
         if panel is None:
             return False
         editor = self.editors.get(panel)
-        if editor is None or not editor.open(entity_id):
+        if editor is None or not editor.open(entity_id, new_window):
             return False
-        panel.show_editor()
         return True
+
+    def retarget(self, entity_id, new_window=False):
+        panel = self.panel_for(entity_id)
+        editor = self.editors.get(panel) if panel is not None else None
+        if editor is None:
+            return False
+        return editor.retarget(entity_id, new_window)
 
     def dialog_for(self, entity_id):
         """The open form for one entity, wherever it is being edited."""
@@ -135,13 +141,13 @@ class EntityWorkspaceController:
         editor = self.editors.get(panel) if panel is not None else None
         if editor is None:
             return None
-        return editor._dialogs.get(entity_id)
+        return editor.dialog_for(entity_id)
 
     def current_editor(self):
         """The entity form now on screen, if one is."""
-        for panel in self.panels:
-            editor = panel.editor.editor
-            if editor is not None and not panel.editor.isHidden():
+        for controller in self.editors.values():
+            editor = controller.current_editor()
+            if editor is not None:
                 return editor
         return None
 

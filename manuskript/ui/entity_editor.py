@@ -2,12 +2,13 @@
 
 import json
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDockWidget,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -74,6 +75,11 @@ class EntityEditorDialog(QDialog):
         )
         self._morphologyChanged = False
         self._readOnly = bool(read_only)
+        self._protectedMetadata = tuple(
+            field for field in entity.metadata
+            if entity.id.startswith("legacy:")
+            and field.name.startswith("legacy.")
+        )
         self.setObjectName("entityEditorDialog")
         schema = next(
             (item for item in schemas if item.type == entity.type), None
@@ -134,8 +140,12 @@ class EntityEditorDialog(QDialog):
         form.addRow(self.tr("T&ype:"), self.typeCombo)
         form.addRow(self.tr("&Aliases:"), self.aliasesEdit)
         form.addRow(self.tr("File:"), self.pathLabel)
-        form.addRow(self.tr("Name forms:"), self.morphologyButton)
-        form.addRow("", self.morphologySummary)
+        if self._morphologyEnabled:
+            form.addRow(self.tr("Name forms:"), self.morphologyButton)
+            form.addRow("", self.morphologySummary)
+        else:
+            self.morphologyButton.hide()
+            self.morphologySummary.hide()
 
         # What this kind of entity is expected to carry, laid out as its
         # own fields. Without this the only editor possible is a table of
@@ -160,6 +170,7 @@ class EntityEditorDialog(QDialog):
         for field in entity.metadata:
             if (
                 field.name in self._fieldWidgets
+                or field in self._protectedMetadata
                 or (
                     field.name == "morphology"
                     and self._morphologyProfile is not None
@@ -385,6 +396,7 @@ class EntityEditorDialog(QDialog):
             )
         ]
         metadata = tuple(ordered) + tuple(result)
+        metadata = metadata + self._protectedMetadata
         if self._morphologyProfile is not None:
             metadata = self._morphologyProfile.apply_to(metadata)
         return metadata
@@ -459,8 +471,36 @@ class EntityEditorDialog(QDialog):
         self.morphologySummary.setText(text)
 
 
+class EntityEditorDock(QDockWidget):
+    """A detail form that floats by default but may join its workspace."""
+
+    closing = pyqtSignal(object)
+
+    def __init__(self, editor, parent):
+        super().__init__(editor.windowTitle(), parent)
+        self.editor = editor
+        self.setObjectName("entityEditorDock")
+        self.setAccessibleName(editor.windowTitle())
+        self.setAllowedAreas(Qt.AllDockWidgetAreas)
+        self.setFeatures(
+            QDockWidget.DockWidgetClosable
+            | QDockWidget.DockWidgetMovable
+            | QDockWidget.DockWidgetFloatable
+        )
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        editor.setParent(self)
+        editor.setWindowFlags(Qt.Widget)
+        editor.setWindowModality(Qt.NonModal)
+        self.setWidget(editor)
+        editor.finished.connect(self.close)
+
+    def closeEvent(self, event):
+        self.closing.emit(self)
+        super().closeEvent(event)
+
+
 class EntityEditorController:
-    """Own non-modal child dialogs for one workspace window."""
+    """Own browser-reachable, dockable detail windows for one entity kind."""
 
     def __init__(
         self,
@@ -469,34 +509,45 @@ class EntityEditorController:
         update_entity,
         morphology_schemas=None,
         morphology_enabled=False,
-        host_panel=None,
-        reveal=None,
     ):
         self.parent = parent
         self.catalog = catalog
         self.updateEntity = update_entity
         self.morphologySchemas = morphology_schemas
         self.morphologyEnabled = morphology_enabled
-        self.hostPanel = host_panel
-        self.reveal = reveal
-        self._dialogs = {}
+        self._docks = []
+        self._primary = None
 
-    def open(self, entity_id):
+    @property
+    def has_open_editor(self):
+        return bool(self._docks)
+
+    def open(self, entity_id, new_window=False):
         entity = self.catalog.find(entity_id)
         if entity is None:
             return False
-        existing = self._dialogs.get(entity_id)
+        existing = next(
+            (
+                dock for dock in self._docks
+                if dock.editor.entity.id == entity_id
+            ),
+            None,
+        )
         if existing is not None:
             existing.show()
             existing.raise_()
             existing.activateWindow()
-            if callable(self.reveal):
-                self.reveal()
             return True
-        if self.hostPanel is not None and self.hostPanel.editor is not None:
-            current = self.hostPanel.editor
-            if current.submit() is False:
+        geometry = None
+        if not new_window and self._primary is not None:
+            previous = self._primary
+            geometry = previous.saveGeometry()
+            if previous.editor.submit() is False:
                 return False
+            # Read-only forms have nothing to submit and therefore do not
+            # finish themselves; retargeting still replaces the primary.
+            if previous in self._docks:
+                previous.close()
         dialog = EntityEditorDialog(
             entity,
             self.catalog.schemas.schemas,
@@ -511,28 +562,57 @@ class EntityEditorController:
             read_only=not self.catalog.can_edit(entity_id),
             allow_type_change=self.catalog.writable,
         )
-        if self.hostPanel is None:
-            dialog.setAttribute(Qt.WA_DeleteOnClose)
-        self._dialogs[entity_id] = dialog
-        dialog.destroyed.connect(
-            lambda _object=None, key=entity_id, dialogs=self._dialogs:
-                dialogs.pop(key, None)
-        )
-        if self.hostPanel is None:
-            dialog.show()
+        dock = EntityEditorDock(dialog, self.parent)
+        dock.closing.connect(self._dock_closing)
+        self.parent.addDockWidget(Qt.RightDockWidgetArea, dock)
+        dock.setFloating(True)
+        if geometry is not None:
+            dock.restoreGeometry(geometry)
         else:
-            self.hostPanel.set_editor(dialog)
-            if callable(self.reveal):
-                self.reveal()
+            dock.resize(720, 760)
+        self._docks.append(dock)
+        if not new_window or self._primary is None:
+            self._primary = dock
+        dock.show()
+        dock.raise_()
+        dock.activateWindow()
         return True
 
+    def retarget(self, entity_id, new_window=False):
+        """Follow browser selection only once a detail window exists."""
+
+        if new_window:
+            return self.open(entity_id, new_window=True)
+        if not self.has_open_editor:
+            return False
+        return self.open(entity_id)
+
+    def dialog_for(self, entity_id):
+        dock = next(
+            (
+                item for item in self._docks
+                if item.editor.entity.id == entity_id
+            ),
+            None,
+        )
+        return dock.editor if dock is not None else None
+
+    def current_editor(self):
+        if self._primary in self._docks:
+            return self._primary.editor
+        return self._docks[-1].editor if self._docks else None
+
+    def _dock_closing(self, dock):
+        if dock in self._docks:
+            self._docks.remove(dock)
+        if self._primary is dock:
+            self._primary = self._docks[0] if self._docks else None
+
     def close_all(self):
-        if self.hostPanel is not None:
-            self.hostPanel.clear()
-        else:
-            for dialog in tuple(self._dialogs.values()):
-                dialog.close()
-        self._dialogs.clear()
+        for dock in tuple(self._docks):
+            dock.close()
+        self._docks.clear()
+        self._primary = None
 
     def pending_editors(self):
-        return tuple(self._dialogs.values())
+        return tuple(dock.editor for dock in self._docks)

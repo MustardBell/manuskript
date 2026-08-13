@@ -25,7 +25,6 @@ from manuskript.panels.core import (
 )
 from manuskript.ui.panels.core.entities import (
     EntityBrowserPanel,
-    EntityEditorPanel,
 )
 from manuskript.ui.views.metadataView import metadataView
 from manuskript.ui.views.storylineView import storylineView

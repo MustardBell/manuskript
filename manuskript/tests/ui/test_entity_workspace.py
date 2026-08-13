@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QMainWindow
 
 from manuskript.domain.entity_catalog import (
     EntityCatalog,
@@ -47,7 +47,7 @@ def _workspace(parent):
 
 def test_entity_workspace_routes_creation_to_the_matching_dock(
         test_application):
-    parent = QWidget()
+    parent = QMainWindow()
     controller, catalog, panels = _workspace(parent)
     connections = SignalConnectionRegistry()
     controller.bind(connections.connect)
@@ -111,13 +111,10 @@ def test_characters_are_read_under_main_secondary_and_minor(MWSampleProject):
     assert tree.topLevelItem(0).data(0, Qt.UserRole) is None
 
 
-def test_an_entity_is_edited_where_it_is_listed(MWEmptyProject):
-    """There is no entity editor to be left looking at on its own.
-
-    Editing a character is something done to a character, so the form is
-    the browser's other half rather than a surface of its own that can
-    be opened, moved or closed without the list it belongs to.
-    """
+def test_entity_detail_is_browser_reachable_but_not_browser_embedded(
+    MWEmptyProject,
+):
+    """The browser remains an overview while details get usable space."""
     window = MWEmptyProject
 
     assert not hasattr(window.corePanels, "entity_editor")
@@ -126,13 +123,13 @@ def test_an_entity_is_edited_where_it_is_listed(MWEmptyProject):
         for panel_id in window.panelHost.instances
     )
 
-    panels = window.entityWorkspace.panels
-    # Each browser edits in a half of its own, and that half is a child
-    # of the browser -- so it cannot outlive it or be reached without it.
-    halves = {id(panel.editor) for panel in panels}
-    assert len(halves) == len(panels)
-    for panel in panels:
-        assert panel.isAncestorOf(panel.editor)
+    assert all(
+        not hasattr(panel, "editor")
+        for panel in window.entityWorkspace.panels
+    )
+    assert "Hold Alt" in (
+        window.corePanels.character_entities.editButton.toolTip()
+    )
 
 
 def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):
