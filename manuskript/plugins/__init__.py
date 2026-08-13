@@ -95,7 +95,16 @@ from manuskript.media_types import (
 )
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.plugins.runtime import PluginRuntime
-from manuskript.plugins.errors import PluginScopeError
+from manuskript.plugins.errors import PluginScopeError, PluginValueError
+from manuskript.plugins.values import (
+    ApiValueCodec,
+    ApiValueLimits,
+    ContentEncoding,
+    ContentEnvelope,
+    ErrorEnvelope,
+    RecordSchema,
+    api_value_codec,
+)
 
 __all__ = [
     "PLUGIN_API_VERSION",
@@ -161,6 +170,7 @@ __all__ = [
     "PluginSettingsContext",
     "PluginSettingsContribution",
     "PluginScopeError",
+    "PluginValueError",
     "ProjectPanelContribution",
     "ProjectSnapshot",
     "ProseAnalysisSnapshot",
@@ -185,5 +195,12 @@ __all__ = [
     "TemporalPointValue",
     "TransformContribution",
     "WorkspaceDocument",
+    "ApiValueCodec",
+    "ApiValueLimits",
+    "ContentEncoding",
+    "ContentEnvelope",
+    "ErrorEnvelope",
+    "RecordSchema",
+    "api_value_codec",
     "contribution_contract",
 ]
