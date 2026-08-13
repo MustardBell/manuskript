@@ -71,6 +71,28 @@ def test_read_only_legacy_catalog_cannot_create_native_entities():
         catalog.create("character", "Mara")
 
 
+def test_projected_entity_permissions_do_not_enable_native_semantics():
+    catalog = EntityCatalog(first_party_story_entity_schemas())
+    legacy = _entity(
+        "legacy:character:1", "Mara", "Legacy/Characters/1.md"
+    )
+    catalog.replace(
+        (),
+        (legacy,),
+        editable_projected_ids=(legacy.id,),
+        deletable_projected_ids=(legacy.id,),
+        creatable_projected_types=("character",),
+    )
+
+    assert not catalog.writable
+    assert catalog.can_edit(legacy.id)
+    assert catalog.can_delete(legacy.id)
+    assert catalog.can_create("character")
+    assert not catalog.can_create("place")
+    with pytest.raises(PermissionError, match="Format 2"):
+        catalog.create("character", "New")
+
+
 @pytest.mark.parametrize(
     "directory",
     (

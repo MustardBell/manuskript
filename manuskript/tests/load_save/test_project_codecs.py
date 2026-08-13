@@ -212,9 +212,12 @@ def test_legacy_formats_expose_one_entity_surface_without_new_semantics(
     entity_read = strategy.support("entities.read")
     assert entity_read.persistence_level is PersistenceLevel.DERIVED
     assert entity_read.readable and not entity_read.writable
+    entity_write = strategy.support("entities.write")
+    assert entity_write.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
+    assert entity_write.writable
+    assert entity_write.old_client_save_safe is (version == 1)
 
     for feature in (
-        "entities.write",
         "references.read",
         "references.write",
         "morphology.entities",

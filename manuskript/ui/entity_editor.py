@@ -61,6 +61,7 @@ class EntityEditorDialog(QDialog):
         morphology_schemas=None,
         morphology_enabled=False,
         read_only=False,
+        allow_type_change=True,
     ):
         super().__init__(parent)
         self.entity = entity
@@ -97,6 +98,7 @@ class EntityEditorDialog(QDialog):
             self.typeCombo.addItem(entity.type, entity.type)
             type_index = self.typeCombo.count() - 1
         self.typeCombo.setCurrentIndex(type_index)
+        self.typeCombo.setEnabled(bool(allow_type_change) and not self._readOnly)
 
         self.aliasesEdit = QPlainTextEdit(self)
         self.aliasesEdit.setObjectName("entityAliasesEdit")
@@ -506,10 +508,8 @@ class EntityEditorController:
                 if callable(self.morphologyEnabled)
                 else bool(self.morphologyEnabled)
             ),
-            read_only=(
-                not self.catalog.writable
-                or entity not in self.catalog.native_entities
-            ),
+            read_only=not self.catalog.can_edit(entity_id),
+            allow_type_change=self.catalog.writable,
         )
         if self.hostPanel is None:
             dialog.setAttribute(Qt.WA_DeleteOnClose)

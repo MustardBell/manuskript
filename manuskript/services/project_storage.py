@@ -105,6 +105,7 @@ class ProjectStorage:
             legacy_entity_adapter or LegacyEntityAdapter()
         )
         self._canonical_project = None
+        self._active_context = None
         self._reference_index = ReferenceIndex()
         self._assertion_store = assertion_store or AssertionStore()
         self._chronology_index = chronology_index or ChronologyIndex()
@@ -229,6 +230,24 @@ class ProjectStorage:
         self._rebuild_assertions()
 
     def create_entity(self, entity_type, title, aliases=()):
+        if not self._entity_catalog.writable:
+            if not self._entity_catalog.can_create(entity_type):
+                raise PermissionError(
+                    "This project format cannot store '{}' entities.".format(
+                        entity_type
+                    )
+                )
+            context = self._require_active_context()
+            entity_id = self._application_model_adapter.create_entity(
+                context, entity_type, title
+            )
+            self._recapture_legacy(context)
+            entity = self._entity_catalog.find(entity_id)
+            if entity is None:
+                raise KeyError(entity_id)
+            if aliases:
+                return self.update_entity(entity.id, aliases=aliases)
+            return entity
         entity = self._entity_catalog.create(entity_type, title, aliases)
         self._reference_index.update(ReferenceDocument(
             id=entity.id,
@@ -241,6 +260,32 @@ class ProjectStorage:
         return entity
 
     def update_entity(self, entity_id, **changes):
+        if not self._entity_catalog.writable:
+            if not self._entity_catalog.can_edit(entity_id):
+                raise PermissionError(
+                    "This project format does not allow editing that entity."
+                )
+            context = self._require_active_context()
+            current = self._entity_catalog.find(entity_id)
+            updated = self._entity_catalog.prepare_update(entity_id, **changes)
+            if current is None:
+                raise KeyError(entity_id)
+            if updated.type != current.type:
+                raise PermissionError(
+                    "Legacy project entities cannot change type."
+                )
+            project = self._legacy_entity_adapter.update(
+                self._canonical_project, updated
+            )
+            self._application_model_adapter.apply_entity(
+                context, project, entity_id
+            )
+            self._canonical_project = project
+            self._recapture_legacy(context)
+            result = self._entity_catalog.find(entity_id)
+            if result is None:
+                raise KeyError(entity_id)
+            return result
         entity = self._entity_catalog.update(entity_id, **changes)
         self._reference_index.update(ReferenceDocument(
             id=entity.id,
@@ -253,6 +298,18 @@ class ProjectStorage:
         return entity
 
     def delete_entity(self, entity_id):
+        if not self._entity_catalog.writable:
+            if not self._entity_catalog.can_delete(entity_id):
+                raise PermissionError(
+                    "This project format does not allow deleting that entity."
+                )
+            context = self._require_active_context()
+            entity = self._entity_catalog.find(entity_id)
+            if entity is None:
+                raise KeyError(entity_id)
+            self._application_model_adapter.delete_entity(context, entity_id)
+            self._recapture_legacy(context)
+            return entity
         entity = self._entity_catalog.delete(entity_id)
         self._reference_index.remove(entity.document.id)
         self._rebuild_assertions()
@@ -323,7 +380,17 @@ class ProjectStorage:
                     self._legacy_file_access.read(context.project_file),
                     zipped=True,
                 )
-                self._adopt_canonical_project(project)
+                result = loadSave.loadProject(
+                    context,
+                    cache=self._file_cache,
+                    file_access=self._file_access,
+                    legacy_file_access=self._legacy_file_access,
+                )
+                if result.succeeded:
+                    self._active_context = context
+                    self._canonical_project = project
+                    self._recapture_legacy(context)
+                return result
             return loadSave.loadProject(
                 context,
                 cache=self._file_cache,
@@ -347,6 +414,8 @@ class ProjectStorage:
                 return self._save_version_1(context)
             if selected_version == 2:
                 return self._save_version_2(context)
+            if selected_version == 0:
+                return self._save_version_0(context)
             return loadSave.saveProject(
                 context,
                 version=version,
@@ -382,6 +451,7 @@ class ProjectStorage:
     def clear_cache(self):
         self._file_cache.clear()
         self._canonical_project = None
+        self._active_context = None
         self._reference_index.rebuild(())
         self._assertion_store.rebuild(())
         self._chronology_index.rebuild(())
@@ -399,6 +469,7 @@ class ProjectStorage:
             zipped=bool(zipped),
         )
         self._application_model_adapter.hydrate(project, context)
+        self._active_context = context
         self._adopt_canonical_project(project)
         if not zipped:
             self._file_cache.clear()
@@ -439,6 +510,23 @@ class ProjectStorage:
             self._adopt_canonical_project(project)
         return result
 
+    def _save_version_0(self, context):
+        result = loadSave.saveProject(
+            context,
+            version=0,
+            cache=self._file_cache,
+            file_access=self._file_access,
+            legacy_file_access=self._legacy_file_access,
+        )
+        if result.succeeded:
+            self._active_context = context
+            self._canonical_project = self._version_0_codec.decode(
+                self._legacy_file_access.read(context.project_file),
+                zipped=True,
+            )
+            self._recapture_legacy(context)
+        return result
+
     def _load_version_2(self, context, *, zipped, file_access):
         read_result = file_access.read(
             context.project_file, zipped=bool(zipped)
@@ -457,6 +545,7 @@ class ProjectStorage:
                 fatal_errors=fatal,
             )
         self._application_model_adapter.hydrate(project, context)
+        self._active_context = context
         self._adopt_canonical_project(project)
         if not zipped:
             self._file_cache.clear()
@@ -542,6 +631,17 @@ class ProjectStorage:
             native_entities,
             legacy_entities,
             writable=project.format_version == 2,
+            editable_projected_ids=(
+                entity.id for entity in legacy_entities
+            ) if project.format_version in (0, 1) else (),
+            deletable_projected_ids=(
+                entity.id for entity in legacy_entities
+                if entity.type != "project"
+            ) if project.format_version in (0, 1) else (),
+            creatable_projected_types=(
+                ("character", "world", "plot")
+                if project.format_version in (0, 1) else ()
+            ),
         )
         entity_aliases = {
             entity.id: self._entity_reference_surfaces(entity)
@@ -565,6 +665,19 @@ class ProjectStorage:
             for document in documents
         ))
         self._rebuild_assertions()
+
+    def _recapture_legacy(self, context):
+        if self._canonical_project is None:
+            raise ValueError("No canonical project is open.")
+        project = self._application_model_adapter.capture(
+            context, self._canonical_project
+        )
+        self._adopt_canonical_project(project)
+
+    def _require_active_context(self):
+        if self._active_context is None:
+            raise RuntimeError("No live project models are bound to storage.")
+        return self._active_context
 
     def _entity_reference_surfaces(self, entity):
         return tuple(

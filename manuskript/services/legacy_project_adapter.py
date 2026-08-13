@@ -111,7 +111,165 @@ class LegacyApplicationModelAdapter:
             issues=baseline.issues,
             structured_metadata=baseline.structured_metadata,
             source_files=baseline.source_files,
+            legacy_models=baseline.legacy_models,
         )
+
+    def create_entity(self, context, entity_type, title):
+        """Create a legacy-native record through the live model API."""
+
+        if entity_type == "character":
+            character = context.models.characters.addCharacter(name=title)
+            return "legacy:character:{}".format(character.ID())
+        if entity_type == "world":
+            item = context.models.world.addItem(title=title)
+            return "legacy:world:{}".format(
+                context.models.world.itemID(item)
+            )
+        if entity_type == "plot":
+            _name, identifier = context.models.plots.addPlot(name=title)
+            return "legacy:plot:{}".format(identifier.text())
+        raise PermissionError(
+            "Legacy projects cannot store '{}' entities.".format(entity_type)
+        )
+
+    def delete_entity(self, context, entity_id):
+        """Delete one projected record using the owning legacy model."""
+
+        kind, identifier = self._projected_identity(entity_id)
+        if kind == "character":
+            model = context.models.characters
+            if model.getCharacterByID(identifier) is None:
+                raise KeyError(entity_id)
+            model.removeCharacter(identifier)
+            return
+        if kind == "world":
+            model = context.models.world
+            index = model.indexByID(identifier)
+            if not index.isValid():
+                raise KeyError(entity_id)
+            model.removeItems((index,))
+            return
+        if kind == "plot":
+            model = context.models.plots
+            index = model.getIndexFromID(identifier)
+            if not index.isValid():
+                raise KeyError(entity_id)
+            model.removePlot(index)
+            return
+        raise PermissionError("The project summary cannot be deleted.")
+
+    def apply_entity(self, context, project, entity_id):
+        """Synchronize one canonical legacy record into the live Qt model."""
+
+        if entity_id == "project:summary":
+            self._apply_summary(project, context.models.flat_data)
+            return
+        kind, identifier = self._projected_identity(entity_id)
+        if kind == "character":
+            record = next(
+                (item for item in project.characters
+                 if str(item.id) == identifier),
+                None,
+            )
+            character = context.models.characters.getCharacterByID(identifier)
+            if record is None or character is None:
+                raise KeyError(entity_id)
+            self._apply_character(
+                context.models.characters, character, record
+            )
+            return
+        if kind == "world":
+            record = self._world_record(project.world, identifier)
+            model = context.models.world
+            item = model.itemByID(identifier)
+            if record is None or item is None:
+                raise KeyError(entity_id)
+            self._apply_standard_fields(
+                model,
+                model.indexFromItem(item),
+                record.fields,
+                World,
+            )
+            return
+        if kind == "plot":
+            record = next(
+                (
+                    item for item in project.plots
+                    if str(item.value("ID") or item.value("name"))
+                    == identifier
+                ),
+                None,
+            )
+            model = context.models.plots
+            index = model.getIndexFromID(identifier)
+            if record is None or not index.isValid():
+                raise KeyError(entity_id)
+            self._apply_standard_fields(model, index, record.fields, Plot)
+            return
+        raise KeyError(entity_id)
+
+    @staticmethod
+    def _apply_summary(project, model):
+        metadata = {item.name: item.value for item in project.metadata}
+        summary = {item.name: item.value for item in project.summary}
+        for row, names, values in (
+            (0, PROJECT_METADATA, metadata),
+            (1, PROJECT_SUMMARY, summary),
+        ):
+            for column, name in enumerate(names):
+                index = model.index(row, column)
+                if index.isValid():
+                    model.setData(index, values.get(name, ""))
+
+    @staticmethod
+    def _apply_character(model, character, record):
+        values = {
+            item.name.casefold(): item.value for item in record.fields
+        }
+        values["Name"] = record.name
+        values["ID"] = record.id
+        for name, field in CHARACTER_FIELD_TO_ENUM.items():
+            model.setData(
+                character.index(field.value),
+                values.get(name.casefold(), values.get(name, "")),
+            )
+        character.infos = [
+            CharacterInfo(character, item.name, item.value)
+            for item in record.custom_fields
+        ]
+        if record.color:
+            character.setColor(QColor(record.color))
+        top = character.index(0)
+        bottom = character.index(len(Character) - 1)
+        model.dataChanged.emit(top, bottom)
+
+    @staticmethod
+    def _apply_standard_fields(model, row_index, fields, enum_type):
+        values = {item.name: item.value for item in fields}
+        for field in enum_type:
+            if enum_type is Plot and field in (Plot.characters, Plot.steps):
+                continue
+            model.setData(
+                row_index.sibling(row_index.row(), field.value),
+                values.get(field.name, ""),
+            )
+
+    @classmethod
+    def _world_record(cls, records, identifier):
+        for record in records:
+            if str(record.value("ID") or record.value("name")) == identifier:
+                return record
+            found = cls._world_record(record.children, identifier)
+            if found is not None:
+                return found
+        return None
+
+    @staticmethod
+    def _projected_identity(entity_id):
+        parts = str(entity_id).split(":", 2)
+        if len(parts) != 3 or parts[0] != "legacy":
+            raise KeyError(entity_id)
+        return parts[1], parts[2]
 
     @staticmethod
     def moves(

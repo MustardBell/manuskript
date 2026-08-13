@@ -20,6 +20,7 @@ from manuskript.load_save.legacy_archive import (
     Version0ProjectArchive,
 )
 from manuskript.models.characterModel import Character, CharacterInfo
+from manuskript.enums import Character as CharacterField
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -38,9 +39,8 @@ def saveProject(context, archive=None):
     files = []
     files.append((saveStandardItemModelXML(context.models.flat_data),
                   "flatModel.xml"))
-    LOGGER.error("File format 0 does not save characters!")
-    # files.append((saveStandardItemModelXML(context.models.characters),
-    #               "perso.xml"))
+    files.append((saveCharacterModelXML(context.models.characters),
+                  "perso.xml"))
     files.append((saveStandardItemModelXML(context.models.world),
                   "world.xml"))
     files.append((saveStandardItemModelXML(context.models.labels),
@@ -65,6 +65,55 @@ def saveProject(context, archive=None):
             failed_files=(context.project_file,)
         )
     return ProjectSaveResult()
+
+
+def saveCharacterModelXML(model):
+    """Serialize the current character model in the historical v0 shape.
+
+    The original format stored custom character information under the final
+    character column, but each nested row used the old absolute columns 11
+    and 12 for description and value.  The current character model is not a
+    QStandardItemModel, so the generic serializer cannot reproduce that
+    shape reliably.
+    """
+
+    root = ET.Element("model")
+    root.attrib["version"] = qApp.applicationVersion()
+    header = ET.SubElement(root, "header")
+    vertical = ET.SubElement(header, "vertical")
+    for row in range(len(model.characters)):
+        ET.SubElement(vertical, "label", row=str(row), text="")
+    horizontal = ET.SubElement(header, "horizontal")
+    for field in CharacterField:
+        ET.SubElement(
+            horizontal, "label", row=str(field.value), text=field.name
+        )
+    data = ET.SubElement(root, "data")
+    for row_number, character in enumerate(model.characters):
+        row = ET.SubElement(data, "row", row=str(row_number))
+        for field in CharacterField:
+            column = ET.SubElement(row, "col", col=str(field.value))
+            if field is CharacterField.infos:
+                for info_number, info in enumerate(character.infos):
+                    info_row = ET.SubElement(
+                        column, "row", row=str(info_number)
+                    )
+                    description = ET.SubElement(info_row, "col", col="11")
+                    description.text = str(info.description or "")
+                    value = ET.SubElement(info_row, "col", col="12")
+                    value.text = str(info.value or "")
+                continue
+            value = character.data(field.value)
+            if value not in (None, ""):
+                column.text = str(value)
+            if field is CharacterField.name:
+                color = character.color().name(QColor.HexArgb)
+                column.attrib["color"] = (
+                    color if color != "#ff000000" else "#00000000"
+                )
+    return ET.tostring(
+        root, encoding="UTF-8", xml_declaration=True, pretty_print=True
+    )
 
 def saveFilesToZip(files, zipname):
     """Saves given files to zipname.

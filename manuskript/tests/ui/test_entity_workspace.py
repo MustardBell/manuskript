@@ -75,7 +75,13 @@ def test_format_one_story_models_appear_in_entity_docks(MWSampleProject):
     assert len(window.corePanels.character_entities.entities) == 6
     assert len(window.corePanels.plot_entities.entities) == 3
     assert len(window.corePanels.world_entities.entities) > 0
-    assert not window.corePanels.character_entities.newButton.isEnabled()
+    assert window.corePanels.character_entities.newButton.isEnabled()
+    catalog = window.projectManager.storage.entity_catalog
+    assert catalog.can_edit(
+        window.corePanels.character_entities.entities[0].id
+    )
+    # Legacy write-through is not permission to activate Format 2 syntax.
+    assert not catalog.writable
 
 
 def test_characters_are_read_under_main_secondary_and_minor(MWSampleProject):

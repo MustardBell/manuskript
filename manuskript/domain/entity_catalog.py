@@ -198,6 +198,9 @@ class EntityCatalog:
         self._native = ()
         self._legacy = ()
         self._writable = False
+        self._editable_projected_ids = frozenset()
+        self._deletable_projected_ids = frozenset()
+        self._creatable_projected_types = frozenset()
         self._listeners = []
 
     @property
@@ -212,12 +215,36 @@ class EntityCatalog:
     def native_entities(self) -> Tuple[EntityRecord, ...]:
         return self._native
 
+    @property
+    def projected_entities(self) -> Tuple[EntityRecord, ...]:
+        return self._legacy
+
+    def can_edit(self, entity_id: str) -> bool:
+        """Whether the authoritative store accepts edits to this identity."""
+
+        if self._writable:
+            return any(item.id == entity_id for item in self._native)
+        return str(entity_id) in self._editable_projected_ids
+
+    def can_delete(self, entity_id: str) -> bool:
+        if self._writable:
+            return any(item.id == entity_id for item in self._native)
+        return str(entity_id) in self._deletable_projected_ids
+
+    def can_create(self, entity_type: str) -> bool:
+        if self._writable:
+            return self.schemas.get(str(entity_type)) is not None
+        return str(entity_type) in self._creatable_projected_types
+
     def replace(
         self,
         native: Iterable[EntityRecord],
         legacy: Iterable[EntityRecord] = (),
         *,
         writable: bool = False,
+        editable_projected_ids: Iterable[str] = (),
+        deletable_projected_ids: Iterable[str] = (),
+        creatable_projected_types: Iterable[str] = (),
     ) -> None:
         native = tuple(native)
         legacy = tuple(legacy)
@@ -225,6 +252,18 @@ class EntityCatalog:
         self._native = native
         self._legacy = legacy
         self._writable = bool(writable)
+        projected_ids = {item.id for item in legacy}
+        self._editable_projected_ids = frozenset(
+            str(item) for item in editable_projected_ids
+            if str(item) in projected_ids
+        )
+        self._deletable_projected_ids = frozenset(
+            str(item) for item in deletable_projected_ids
+            if str(item) in projected_ids
+        )
+        self._creatable_projected_types = frozenset(
+            str(item) for item in creatable_projected_types
+        )
         self._rebuild_morphology()
         self._notify()
 
@@ -394,9 +433,36 @@ class EntityCatalog:
             raise PermissionError(
                 "Native entities require a writable Format 2 project."
             )
-        entity = next(
-            (item for item in self._native if item.id == entity_id), None
+        if not any(item.id == entity_id for item in self._native):
+            raise KeyError(entity_id)
+        updated = self.prepare_update(
+            entity_id,
+            title=title,
+            entity_type=entity_type,
+            aliases=aliases,
+            text=text,
+            metadata=metadata,
         )
+        self._native = tuple(
+            updated if item.id == entity_id else item for item in self._native
+        )
+        self._rebuild_morphology()
+        self._notify()
+        return updated
+
+    def prepare_update(
+        self,
+        entity_id: str,
+        *,
+        title: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        aliases=None,
+        text: Optional[str] = None,
+        metadata: Optional[Iterable[StructuredMetadataField]] = None,
+    ) -> EntityRecord:
+        """Validate an edit without deciding which persistence owns it."""
+
+        entity = self.find(entity_id)
         if entity is None:
             raise KeyError(entity_id)
         new_title = (
@@ -426,11 +492,6 @@ class EntityCatalog:
                 entity.metadata if metadata is None else tuple(metadata)
             ),
         )
-        self._native = tuple(
-            updated if item.id == entity_id else item for item in self._native
-        )
-        self._rebuild_morphology()
-        self._notify()
         return updated
 
     def delete(self, entity_id: str) -> EntityRecord:

@@ -225,10 +225,11 @@ class V2PersistenceStrategy(ProjectPersistenceStrategy):
         })
 
 
-class LegacyEntityReadPersistenceDecorator(PersistenceDecorator):
+class LegacyEntityPersistenceDecorator(PersistenceDecorator):
     namespace = "entities"
 
     def __init__(self, wrapped: ProjectPersistenceStrategy):
+        old_save_safe = wrapped.name != "manuskript-v0"
         super().__init__(wrapped, (
             _support(
                 "entities.read",
@@ -236,7 +237,16 @@ class LegacyEntityReadPersistenceDecorator(PersistenceDecorator):
                 writable=False,
                 reason=(
                     "Legacy character, world, and plot records are exposed "
-                    "through read-only generic entity adapters."
+                    "through the common entity surface."
+                ),
+            ),
+            _support(
+                "entities.write",
+                PersistenceLevel.COMPATIBLE_ENCODING,
+                old_save_safe=old_save_safe,
+                reason=(
+                    "Entity commands are translated back into the native "
+                    "legacy character, world, plot, and summary records."
                 ),
             ),
         ))
@@ -244,11 +254,11 @@ class LegacyEntityReadPersistenceDecorator(PersistenceDecorator):
 
 def compatibility_strategy(version: int) -> ProjectPersistenceStrategy:
     if version == 0:
-        return LegacyEntityReadPersistenceDecorator(V0PersistenceStrategy())
+        return LegacyEntityPersistenceDecorator(V0PersistenceStrategy())
     if version == 1:
         # Old formats preserve unknown text and fields; preservation is not
         # permission to reinterpret them as new application semantics.
-        return LegacyEntityReadPersistenceDecorator(V1PersistenceStrategy())
+        return LegacyEntityPersistenceDecorator(V1PersistenceStrategy())
     if version == 2:
         return V2PersistenceStrategy()
     return ProjectPersistenceStrategy()

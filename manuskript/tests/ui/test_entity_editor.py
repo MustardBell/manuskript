@@ -77,7 +77,25 @@ def test_entity_dialog_exposes_and_preserves_structured_properties():
     assert save_entity.call_args.kwargs["metadata"] == entity.metadata
 
 
-def test_projected_entities_open_read_only_in_the_same_editor():
+def test_projected_entities_follow_their_per_entity_edit_permission():
+    catalog, entity = _catalog()
+    catalog.replace(
+        (), (entity,), writable=False,
+        editable_projected_ids=(entity.id,),
+    )
+    controller = EntityEditorController(QWidget(), catalog, MagicMock())
+
+    assert controller.open(entity.id)
+    dialog = controller._dialogs[entity.id]
+    assert not dialog.titleEdit.isReadOnly()
+    assert not dialog.bodyEdit.isReadOnly()
+    # A legacy character stays a character; only Format 2 entities can move
+    # freely between schema-defined types.
+    assert not dialog.typeCombo.isEnabled()
+    controller.close_all()
+
+
+def test_unwritable_projected_entity_remains_read_only():
     catalog, entity = _catalog()
     catalog.replace((), (entity,), writable=False)
     controller = EntityEditorController(QWidget(), catalog, MagicMock())
@@ -86,7 +104,6 @@ def test_projected_entities_open_read_only_in_the_same_editor():
     dialog = controller._dialogs[entity.id]
     assert dialog.titleEdit.isReadOnly()
     assert dialog.bodyEdit.isReadOnly()
-    assert not dialog.typeCombo.isEnabled()
     controller.close_all()
 
 

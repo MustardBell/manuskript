@@ -73,20 +73,29 @@ class EntityWorkspaceController:
     def refresh(self):
         if self.catalog is None:
             return
-        editable = tuple(
-            entity.id for entity in self.catalog.native_entities
-            if entity.type != "project"
-        ) if self.catalog.writable else ()
+        deletable = tuple(
+            entity.id for entity in self.catalog.entities
+            if entity.type != "project" and self.catalog.can_delete(entity.id)
+        )
         for panel in self.panels:
+            creatable = any(
+                self.catalog.can_create(schema.type)
+                for schema in self.catalog.schemas.schemas
+                if (
+                    (not panel.creatableTypes or schema.type in panel.creatableTypes)
+                    and (not panel.acceptedTypes or schema.type in panel.acceptedTypes)
+                    and schema.type not in panel.excludedTypes
+                )
+            )
             panel.set_catalogue(
                 self.catalog.entities,
                 self.catalog.schemas.schemas,
-                self.catalog.writable,
-                editable,
+                creatable,
+                deletable,
             )
 
     def create(self, entity_type):
-        if self.catalog is None or not self.catalog.writable:
+        if self.catalog is None or not self.catalog.can_create(entity_type):
             return False
         schema = self.catalog.schemas.get(entity_type)
         label = schema.label if schema is not None else self.parent.tr("Entity")
@@ -160,7 +169,7 @@ class EntityWorkspaceController:
         if (
             entity is None
             or entity.type == "project"
-            or entity not in self.catalog.native_entities
+            or not self.catalog.can_delete(entity_id)
         ):
             return False
         answer = QMessageBox.question(

@@ -39,7 +39,7 @@ class EntityBrowserPanel(QWidget):
         self.creatableTypes = tuple(creatable_types)
         self.schemas = ()
         self.entities = ()
-        self.editableIds = set()
+        self.deletableIds = set()
         self.writable = False
         self.setObjectName("entityBrowserPanel")
         self.setMinimumSize(180, 120)
@@ -127,13 +127,13 @@ class EntityBrowserPanel(QWidget):
         return entity.type not in self.excludedTypes
 
     def set_catalogue(
-        self, entities, schemas, writable, editable_entity_ids=()
+        self, entities, schemas, writable, deletable_entity_ids=()
     ):
         selected = self.current_entity_id()
         labels = {schema.type: schema.label for schema in schemas}
         self.schemas = tuple(schemas)
         self.writable = bool(writable)
-        self.editableIds = set(editable_entity_ids)
+        self.deletableIds = set(deletable_entity_ids)
         self.entities = tuple(
             entity for entity in entities if self.accepts(entity)
         )
@@ -314,7 +314,7 @@ class EntityBrowserPanel(QWidget):
         identifier = self.current_entity_id()
         self.editButton.setEnabled(bool(identifier))
         self.deleteButton.setEnabled(
-            bool(identifier and identifier in self.editableIds)
+            bool(identifier and identifier in self.deletableIds)
         )
 
     def _edit_item(self, item, _column):
