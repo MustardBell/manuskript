@@ -1,0 +1,51 @@
+{
+  "api_version": 1,
+  "protocol_version": 1,
+  "transport": {
+    "encoding": "utf-8",
+    "framing": "Content-Length: <decimal>\\r\\n\\r\\n<payload>",
+    "message_model": "JSON-RPC 2.0",
+    "standard_error": "diagnostics",
+    "standard_output": "protocol-only"
+  },
+  "limits": {
+    "max_header_bytes": 8192,
+    "max_message_bytes": 16777216,
+    "max_pending_notifications": 128,
+    "max_remote_contributions": 1024
+  },
+  "lifecycle": [
+    "initialize",
+    "initialized",
+    "project/changed",
+    "deactivate",
+    "shutdown",
+    "exit"
+  ],
+  "host_to_plugin": {
+    "contribution/call": "request",
+    "contribution/notify": "notification",
+    "project/changed": "notification"
+  },
+  "plugin_to_host": {
+    "capability/call": "request",
+    "capability/subscribe": "request",
+    "capability/unsubscribe": "request"
+  },
+  "contributions": {
+    "exporter": {"portability": "portable", "operations": ["export"], "required": ["export"]},
+    "importer": {"portability": "portable", "operations": ["import_document"], "required": ["import_document"]},
+    "converter": {"portability": "portable", "operations": ["convert"], "required": ["convert"]},
+    "project_panel": {"portability": "portable", "operations": ["ui_open", "ui_event", "ui_close"], "required": ["ui_open", "ui_event"]},
+    "settings_panel": {"portability": "portable", "operations": ["ui_open", "ui_event", "ui_close"], "required": ["ui_open", "ui_event"]},
+    "index_card_style": {"portability": "native", "operations": [], "required": []},
+    "editor_workspace": {"portability": "native", "operations": [], "required": []},
+    "page_type": {"portability": "portable", "operations": ["detect", "parse", "render", "activation_warning"], "required": []},
+    "page_renderer": {"portability": "portable", "operations": ["render"], "required": ["render"]},
+    "markup": {"portability": "portable", "operations": ["analyze", "cancel_analysis"], "required": ["analyze", "cancel_analysis"]},
+    "native_markup": {"portability": "native", "operations": [], "required": []},
+    "transform": {"portability": "portable", "operations": ["transform"], "required": ["transform"]},
+    "conversion_augmentation": {"portability": "native", "operations": [], "required": []},
+    "command": {"portability": "portable", "operations": ["invoke"], "required": ["invoke"]}
+  }
+}

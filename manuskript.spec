@@ -30,6 +30,7 @@ a = Analysis(
         ("resources", "resources"),
         ("sample-projects", "sample-projects"),
         ("i18n", "i18n"),
+        ("plugin_api/schema", "plugin_api/schema"),
     ] + plugin_data_entries("manuskript/plugins"),
     hiddenimports=["xml.dom"],
     hookspath=[],

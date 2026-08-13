@@ -12,10 +12,12 @@ used the number 1.
 from dataclasses import dataclass
 from enum import Enum
 
+from manuskript.plugins.specification import protocol_document
 
-PLUGIN_API_VERSION = 1
+_PROTOCOL_SPECIFICATION = protocol_document()
+PLUGIN_API_VERSION = int(_PROTOCOL_SPECIFICATION["api_version"])
 PLUGIN_API_STABILITY = "draft"
-PLUGIN_PROTOCOL_VERSION = 1
+PLUGIN_PROTOCOL_VERSION = int(_PROTOCOL_SPECIFICATION["protocol_version"])
 
 
 class ContractPortability(str, Enum):
@@ -50,77 +52,83 @@ class ContributionContract:
     reason: str
 
 
-#: The inventory is code because runtime negotiation and the plugin manager
-#: must eventually read the same answer as the developer documentation.
+def _declared_portability(kind):
+    return ContractPortability(
+        _PROTOCOL_SPECIFICATION["contributions"][kind.value]["portability"]
+    )
+
+
+#: Reasons remain binding documentation; portability comes from the canonical
+#: protocol document used by every language and by runtime negotiation.
 CONTRIBUTION_CONTRACTS = (
     ContributionContract(
         ContributionKind.EXPORTER,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.EXPORTER),
         "Bounded request and content response.",
     ),
     ContributionContract(
         ContributionKind.IMPORTER,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.IMPORTER),
         "Bounded source and declarative import tree.",
     ),
     ContributionContract(
         ContributionKind.CONVERTER,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.CONVERTER),
         "Content and media types cross the transport as values.",
     ),
     ContributionContract(
         ContributionKind.PROJECT_PANEL,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.PROJECT_PANEL),
         "Core renders a bounded declarative UI document and events.",
     ),
     ContributionContract(
         ContributionKind.SETTINGS_PANEL,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.SETTINGS_PANEL),
         "Core renders a bounded declarative settings document and events.",
     ),
     ContributionContract(
         ContributionKind.INDEX_CARD_STYLE,
-        ContractPortability.NATIVE,
+        _declared_portability(ContributionKind.INDEX_CARD_STYLE),
         "The current contract returns a live Qt painter/style object.",
     ),
     ContributionContract(
         ContributionKind.EDITOR_WORKSPACE,
-        ContractPortability.NATIVE,
+        _declared_portability(ContributionKind.EDITOR_WORKSPACE),
         "The current contract returns a QWidget and consumes Qt signals.",
     ),
     ContributionContract(
         ContributionKind.PAGE_TYPE,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.PAGE_TYPE),
         "Detection, parsing, and rendering can be bounded value calls.",
     ),
     ContributionContract(
         ContributionKind.PAGE_RENDERER,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.PAGE_RENDERER),
         "A page model and rendered content cross as values.",
     ),
     ContributionContract(
         ContributionKind.MARKUP,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.MARKUP),
         "Plugins return revisioned semantic spans for bounded source ranges.",
     ),
     ContributionContract(
         ContributionKind.NATIVE_MARKUP,
-        ContractPortability.NATIVE,
+        _declared_portability(ContributionKind.NATIVE_MARKUP),
         "This explicitly local contract exposes Qt highlighters and keys.",
     ),
     ContributionContract(
         ContributionKind.TRANSFORM,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.TRANSFORM),
         "Content-in/content-out middleware is transport-neutral.",
     ),
     ContributionContract(
         ContributionKind.CONVERSION_AUGMENTATION,
-        ContractPortability.NATIVE,
+        _declared_portability(ContributionKind.CONVERSION_AUGMENTATION),
         "The current factory returns converter-specific Python objects.",
     ),
     ContributionContract(
         ContributionKind.COMMAND,
-        ContractPortability.PORTABLE,
+        _declared_portability(ContributionKind.COMMAND),
         "Core owns the action and invokes a bounded value operation.",
     ),
 )

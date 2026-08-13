@@ -19,19 +19,23 @@ from manuskript.plugins.errors import (
     PluginRequestTimeout,
     PluginScopeError,
 )
+from manuskript.plugins.specification import protocol_document
 
 
 LOGGER = logging.getLogger(__name__)
 JSONRPC_VERSION = "2.0"
 CANCEL_METHOD = "$/cancelRequest"
+_PROTOCOL_LIMITS = protocol_document()["limits"]
 
 
 @dataclass(frozen=True)
 class RpcLimits:
-    max_header_bytes: int = 8192
-    max_message_bytes: int = 16 * 1024 * 1024
+    max_header_bytes: int = _PROTOCOL_LIMITS["max_header_bytes"]
+    max_message_bytes: int = _PROTOCOL_LIMITS["max_message_bytes"]
     stderr_chunk_bytes: int = 4096
-    max_pending_notifications: int = 128
+    max_pending_notifications: int = (
+        _PROTOCOL_LIMITS["max_pending_notifications"]
+    )
 
     def __post_init__(self):
         if min(

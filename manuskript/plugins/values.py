@@ -19,6 +19,7 @@ from typing import Mapping
 
 from manuskript.plugins.errors import PluginValueError
 from manuskript.plugins.contracts import PLUGIN_API_VERSION
+from manuskript.plugins.specification import api_schema_document
 
 
 WIRE_RECORD_VERSION = 1
@@ -187,7 +188,18 @@ class ApiValueCodec:
 
     @property
     def schema_document(self):
-        """A JSON value from which another language can build API records."""
+        """The canonical JSON value from which languages build API records."""
+        generated = self._binding_schema_document()
+        canonical = api_schema_document()
+        if generated != canonical:
+            raise RuntimeError(
+                "Python Plugin API bindings have drifted from the canonical "
+                "API-1 value schema."
+            )
+        return canonical
+
+    def _binding_schema_document(self):
+        """Describe Python bindings for validation against the wire model."""
         records = {}
         for name, binding in sorted(self._records_by_name.items()):
             hints = typing.get_type_hints(binding.python_type)

@@ -27,6 +27,7 @@ from manuskript.plugins.errors import (
     PluginRegistrationError,
 )
 from manuskript.plugins.rpc import RpcProcess
+from manuskript.plugins.specification import protocol_document
 from manuskript.plugins.runtimes import (
     ProcessRuntime,
     PythonRuntime,
@@ -37,7 +38,10 @@ from manuskript.plugins.values import PortableArtifact, api_value_codec
 
 
 LOGGER = logging.getLogger(__name__)
-MAX_REMOTE_CONTRIBUTIONS = 1024
+_PROTOCOL_SPECIFICATION = protocol_document()
+MAX_REMOTE_CONTRIBUTIONS = _PROTOCOL_SPECIFICATION["limits"][
+    "max_remote_contributions"
+]
 
 
 class PluginDriver:
@@ -579,37 +583,12 @@ class _RemoteOperations:
 
 
 _REMOTE_OPERATIONS = {
-    ContributionKind.EXPORTER: _RemoteOperations(("export",), ("export",)),
-    ContributionKind.IMPORTER: _RemoteOperations(
-        ("import_document",), ("import_document",)
-    ),
-    ContributionKind.CONVERTER: _RemoteOperations(
-        ("convert",), ("convert",)
-    ),
-    ContributionKind.TRANSFORM: _RemoteOperations(
-        ("transform",), ("transform",)
-    ),
-    ContributionKind.PAGE_TYPE: _RemoteOperations(
-        ("detect", "parse", "render", "activation_warning"),
-        (),
-    ),
-    ContributionKind.PAGE_RENDERER: _RemoteOperations(
-        ("render",), ("render",)
-    ),
-    ContributionKind.PROJECT_PANEL: _RemoteOperations(
-        ("ui_open", "ui_event", "ui_close"),
-        ("ui_open", "ui_event"),
-    ),
-    ContributionKind.SETTINGS_PANEL: _RemoteOperations(
-        ("ui_open", "ui_event", "ui_close"),
-        ("ui_open", "ui_event"),
-    ),
-    ContributionKind.COMMAND: _RemoteOperations(
-        ("invoke",), ("invoke",)
-    ),
-    ContributionKind.MARKUP: _RemoteOperations(
-        ("analyze", "cancel_analysis"), ("analyze", "cancel_analysis")
-    ),
+    ContributionKind(kind): _RemoteOperations(
+        tuple(contract["operations"]),
+        tuple(contract["required"]),
+    )
+    for kind, contract in _PROTOCOL_SPECIFICATION["contributions"].items()
+    if contract["portability"] == ContractPortability.PORTABLE.value
 }
 
 

@@ -1,0 +1,1784 @@
+{
+  "api_version": 1,
+  "enums": {
+    "content_encoding": [
+      "utf-8",
+      "base64"
+    ],
+    "contribution_kind": [
+      "exporter",
+      "importer",
+      "converter",
+      "project_panel",
+      "settings_panel",
+      "index_card_style",
+      "editor_workspace",
+      "page_type",
+      "page_renderer",
+      "markup",
+      "native_markup",
+      "transform",
+      "conversion_augmentation",
+      "command"
+    ],
+    "markup_mode": [
+      "augment",
+      "replace"
+    ],
+    "option_kind": [
+      "boolean",
+      "integer",
+      "number",
+      "string",
+      "choice"
+    ],
+    "semantic_role": [
+      "markup",
+      "emphasis",
+      "strong",
+      "code",
+      "link",
+      "heading",
+      "comment",
+      "keyword",
+      "string",
+      "number",
+      "variable",
+      "highlight",
+      "success",
+      "warning",
+      "error"
+    ],
+    "text_position_encoding": [
+      "utf-16"
+    ],
+    "ui_control_kind": [
+      "group",
+      "text",
+      "checkbox",
+      "integer",
+      "number",
+      "choice",
+      "list",
+      "table",
+      "tree",
+      "button",
+      "progress",
+      "message"
+    ],
+    "ui_event_kind": [
+      "change",
+      "activate",
+      "select",
+      "reorder"
+    ]
+  },
+  "record_version": 1,
+  "records": {
+    "assertion_diagnostic": {
+      "fields": [
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "message",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "severity",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "source_end",
+          "required": true,
+          "type": "integer"
+        }
+      ],
+      "version": 1
+    },
+    "assertion_snapshot": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "subject",
+          "required": true,
+          "type": {
+            "record": "story_reference"
+          }
+        },
+        {
+          "name": "predicate",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "object",
+          "required": true,
+          "type": {
+            "record": "assertion_term"
+          }
+        },
+        {
+          "name": "qualifiers",
+          "required": true,
+          "type": {
+            "map": "value"
+          }
+        },
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "source_end",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "anchor",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "canon_state",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "validity",
+          "required": false,
+          "type": {
+            "optional": {
+              "record": "temporal_interval"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "assertion_term": {
+      "fields": [
+        {
+          "name": "reference",
+          "required": false,
+          "type": {
+            "optional": {
+              "record": "story_reference"
+            }
+          }
+        },
+        {
+          "name": "value",
+          "required": false,
+          "type": "value"
+        },
+        {
+          "name": "is_reference",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "version": 1
+    },
+    "chronology_snapshot": {
+      "fields": [
+        {
+          "name": "subject",
+          "required": true,
+          "type": {
+            "record": "story_reference"
+          }
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "assertion_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "start",
+          "required": false,
+          "type": {
+            "optional": "string"
+          }
+        },
+        {
+          "name": "end",
+          "required": false,
+          "type": {
+            "optional": "string"
+          }
+        },
+        {
+          "name": "related_to",
+          "required": false,
+          "type": {
+            "optional": {
+              "record": "story_reference"
+            }
+          }
+        },
+        {
+          "name": "label",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "content": {
+      "fields": [
+        {
+          "name": "content",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "media_type",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "encoding",
+          "required": false,
+          "type": {
+            "enum": "content_encoding"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "content_signature": {
+      "fields": [
+        {
+          "name": "starts_with",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "ends_with",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "contains",
+          "required": false,
+          "type": {
+            "sequence": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "contribution_declaration": {
+      "fields": [
+        {
+          "name": "kind",
+          "required": true,
+          "type": {
+            "enum": "contribution_kind"
+          }
+        },
+        {
+          "name": "descriptor",
+          "required": true,
+          "type": {
+            "record": "extension_descriptor"
+          }
+        },
+        {
+          "name": "configuration",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "conversion_request": {
+      "fields": [
+        {
+          "name": "source_format",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "target_format",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "page_type",
+          "required": false,
+          "type": {
+            "optional": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "counted_pattern": {
+      "fields": [
+        {
+          "name": "pattern",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "count",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "occurrences",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "prose_occurrence"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "document_prose_metrics": {
+      "fields": [
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "word_count",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "sentence_lengths",
+          "required": true,
+          "type": {
+            "sequence": "integer"
+          }
+        },
+        {
+          "name": "paragraph_lengths",
+          "required": true,
+          "type": {
+            "sequence": "integer"
+          }
+        },
+        {
+          "name": "dialogue_word_ratio",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "name": "punctuation",
+          "required": true,
+          "type": {
+            "sequence": {
+              "tuple": [
+                "string",
+                "integer"
+              ]
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "document_revision_workflow": {
+      "fields": [
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "states",
+          "required": true,
+          "type": {
+            "map": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "entity_snapshot": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "type",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "aliases",
+          "required": false,
+          "type": {
+            "sequence": "string"
+          }
+        },
+        {
+          "name": "metadata",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "error": {
+      "fields": [
+        {
+          "name": "code",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "message",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "data",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "extension_descriptor": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "icon",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "extensions",
+          "required": false,
+          "type": {
+            "sequence": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "import_node": {
+      "fields": [
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "metadata",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        },
+        {
+          "name": "children",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "import_node"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "import_result": {
+      "fields": [
+        {
+          "name": "nodes",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "import_node"
+            }
+          }
+        },
+        {
+          "name": "warnings",
+          "required": false,
+          "type": {
+            "sequence": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "markup_analysis_request": {
+      "fields": [
+        {
+          "name": "analysis_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "document_revision",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "window",
+          "required": true,
+          "type": {
+            "record": "text_range"
+          }
+        },
+        {
+          "name": "source",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "changed_ranges",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "text_range"
+            }
+          }
+        },
+        {
+          "name": "position_encoding",
+          "required": false,
+          "type": {
+            "enum": "text_position_encoding"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "markup_analysis_result": {
+      "fields": [
+        {
+          "name": "analysis_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "document_revision",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "window",
+          "required": true,
+          "type": {
+            "record": "text_range"
+          }
+        },
+        {
+          "name": "spans",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "semantic_span"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "media_type": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "base",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "textual",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "version": 1
+    },
+    "morphology_schema": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "language_tag",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "version",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "option_field": {
+      "fields": [
+        {
+          "name": "key",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "type": {
+            "enum": "option_kind"
+          }
+        },
+        {
+          "name": "default",
+          "required": false,
+          "type": "value"
+        },
+        {
+          "name": "description",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "choices",
+          "required": false,
+          "type": {
+            "sequence": {
+              "tuple": [
+                "string",
+                "value"
+              ]
+            }
+          }
+        },
+        {
+          "name": "minimum",
+          "required": false,
+          "type": {
+            "optional": "number"
+          }
+        },
+        {
+          "name": "maximum",
+          "required": false,
+          "type": {
+            "optional": "number"
+          }
+        },
+        {
+          "name": "section",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "outline_snapshot": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "metadata",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        },
+        {
+          "name": "children",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "outline_snapshot"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "page_export_document": {
+      "fields": [
+        {
+          "name": "content",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_format",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "plugin_file": {
+      "fields": [
+        {
+          "name": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "required": false,
+          "type": "value"
+        },
+        {
+          "name": "deleted",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "version": 1
+    },
+    "plugin_options": {
+      "fields": [
+        {
+          "name": "extension_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "values",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "portable_artifact": {
+      "fields": [
+        {
+          "name": "content",
+          "required": true,
+          "type": {
+            "record": "content"
+          }
+        },
+        {
+          "name": "suggested_name",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "warnings",
+          "required": false,
+          "type": {
+            "sequence": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "project_snapshot": {
+      "fields": [
+        {
+          "name": "project_file",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "metadata",
+          "required": true,
+          "type": {
+            "map": "value"
+          }
+        },
+        {
+          "name": "outline",
+          "required": true,
+          "type": {
+            "record": "outline_snapshot"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "prose_analysis": {
+      "fields": [
+        {
+          "name": "documents",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "document_prose_metrics"
+            }
+          }
+        },
+        {
+          "name": "repeated_phrases",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "counted_pattern"
+            }
+          }
+        },
+        {
+          "name": "repeated_openings",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "counted_pattern"
+            }
+          }
+        },
+        {
+          "name": "nearby_repetitions",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "counted_pattern"
+            }
+          }
+        },
+        {
+          "name": "passive_candidates",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "counted_pattern"
+            }
+          }
+        },
+        {
+          "name": "filler_phrases",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "counted_pattern"
+            }
+          }
+        },
+        {
+          "name": "spelling_mixtures",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "counted_pattern"
+            }
+          }
+        },
+        {
+          "name": "similar_names",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "similar_name"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "prose_occurrence": {
+      "fields": [
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "source_end",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "excerpt",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "reference_occurrence": {
+      "fields": [
+        {
+          "name": "source_document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "source_end",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "raw_target",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "display_text",
+          "required": true,
+          "type": {
+            "optional": "string"
+          }
+        },
+        {
+          "name": "resolution",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "resolved_target_id",
+          "required": false,
+          "type": {
+            "optional": "string"
+          }
+        },
+        {
+          "name": "resolved_target_path",
+          "required": false,
+          "type": {
+            "optional": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "reference_suggestion": {
+      "fields": [
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "target",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "rendered_document": {
+      "fields": [
+        {
+          "name": "html",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "base_url",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "revision_pass": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "rule_diagnostic": {
+      "fields": [
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "message",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "severity",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "source_end",
+          "required": true,
+          "type": "integer"
+        }
+      ],
+      "version": 1
+    },
+    "rule_evidence": {
+      "fields": [
+        {
+          "name": "assertion_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "document_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "source_start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "source_end",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "role",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "rule_finding": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "rule_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "rule_label",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "severity",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "message",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "evidence",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "rule_evidence"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "rule_report": {
+      "fields": [
+        {
+          "name": "findings",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "rule_finding"
+            }
+          }
+        },
+        {
+          "name": "evaluated_rule_ids",
+          "required": true,
+          "type": {
+            "sequence": "string"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "rule_summary": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "semantic_span": {
+      "fields": [
+        {
+          "name": "range",
+          "required": true,
+          "type": {
+            "record": "text_range"
+          }
+        },
+        {
+          "name": "role",
+          "required": true,
+          "type": {
+            "enum": "semantic_role"
+          }
+        },
+        {
+          "name": "message",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "exclude_from_plain_text",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "version": 1
+    },
+    "similar_name": {
+      "fields": [
+        {
+          "name": "first",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "second",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "distance",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "similarity",
+          "required": true,
+          "type": "number"
+        }
+      ],
+      "version": 1
+    },
+    "story_reference": {
+      "fields": [
+        {
+          "name": "kind",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "temporal_diagnostic": {
+      "fields": [
+        {
+          "name": "assertion_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "message",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "severity",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "temporal_fact": {
+      "fields": [
+        {
+          "name": "assertion",
+          "required": true,
+          "type": {
+            "record": "assertion_snapshot"
+          }
+        },
+        {
+          "name": "status",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "temporal_interval": {
+      "fields": [
+        {
+          "name": "valid_from",
+          "required": false,
+          "type": {
+            "optional": {
+              "record": "temporal_point"
+            }
+          }
+        },
+        {
+          "name": "valid_until",
+          "required": false,
+          "type": {
+            "optional": {
+              "record": "temporal_point"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "temporal_point": {
+      "fields": [
+        {
+          "name": "axis",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "reference",
+          "required": false,
+          "type": {
+            "optional": {
+              "record": "story_reference"
+            }
+          }
+        },
+        {
+          "name": "value",
+          "required": false,
+          "type": "value"
+        }
+      ],
+      "version": 1
+    },
+    "text_range": {
+      "fields": [
+        {
+          "name": "start",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "length",
+          "required": true,
+          "type": "integer"
+        }
+      ],
+      "version": 1
+    },
+    "ui_choice": {
+      "fields": [
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "required": true,
+          "type": "value"
+        }
+      ],
+      "version": 1
+    },
+    "ui_column": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "ui_control": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "type": {
+            "enum": "ui_control_kind"
+          }
+        },
+        {
+          "name": "label",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "error",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "accessible_name",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "required": false,
+          "type": "value"
+        },
+        {
+          "name": "choices",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "ui_choice"
+            }
+          }
+        },
+        {
+          "name": "columns",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "ui_column"
+            }
+          }
+        },
+        {
+          "name": "items",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "ui_item"
+            }
+          }
+        },
+        {
+          "name": "children",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "ui_control"
+            }
+          }
+        },
+        {
+          "name": "minimum",
+          "required": false,
+          "type": {
+            "optional": "number"
+          }
+        },
+        {
+          "name": "maximum",
+          "required": false,
+          "type": {
+            "optional": "number"
+          }
+        },
+        {
+          "name": "required",
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "name": "enabled",
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "name": "visible",
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "name": "reorderable",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "version": 1
+    },
+    "ui_document": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "revision",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "controls",
+          "required": true,
+          "type": {
+            "sequence": {
+              "record": "ui_control"
+            }
+          }
+        }
+      ],
+      "version": 1
+    },
+    "ui_event": {
+      "fields": [
+        {
+          "name": "session_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "document_revision",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "control_id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "type": {
+            "enum": "ui_event_kind"
+          }
+        },
+        {
+          "name": "value",
+          "required": false,
+          "type": "value"
+        }
+      ],
+      "version": 1
+    },
+    "ui_item": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "label",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "cells",
+          "required": false,
+          "type": {
+            "map": "value"
+          }
+        },
+        {
+          "name": "children",
+          "required": false,
+          "type": {
+            "sequence": {
+              "record": "ui_item"
+            }
+          }
+        },
+        {
+          "name": "enabled",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "version": 1
+    },
+    "ui_navigator_entry": {
+      "fields": [
+        {
+          "name": "label",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "icon",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "order",
+          "required": false,
+          "type": "integer"
+        }
+      ],
+      "version": 1
+    },
+    "ui_response": {
+      "fields": [
+        {
+          "name": "document",
+          "required": true,
+          "type": {
+            "record": "ui_document"
+          }
+        },
+        {
+          "name": "message",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "focus",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "version": 1
+    },
+    "workspace_document": {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "compile",
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "name": "parent_id",
+          "required": false,
+          "type": {
+            "optional": "string"
+          }
+        }
+      ],
+      "version": 1
+    }
+  }
+}
