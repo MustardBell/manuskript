@@ -51,6 +51,7 @@ class PluginRecord:
     status: PluginStatus
     loadable: bool = True
     error: str = ""
+    warning: str = ""
     handle: object = None
     module_prefix: str = ""
 
@@ -71,6 +72,7 @@ class PluginRuntime:
         registry=None,
         api_version=PLUGIN_API_VERSION,
         media_types=None,
+        project_format=None,
     ):
         self.roots = tuple(Path(root).resolve() for root in roots)
         self.preferences = preferences
@@ -81,6 +83,7 @@ class PluginRuntime:
         )
         self.records = {}
         self.discovery_issues = []
+        self.projectFormat = project_format
 
     def discover(self):
         enabled = set(self.preferences.enabled_plugin_ids)
@@ -146,6 +149,7 @@ class PluginRuntime:
                             if manifest.id not in enabled
                             else "Enabled plugin has not been loaded."
                         ),
+                        warning=self._project_format_warning(manifest),
                     )
 
         for plugin_id, previous in previous_records.items():
@@ -212,6 +216,7 @@ class PluginRuntime:
         self._deactivate_record(record)
         record.status = PluginStatus.DISABLED
         record.error = ""
+        record.warning = self._project_format_warning(record.manifest)
         return record
 
     def load(self, plugin_id):
@@ -220,6 +225,15 @@ class PluginRuntime:
         if record.status is PluginStatus.LOADED:
             return record
         if not record.loadable:
+            return record
+
+        if (
+            self.projectFormat is not None
+            and not manifest.supports_project_format(self.projectFormat)
+        ):
+            record.status = PluginStatus.INCOMPATIBLE
+            record.error = self._project_format_error(manifest)
+            record.warning = ""
             return record
 
         if manifest.api_version != self.api_version:
@@ -233,6 +247,7 @@ class PluginRuntime:
             )
             record.status = PluginStatus.INCOMPATIBLE
             record.error = str(error)
+            record.warning = ""
             return record
 
         # Negotiate before anything of the plugin's runs. A plugin whose
@@ -249,6 +264,7 @@ class PluginRuntime:
                     ", ".join(missing),
                 )
             )
+            record.warning = ""
             return record
 
         unavailable_optional = []
@@ -297,6 +313,7 @@ class PluginRuntime:
             )
             record.status = PluginStatus.FAILED
             record.error = str(failure)
+            record.warning = ""
             LOGGER.exception("%s", failure)
             return record
 
@@ -304,7 +321,71 @@ class PluginRuntime:
         record.module_prefix = module_prefix
         record.status = PluginStatus.LOADED
         record.error = ""
+        record.warning = self._project_format_warning(manifest)
         return record
+
+    def set_project_format(self, version):
+        """Make enabled plugins match the project before its UI connects."""
+
+        version = None if version is None else int(version)
+        if version == self.projectFormat:
+            return tuple(self.records.values())
+        self.projectFormat = version
+        enabled = set(self.preferences.enabled_plugin_ids)
+        for plugin_id, record in sorted(self.records.items()):
+            record.warning = self._project_format_warning(record.manifest)
+            if plugin_id not in enabled or not record.loadable:
+                continue
+            compatible = (
+                version is None
+                or record.manifest.supports_project_format(version)
+            )
+            if not compatible:
+                if record.status is PluginStatus.LOADED:
+                    self._deactivate_record(record)
+                record.status = PluginStatus.INCOMPATIBLE
+                record.error = self._project_format_error(record.manifest)
+                record.warning = ""
+                continue
+            if record.status is not PluginStatus.LOADED:
+                self.load(plugin_id)
+            elif compatible:
+                record.warning = self._project_format_warning(
+                    record.manifest
+                )
+        return tuple(self.records.values())
+
+    def _project_format_error(self, manifest):
+        return (
+            "Plugin {} supports project formats {}, but the open project "
+            "uses format {}."
+        ).format(
+            manifest.id,
+            manifest.project_formats.label,
+            self.projectFormat,
+        )
+
+    def _project_format_warning(self, manifest):
+        if (
+            self.projectFormat is None
+            or not manifest.project_formats.is_tentative(
+                self.projectFormat
+            )
+        ):
+            return ""
+        if not manifest.project_formats.declared:
+            return (
+                "Plugin {} does not declare project-format compatibility; "
+                "format {} is tentatively allowed."
+            ).format(manifest.id, self.projectFormat)
+        return (
+            "Plugin {} has only been explicitly tested through project "
+            "format {}; format {} is tentatively allowed."
+        ).format(
+            manifest.id,
+            manifest.project_formats.tested_through,
+            self.projectFormat,
+        )
 
     @staticmethod
     def _require_promised(manifest, contributions):

@@ -39,6 +39,7 @@ Manuskript's plugin folder — `manuskript/plugins/vendor.hello/`.
   "name": "Hello",
   "version": "1.0.0",
   "api_version": 1,
+  "project_formats": {"minimum": 0, "tested_through": 2},
   "entry_point": "plugin:register",
   "description": "Adds a panel that says hello.",
   "author": "You"
@@ -82,6 +83,22 @@ Two naming rules, both enforced at load:
 - every `ExtensionDescriptor` `id` needs at least one dot and should start
   with your plugin's name, so `vendor.hello.panel`, never `panel`
 
+`project_formats` is a separate compatibility promise. `minimum` and
+`tested_through` say which project formats you explicitly support. With no
+`maximum`, later formats are tentatively allowed and Manuskript shows a
+compatibility warning until you publish a plugin version that tests them.
+Older API-1 plugins that omit `project_formats` still load, but every open
+format is tentative and the same warning remains visible.
+Use a hard maximum when compatibility ends:
+
+```json
+"project_formats": {"minimum": 0, "tested_through": 1, "maximum": 1}
+```
+
+That plugin runs for formats 0 and 1 and is not imported or activated for a
+format 2 project. This is independent of `api_version`: one describes the
+host/plugin API, the other describes project data and semantics.
+
 ---
 
 ## Seeing it work
@@ -100,7 +117,7 @@ in rather than failing silently:
 |---|---|
 | **Disabled** | found, not run. The normal starting state. |
 | **Loaded** | running. |
-| **Incompatible** | your `api_version` is not this Manuskript's. |
+| **Incompatible** | your `api_version` or hard project-format range excludes this project. |
 | **Unsatisfied** | you asked for a service this Manuskript lacks. |
 | **Failed** | something went wrong; the manager shows the message. |
 

@@ -41,6 +41,7 @@ and the boundary test will refuse a plugin that reaches for it.
   "name": "Thing",
   "version": "1.0.0",
   "api_version": 1,
+  "project_formats": {"minimum": 0, "tested_through": 2},
   "entry_point": "plugin:register",
   "description": "One sentence.",
   "author": "You",
@@ -78,6 +79,23 @@ deduplicated; a name appearing in both is required. The difference matters:
 
 A malformed `requires` or `optional` list is rejected during discovery, so a
 bad declaration is reported against the manifest rather than surfacing later.
+
+`project_formats` gates the data model independently of the plugin API:
+
+- `minimum` is the oldest format the plugin supports
+- `tested_through` is the newest format explicitly verified by its author
+- optional `maximum` is a hard stop: the plugin is not imported, activated,
+  or registered against a newer project
+- without `maximum`, newer formats are tentatively allowed and the plugin
+  manager displays a persistent compatibility warning
+- omitting `project_formats` is accepted for API-1 compatibility, but grants
+  no explicit support at all: every open project format carries that warning
+
+For example, `{ "minimum": 0, "tested_through": 1, "maximum": 1 }`
+is the closed set 0–1. `{ "minimum": 0, "tested_through": 2 }` explicitly
+supports 0–2 and tentatively allows future formats. Opening a project changes
+the active contribution set before project views connect; a plugin outside
+its hard range is deactivated and contributes nothing to that project.
 
 ---
 

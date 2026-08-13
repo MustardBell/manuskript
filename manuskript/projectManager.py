@@ -48,7 +48,7 @@ class ProjectManager:
             self, lifecycle_view, settings, model_parent, storage=None,
             status_reporter=None, model_factory=None, autosave=None,
             last_project_store=None, revision_coordinator=None,
-            document_buffers=None):
+            document_buffers=None, project_format_changed=None):
         self.ui = lifecycle_view
         self.settings = settings
         self.model_parent = model_parent
@@ -82,6 +82,9 @@ class ProjectManager:
         #: Set when a quit has already asked about unsaved changes, so the
         #: close that follows does not ask again.
         self._closeSettled = False
+        self._projectFormatChanged = (
+            project_format_changed or (lambda _version: None)
+        )
 
     @property
     def currentProject(self):
@@ -136,6 +139,11 @@ class ProjectManager:
                     self.storage.clear_cache()
                     return False
 
+            canonical = self.storage.canonical_project
+            project_format = (
+                canonical.format_version if canonical is not None else 1
+            )
+            self._projectFormatChanged(project_format)
             self.session.open(project)
             with timing.span("project.open.connect"):
                 self.ui.connect_project()
@@ -228,6 +236,7 @@ class ProjectManager:
         self.syncUiToState()
 
         self.ui.project_closed()
+        self._projectFormatChanged(None)
         return True
 
     def startTimerNoChanges(self):

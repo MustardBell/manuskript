@@ -85,7 +85,7 @@ class PluginManagerDialog(QDialog):
         root_layout.addWidget(self.splitter, 1)
 
         self.pluginList = QTreeWidget(self.splitter)
-        self.pluginList.setMinimumWidth(280)
+        self.pluginList.setMinimumWidth(360)
         self.pluginList.setHeaderLabels(
             [
                 self.tr("Plugin"),
@@ -133,7 +133,7 @@ class PluginManagerDialog(QDialog):
         self.detailsScroll.setWidget(self.detailsWidget)
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 2)
-        self.splitter.setSizes((300, 620))
+        self.splitter.setSizes((380, 540))
 
         action_layout = QHBoxLayout()
         self.refreshButton = QPushButton(self.tr("Refresh"))
@@ -219,22 +219,32 @@ class PluginManagerDialog(QDialog):
             self.pluginList.clear()
             selected_item = None
             for plugin_id, record in sorted(self.runtime.records.items()):
+                status = self._status_text(record.status)
+                if record.warning:
+                    accessible_status = self.tr(
+                        "{}; compatibility warning"
+                    ).format(status)
+                    status = self.tr("{} ⚠").format(status)
+                else:
+                    accessible_status = status
                 item = QTreeWidgetItem(
                     [
                         record.manifest.name,
                         record.manifest.version,
-                        self._status_text(record.status),
+                        status,
                     ]
                 )
                 item.setData(0, Qt.UserRole, plugin_id)
-                if record.error:
-                    item.setToolTip(2, record.error)
+                item.setData(2, Qt.AccessibleTextRole, accessible_status)
+                if record.error or record.warning:
+                    item.setToolTip(2, record.error or record.warning)
                 self.pluginList.addTopLevelItem(item)
                 if plugin_id == selected_id:
                     selected_item = item
 
             self.pluginList.resizeColumnToContents(0)
             self.pluginList.resizeColumnToContents(1)
+            self.pluginList.resizeColumnToContents(2)
             if (
                 selected_item is None
                 and self.pluginList.topLevelItemCount()
@@ -278,6 +288,9 @@ class PluginManagerDialog(QDialog):
                 html.escape(manifest.version)
             ),
             self.tr("API: {}").format(manifest.api_version),
+            self.tr("Project formats: {}").format(
+                html.escape(manifest.project_formats.label)
+            ),
         ]
         metadata.append(self.tr("Installed plugin"))
         if manifest.author:
@@ -307,16 +320,21 @@ class PluginManagerDialog(QDialog):
                 "{}</b>"
             ).format(len(overridden), html.escape(", ".join(overridden))))
         self.metadataLabel.setText("<br>".join(metadata))
-        self.errorLabel.setText(
-            (
+        if record.error:
+            message = (
                 "<b>{}</b><br>{}".format(
                     self.tr("Error"),
                     html.escape(record.error),
                 )
-                if record.error
-                else ""
             )
-        )
+        elif record.warning:
+            message = "<b>{}</b><br>{}".format(
+                self.tr("Compatibility warning"),
+                html.escape(record.warning),
+            )
+        else:
+            message = ""
+        self.errorLabel.setText(message)
         self._show_plugin_panel(plugin_id)
         self.enableButton.setEnabled(
             record.status is not PluginStatus.LOADED
@@ -428,4 +446,3 @@ class PluginManagerDialog(QDialog):
             PluginStatus.UNSATISFIED: self.tr("Unsatisfied"),
             PluginStatus.FAILED: self.tr("Failed"),
         }[status]
-

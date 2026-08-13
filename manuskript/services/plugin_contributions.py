@@ -73,6 +73,12 @@ class PluginContributionService(QObject):
         self.announce()
         return records
 
+    def set_project_format(self, version):
+        """Activate only contributions valid for the current project."""
+        records = self.runtime.set_project_format(version)
+        self.announce()
+        return records
+
     def announce(self):
         """Say the set changed.
 

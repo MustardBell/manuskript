@@ -265,6 +265,7 @@ def prepare(arguments, tests=False):
         settings_manager=settings_manager,
         project_history=ProjectHistory(),
         active_window_source=window_registry.get_active,
+        project_format_changed=plugin_contributions.set_project_format,
     )
 
     # Everything composed above, gathered into the one thing a window is

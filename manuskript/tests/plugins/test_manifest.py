@@ -13,6 +13,7 @@ def write_manifest(tmp_path, **overrides):
         "version": "1.2.3",
         "api_version": 1,
         "entry_point": "plugin:register",
+        "project_formats": {"minimum": 0, "tested_through": 2},
     }
     values.update(overrides)
     root = tmp_path / "writer-tools"

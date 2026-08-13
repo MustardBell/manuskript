@@ -1,5 +1,7 @@
 import json
 
+from PyQt5.QtCore import Qt
+
 from manuskript.plugins.runtime import PluginRuntime, PluginStatus
 from manuskript.services.plugin_preferences import (
     InMemoryPluginPreferences,
@@ -96,3 +98,31 @@ def test_manager_reports_invalid_manifests(tmp_path):
 
     assert "Discovery problems" in dialog.discoveryLabel.text()
     assert "Invalid plugin ID" in dialog.discoveryLabel.text()
+
+
+def test_manager_makes_tentative_format_compatibility_visible(tmp_path):
+    create_plugin(
+        tmp_path,
+        source="def register(api):\n    return None\n",
+        manifest={"project_formats": {
+            "minimum": 0, "tested_through": 1,
+        }},
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(),
+        project_format=2,
+    )
+
+    dialog = PluginManagerDialog(contributions(runtime))
+    item = dialog.pluginList.topLevelItem(0)
+
+    assert item.text(2) == "Disabled ⚠"
+    assert item.data(2, Qt.AccessibleTextRole) == (
+        "Disabled; compatibility warning"
+    )
+    assert "tentatively allowed" in item.toolTip(2)
+    assert "Compatibility warning" in dialog.errorLabel.text()
+    assert "Project formats: 0–1; later formats tentative" in (
+        dialog.metadataLabel.text()
+    )

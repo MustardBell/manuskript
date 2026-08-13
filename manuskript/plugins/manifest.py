@@ -2,6 +2,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from manuskript.media_types import MediaType, MediaTypeError
 from manuskript.plugins.errors import PluginManifestError
@@ -24,6 +25,54 @@ ENTRY_POINT = re.compile(
 
 
 @dataclass(frozen=True)
+class ProjectFormatCompatibility:
+    """The project formats a plugin agrees to run against.
+
+    An absent maximum is deliberately not called unconditional support: it
+    is a declaration of tentative forward compatibility that can still be
+    bounded in a later plugin release when a future format is known.
+    """
+
+    minimum: int
+    tested_through: int
+    maximum: Optional[int] = None
+    declared: bool = True
+
+    def supports(self, version):
+        try:
+            version = int(version)
+        except (TypeError, ValueError):
+            return False
+        return (
+            version >= self.minimum
+            and (self.maximum is None or version <= self.maximum)
+        )
+
+    def explicitly_supports(self, version):
+        return self.supports(version) and int(version) <= self.tested_through
+
+    def is_tentative(self, version):
+        return self.supports(version) and not self.explicitly_supports(version)
+
+    @property
+    def label(self):
+        if not self.declared:
+            return "not declared; all formats tentative"
+        explicit = (
+            str(self.minimum)
+            if self.minimum == self.tested_through
+            else "{}–{}".format(self.minimum, self.tested_through)
+        )
+        if self.maximum == self.tested_through:
+            return explicit + " only"
+        if self.maximum is None:
+            return explicit + "; later formats tentative"
+        return "{}; {}–{} tentative".format(
+            explicit, self.tested_through + 1, self.maximum
+        )
+
+
+@dataclass(frozen=True)
 class PluginManifest:
     id: str
     name: str
@@ -32,6 +81,7 @@ class PluginManifest:
     entry_module: str
     entry_callable: str
     root: Path
+    project_formats: ProjectFormatCompatibility
     description: str = ""
     author: str = ""
     homepage: str = ""
@@ -126,6 +176,7 @@ class PluginManifest:
             )
 
         requires = cls._read_capabilities(value, "requires")
+        project_formats = cls._read_project_formats(value)
         optional = tuple(
             name for name in cls._read_capabilities(value, "optional")
             if name not in requires
@@ -145,6 +196,7 @@ class PluginManifest:
             entry_module=match.group("module"),
             entry_callable=match.group("callable"),
             root=filename.parent.resolve(),
+            project_formats=project_formats,
             description=str(value.get("description", "")).strip(),
             author=str(value.get("author", "")).strip(),
             homepage=str(value.get("homepage", "")).strip(),
@@ -152,6 +204,78 @@ class PluginManifest:
             optional=optional,
             media_types=media_types,
             **promises,
+        )
+
+    def supports_project_format(self, version):
+        return self.project_formats.supports(version)
+
+    @staticmethod
+    def _read_project_formats(value):
+        if "project_formats" not in value:
+            # API 1 predates this manifest promise. Refusing every existing
+            # third-party plugin would turn an added safety rail into an
+            # ecosystem break; load it tentatively and make the omission
+            # visible until its author publishes an explicit declaration.
+            return ProjectFormatCompatibility(0, -1, None, False)
+        declared = value.get("project_formats")
+        if not isinstance(declared, dict):
+            raise PluginManifestError(
+                "Plugin project_formats must be an object with a minimum "
+                "and an optional maximum."
+            )
+        unknown = set(declared) - {
+            "minimum", "tested_through", "maximum"
+        }
+        if unknown:
+            raise PluginManifestError(
+                "Plugin project_formats contains unknown fields: {}."
+                .format(", ".join(sorted(unknown)))
+            )
+        missing = [
+            name for name in ("minimum", "tested_through")
+            if name not in declared
+        ]
+        if missing:
+            raise PluginManifestError(
+                "Plugin project_formats requires: {}."
+                .format(", ".join(missing))
+            )
+
+        def version(name, required=False):
+            raw = declared.get(name)
+            if raw is None and not required:
+                return None
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise PluginManifestError(
+                    "Plugin project_formats {} must be a non-negative "
+                    "integer.".format(name)
+                )
+            if raw < 0:
+                raise PluginManifestError(
+                    "Plugin project_formats {} must be a non-negative "
+                    "integer.".format(name)
+                )
+            return raw
+
+        minimum = version("minimum", required=True)
+        tested_through = version("tested_through", required=True)
+        maximum = version("maximum")
+        if tested_through < minimum:
+            raise PluginManifestError(
+                "Plugin project_formats tested_through cannot be below "
+                "minimum."
+            )
+        if maximum is not None and maximum < minimum:
+            raise PluginManifestError(
+                "Plugin project_formats maximum cannot be below minimum."
+            )
+        if maximum is not None and tested_through > maximum:
+            raise PluginManifestError(
+                "Plugin project_formats tested_through cannot exceed "
+                "maximum."
+            )
+        return ProjectFormatCompatibility(
+            minimum, tested_through, maximum
         )
 
     @staticmethod

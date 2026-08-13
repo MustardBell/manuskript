@@ -39,11 +39,76 @@ def manifest(tmp_path, **extra):
         "version": "1.0",
         "api_version": 1,
         "entry_point": "plugin:register",
+        "project_formats": {"minimum": 0, "tested_through": 2},
     }
     declared.update(extra)
     path = root / "plugin.json"
     path.write_text(json.dumps(declared), encoding="utf-8")
     return PluginManifest.load(path)
+
+
+def test_project_format_contract_distinguishes_explicit_tentative_and_closed(
+    tmp_path,
+):
+    loaded = manifest(
+        tmp_path,
+        project_formats={"minimum": 0, "tested_through": 2},
+    )
+
+    assert loaded.supports_project_format(0)
+    assert loaded.project_formats.explicitly_supports(2)
+    assert loaded.project_formats.is_tentative(3)
+    assert loaded.project_formats.label == (
+        "0–2; later formats tentative"
+    )
+
+
+def test_project_format_maximum_is_a_hard_stop(tmp_path):
+    loaded = manifest(
+        tmp_path,
+        project_formats={
+            "minimum": 0, "tested_through": 1, "maximum": 1,
+        },
+    )
+
+    assert loaded.supports_project_format(1)
+    assert not loaded.supports_project_format(2)
+    assert loaded.project_formats.label == "0–1 only"
+
+
+@pytest.mark.parametrize("declaration", [
+    None,
+    [],
+    {},
+    {"minimum": 0},
+    {"minimum": 1, "tested_through": 0},
+    {"minimum": 0, "tested_through": 2, "maximum": 1},
+    {"minimum": 0, "tested_through": 1, "max": 1},
+])
+def test_invalid_project_format_contract_is_refused(tmp_path, declaration):
+    with pytest.raises(PluginManifestError):
+        manifest(tmp_path, project_formats=declaration)
+
+
+def test_undeclared_project_formats_remain_tentative_for_api_1(tmp_path):
+    root = tmp_path / "legacy-plugin"
+    root.mkdir()
+    path = root / "plugin.json"
+    path.write_text(json.dumps({
+        "id": "vendor.legacy",
+        "name": "Legacy plugin",
+        "version": "1.0",
+        "api_version": 1,
+        "entry_point": "plugin:register",
+    }), encoding="utf-8")
+
+    loaded = PluginManifest.load(path)
+
+    assert loaded.supports_project_format(2)
+    assert loaded.project_formats.is_tentative(2)
+    assert loaded.project_formats.label == (
+        "not declared; all formats tentative"
+    )
 
 
 # ------------------------------------------------------------- declaring

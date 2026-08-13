@@ -36,6 +36,7 @@ class ProjectRuntime(QObject):
         project_history=None,
         revision_coordinator=None,
         active_window_source=None,
+        project_format_changed=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -68,6 +69,7 @@ class ProjectRuntime(QObject):
         )
         self.projectManager = None
         self._projectHistory = project_history
+        self._projectFormatChanged = project_format_changed
 
     def attach(self, view, workspace=None):
         """Register a workspace's view side, building the manager once.
@@ -98,6 +100,7 @@ class ProjectRuntime(QObject):
                 document_buffers=self.documentBuffers,
                 last_project_store=self._projectHistory,
                 revision_coordinator=self.revisionCoordinator,
+                project_format_changed=self._projectFormatChanged,
             )
         return self.projectManager
 

@@ -54,6 +54,7 @@ def write_plugin(
         "version": "1.0",
         "api_version": 1,
         "entry_point": "plugin:register",
+        "project_formats": {"minimum": 0, "tested_through": 2},
     }
     if requires:
         manifest["requires"] = list(requires)
@@ -226,6 +227,7 @@ def test_a_malformed_requires_is_rejected_at_discovery(tmp_path, declared):
         "version": "1.0",
         "api_version": 1,
         "entry_point": "plugin:register",
+        "project_formats": {"minimum": 0, "tested_through": 2},
         "requires": declared,
     }), encoding="utf-8")
 

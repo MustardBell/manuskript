@@ -19,7 +19,10 @@ from manuskript.plugins.capabilities import (
 )
 from manuskript.plugins.errors import PluginScopeError
 from manuskript.plugins import All, QueryScope
-from manuskript.plugins.manifest import PluginManifest
+from manuskript.plugins.manifest import (
+    PluginManifest,
+    ProjectFormatCompatibility,
+)
 from manuskript.plugins.runtime import PluginRecord, PluginStatus
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -66,6 +69,7 @@ def _declare(window, requires):
             entry_module="plugin",
             entry_callable="register",
             root=Path("."),
+            project_formats=ProjectFormatCompatibility(0, 2),
             requires=tuple(requires),
         ),
         status=PluginStatus.LOADED,

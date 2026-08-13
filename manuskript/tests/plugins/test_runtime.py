@@ -20,6 +20,7 @@ def create_plugin(
         "version": "1.0",
         "api_version": api_version,
         "entry_point": "plugin:register",
+        "project_formats": {"minimum": 0, "tested_through": 2},
     }
     declared.update(manifest or {})
     (plugin_root / "plugin.json").write_text(
@@ -100,6 +101,112 @@ def test_incompatible_plugin_is_never_imported(tmp_path):
     record = runtime.records["example.plugin"]
     assert record.status is PluginStatus.INCOMPATIBLE
     assert "requires API 999" in record.error
+
+
+def test_project_format_exclusion_prevents_import(tmp_path):
+    create_plugin(
+        tmp_path,
+        source="raise RuntimeError('excluded plugin was imported')\n",
+        manifest={"project_formats": {
+            "minimum": 0, "tested_through": 1, "maximum": 1,
+        }},
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+        project_format=2,
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.INCOMPATIBLE
+    assert "supports project formats 0–1 only" in record.error
+    assert runtime.registry.exporters == ()
+
+
+def test_project_change_deactivates_and_reloads_format_scoped_plugin(
+    tmp_path,
+):
+    create_plugin(
+        tmp_path,
+        source=ACTIVATING_SOURCE,
+        manifest={
+            "requires": ["markup.bbcode"],
+            "project_formats": {
+                "minimum": 0, "tested_through": 1, "maximum": 1,
+            },
+        },
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+        project_format=1,
+    )
+    runtime.discover()
+    runtime.load_enabled()
+
+    assert runtime.records["example.plugin"].status is PluginStatus.LOADED
+    assert runtime.registry.exporters
+
+    runtime.set_project_format(2)
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.INCOMPATIBLE
+    assert runtime.registry.exporters == ()
+    assert (tmp_path / "example.plugin" / "deactivated").exists()
+
+    runtime.set_project_format(1)
+
+    assert record.status is PluginStatus.LOADED
+    assert runtime.registry.exporters
+
+
+def test_forward_compatible_plugin_loads_with_a_visible_warning(tmp_path):
+    create_plugin(
+        tmp_path,
+        source="def register(api):\n    return None\n",
+        manifest={"project_formats": {
+            "minimum": 0, "tested_through": 1,
+        }},
+    )
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+        project_format=2,
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.LOADED
+    assert "explicitly tested through project format 1" in record.warning
+    assert "format 2 is tentatively allowed" in record.warning
+
+
+def test_undeclared_project_compatibility_loads_with_a_warning(tmp_path):
+    plugin_root = create_plugin(
+        tmp_path,
+        source="def register(api):\n    return None\n",
+    )
+    manifest_path = plugin_root / "plugin.json"
+    declaration = json.loads(manifest_path.read_text(encoding="utf-8"))
+    declaration.pop("project_formats")
+    manifest_path.write_text(json.dumps(declaration), encoding="utf-8")
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+        project_format=2,
+    )
+
+    runtime.discover()
+    runtime.load_enabled()
+
+    record = runtime.records["example.plugin"]
+    assert record.status is PluginStatus.LOADED
+    assert "does not declare project-format compatibility" in record.warning
 
 
 def test_failed_registration_leaves_no_partial_contributions(tmp_path):
@@ -359,6 +466,7 @@ def test_refresh_unloads_plugin_when_manifest_becomes_duplicate(tmp_path):
             "version": "1.0",
             "api_version": 1,
             "entry_point": "plugin:register",
+            "project_formats": {"minimum": 0, "tested_through": 2},
         }),
         encoding="utf-8",
     )

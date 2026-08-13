@@ -93,6 +93,38 @@ class TestProjectManager(unittest.TestCase):
                                 if len(call.kwargs) > 0 and call.kwargs.get('importance') == 3]
             self.assertEqual(len(error_status_calls), 0, "Should not show error status message")
 
+    @patch('os.path.exists')
+    def test_project_format_is_announced_before_project_views_connect(
+            self, mock_exists):
+        mock_exists.return_value = True
+        observer = MagicMock()
+        self.project_manager._projectFormatChanged = observer
+        self.storage.canonical_project.format_version = 2
+        events = []
+        observer.side_effect = lambda version: events.append(
+            ("format", version)
+        )
+        self.lifecycle_view.connect_project = MagicMock(
+            side_effect=lambda: events.append(("connect", None))
+        )
+
+        with patch.object(self.project_manager, 'loadEmptyDatas'), \
+             patch.object(self.project_manager, 'loadDatas', return_value=True):
+            assert self.project_manager.loadProject("existing_project.msk")
+
+        self.assertEqual(events[:2], [("format", 2), ("connect", None)])
+
+    def test_closing_project_releases_the_project_format(self):
+        observer = MagicMock()
+        self.project_manager._projectFormatChanged = observer
+        self.project_manager.session.open("project.msk")
+        self.project_manager._closeSettled = True
+
+        with patch.object(self.project_manager, 'loadEmptyDatas'):
+            self.assertTrue(self.project_manager.closeProject())
+
+        observer.assert_called_once_with(None)
+
     def test_project_change_transitions_session_to_dirty(self):
         self.project_manager.session.open("project.msk")
         self.window.projectRuntime.settingsManager.autoSaveNoChanges = False
