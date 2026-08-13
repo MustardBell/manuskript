@@ -90,6 +90,7 @@ def test_manager_reports_invalid_manifests(tmp_path):
                 "module": "plugin",
                 "callable": "register",
             },
+            "project_formats": {"minimum": 0, "tested_through": 2},
         }),
         encoding="utf-8",
     )

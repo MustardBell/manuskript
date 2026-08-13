@@ -1,6 +1,7 @@
 import json
 
 from manuskript.plugins.runtime import PluginRuntime, PluginStatus
+from manuskript.plugins.runtimes import current_platform
 from manuskript.services.plugin_preferences import (
     InMemoryPluginPreferences,
 )
@@ -116,7 +117,7 @@ def test_process_plugin_is_refused_before_code_runs_when_runtime_is_missing(
         manifest={"runtime": {
             "kind": "process",
             "protocol_version": 1,
-            "commands": {"linux": ["missing-plugin-process"]},
+            "commands": {current_platform(): ["missing-plugin-process"]},
         }},
     )
     runtime = PluginRuntime(
