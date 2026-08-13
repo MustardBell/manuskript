@@ -37,6 +37,19 @@ The implementations under `reference/` deliberately do not use an SDK. Each
 shows the complete minimum protocol in its language. SDKs may wrap this work,
 but an SDK is never required to implement API 1.
 
+Run every reference for which a toolchain is installed (C and Rust are built
+in a temporary directory):
+
+```sh
+python3 plugin_api/conformance/run_all.py
+```
+
+CI uses `--require` after provisioning its language tools, so a missing
+toolchain cannot turn a promised conformance check into a silent skip.
+The Erlang reference configures `standard_io` as Latin-1 and uses the bytewise
+`file` API because JSON-RPC `Content-Length` counts UTF-8 bytes, not Unicode
+characters.
+
 These references are protocol fixtures, not examples of how to structure a
 real feature. Real plugins belong in their own repositories and declare their
 runtime plus project-format compatibility in `plugin.json`.

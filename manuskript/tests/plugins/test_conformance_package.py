@@ -56,16 +56,16 @@ def test_checked_in_documents_are_the_runtime_source_of_truth():
             assert not declared["operations"]
 
 
-def run_reference(language, executable, script):
+def run_reference(language, command, cwd):
     result = subprocess.run(
         [
             sys.executable,
             str(RUNNER),
             "--plugin-id", "org.manuskript.reference." + language,
             "--language", language,
-            "--cwd", str(script.parent),
+            "--cwd", str(cwd),
             "--timeout", "3",
-            "--", executable, script.name,
+            "--", *[str(item) for item in command],
         ],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -81,10 +81,44 @@ def run_reference(language, executable, script):
 def test_python_reference_passes_without_importing_manuskript():
     script = ROOT / "plugin_api" / "reference" / "python" / "plugin.py"
     assert "import manuskript" not in script.read_text(encoding="utf-8").lower()
-    run_reference("python", sys.executable, script)
+    run_reference("python", [sys.executable, script.name], script.parent)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not installed")
 def test_node_reference_passes_without_an_sdk():
     script = ROOT / "plugin_api" / "reference" / "node" / "plugin.mjs"
-    run_reference("node", shutil.which("node"), script)
+    run_reference("node", [shutil.which("node"), script.name], script.parent)
+
+
+@pytest.mark.skipif(shutil.which("cc") is None, reason="C compiler not installed")
+def test_c_reference_passes_without_an_sdk(tmp_path):
+    source = ROOT / "plugin_api" / "reference" / "c" / "plugin.c"
+    executable = tmp_path / "c-plugin"
+    subprocess.run(
+        ["cc", "-std=c11", "-O2", str(source), "-o", str(executable)],
+        timeout=60,
+        check=True,
+    )
+    run_reference("c", [str(executable)], tmp_path)
+
+
+@pytest.mark.skipif(
+    shutil.which("rustc") is None, reason="Rust compiler not installed"
+)
+def test_rust_reference_passes_without_an_sdk(tmp_path):
+    source = ROOT / "plugin_api" / "reference" / "rust" / "plugin.rs"
+    executable = tmp_path / "rust-plugin"
+    subprocess.run(
+        ["rustc", "--edition=2021", "-O", str(source), "-o", str(executable)],
+        timeout=60,
+        check=True,
+    )
+    run_reference("rust", [str(executable)], tmp_path)
+
+
+@pytest.mark.skipif(
+    shutil.which("escript") is None, reason="Erlang escript not installed"
+)
+def test_erlang_reference_passes_without_an_sdk():
+    script = ROOT / "plugin_api" / "reference" / "erlang" / "plugin.escript"
+    run_reference("erlang", [shutil.which("escript"), script.name], script.parent)
