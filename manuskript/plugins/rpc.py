@@ -12,10 +12,12 @@ import time
 from dataclasses import dataclass, field
 
 from manuskript.plugins.errors import (
+    PluginConflictError,
     PluginProcessError,
     PluginProtocolError,
     PluginRemoteError,
     PluginRequestTimeout,
+    PluginScopeError,
 )
 
 
@@ -182,6 +184,7 @@ class RpcProcess:
         cwd,
         limits=None,
         notification_handler=None,
+        request_handler=None,
         environment=None,
     ):
         if isinstance(command, str) or not command:
@@ -193,6 +196,7 @@ class RpcProcess:
         self.cwd = str(cwd)
         self.limits = limits or RpcLimits()
         self.notification_handler = notification_handler
+        self.request_handler = request_handler
         self._write_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._pending = {}
@@ -203,6 +207,11 @@ class RpcProcess:
         self._notification_queue = (
             queue.Queue(maxsize=self.limits.max_pending_notifications)
             if notification_handler is not None
+            else None
+        )
+        self._host_request_queue = (
+            queue.Queue(maxsize=self.limits.max_pending_notifications)
+            if request_handler is not None
             else None
         )
 
@@ -245,10 +254,21 @@ class RpcProcess:
             if self._notification_queue is not None
             else None
         )
+        self._host_request_thread = (
+            threading.Thread(
+                target=self._answer_host_requests,
+                name="plugin-{}-host-requests".format(self.plugin_id),
+                daemon=True,
+            )
+            if self._host_request_queue is not None
+            else None
+        )
         self._stdout_thread.start()
         self._stderr_thread.start()
         if self._notification_thread is not None:
             self._notification_thread.start()
+        if self._host_request_thread is not None:
+            self._host_request_thread.start()
 
     @property
     def is_running(self):
@@ -488,14 +508,32 @@ class RpcProcess:
             except (TypeError, ValueError) as error:
                 raise PluginProtocolError(str(error)) from error
         if "id" in message:
-            self._write({
-                "jsonrpc": JSONRPC_VERSION,
-                "id": message["id"],
-                "error": {
-                    "code": -32601,
-                    "message": "Host method is not available.",
-                },
-            })
+            request_id = message["id"]
+            if isinstance(request_id, bool) or not isinstance(
+                request_id, (int, str)
+            ):
+                raise PluginProtocolError(
+                    "RPC request ids must be integers or strings."
+                )
+            if self._host_request_queue is None:
+                self._write({
+                    "jsonrpc": JSONRPC_VERSION,
+                    "id": request_id,
+                    "error": {
+                        "code": -32601,
+                        "message": "Host method is not available.",
+                    },
+                })
+                return
+            try:
+                self._host_request_queue.put_nowait((
+                    request_id, method, message.get("params")
+                ))
+            except queue.Full as error:
+                raise PluginProtocolError(
+                    "Plugin host-request queue exceeds {} messages."
+                    .format(self.limits.max_pending_notifications)
+                ) from error
             return
         if self.notification_handler is not None:
             try:
@@ -522,6 +560,73 @@ class RpcProcess:
                     self.plugin_id,
                     method,
                 )
+
+    def _answer_host_requests(self):
+        while True:
+            item = self._host_request_queue.get()
+            if item is None:
+                return
+            request_id, method, params = item
+            try:
+                result = self.request_handler(method, params)
+                response = {
+                    "jsonrpc": JSONRPC_VERSION,
+                    "id": request_id,
+                    "result": result,
+                }
+            except PluginConflictError as error:
+                response = {
+                    "jsonrpc": JSONRPC_VERSION,
+                    "id": request_id,
+                    "error": {
+                        "code": 4090,
+                        "message": str(error),
+                        "data": error.data,
+                    },
+                }
+            except PluginScopeError as error:
+                response = {
+                    "jsonrpc": JSONRPC_VERSION,
+                    "id": request_id,
+                    "error": {
+                        "code": 4030,
+                        "message": str(error),
+                    },
+                }
+            except (
+                PluginProtocolError,
+                TypeError,
+                ValueError,
+                KeyError,
+            ) as error:
+                response = {
+                    "jsonrpc": JSONRPC_VERSION,
+                    "id": request_id,
+                    "error": {
+                        "code": 4000,
+                        "message": "{}: {}".format(
+                            type(error).__name__, error
+                        ),
+                    },
+                }
+            except Exception as error:
+                LOGGER.exception(
+                    "Plugin %s host request %s failed.",
+                    self.plugin_id,
+                    method,
+                )
+                response = {
+                    "jsonrpc": JSONRPC_VERSION,
+                    "id": request_id,
+                    "error": {
+                        "code": 5000,
+                        "message": "Host capability operation failed.",
+                    },
+                }
+            try:
+                self._write(response)
+            except PluginProcessError:
+                return
 
     def _fail(self, error):
         with self._state_lock:
@@ -577,10 +682,17 @@ class RpcProcess:
                 self._notification_queue.put(None, timeout=max(0.0, timeout))
             except queue.Full:
                 pass
+        if self._host_request_queue is not None:
+            try:
+                self._host_request_queue.put(None, timeout=max(0.0, timeout))
+            except queue.Full:
+                pass
         current = threading.current_thread()
         threads = [self._stdout_thread, self._stderr_thread]
         if self._notification_thread is not None:
             threads.append(self._notification_thread)
+        if self._host_request_thread is not None:
+            threads.append(self._host_request_thread)
         for thread in threads:
             if thread is not current:
                 thread.join(timeout=max(0.0, timeout))

@@ -113,6 +113,7 @@ CAPABILITIES = (
             "or extended(*rules) for a converter with extra rules of your "
             "own that does not affect anyone else."
         ),
+        portability=ContractPortability.NATIVE,
         factory=_bbcode_converter,
     ),
     Capability(
@@ -131,6 +132,7 @@ CAPABILITIES = (
             "in for a format, and who declared or promised what. Read "
             "only -- declaring is done in your manifest."
         ),
+        portability=ContractPortability.DECLARATIVE,
     ),
     Capability(
         name=CAPABILITY_CONVERSION,
@@ -150,6 +152,7 @@ CAPABILITIES = (
             "the selected items, every document, and word of it changing. "
             "Your workspace context's outline reads but cannot write."
         ),
+        portability=ContractPortability.DECLARATIVE,
     ),
     Capability(
         name=CAPABILITY_OUTLINE_WRITE,
@@ -159,6 +162,7 @@ CAPABILITIES = (
             "Includes everything outline.read offers, so asking for both "
             "is unnecessary."
         ),
+        portability=ContractPortability.NATIVE,
     ),
     Capability(
         name=CAPABILITY_EDITOR_CONTROL,
@@ -192,6 +196,7 @@ CAPABILITIES = (
             "Insert source-owned wikilinks through a guarded outline edit; "
             "includes references.read."
         ),
+        portability=ContractPortability.DECLARATIVE,
     ),
     Capability(
         name=CAPABILITY_ASSERTIONS_READ,
@@ -203,6 +208,7 @@ CAPABILITIES = (
             "Append or remove fenced source-owned assertions through a "
             "guarded outline edit; includes assertions.read."
         ),
+        portability=ContractPortability.DECLARATIVE,
     ),
     Capability(
         name=CAPABILITY_TIMELINE_READ,
@@ -242,6 +248,7 @@ CAPABILITIES = (
             "Execute the stable typed query AST over entities, references, "
             "and explicit assertions."
         ),
+        portability=ContractPortability.DECLARATIVE,
     ),
     Capability(
         name=CAPABILITY_MORPHOLOGY_SCHEMAS,

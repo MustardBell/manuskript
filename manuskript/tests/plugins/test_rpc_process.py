@@ -70,6 +70,12 @@ while True:
         send({"jsonrpc": "2.0", "method": "fixture.changed",
               "params": {"value": 3}})
         send({"jsonrpc": "2.0", "id": request_id, "result": True})
+    elif method == "host-call":
+        send({"jsonrpc": "2.0", "id": "host-1",
+              "method": "fixture.host", "params": {"value": 7}})
+        host_response = read_message()
+        send({"jsonrpc": "2.0", "id": request_id,
+              "result": host_response.get("result")})
     elif method == "hang":
         pass
     elif method == "$/cancelRequest":
@@ -196,6 +202,25 @@ def test_notification_handler_can_make_a_request_without_deadlocking_reader(
         rpc.shutdown(timeout=0.5)
 
     assert received == [{"nested": {"value": 3}}]
+
+
+def test_plugin_can_call_host_without_deadlocking_the_response_reader(
+    tmp_path,
+):
+    handled_on = []
+
+    def request_handler(method, params):
+        handled_on.append(threading.current_thread().name)
+        assert method == "fixture.host"
+        return {"handled": params["value"] + 1}
+
+    rpc = process(tmp_path, request_handler=request_handler)
+    try:
+        assert rpc.request("host-call", timeout=1) == {"handled": 8}
+    finally:
+        rpc.shutdown(timeout=0.5)
+
+    assert handled_on == ["plugin-example.rpc-host-requests"]
 
 
 def test_request_deadline_sends_cancellation_and_returns_promptly(tmp_path):

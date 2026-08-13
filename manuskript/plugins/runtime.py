@@ -13,6 +13,7 @@ from manuskript.plugins.errors import (
     PluginLoadError,
     PluginManifestError,
     PluginRegistrationError,
+    PluginScopeError,
 )
 from manuskript.media_types import (
     PROMISES,
@@ -71,6 +72,7 @@ class PluginRuntime:
         api_version=PLUGIN_API_VERSION,
         media_types=None,
         project_format=None,
+        project_capability_resolver=None,
         drivers=None,
     ):
         self.roots = tuple(Path(root).resolve() for root in roots)
@@ -83,6 +85,8 @@ class PluginRuntime:
         self.records = {}
         self.discovery_issues = []
         self.projectFormat = project_format
+        self.projectGeneration = 0
+        self._projectCapabilityResolver = project_capability_resolver
         drivers = tuple(
             (PythonPluginDriver(), ProcessPluginDriver())
             if drivers is None else drivers
@@ -275,8 +279,10 @@ class PluginRuntime:
 
         # Negotiate before anything of the plugin's runs. A plugin whose
         # requirements core cannot meet is refused, not half-started.
+        required_capabilities = driver.required_capabilities(manifest)
+        optional_capability_names = driver.optional_capabilities(manifest)
         capabilities, missing = grant(
-            manifest.requires, self.capabilityContext()
+            required_capabilities, self.capabilityContext()
         )
         if missing:
             record.status = PluginStatus.UNSATISFIED
@@ -291,7 +297,7 @@ class PluginRuntime:
             return record
 
         unavailable_optional = []
-        for name in manifest.optional:
+        for name in optional_capability_names:
             optional_capabilities, unavailable = grant(
                 (name,), self.capabilityContext()
             )
@@ -314,6 +320,13 @@ class PluginRuntime:
                 PluginDriverContext(
                     api_version=self.api_version,
                     project_format=self.projectFormat,
+                    project_generation=self.projectGeneration,
+                    generation_source=lambda: self.projectGeneration,
+                    capability_resolver=lambda name: (
+                        self._resolve_process_capability(
+                            plugin_id, registrar, name
+                        )
+                    ),
                 ),
             )
             self._require_promised(manifest, registrar.contributions)
@@ -355,6 +368,7 @@ class PluginRuntime:
         if version == self.projectFormat:
             return tuple(self.records.values())
         self.projectFormat = version
+        self.projectGeneration += 1
         enabled = set(self.preferences.enabled_plugin_ids)
         for plugin_id, record in sorted(self.records.items()):
             record.warning = self._project_format_warning(record.manifest)
@@ -377,7 +391,41 @@ class PluginRuntime:
                 record.warning = self._project_format_warning(
                     record.manifest
                 )
+                record.driver.project_changed(
+                    record.manifest,
+                    record.session,
+                    self.projectGeneration,
+                    self.projectFormat,
+                )
         return tuple(self.records.values())
+
+    def set_project_capability_resolver(self, resolver):
+        """Install the composition-root bridge to current project services."""
+
+        if resolver is not None and not callable(resolver):
+            raise TypeError("Project capability resolver must be callable.")
+        self._projectCapabilityResolver = resolver
+
+    def publish_project_event(self, topic, payload):
+        """Send an ordered event only to live subscribed process plugins."""
+
+        for record in tuple(self.records.values()):
+            if record.status is not PluginStatus.LOADED:
+                continue
+            record.driver.publish_event(
+                record.manifest,
+                record.session,
+                topic,
+                payload,
+            )
+
+    def _resolve_process_capability(self, plugin_id, registrar, name):
+        try:
+            return registrar.capability(name)
+        except PluginScopeError as local_error:
+            if self._projectCapabilityResolver is None:
+                raise local_error
+            return self._projectCapabilityResolver(plugin_id, name)
 
     def _project_format_error(self, manifest):
         return (

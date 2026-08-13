@@ -7,6 +7,7 @@ from pathlib import Path
 from manuskript.plugins.api import (
     ContentSignature,
     ContributionDeclaration,
+    EntitySnapshot,
     ExtensionDescriptor,
     ImportNode,
     ImportResult,
@@ -93,7 +94,26 @@ while True:
         call = message["params"]
         operation = call["operation"]
         contribution_id = call["contribution_id"]
-        if operation == "transform":
+        if (
+            operation == "detect"
+            and call["arguments"]["items"][0] == "CALL CAPABILITY"
+        ):
+            send({"jsonrpc": "2.0", "id": "capability-1",
+                  "method": "capability/call", "params": {
+                "capability": "entities.read",
+                "operation": "find",
+                "arguments": {"$kind": "tuple",
+                              "items": ["character:mara"]},
+                "keyword_arguments": {"$kind": "map", "items": {}},
+                "project_generation": 0,
+                "expected_revision": None,
+            }})
+            host_response = read_message()
+            result = (
+                host_response["result"]["value"]["fields"]["title"]
+                == "Mara"
+            )
+        elif operation == "transform":
             arguments = call["arguments"]["items"]
             result = arguments[0].upper()
         elif operation == "detect":
@@ -244,12 +264,13 @@ def create_process_plugin(tmp_path, contributions=None, requires=()):
     return plugin_root
 
 
-def load_process_plugin(tmp_path, **kwargs):
+def load_process_plugin(tmp_path, project_capability_resolver=None, **kwargs):
     plugin_root = create_process_plugin(tmp_path, **kwargs)
     runtime = PluginRuntime(
         [tmp_path],
         InMemoryPluginPreferences(["example.remote"]),
         project_format=2,
+        project_capability_resolver=project_capability_resolver,
     )
     runtime.discover()
     runtime.load_enabled()
@@ -269,7 +290,9 @@ def test_process_driver_negotiates_and_installs_atomically(tmp_path):
         "api_version": 1,
         "protocol_version": 1,
         "project_format": 2,
+        "project_generation": 0,
     }
+    assert seen["capabilities"] == {}
     assert seen["contribution_kinds"]["exporter"] == "portable"
     assert seen["contribution_kinds"]["project_panel"] == "declarative"
     assert seen["value_schema"]["api_version"] == 1
@@ -332,15 +355,71 @@ def test_native_remote_contribution_refuses_the_whole_plugin(tmp_path):
     assert runtime.registry.plugin_records("example.remote") == ()
 
 
-def test_remote_capabilities_are_refused_until_capability_router_lands(
+def test_portable_remote_capability_is_advertised_without_local_objects(
     tmp_path,
 ):
-    _root, runtime = load_process_plugin(
+    root, runtime = load_process_plugin(
         tmp_path,
         requires=("entities.read",),
     )
 
     record = runtime.records["example.remote"]
-    assert record.status is PluginStatus.FAILED
-    assert "capability router" in record.error
-    assert runtime.registry.plugin_records("example.remote") == ()
+    assert record.status is PluginStatus.LOADED, record.error
+    seen = json.loads(
+        (root / "initialize_seen.json").read_text(encoding="utf-8")
+    )
+    methods = seen["capabilities"]["entities.read"]
+    assert [method["name"] for method in methods] == [
+        "entities", "find", "exact_matches"
+    ]
+    assert methods[1] == {
+        "name": "find",
+        "positional": ["entity_id"],
+        "optional": [],
+        "keyword": [],
+        "returns": "api_value",
+        "mutates": False,
+        "revision": "not_accepted",
+    }
+    runtime.disable("example.remote")
+
+
+def test_required_nonportable_capability_is_refused_before_process_start(
+    tmp_path,
+):
+    root, runtime = load_process_plugin(
+        tmp_path,
+        requires=("references.write",),
+    )
+
+    record = runtime.records["example.remote"]
+    assert record.status is PluginStatus.UNSATISFIED
+    assert "not available to process plugins" in record.error
+    assert not (root / "initialize_seen.json").exists()
+
+
+def test_remote_contribution_can_call_a_granted_host_capability(tmp_path):
+    entity = EntitySnapshot(
+        "character:mara",
+        "character",
+        "Mara",
+        "entities/character/mara.md",
+    )
+
+    class EntityService:
+        def find(self, entity_id):
+            return entity if entity_id == entity.id else None
+
+    _root, runtime = load_process_plugin(
+        tmp_path,
+        requires=("entities.read",),
+        project_capability_resolver=(
+            lambda _plugin_id, _name: EntityService()
+        ),
+    )
+    try:
+        assert runtime.registry.page_types[0].detector(
+            "CALL CAPABILITY"
+        ) is True
+    finally:
+        runtime.disable("example.remote")

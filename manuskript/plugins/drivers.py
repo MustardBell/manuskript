@@ -9,6 +9,11 @@ import types
 from dataclasses import dataclass
 
 from manuskript.plugins.api import PluginActivationContext
+from manuskript.plugins.capabilities import capability_catalogue
+from manuskript.plugins.capability_rpc import (
+    CapabilityRpcRouter,
+    portable_capability_methods,
+)
 from manuskript.plugins.contracts import (
     CONTRIBUTION_CONTRACTS,
     PLUGIN_PROTOCOL_VERSION,
@@ -51,6 +56,18 @@ class PluginDriver:
 
     def deactivate(self, manifest, session):
         raise NotImplementedError
+
+    def required_capabilities(self, manifest):
+        return manifest.requires
+
+    def optional_capabilities(self, manifest):
+        return manifest.optional
+
+    def project_changed(self, manifest, session, generation, project_format):
+        """Announce a project identity change to a live driver session."""
+
+    def publish_event(self, manifest, session, topic, payload):
+        """Publish one project event when this driver supports events."""
 
 
 @dataclass
@@ -156,11 +173,15 @@ class PythonPluginDriver(PluginDriver):
 class PluginDriverContext:
     api_version: int
     project_format: object = None
+    project_generation: int = 0
+    generation_source: object = None
+    capability_resolver: object = None
 
 
 @dataclass
 class ProcessDriverSession:
     rpc: RpcProcess
+    router: object = None
     initialized: bool = False
     activated: bool = False
     closed: bool = False
@@ -195,24 +216,71 @@ class ProcessPluginDriver(PluginDriver):
                     PLUGIN_PROTOCOL_VERSION,
                 ),
             )
+        catalogue = capability_catalogue()
+        unsupported = tuple(
+            name for name in manifest.requires
+            if (
+                name in catalogue
+                and catalogue[name].portability
+                is not ContractPortability.PORTABLE
+            )
+        )
+        if unsupported:
+            return RuntimeAvailability(
+                False,
+                error=(
+                    "Plugin {} requires capabilities that are not available "
+                    "to process plugins: {}."
+                ).format(manifest.id, ", ".join(unsupported)),
+            )
         return manifest.runtime.availability(manifest.root)
+
+    def required_capabilities(self, manifest):
+        return self._portable_capabilities(manifest.requires)
+
+    def optional_capabilities(self, manifest):
+        return self._portable_capabilities(manifest.optional)
+
+    @staticmethod
+    def _portable_capabilities(names):
+        catalogue = capability_catalogue()
+        return tuple(
+            name for name in names
+            if (
+                name not in catalogue
+                or catalogue[name].portability
+                is ContractPortability.PORTABLE
+            )
+        )
 
     def load(self, manifest, registrar, context=None):
         context = context or PluginDriverContext(manifest.api_version)
-        if manifest.requires or manifest.optional:
-            raise PluginCompatibilityError(
-                "RPC capability services are not available until the API 1 "
-                "capability router is installed."
-            )
         availability = self.availability(manifest)
         if not availability.available:
             raise PluginLoadError(availability.error)
+        declared_capabilities = (
+            self.required_capabilities(manifest)
+            + self.optional_capabilities(manifest)
+        )
+        generation_source = context.generation_source or (
+            lambda: context.project_generation
+        )
+        capability_resolver = context.capability_resolver or (
+            lambda name: registrar.capability(name)
+        )
+        router = CapabilityRpcRouter(
+            manifest.id,
+            declared_capabilities,
+            capability_resolver,
+            generation_source,
+        )
         rpc = RpcProcess(
             manifest.id,
             availability.command,
             manifest.root,
+            request_handler=router.handle,
         )
-        session = ProcessDriverSession(rpc)
+        session = ProcessDriverSession(rpc, router=router)
         try:
             result = rpc.request(
                 "initialize",
@@ -253,9 +321,35 @@ class ProcessPluginDriver(PluginDriver):
         session.rpc.shutdown(timeout=0.5)
         session.closed = True
 
+    def project_changed(self, manifest, session, generation, project_format):
+        if session is None or session.closed:
+            return
+        session.router.invalidate_subscriptions()
+        session.rpc.notify("project/changed", {
+            "project_generation": generation,
+            "project_format": project_format,
+        })
+
+    def publish_event(self, manifest, session, topic, payload):
+        if session is None or session.closed:
+            return
+        for notification in session.router.event_notifications(
+            topic, payload
+        ):
+            session.rpc.notify("event/publish", notification)
+
     @staticmethod
     def _initialize_params(manifest, context):
         codec = api_value_codec()
+        catalogue = capability_catalogue()
+        granted = tuple(
+            name for name in manifest.requires + manifest.optional
+            if (
+                name in catalogue
+                and catalogue[name].portability
+                is ContractPortability.PORTABLE
+            )
+        )
         return {
             "plugin": {
                 "id": manifest.id,
@@ -265,7 +359,9 @@ class ProcessPluginDriver(PluginDriver):
                 "api_version": context.api_version,
                 "protocol_version": PLUGIN_PROTOCOL_VERSION,
                 "project_format": context.project_format,
+                "project_generation": context.project_generation,
             },
+            "capabilities": portable_capability_methods(granted),
             "contribution_kinds": {
                 contract.kind.value: contract.portability.value
                 for contract in CONTRIBUTION_CONTRACTS

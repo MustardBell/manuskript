@@ -267,6 +267,21 @@ def prepare(arguments, tests=False):
         active_window_source=window_registry.get_active,
         project_format_changed=plugin_contributions.set_project_format,
     )
+    # Project capabilities are scoped at the composition root. The plugin
+    # runtime exists before a project manager does, so it receives a live
+    # resolver rather than capturing whichever manager happened to exist at
+    # startup. A process request after close or project replacement therefore
+    # cannot retain authority over the previous project.
+    from manuskript.ui.plugins.story_capabilities import build_story_capability
+
+    plugin_runtime.set_project_capability_resolver(
+        lambda plugin_id, name: build_story_capability(
+            plugin_runtime,
+            project_runtime.projectManager,
+            plugin_id,
+            name,
+        )
+    )
 
     # Everything composed above, gathered into the one thing a window is
     # given. This is the composition root and the only one: a window that

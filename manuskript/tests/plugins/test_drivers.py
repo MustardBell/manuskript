@@ -29,6 +29,11 @@ class RecordingProcessDriver(PluginDriver):
     def deactivate(self, manifest, session):
         self.events.append(("deactivate", session["plugin"]))
 
+    def project_changed(self, manifest, session, generation, project_format):
+        self.events.append((
+            "project", session["plugin"], generation, project_format
+        ))
+
 
 PROCESS_MANIFEST = {"runtime": {
     "kind": "process",
@@ -112,3 +117,29 @@ def test_runtime_rejects_ambiguous_driver_ownership(tmp_path):
         assert "unique" in str(error)
     else:
         raise AssertionError("duplicate runtime driver kind was accepted")
+
+
+def test_runtime_versions_project_identity_and_announces_live_change(tmp_path):
+    create_plugin(
+        tmp_path,
+        source="raise RuntimeError('must remain unimported')\n",
+        manifest=PROCESS_MANIFEST,
+    )
+    driver = RecordingProcessDriver()
+    runtime = PluginRuntime(
+        [tmp_path],
+        InMemoryPluginPreferences(["example.plugin"]),
+        drivers=(driver,),
+    )
+    runtime.discover()
+    runtime.load_enabled()
+
+    runtime.set_project_format(2)
+    runtime.set_project_format(2)
+    runtime.set_project_format(None)
+
+    assert runtime.projectGeneration == 2
+    assert driver.events[-2:] == [
+        ("project", "example.plugin", 1, 2),
+        ("project", "example.plugin", 2, None),
+    ]

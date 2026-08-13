@@ -46,3 +46,11 @@ class PluginRemoteError(PluginError):
         self.code = code
         self.message = str(message)
         self.data = data
+
+
+class PluginConflictError(PluginError):
+    """A remote write targeted a stale project or resource revision."""
+
+    def __init__(self, message, data=None):
+        super().__init__(message)
+        self.data = dict(data or {})
