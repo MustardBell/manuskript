@@ -8,7 +8,6 @@ import pytest
 
 from manuskript.domain.canonical_project import MetadataField
 from manuskript.domain.project_features import (
-    MorphologyPersistenceDecorator,
     PersistenceDecorator,
     PersistenceLevel,
     V1PersistenceStrategy,
@@ -204,37 +203,35 @@ def test_codec_registry_resolves_formats_without_ui_handlers():
         registry.resolve(42)
 
 
-def test_features_negotiate_structured_compatibility_not_version_checks():
-    strategy = compatibility_strategy(1)
+@pytest.mark.parametrize("version", (0, 1))
+def test_legacy_formats_expose_one_entity_surface_without_new_semantics(
+    version,
+):
+    strategy = compatibility_strategy(version)
 
-    links = strategy.support("references.write")
-    assertions = strategy.support("story.assertions")
-    assertion_write = strategy.support("assertions.write")
     entity_read = strategy.support("entities.read")
-    entity_write = strategy.support("entities.write")
-    project_files = strategy.support("plugins.project-files")
-    timeline_write = strategy.support("timeline.write")
-    rules_execute = strategy.support("rules.execute")
-    workflow_write = strategy.support("workflow.write")
-
-    assert links.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
-    assert links.old_client_save_safe
-    assert assertions.persistence_level is PersistenceLevel.OVERLAY
-    assert not assertions.old_client_save_safe
-    assert (
-        assertion_write.persistence_level
-        is PersistenceLevel.COMPATIBLE_ENCODING
-    )
-    assert assertion_write.writable
-    assert assertion_write.old_client_save_safe
-    assert timeline_write.persistence_level is PersistenceLevel.COMPATIBLE_ENCODING
-    assert timeline_write.writable and timeline_write.old_client_save_safe
-    assert rules_execute.readable and rules_execute.old_client_save_safe
-    assert not workflow_write.supported
     assert entity_read.persistence_level is PersistenceLevel.DERIVED
     assert entity_read.readable and not entity_read.writable
-    assert not entity_write.supported
-    assert not project_files.old_client_save_safe
+
+    for feature in (
+        "entities.write",
+        "references.read",
+        "references.write",
+        "morphology.entities",
+        "assertions.read",
+        "assertions.write",
+        "timeline.read",
+        "timeline.write",
+        "rules.execute",
+        "workflow.read",
+        "workflow.write",
+    ):
+        assert not strategy.support(feature).supported
+
+    if version == 1:
+        assert not strategy.support(
+            "plugins.project-files"
+        ).old_client_save_safe
 
 
 def test_v2_negotiates_native_entity_morphology_without_format_checks():

@@ -41,6 +41,10 @@ class EntityWorkspaceController:
                 self.catalog,
                 self.manager.updateEntity,
                 self.manager.storage.morphology_schemas,
+                morphology_enabled=lambda manager=self.manager: manager.storage
+                .persistence_strategy.supports(
+                    "morphology.entities", write=True
+                ),
                 host_panel=panel.editor,
             )
             for panel in self.panels

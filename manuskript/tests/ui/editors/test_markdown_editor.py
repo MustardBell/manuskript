@@ -46,6 +46,11 @@ def test_interaction_rectangle_updates_are_coalesced():
 
 def test_wikilink_geometry_does_not_depend_on_highlighter_internals():
     editor = make_editor()
+    context = MagicMock()
+    context.settings = editor.settings
+    context.wikilinks_enabled = lambda: True
+    context.story_projection_enabled = lambda: True
+    editor.set_text_editor_context(context)
     original = editor.highlighter
     original.setDocument(None)
     original.deleteLater()

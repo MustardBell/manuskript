@@ -168,6 +168,27 @@ class V1PersistenceStrategy(ProjectPersistenceStrategy):
         })
 
 
+class V0PersistenceStrategy(ProjectPersistenceStrategy):
+    """Describe the original archive without pretending it stores new data.
+
+    Format 0 is still a supported round-trip input.  Its legacy Qt item
+    models are preserved and projected through the common entity surface, but
+    no Format 2 interpretation is enabled merely because an old text cell can
+    happen to contain similar punctuation.
+    """
+
+    name = "manuskript-v0"
+
+    def __init__(self):
+        super().__init__({
+            item.feature: item for item in (
+                _support("legacy.characters", PersistenceLevel.NATIVE),
+                _support("legacy.world", PersistenceLevel.NATIVE),
+                _support("legacy.plots", PersistenceLevel.NATIVE),
+            )
+        })
+
+
 class V2PersistenceStrategy(ProjectPersistenceStrategy):
     name = "manuskript-v2"
 
@@ -204,24 +225,6 @@ class V2PersistenceStrategy(ProjectPersistenceStrategy):
         })
 
 
-class WikilinkPersistenceDecorator(PersistenceDecorator):
-    namespace = "references"
-
-    def __init__(self, wrapped: ProjectPersistenceStrategy):
-        super().__init__(wrapped, (
-            _support(
-                "references.read",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                reason="Wikilinks remain ordinary manuscript text to v1 clients.",
-            ),
-            _support(
-                "references.write",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                reason="Wikilinks remain ordinary manuscript text to v1 clients.",
-            ),
-        ))
-
-
 class LegacyEntityReadPersistenceDecorator(PersistenceDecorator):
     namespace = "entities"
 
@@ -239,142 +242,13 @@ class LegacyEntityReadPersistenceDecorator(PersistenceDecorator):
         ))
 
 
-class AssertionDslPersistenceDecorator(PersistenceDecorator):
-    namespace = "assertions"
-
-    def __init__(self, wrapped: ProjectPersistenceStrategy):
-        super().__init__(wrapped, (
-            _support(
-                "assertions.read",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=True,
-                reason=(
-                    "Assertion fences remain ordinary manuscript Markdown "
-                    "to Format 1 clients."
-                ),
-            ),
-            _support(
-                "assertions.write",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=True,
-                reason=(
-                    "Assertion fences remain ordinary manuscript Markdown "
-                    "to Format 1 clients."
-                ),
-            ),
-        ))
-
-
-class TimelineDslPersistenceDecorator(PersistenceDecorator):
-    namespace = "timeline"
-
-    def __init__(self, wrapped: ProjectPersistenceStrategy):
-        super().__init__(wrapped, (
-            _support(
-                "timeline.read",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=True,
-                reason=(
-                    "Temporal validity and chronology remain inside safely "
-                    "preserved assertion fences for Format 1 clients."
-                ),
-            ),
-            _support(
-                "timeline.write",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=True,
-                reason=(
-                    "Temporal validity and chronology remain inside safely "
-                    "preserved assertion fences for Format 1 clients."
-                ),
-            ),
-        ))
-
-
-class RuleDslPersistenceDecorator(PersistenceDecorator):
-    namespace = "rules"
-
-    def __init__(self, wrapped: ProjectPersistenceStrategy):
-        super().__init__(wrapped, (
-            _support(
-                "rules.execute",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=True,
-                reason=(
-                    "Declarative rules remain safely preserved fenced "
-                    "Markdown in Format 1 projects."
-                ),
-            ),
-        ))
-
-
-class MorphologyPersistenceDecorator(PersistenceDecorator):
-    namespace = "morphology"
-
-    def __init__(self, wrapped: ProjectPersistenceStrategy):
-        super().__init__(wrapped, (
-            _support(
-                "morphology.entities",
-                PersistenceLevel.COMPATIBLE_ENCODING,
-                old_readable=True,
-                old_editable=True,
-                old_save_safe=True,
-                reason="Stored in safely preserved character custom fields.",
-            ),
-        ))
-
-
-class StoryOverlayPersistenceDecorator(PersistenceDecorator):
-    namespace = "story"
-
-    def __init__(self, wrapped: ProjectPersistenceStrategy):
-        super().__init__(wrapped, (
-            _support(
-                "story.assertions",
-                PersistenceLevel.OVERLAY,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=False,
-                reason="v1 has no native assertion representation.",
-            ),
-            _support(
-                "story.timeline",
-                PersistenceLevel.OVERLAY,
-                old_readable=False,
-                old_editable=False,
-                old_save_safe=False,
-                reason="v1 has no native temporal assertion representation.",
-            ),
-        ))
-
-
 def compatibility_strategy(version: int) -> ProjectPersistenceStrategy:
+    if version == 0:
+        return LegacyEntityReadPersistenceDecorator(V0PersistenceStrategy())
     if version == 1:
-        return AssertionDslPersistenceDecorator(
-            RuleDslPersistenceDecorator(
-                TimelineDslPersistenceDecorator(
-                    LegacyEntityReadPersistenceDecorator(
-                        StoryOverlayPersistenceDecorator(
-                            MorphologyPersistenceDecorator(
-                                WikilinkPersistenceDecorator(
-                                    V1PersistenceStrategy()
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
+        # Old formats preserve unknown text and fields; preservation is not
+        # permission to reinterpret them as new application semantics.
+        return LegacyEntityReadPersistenceDecorator(V1PersistenceStrategy())
     if version == 2:
         return V2PersistenceStrategy()
     return ProjectPersistenceStrategy()

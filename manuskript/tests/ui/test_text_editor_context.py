@@ -6,6 +6,7 @@ from PyQt5.QtTest import QTest
 
 from manuskript.commands import DocumentCommand
 from manuskript.domain.reference_index import ReferenceDocument, ReferenceIndex
+from manuskript.domain.project_features import compatibility_strategy
 from manuskript.domain.story_assertions import TemporalAxis
 from manuskript.ui.views.textEditView import textEditView
 from manuskript.ui.views.text_editor_context import text_editor_context_for
@@ -108,6 +109,7 @@ def test_text_editor_context_exposes_project_wikilink_commands():
         MagicMock(),
         reference_index=reference_index,
         open_document=open_document,
+        persistence_strategy=lambda: compatibility_strategy(2),
     )
 
     assert context.complete_wikilink("mar") == suggestions
@@ -136,6 +138,7 @@ def test_text_editor_context_routes_generic_entity_commands():
         entity_catalog=catalog,
         create_native_entity=create_entity,
         open_entity=open_entity,
+        persistence_strategy=lambda: compatibility_strategy(2),
     )
 
     assert context.entity_reference_choices("Mara") == choices
@@ -162,11 +165,30 @@ def test_wikilink_navigation_falls_back_from_outline_to_entity_document():
         reference_index=reference_index,
         open_document=open_document,
         open_entity=open_entity,
+        persistence_strategy=lambda: compatibility_strategy(2),
     )
 
     assert context.open_wikilink("Characters/Mara")
     open_document.assert_called_once_with("entity-id")
     open_entity.assert_called_once_with("entity-id")
+
+
+def test_text_editor_context_does_not_interpret_wikilinks_in_legacy_formats():
+    reference_index = MagicMock()
+    context = text_editor_context_for(
+        make_window(),
+        MagicMock(),
+        MagicMock(),
+        reference_index=reference_index,
+        persistence_strategy=lambda: compatibility_strategy(1),
+    )
+
+    assert not context.wikilinks_enabled()
+    assert not context.story_projection_enabled()
+    assert context.complete_wikilink("Characters") == ()
+    assert not context.open_wikilink("Characters/Mara")
+    reference_index.complete.assert_not_called()
+    reference_index.resolve.assert_not_called()
 
 
 def test_text_editor_context_negotiates_assertion_writes_dynamically():

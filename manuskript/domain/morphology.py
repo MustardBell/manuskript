@@ -486,10 +486,18 @@ class EntitySurfaceRealization:
 class MorphologyIndex:
     """Disposable reverse index from written surfaces to entity identity."""
 
-    def __init__(self, schemas: MorphologySchemaRegistry):
+    def __init__(self, schemas: MorphologySchemaRegistry, enabled=True):
         self.schemas = schemas
+        self._enabled = bool(enabled)
         self._by_surface = {}
         self._by_entity = {}
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._enabled = bool(enabled)
 
     def rebuild(self, entities: Iterable[EntityRecord]) -> None:
         by_surface = {}
@@ -502,7 +510,10 @@ class MorphologyIndex:
                 EntitySurfaceRealization(entity.id, alias, "alias")
                 for alias in entity.aliases
             )
-            profile = MorphologyProfile.from_entity(entity)
+            profile = (
+                MorphologyProfile.from_entity(entity)
+                if self._enabled else None
+            )
             if profile is not None:
                 realizations.extend(
                     EntitySurfaceRealization(

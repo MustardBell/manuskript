@@ -120,6 +120,33 @@ def test_storage_clears_persistence_cache():
     assert storage.canonical_project is None
 
 
+def test_legacy_project_text_is_not_indexed_as_format_2_story_syntax():
+    assertion = Assertion(
+        "looks-structured",
+        StoryReference("entity", "mara"),
+        "knows",
+        AssertionTerm.scalar("something"),
+    )
+    source = (
+        "Literal [[Characters/Mara|Mara]].\n\n"
+        + encode_assertion_block(assertion)
+    )
+    project = CanonicalProject(
+        format_version=1,
+        outline=(OutlineDocument(
+            "scene", "Scene", "scene", source, "outline/scene.md"
+        ),),
+    )
+    storage = ProjectStorage()
+
+    storage._adopt_canonical_project(project)
+
+    assert not storage.reference_index.enabled
+    assert storage.reference_index.references == ()
+    assert storage.assertion_store.assertions == ()
+    assert storage.rule_store.rules == ()
+
+
 def test_storage_instances_do_not_share_file_caches():
     first_cache = {"first.txt": "first"}
     second_cache = {"second.txt": "second"}

@@ -59,13 +59,18 @@ class EntityEditorDialog(QDialog):
         save_entity,
         parent=None,
         morphology_schemas=None,
+        morphology_enabled=False,
         read_only=False,
     ):
         super().__init__(parent)
         self.entity = entity
         self._saveEntity = save_entity
         self._morphologySchemas = morphology_schemas
-        self._morphologyProfile = MorphologyProfile.from_entity(entity)
+        self._morphologyEnabled = bool(morphology_enabled)
+        self._morphologyProfile = (
+            MorphologyProfile.from_entity(entity)
+            if self._morphologyEnabled else None
+        )
         self._morphologyChanged = False
         self._readOnly = bool(read_only)
         self.setObjectName("entityEditorDialog")
@@ -113,6 +118,7 @@ class EntityEditorDialog(QDialog):
         ))
         self.morphologyButton.setEnabled(
             not self._readOnly
+            and self._morphologyEnabled
             and morphology_schemas is not None
         )
         self.morphologyButton.clicked.connect(self._editMorphology)
@@ -460,6 +466,7 @@ class EntityEditorController:
         catalog,
         update_entity,
         morphology_schemas=None,
+        morphology_enabled=False,
         host_panel=None,
         reveal=None,
     ):
@@ -467,6 +474,7 @@ class EntityEditorController:
         self.catalog = catalog
         self.updateEntity = update_entity
         self.morphologySchemas = morphology_schemas
+        self.morphologyEnabled = morphology_enabled
         self.hostPanel = host_panel
         self.reveal = reveal
         self._dialogs = {}
@@ -493,6 +501,11 @@ class EntityEditorController:
             self.updateEntity,
             self.parent,
             morphology_schemas=self.morphologySchemas,
+            morphology_enabled=(
+                self.morphologyEnabled()
+                if callable(self.morphologyEnabled)
+                else bool(self.morphologyEnabled)
+            ),
             read_only=(
                 not self.catalog.writable
                 or entity not in self.catalog.native_entities

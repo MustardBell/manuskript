@@ -38,6 +38,21 @@ def test_reference_index_resolves_paths_titles_missing_and_external_targets():
     assert tuple(item.raw_target for item in index.broken()) == ("missing",)
 
 
+def test_disabled_reference_index_keeps_documents_without_interpreting_text():
+    index = ReferenceIndex(enabled=False)
+
+    assert index.rebuild(_documents()) == ()
+    assert index.documents == _documents()
+    assert index.complete("mar") == ()
+    assert index.resolve("Characters/Mara") == (
+        ReferenceResolution.MISSING, None
+    )
+
+    index.set_enabled(True)
+
+    assert index.references[0].resolved_target_id == "mara"
+
+
 def test_duplicate_short_titles_are_ambiguous_but_full_paths_resolve():
     documents = (
         ReferenceDocument("a", "Places/A/Station.md", "Station", ""),

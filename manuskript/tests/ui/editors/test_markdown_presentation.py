@@ -45,6 +45,15 @@ def make_context(settings, **commands):
     )
 
 
+def format_2_context(settings, **commands):
+    return make_context(
+        settings,
+        wikilinks_enabled=lambda: True,
+        story_projection_enabled=lambda: True,
+        **commands,
+    )
+
+
 def host_editor(editor, width=480, height=360):
     host = MarkdownEditorHost(editor)
     host.resize(width, height)
@@ -491,6 +500,7 @@ def test_clean_editing_hides_markup_including_the_active_block():
         spellcheck=False,
         settings=SettingsManager(),
     )
+    editor.set_text_editor_context(format_2_context(editor.settings))
     host = host_editor(editor)
     source = "**bold** and [[Characters/Mara|Mara]]"
     editor.setPlainText(source)
@@ -561,6 +571,7 @@ def test_live_preview_rehighlights_old_and_new_active_blocks():
 
 def test_live_preview_projects_wikilink_display_without_mutating_source():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    editor.set_text_editor_context(format_2_context(editor.settings))
     host = host_editor(editor)
     source = (
         "Meet [[Characters/Olena|Олену]].\n"
@@ -600,6 +611,7 @@ def test_live_preview_projects_wikilink_display_without_mutating_source():
 
 def test_wikilinks_in_code_are_neither_projected_nor_clickable():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    editor.set_text_editor_context(format_2_context(editor.settings))
     host = host_editor(editor)
     source = "```\n[[CodeExample]]\n```\n[[Actual]]"
     editor.setPlainText(source)
@@ -630,7 +642,7 @@ def test_wikilink_completion_replaces_only_the_target_source_span():
     suggestions = (ReferenceSuggestion(
         "mara", "Characters/Mara", "Mara", "Characters/Mara.md"
     ),)
-    editor.set_text_editor_context(make_context(
+    editor.set_text_editor_context(format_2_context(
         editor.settings,
         complete_wikilink=lambda prefix: suggestions
         if prefix == "Mar" else (),
@@ -1128,6 +1140,7 @@ def test_reading_mode_is_a_rendered_projection_of_untouched_source():
 
 def test_reading_projection_hides_valid_assertion_blocks_without_mutation():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    editor.set_text_editor_context(format_2_context(editor.settings))
     host = host_editor(editor)
     assertion = Assertion(
         "claim-1",
@@ -1152,6 +1165,7 @@ def test_reading_projection_hides_valid_assertion_blocks_without_mutation():
 
 def test_reading_projection_renders_wikilink_display_and_routes_its_target():
     editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    editor.set_text_editor_context(format_2_context(editor.settings))
     open_wikilink = MagicMock(return_value=True)
     completions = (MagicMock(),)
     host = host_editor(editor)
@@ -1173,7 +1187,7 @@ def test_reading_projection_renders_wikilink_display_and_routes_its_target():
         )
         assert "[[" not in editor.readingView.toHtml()
 
-        editor.set_text_editor_context(make_context(
+        editor.set_text_editor_context(format_2_context(
             editor.settings,
             open_wikilink=open_wikilink,
             complete_wikilink=lambda _prefix: completions,
@@ -1184,6 +1198,39 @@ def test_reading_projection_renders_wikilink_display_and_routes_its_target():
         assert list(activated[0]) == ["Characters/Olena"]
         open_wikilink.assert_called_once_with("Characters/Olena")
         assert editor.wikilinkCompletions("char") == completions
+    finally:
+        host.hide()
+
+
+def test_legacy_editor_treats_format_2_story_syntax_as_literal_markdown():
+    editor = MDEditView(spellcheck=False, settings=SettingsManager())
+    editor.set_text_editor_context(make_context(
+        editor.settings,
+        wikilinks_enabled=lambda: False,
+        story_projection_enabled=lambda: False,
+    ))
+    source = "Meet [[Characters/Olena|Olena]]."
+    editor.setPlainText(source)
+    editor.setPresentationMode(MarkdownPresentationMode.LIVE_PREVIEW)
+    host = host_editor(editor)
+    host.show()
+    try:
+        qApp.processEvents()
+        editor.getClickRects()
+        target = format_at(editor, source.index("Characters/Olena"))
+
+        assert not target.fontUnderline()
+        assert not any(
+            item.regex is editor.wikilinkRegex
+            for item in editor.clickRects
+        )
+        assert editor.wikilinkCompletions("Char") == ()
+
+        editor.setPresentationMode(MarkdownPresentationMode.READING)
+        assert wait_until(
+            lambda: editor.readingView.toPlainText() == source
+        )
+        assert "manuskript:" not in editor.readingView.toHtml()
     finally:
         host.hide()
 

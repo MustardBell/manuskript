@@ -88,8 +88,13 @@ class MarkdownReadingView(QTextBrowser):
         source = self._sourceEditor.toPlainText()
         if self._renderer is None:
             document.setBaseUrl(QUrl())
+            projected = (
+                render_story_markdown(source)
+                if self._sourceEditor.storyProjectionEnabled()
+                else source
+            )
             document.setMarkdown(
-                render_story_markdown(source),
+                projected,
                 QTextDocument.MarkdownDialectGitHub,
             )
         else:
@@ -105,6 +110,9 @@ class MarkdownReadingView(QTextBrowser):
         scrollbar.setValue(round(scroll_ratio * new_maximum))
 
     def _anchorClicked(self, url):
-        if url.scheme() == "manuskript":
+        if (
+            url.scheme() == "manuskript"
+            and self._sourceEditor.wikilinksEnabled()
+        ):
             target = url.toString()[len("manuskript:"):]
             self.wikilinkActivated.emit(target)

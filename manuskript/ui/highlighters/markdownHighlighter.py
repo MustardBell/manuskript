@@ -616,6 +616,8 @@ class MarkdownHighlighter(BasicHighlighter):
     def _highlightWikilinks(self, text):
         """Project core wikilinks without changing the QTextDocument."""
 
+        if not self.editor.wikilinksEnabled():
+            return
         if self._presentationMode() is MarkdownPresentationMode.SOURCE:
             return
         if self.currentBlockState() in (

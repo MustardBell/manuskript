@@ -452,14 +452,35 @@ class MDEditView(textEditView):
 
     def set_text_editor_context(self, context):
         textEditView.set_text_editor_context(self, context)
+        if self.highlighter is not None:
+            self.highlighter.rehighlight()
+        self.scheduleInteractionRectUpdate()
+        if self.readingView is not None:
+            self.readingView.scheduleRefresh()
+
+    def wikilinksEnabled(self):
+        enabled = getattr(
+            self.text_editor_context, "wikilinks_enabled", None
+        )
+        return bool(enabled()) if callable(enabled) else False
+
+    def storyProjectionEnabled(self):
+        enabled = getattr(
+            self.text_editor_context, "story_projection_enabled", None
+        )
+        return bool(enabled()) if callable(enabled) else False
 
     def wikilinkCompletions(self, prefix):
+        if not self.wikilinksEnabled():
+            return ()
         provider = getattr(
             self.text_editor_context, "complete_wikilink", None
         )
         return tuple(provider(prefix)) if provider is not None else ()
 
     def _openWikilink(self, target):
+        if not self.wikilinksEnabled():
+            return False
         command = getattr(self.text_editor_context, "open_wikilink", None)
         return bool(command(target)) if command is not None else False
 
@@ -501,6 +522,8 @@ class MDEditView(textEditView):
         return True
 
     def _wikilinkTargetAtCursor(self):
+        if not self.wikilinksEnabled():
+            return None
         cursor = self.textCursor()
         block = cursor.block()
         if block.userState() in (
@@ -1410,16 +1433,19 @@ class MDEditView(textEditView):
         cursor = self.textCursor()
         refs = []
         text = self.toPlainText()
-        wikilink_positions = {
-            link.span.start + (1 if link.embedded else 0)
-            for link in self._dslParser.parse(text).wikilinks
-        }
-        for rx in [
+        wikilink_positions = set()
+        regexes = [
                 self.imageRegex,
                 self.automaticLinkRegex,
                 self.inlineLinkRegex,
-                self.wikilinkRegex,
-            ]:
+        ]
+        if self.wikilinksEnabled():
+            wikilink_positions = {
+                link.span.start + (1 if link.embedded else 0)
+                for link in self._dslParser.parse(text).wikilinks
+            }
+            regexes.append(self.wikilinkRegex)
+        for rx in regexes:
             pos = 0
             while rx.indexIn(text, pos) != -1:
                 if (

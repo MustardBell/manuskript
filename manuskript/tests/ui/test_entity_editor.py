@@ -112,6 +112,7 @@ def test_entity_dialog_saves_author_reviewed_morphology_as_entity_metadata():
         catalog.schemas.schemas,
         save_entity,
         morphology_schemas=schemas,
+        morphology_enabled=True,
     )
     dialog._morphologyProfile = MorphologyProfile(
         "uk",
@@ -129,6 +130,29 @@ def test_entity_dialog_saves_author_reviewed_morphology_as_entity_metadata():
     assert metadata[0].value["language"] == "uk"
     assert metadata[0].value["schema"] == "uk.personal-names"
     assert dialog.morphologyButton.isEnabled()
+
+
+def test_legacy_entity_treats_morphology_named_metadata_as_opaque_data():
+    catalog, entity = _catalog()
+    entity = catalog.update(
+        entity.id,
+        metadata=(StructuredMetadataField(
+            "morphology",
+            {"language": "uk", "schema": "uk.personal-names"},
+        ),),
+    )
+    dialog = EntityEditorDialog(
+        entity,
+        catalog.schemas.schemas,
+        MagicMock(),
+        morphology_schemas=first_party_morphology_schemas(),
+        morphology_enabled=False,
+        read_only=True,
+    )
+
+    assert not dialog.morphologyButton.isEnabled()
+    assert dialog.propertiesTable.rowCount() == 1
+    assert dialog.propertiesTable.item(0, 0).text() == "morphology"
 
 
 def test_entity_controller_owns_one_window_modal_child_per_entity():
@@ -159,6 +183,7 @@ def test_docked_entity_form_scrolls_instead_of_clipping_its_first_fields():
         catalog,
         MagicMock(),
         morphology_schemas=first_party_morphology_schemas(),
+        morphology_enabled=True,
         host_panel=panel,
     )
 

@@ -62,8 +62,9 @@ class ReferenceIndex:
 
     _EXTERNAL = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
-    def __init__(self, parser=None):
+    def __init__(self, parser=None, enabled=True):
         self._parser = parser or MarkdownDslParser()
+        self._enabled = bool(enabled)
         self._documents: Dict[str, ReferenceDocument] = {}
         self._references: Tuple[ReferenceOccurrence, ...] = ()
 
@@ -75,10 +76,24 @@ class ReferenceIndex:
     def documents(self) -> Tuple[ReferenceDocument, ...]:
         return tuple(self._documents.values())
 
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._enabled:
+            return
+        self._enabled = enabled
+        self.rebuild(self._documents.values())
+
     def rebuild(
         self, documents: Iterable[ReferenceDocument]
     ) -> Tuple[ReferenceOccurrence, ...]:
         self._documents = {document.id: document for document in documents}
+        if not self._enabled:
+            self._references = ()
+            return self._references
         addresses = self._addresses(self._documents.values())
         references = []
         for document in self._documents.values():
@@ -104,6 +119,9 @@ class ReferenceIndex:
     def update(self, document: ReferenceDocument) -> None:
         previous = self._documents.get(document.id)
         self._documents[document.id] = document
+        if not self._enabled:
+            self._references = ()
+            return
         if (
             previous is None
             or previous.path != document.path
@@ -161,12 +179,17 @@ class ReferenceIndex:
     ) -> Tuple[ReferenceResolution, Optional[ReferenceDocument]]:
         """Resolve a target through the same rules used by the index."""
 
+        if not self._enabled:
+            return ReferenceResolution.MISSING, None
         return self._resolve(
             raw_target, self._addresses(self._documents.values())
         )
 
     def complete(self, prefix: str) -> Tuple[ReferenceSuggestion, ...]:
         """Return deterministic path suggestions for a wikilink prefix."""
+
+        if not self._enabled:
+            return ()
 
         normalized_prefix = (
             self._normalize(prefix) if prefix.strip() else ""

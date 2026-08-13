@@ -25,6 +25,8 @@ class TextEditorContext:
     focus_released: Optional[Callable[[object], None]] = None
     #: Generic Format 2 wikilink operations. The editor sees commands, not
     #: the project storage or a window.
+    wikilinks_enabled: Optional[Callable[[], bool]] = None
+    story_projection_enabled: Optional[Callable[[], bool]] = None
     complete_wikilink: Optional[Callable[[str], tuple]] = None
     open_wikilink: Optional[Callable[[str], bool]] = None
     entity_reference_choices: Optional[Callable[[str], tuple]] = None
@@ -87,7 +89,33 @@ def text_editor_context_for(
         ):
             focus.focus_changed(editor, None)
 
+    def current_strategy():
+        return (
+            persistence_strategy()
+            if callable(persistence_strategy)
+            else persistence_strategy
+        )
+
+    def supports(feature, write=False):
+        strategy = current_strategy()
+        return bool(
+            strategy is not None
+            and strategy.supports(feature, write=write)
+        )
+
+    def wikilinks_enabled():
+        return supports("references.read")
+
+    def story_projection_enabled():
+        return bool(
+            supports("references.read")
+            or supports("assertions.read")
+            or supports("rules.execute")
+        )
+
     def complete_wikilink(prefix):
+        if not wikilinks_enabled():
+            return ()
         return (
             reference_index.complete(prefix)
             if reference_index is not None
@@ -95,7 +123,7 @@ def text_editor_context_for(
         )
 
     def open_wikilink(target):
-        if reference_index is None:
+        if not wikilinks_enabled() or reference_index is None:
             return False
         _resolution, document = reference_index.resolve(target)
         if document is None:
@@ -123,26 +151,10 @@ def text_editor_context_for(
         return entity_catalog.reference_choice(entity, exact_match=True)
 
     def can_write_assertions():
-        strategy = (
-            persistence_strategy()
-            if callable(persistence_strategy)
-            else persistence_strategy
-        )
-        return bool(
-            strategy is not None
-            and strategy.supports("assertions.write", write=True)
-        )
+        return supports("assertions.write", write=True)
 
     def can_write_timeline():
-        strategy = (
-            persistence_strategy()
-            if callable(persistence_strategy)
-            else persistence_strategy
-        )
-        return bool(
-            strategy is not None
-            and strategy.supports("timeline.write", write=True)
-        )
+        return supports("timeline.write", write=True)
 
     def temporal_reference_choices():
         if reference_index is None:
@@ -179,6 +191,8 @@ def text_editor_context_for(
         document_buffers=buffers,
         focus_received=focus_received,
         focus_released=focus_released,
+        wikilinks_enabled=wikilinks_enabled,
+        story_projection_enabled=story_projection_enabled,
         complete_wikilink=complete_wikilink,
         open_wikilink=open_wikilink,
         entity_reference_choices=entity_reference_choices,

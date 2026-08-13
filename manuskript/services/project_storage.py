@@ -513,26 +513,25 @@ class ProjectStorage:
         return result
 
     def _adopt_canonical_project(self, project):
+        strategy = compatibility_strategy(project.format_version)
+        self._reference_index.set_enabled(
+            strategy.supports("references.read")
+        )
+        self._morphology_index.set_enabled(
+            strategy.supports("morphology.entities")
+        )
         projected = self._legacy_entity_adapter.project(project)
         native_ids = {entity.id for entity in project.entities}
         missing_projected = tuple(
             entity for entity in projected if entity.id not in native_ids
         )
         if project.format_version == 2:
-            # Older Format 2 writers could still leave the historical
-            # collections in legacy.yaml.  Promote those records in memory
-            # immediately so the only UI vocabulary is entities; the next
-            # save writes them as native documents and drops the collections.
-            native_entities = project.entities + missing_projected
+            # Format 2 has not shipped and has no compatibility population.
+            # Its entity documents are authoritative; do not carry migration
+            # behavior for intermediate development encodings into the
+            # architecture being built.
+            native_entities = project.entities
             legacy_entities = ()
-            project = replace(
-                project,
-                entities=native_entities,
-                summary=(),
-                characters=(),
-                world=(),
-                plots=(),
-            )
         else:
             native_entities = project.entities
             legacy_entities = missing_projected
@@ -574,6 +573,14 @@ class ProjectStorage:
         )
 
     def _rebuild_assertions(self):
+        if not self.persistence_strategy.supports("assertions.read"):
+            # A legacy document may contain the same fenced text by chance.
+            # Preserving those bytes is not permission to execute or project
+            # them as Format 2 story data.
+            self._assertion_store.rebuild(())
+            self._rule_store.rebuild(())
+            self._chronology_index.rebuild(())
+            return
         entity_ids = tuple(
             entity.id for entity in self._entity_catalog.entities
         )
