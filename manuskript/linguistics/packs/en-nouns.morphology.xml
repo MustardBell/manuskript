@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<morphology-pack id="en.nominals" label="English nouns and names" language="en" version="1">
+  <components default-role="noun">
+    <role id="noun" label="Noun"/>
+    <role id="proper-name" label="Proper name"/>
+    <attribute id="inflection" label="Inflection" kind="choice" default="regular">
+      <choice value="regular" label="Regular"/>
+      <choice value="invariable" label="Invariable"/>
+    </attribute>
+  </components>
+  <forms>
+    <form id="singular" label="Singular"><feature name="number" value="singular"/></form>
+    <form id="plural" label="Plural"><feature name="number" value="plural"/></form>
+  </forms>
+  <lexicon>
+    <lexeme lemma="child" role="noun"><surface form="plural" text="children"/></lexeme>
+    <lexeme lemma="foot" role="noun"><surface form="plural" text="feet"/></lexeme>
+    <lexeme lemma="goose" role="noun"><surface form="plural" text="geese"/></lexeme>
+    <lexeme lemma="man" role="noun"><surface form="plural" text="men"/></lexeme>
+    <lexeme lemma="mouse" role="noun"><surface form="plural" text="mice"/></lexeme>
+    <lexeme lemma="person" role="noun"><surface form="plural" text="people"/></lexeme>
+    <lexeme lemma="tooth" role="noun"><surface form="plural" text="teeth"/></lexeme>
+    <lexeme lemma="woman" role="noun"><surface form="plural" text="women"/></lexeme>
+  </lexicon>
+  <paradigms>
+    <paradigm id="invariable" roles="noun proper-name">
+      <when attribute="inflection" values="invariable"/>
+    </paradigm>
+    <paradigm id="proper-name" roles="proper-name"/>
+    <paradigm id="consonant-y" roles="noun" pattern="(?i)[^aeiou]y$">
+      <surface form="plural" strip="1" append="ies"/>
+    </paradigm>
+    <paradigm id="sibilant" roles="noun" pattern="(?i)(s|x|z|ch|sh)$">
+      <surface form="plural" append="es"/>
+    </paradigm>
+    <paradigm id="regular" roles="noun">
+      <surface form="plural" append="s"/>
+    </paradigm>
+  </paradigms>
+</morphology-pack>

@@ -44,7 +44,7 @@ from manuskript.domain.temporal_story import (
     ChronologyIndex,
     TemporalStoryIndex,
 )
-from manuskript.linguistics import first_party_morphology_providers
+from manuskript.linguistics import installed_morphology_schemas
 
 
 LOGGER = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class ProjectStorage:
         application_model_adapter=None,
         entity_catalog=None,
         legacy_entity_adapter=None,
-        morphology_providers=None,
+        morphology_schemas=None,
         assertion_store=None,
         chronology_index=None,
         rule_store=None,
@@ -91,11 +91,11 @@ class ProjectStorage:
         self._application_model_adapter = (
             application_model_adapter or LegacyApplicationModelAdapter()
         )
-        self._morphology_providers = (
-            morphology_providers or first_party_morphology_providers()
+        self._morphology_schemas = (
+            morphology_schemas or installed_morphology_schemas()
         )
         self._morphology_index = MorphologyIndex(
-            self._morphology_providers
+            self._morphology_schemas
         )
         self._entity_catalog = entity_catalog or EntityCatalog(
             first_party_story_entity_schemas(),
@@ -173,8 +173,8 @@ class ProjectStorage:
         return self._entity_catalog
 
     @property
-    def morphology_providers(self):
-        return self._morphology_providers
+    def morphology_schemas(self):
+        return self._morphology_schemas
 
     @property
     def assertion_store(self):
@@ -210,8 +210,8 @@ class ProjectStorage:
         )
         return self._revision_workflow.workflow(document_id)
 
-    def register_morphology_provider(self, provider):
-        self._morphology_providers.register(provider)
+    def register_morphology_schema(self, schema):
+        self._morphology_schemas.register(schema)
         self._entity_catalog.refresh_derived_surfaces()
         entity_by_id = {
             entity.id: entity for entity in self._entity_catalog.entities

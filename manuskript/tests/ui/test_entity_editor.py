@@ -12,7 +12,7 @@ from manuskript.domain.morphology import (
     MorphologyComponent,
     MorphologyProfile,
 )
-from manuskript.linguistics import first_party_morphology_providers
+from manuskript.linguistics import first_party_morphology_schemas
 from manuskript.ui.entity_editor import (
     EntityEditorController,
     EntityEditorDialog,
@@ -106,14 +106,15 @@ def test_entity_dialog_accepts_an_extension_defined_type():
 def test_entity_dialog_saves_author_reviewed_morphology_as_entity_metadata():
     catalog, entity = _catalog()
     save_entity = MagicMock()
-    providers = first_party_morphology_providers()
+    schemas = first_party_morphology_schemas()
     dialog = EntityEditorDialog(
         entity,
         catalog.schemas.schemas,
         save_entity,
-        morphology_providers=providers,
+        morphology_schemas=schemas,
     )
     dialog._morphologyProfile = MorphologyProfile(
+        "uk",
         "uk.personal-names",
         (MorphologyComponent(
             "given-name", "Мара", (("gender", "feminine"),)
@@ -125,7 +126,8 @@ def test_entity_dialog_saves_author_reviewed_morphology_as_entity_metadata():
 
     metadata = save_entity.call_args.kwargs["metadata"]
     assert metadata[0].name == "morphology"
-    assert metadata[0].value["provider"] == "uk.personal-names"
+    assert metadata[0].value["language"] == "uk"
+    assert metadata[0].value["schema"] == "uk.personal-names"
     assert dialog.morphologyButton.isEnabled()
 
 
@@ -156,7 +158,7 @@ def test_docked_entity_form_scrolls_instead_of_clipping_its_first_fields():
         parent,
         catalog,
         MagicMock(),
-        morphology_providers=first_party_morphology_providers(),
+        morphology_schemas=first_party_morphology_schemas(),
         host_panel=panel,
     )
 

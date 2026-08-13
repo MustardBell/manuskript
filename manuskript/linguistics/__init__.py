@@ -1,13 +1,22 @@
-"""First-party deterministic language providers."""
+"""First-party and installed declarative language resources."""
 
-from manuskript.linguistics.slavic_names import (
-    RussianNameMorphology,
-    UkrainianNameMorphology,
-    first_party_morphology_providers,
+from manuskript.linguistics.morphology_packs import (
+    MorphologyPackError,
+    built_in_pack_path,
+    first_party_morphology_schemas,
+    installed_morphology_schemas,
+    load_morphology_schemas,
+    parse_morphology_pack,
+    user_pack_path,
 )
 
+
 __all__ = (
-    "RussianNameMorphology",
-    "UkrainianNameMorphology",
-    "first_party_morphology_providers",
+    "MorphologyPackError",
+    "built_in_pack_path",
+    "first_party_morphology_schemas",
+    "installed_morphology_schemas",
+    "load_morphology_schemas",
+    "parse_morphology_pack",
+    "user_pack_path",
 )

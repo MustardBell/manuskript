@@ -10,11 +10,7 @@ from manuskript.domain.canonical_project import (
     OutlineDocument,
 )
 from manuskript.domain.reference_index import ReferenceDocument
-from manuskript.domain.morphology import (
-    GrammaticalForm,
-    MorphologyComponent,
-    MorphologyProfile,
-)
+from manuskript.domain.morphology import MorphologyComponent, MorphologyProfile
 from manuskript.domain.story_query import AssertionsWhere
 from manuskript.plugins.api import (
     StoryReferenceValue,
@@ -28,7 +24,7 @@ from manuskript.ui.plugins.story_capabilities import (
     AssertionWriteCapability,
     EntityReadCapability,
     EntityWriteCapability,
-    MorphologyRegistryCapability,
+    MorphologySchemaCapability,
     QueryExecuteCapability,
     ReferenceReadCapability,
     ReferenceWriteCapability,
@@ -100,24 +96,13 @@ class _Outline:
         return True
 
 
-class _Provider:
-    id = "example.story.simple-names"
-    label = "Simple names"
-    language = "en"
-    component_roles = (("name", "Name"),)
-    genders = ()
-
-    @staticmethod
-    def generate(component):
-        return (GrammaticalForm("display", "Display", component.lemma.upper()),)
-
-    @staticmethod
-    def analyse(_surface, _component):
-        return ()
-
-    @staticmethod
-    def validate(_component):
-        return ()
+_SCHEMA_ID = "example.story.simple-names"
+_SCHEMA_XML = """\
+<morphology-pack id="example.story.simple-names" label="Simple names" language="en" version="1">
+  <components default-role="name"><role id="name" label="Name"/></components>
+  <forms><form id="display" label="Display"/></forms>
+</morphology-pack>
+"""
 
 
 @pytest.fixture
@@ -317,25 +302,24 @@ def test_morphology_registration_is_namespaced_and_refreshes_surfaces(
     manager, _outline = story_services
     entity = EntityWriteCapability(manager).create("character", "Mara")
     profile = MorphologyProfile(
-        _Provider.id,
+        "en",
+        _SCHEMA_ID,
         (MorphologyComponent("name", "Mara"),),
     )
     manager.storage.update_entity(
         entity.id, metadata=profile.apply_to(())
     )
-    capability = MorphologyRegistryCapability(manager, "example.story")
+    capability = MorphologySchemaCapability(manager, "example.story")
 
-    registered = capability.register(_Provider())
+    registered = capability.register_xml(_SCHEMA_XML)
 
-    assert registered.id == _Provider.id
+    assert registered.id == _SCHEMA_ID
     assert manager.storage.entity_catalog.exact_matches("MARA")[0].id == (
         entity.id
     )
     with pytest.raises(ValueError, match="must start"):
-        capability.register(SimpleNamespace(
-            id="someone.else.provider",
-            label="Foreign",
-            language="en",
+        capability.register_xml(_SCHEMA_XML.replace(
+            _SCHEMA_ID, "someone.else.schema"
         ))
 
 

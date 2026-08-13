@@ -5,8 +5,14 @@ from manuskript.domain.morphology import (
     MorphologyComponent,
     MorphologyIndex,
     MorphologyProfile,
+    normalize_language_tag,
 )
-from manuskript.linguistics import first_party_morphology_providers
+from manuskript.linguistics import (
+    MorphologyPackError,
+    first_party_morphology_schemas,
+    load_morphology_schemas,
+    parse_morphology_pack,
+)
 
 
 def _component(role, lemma, gender="feminine", overrides=()):
@@ -33,8 +39,9 @@ def _entity(identifier, title, profile, aliases=()):
     )
 
 
-def test_morphology_profile_is_inspectable_structured_metadata():
+def test_profile_stores_language_schema_features_and_overrides_as_data():
     profile = MorphologyProfile(
+        "uk",
         "uk.personal-names",
         (_component("given-name", "Олена"),),
     )
@@ -43,13 +50,31 @@ def test_morphology_profile_is_inspectable_structured_metadata():
     reopened = MorphologyProfile.from_entity(entity)
 
     assert reopened == profile
-    assert entity.metadata[0].value["provider"] == "uk.personal-names"
+    assert entity.metadata[0].value["language"] == "uk"
+    assert entity.metadata[0].value["schema"] == "uk.personal-names"
     assert entity.metadata[0].value["components"][0]["lemma"] == "Олена"
 
 
-def test_ukrainian_provider_generates_reviewable_compound_name_forms():
-    providers = first_party_morphology_providers()
+def test_development_provider_metadata_is_not_a_public_format():
+    assert MorphologyProfile.from_value({
+        "version": 1,
+        "provider": "uk.personal-names",
+        "components": [{"role": "name", "lemma": "Олена"}],
+    }) is None
+
+
+@pytest.mark.parametrize(
+    "entered, normalized",
+    (("tlh_001", "tlh-001"), ("x_code_001", "x-code-001"), ("qaa", "qaa")),
+)
+def test_language_tags_accept_registered_and_private_namespaces(entered, normalized):
+    assert normalize_language_tag(entered) == normalized
+
+
+def test_ukrainian_pack_generates_reviewable_compound_name_forms():
+    schemas = first_party_morphology_schemas()
     profile = MorphologyProfile(
+        "uk",
         "uk.personal-names",
         (
             _component("given-name", "Олена"),
@@ -57,7 +82,7 @@ def test_ukrainian_provider_generates_reviewable_compound_name_forms():
         ),
     )
 
-    forms = {form.key: form.text for form in providers.generate(profile)}
+    forms = {form.key: form.text for form in schemas.generate(profile)}
 
     assert forms["nominative"] == "Олена Ковальська"
     assert forms["genitive"] == "Олени Ковальської"
@@ -66,9 +91,10 @@ def test_ukrainian_provider_generates_reviewable_compound_name_forms():
     assert forms["vocative"] == "Олено Ковальська"
 
 
-def test_russian_provider_supports_soft_sign_and_author_override():
-    providers = first_party_morphology_providers()
+def test_russian_pack_supports_soft_sign_and_author_override():
+    schemas = first_party_morphology_schemas()
     profile = MorphologyProfile(
+        "ru",
         "ru.personal-names",
         (
             _component(
@@ -80,82 +106,74 @@ def test_russian_provider_supports_soft_sign_and_author_override():
         ),
     )
 
-    forms = {form.key: form.text for form in providers.generate(profile)}
+    forms = {form.key: form.text for form in schemas.generate(profile)}
 
     assert forms["genitive"] == "Игоря"
     assert forms["instrumental"] == "Игорем (preferred)"
-    provider = providers.get("ru.personal-names")
-    assert provider.analyse(
-        "Игорем (preferred)", profile.components[0]
-    )[0].key == "instrumental"
+    assert schemas.analyse(profile, "Игорем (preferred)")[0].key == "instrumental"
 
 
-def test_morphology_index_maps_generated_forms_to_stable_entity_identity():
-    providers = first_party_morphology_providers()
+@pytest.mark.parametrize(
+    "lemma, plural",
+    (("mouse", "mice"), ("goose", "geese"), ("foot", "feet"), ("city", "cities")),
+)
+def test_english_is_a_first_party_pack_not_an_engine_special_case(lemma, plural):
+    schemas = first_party_morphology_schemas()
     profile = MorphologyProfile(
-        "uk.personal-names",
-        (_component("given-name", "Олена"),),
+        "en",
+        "en.nominals",
+        (MorphologyComponent("noun", lemma, (("inflection", "regular"),)),),
     )
-    index = MorphologyIndex(providers)
-    index.rebuild((
-        _entity("olena", "Олена", profile, ("Лена",)),
-    ))
 
-    generated = index.lookup("  ОЛЕНИ ")
+    assert {form.key: form.text for form in schemas.generate(profile)}["plural"] == plural
 
-    assert generated[0].entity_id == "olena"
-    assert generated[0].source == "generated"
-    assert generated[0].form_key == "genitive"
-    assert {item.text for item in index.forms_for("olena")} >= {
-        "Олена", "Лена", "Олени", "Олені", "Оленою",
+
+def test_missing_schema_preserves_and_indexes_opaque_manual_forms():
+    schemas = first_party_morphology_schemas()
+    profile = MorphologyProfile(
+        "x-velari",
+        "",
+        (MorphologyComponent(
+            "speaker-name",
+            "Tara",
+            (("social-class", "river"),),
+            (("addressive", "Tarai"),),
+        ),),
+    )
+    entity = _entity("tara", "Tara", profile)
+    index = MorphologyIndex(schemas)
+    index.rebuild((entity,))
+
+    issues = schemas.validate(profile)
+
+    assert issues and not issues[0].blocking
+    assert schemas.generate(profile)[0].text == "Tarai"
+    assert index.lookup("tarai")[0].entity_id == "tara"
+    assert MorphologyProfile.from_entity(entity) == profile
+
+
+def test_fictional_pack_is_discovered_from_a_dropped_in_xml_file(tmp_path):
+    source = """\
+<morphology-pack id="x.velari.nouns" label="Velari nouns" language="x-velari" version="3">
+  <components default-role="noun"><role id="noun" label="Noun"/></components>
+  <forms><form id="one" label="One"/><form id="many" label="Many"/></forms>
+  <paradigms><paradigm id="plural" roles="noun"><surface form="many" append="-ir"/></paradigm></paradigms>
+</morphology-pack>
+"""
+    filename = tmp_path / "velari.morphology.xml"
+    filename.write_text(source, encoding="utf-8")
+
+    schemas = load_morphology_schemas((tmp_path,), strict=True)
+    profile = MorphologyProfile(
+        "x-velari", "x.velari.nouns", (MorphologyComponent("noun", "tal"),)
+    )
+
+    assert schemas.get("x.velari.nouns").version == "3"
+    assert {form.key: form.text for form in schemas.generate(profile)} == {
+        "one": "tal", "many": "tal-ir"
     }
 
 
-def test_missing_provider_leaves_profile_data_intact_but_generates_nothing():
-    providers = first_party_morphology_providers()
-    profile = MorphologyProfile(
-        "plugin.missing",
-        (_component("given-name", "Mara"),),
-    )
-
-    issues = providers.validate(profile)
-
-    assert providers.generate(profile) == ()
-    assert "unavailable" in issues[0].message
-
-
-def test_provider_extension_point_rejects_incomplete_and_contains_failures():
-    providers = first_party_morphology_providers()
-
-    class Incomplete:
-        id = "plugin.incomplete"
-
-    with pytest.raises(ValueError, match="implement"):
-        providers.register(Incomplete())
-
-    class Broken:
-        id = "plugin.broken"
-        label = "Broken"
-        language = "x-test"
-        component_roles = (("name", "Name"),)
-        genders = ()
-
-        @staticmethod
-        def validate(_component):
-            raise RuntimeError("provider defect")
-
-        @staticmethod
-        def generate(_component):
-            raise RuntimeError("provider defect")
-
-        @staticmethod
-        def analyse(_surface, _component):
-            return ()
-
-    providers.register(Broken())
-    profile = MorphologyProfile(
-        Broken.id, (_component("name", "Mara"),)
-    )
-
-    assert "provider defect" in providers.validate(profile)[0].message
-    assert providers.generate(profile) == ()
+def test_pack_loader_rejects_executable_or_malformed_content():
+    with pytest.raises(MorphologyPackError):
+        parse_morphology_pack("<script>open('/tmp/leak')</script>")

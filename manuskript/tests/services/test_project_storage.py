@@ -331,6 +331,7 @@ def test_real_v2_storage_stays_v2_and_keeps_opaque_document_identity(tmp_path):
         created_entity.id
     )
     morphology = MorphologyProfile(
+        "uk",
         "uk.personal-names",
         (MorphologyComponent(
             "given-name", "Олена", (("gender", "feminine"),)

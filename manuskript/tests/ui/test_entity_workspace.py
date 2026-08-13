@@ -7,7 +7,7 @@ from manuskript.domain.entity_catalog import (
     EntityCatalog,
     first_party_story_entity_schemas,
 )
-from manuskript.linguistics import first_party_morphology_providers
+from manuskript.linguistics import first_party_morphology_schemas
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.entity_workspace import EntityWorkspaceController
 from manuskript.ui.panels.core.entities import (
@@ -27,7 +27,7 @@ def _workspace(parent):
     catalog.replace((), writable=True)
     storage = MagicMock()
     storage.entity_catalog = catalog
-    storage.morphology_providers = first_party_morphology_providers()
+    storage.morphology_schemas = first_party_morphology_schemas()
     manager = MagicMock()
     manager.storage = storage
     manager.createEntity.side_effect = catalog.create

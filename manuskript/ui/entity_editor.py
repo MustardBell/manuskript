@@ -58,13 +58,13 @@ class EntityEditorDialog(QDialog):
         schemas,
         save_entity,
         parent=None,
-        morphology_providers=None,
+        morphology_schemas=None,
         read_only=False,
     ):
         super().__init__(parent)
         self.entity = entity
         self._saveEntity = save_entity
-        self._morphologyProviders = morphology_providers
+        self._morphologySchemas = morphology_schemas
         self._morphologyProfile = MorphologyProfile.from_entity(entity)
         self._morphologyChanged = False
         self._readOnly = bool(read_only)
@@ -111,27 +111,10 @@ class EntityEditorDialog(QDialog):
         self.morphologyButton.setAccessibleDescription(self.tr(
             "Review deterministic grammatical forms and author overrides."
         ))
-        provider_available = (
-            self._morphologyProfile is None
-            or (
-                morphology_providers is not None
-                and morphology_providers.get(
-                    self._morphologyProfile.provider_id
-                ) is not None
-            )
-        )
         self.morphologyButton.setEnabled(
             not self._readOnly
-            and
-            morphology_providers is not None
-            and bool(morphology_providers.providers)
-            and provider_available
+            and morphology_schemas is not None
         )
-        if not provider_available:
-            self.morphologyButton.setToolTip(self.tr(
-                "Install the configured morphology provider before editing "
-                "this profile."
-            ))
         self.morphologyButton.clicked.connect(self._editMorphology)
         self.morphologySummary = QLabel(self)
         self.morphologySummary.setObjectName("morphologySummary")
@@ -167,7 +150,13 @@ class EntityEditorDialog(QDialog):
         self.propertiesTable.verticalHeader().setVisible(False)
         propertiesLabel.setBuddy(self.propertiesTable)
         for field in entity.metadata:
-            if field.name == "morphology" or field.name in self._fieldWidgets:
+            if (
+                field.name in self._fieldWidgets
+                or (
+                    field.name == "morphology"
+                    and self._morphologyProfile is not None
+                )
+            ):
                 # Shown as its own field above. Repeating it here as a
                 # raw key would offer two places to edit one value.
                 continue
@@ -433,7 +422,7 @@ class EntityEditorDialog(QDialog):
     def _editMorphology(self):
         dialog = MorphologyParadigmDialog(
             self._morphologyProfile,
-            self._morphologyProviders,
+            self._morphologySchemas,
             self.titleEdit.text() or self.entity.title,
             self,
         )
@@ -448,13 +437,15 @@ class EntityEditorDialog(QDialog):
         if profile is None:
             text = self.tr("No grammatical forms configured.")
         else:
-            provider = (
-                self._morphologyProviders.get(profile.provider_id)
-                if self._morphologyProviders is not None
+            schema = (
+                self._morphologySchemas.get(profile.schema_id)
+                if self._morphologySchemas is not None
                 else None
             )
-            label = provider.label if provider is not None else profile.provider_id
-            text = self.tr("{}; {} name component(s).").format(
+            label = schema.label if schema is not None else (
+                profile.schema_id or profile.language_tag
+            )
+            text = self.tr("{}; {} component(s).").format(
                 label, len(profile.components)
             )
         self.morphologySummary.setText(text)
@@ -468,14 +459,14 @@ class EntityEditorController:
         parent,
         catalog,
         update_entity,
-        morphology_providers=None,
+        morphology_schemas=None,
         host_panel=None,
         reveal=None,
     ):
         self.parent = parent
         self.catalog = catalog
         self.updateEntity = update_entity
-        self.morphologyProviders = morphology_providers
+        self.morphologySchemas = morphology_schemas
         self.hostPanel = host_panel
         self.reveal = reveal
         self._dialogs = {}
@@ -501,7 +492,7 @@ class EntityEditorController:
             self.catalog.schemas.schemas,
             self.updateEntity,
             self.parent,
-            morphology_providers=self.morphologyProviders,
+            morphology_schemas=self.morphologySchemas,
             read_only=(
                 not self.catalog.writable
                 or entity not in self.catalog.native_entities

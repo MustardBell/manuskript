@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<morphology-pack id="ru.personal-names" label="Russian personal names" language="ru" version="1">
+  <components default-role="given-name">
+    <role id="title" label="Title"/>
+    <role id="given-name" label="Given name"/>
+    <role id="patronymic" label="Patronymic"/>
+    <role id="surname" label="Surname"/>
+    <role id="suffix" label="Suffix"/>
+    <attribute id="gender" label="Gender" kind="choice" default="invariable">
+      <choice value="feminine" label="Feminine"/>
+      <choice value="masculine" label="Masculine"/>
+      <choice value="invariable" label="Invariable"/>
+    </attribute>
+  </components>
+  <forms>
+    <form id="nominative" label="Nominative"><feature name="case" value="nominative"/></form>
+    <form id="genitive" label="Genitive"><feature name="case" value="genitive"/></form>
+    <form id="dative" label="Dative"><feature name="case" value="dative"/></form>
+    <form id="accusative" label="Accusative"><feature name="case" value="accusative"/></form>
+    <form id="instrumental" label="Instrumental"><feature name="case" value="instrumental"/></form>
+    <form id="prepositional" label="Prepositional"><feature name="case" value="prepositional"/></form>
+  </forms>
+  <paradigms>
+    <paradigm id="invariable"><when attribute="gender" values="invariable"/></paradigm>
+    <paradigm id="title-or-suffix" roles="title suffix"/>
+    <paradigm id="feminine-adjectival-surname" roles="surname" pattern="(?i)(ская|цкая)$">
+      <when attribute="gender" values="feminine"/>
+      <surface form="genitive" strip="2" append="ой"/>
+      <surface form="dative" strip="2" append="ой"/>
+      <surface form="accusative" strip="2" append="ую"/>
+      <surface form="instrumental" strip="2" append="ой"/>
+      <surface form="prepositional" strip="2" append="ой"/>
+    </paradigm>
+    <paradigm id="feminine-ya" pattern="(?i)я$">
+      <when attribute="gender" values="feminine"/>
+      <surface form="genitive" strip="1" append="и"/>
+      <surface form="dative" strip="1" append="е"/>
+      <surface form="accusative" strip="1" append="ю"/>
+      <surface form="instrumental" strip="1" append="ей"/>
+      <surface form="prepositional" strip="1" append="е"/>
+    </paradigm>
+    <paradigm id="feminine-a-after-husher" pattern="(?i)[гкхжчшщц]а$">
+      <when attribute="gender" values="feminine"/>
+      <surface form="genitive" strip="1" append="и"/>
+      <surface form="dative" strip="1" append="е"/>
+      <surface form="accusative" strip="1" append="у"/>
+      <surface form="instrumental" strip="1" append="ой"/>
+      <surface form="prepositional" strip="1" append="е"/>
+    </paradigm>
+    <paradigm id="feminine-a" pattern="(?i)а$">
+      <when attribute="gender" values="feminine"/>
+      <surface form="genitive" strip="1" append="ы"/>
+      <surface form="dative" strip="1" append="е"/>
+      <surface form="accusative" strip="1" append="у"/>
+      <surface form="instrumental" strip="1" append="ой"/>
+      <surface form="prepositional" strip="1" append="е"/>
+    </paradigm>
+    <paradigm id="masculine-adjectival-surname" roles="surname" pattern="(?i)(ский|цкий)$">
+      <when attribute="gender" values="masculine"/>
+      <surface form="genitive" strip="2" append="ого"/>
+      <surface form="dative" strip="2" append="ому"/>
+      <surface form="accusative" strip="2" append="ого"/>
+      <surface form="instrumental" strip="2" append="им"/>
+      <surface form="prepositional" strip="2" append="ом"/>
+    </paradigm>
+    <paradigm id="masculine-surname" roles="surname" pattern="(?i)(ов|ев|ин)$">
+      <when attribute="gender" values="masculine"/>
+      <surface form="genitive" append="а"/>
+      <surface form="dative" append="у"/>
+      <surface form="accusative" append="а"/>
+      <surface form="instrumental" append="ым"/>
+      <surface form="prepositional" append="е"/>
+    </paradigm>
+    <paradigm id="masculine-y" pattern="(?i)й$">
+      <when attribute="gender" values="masculine"/>
+      <surface form="genitive" strip="1" append="я"/>
+      <surface form="dative" strip="1" append="ю"/>
+      <surface form="accusative" strip="1" append="я"/>
+      <surface form="instrumental" strip="1" append="ем"/>
+      <surface form="prepositional" strip="1" append="е"/>
+    </paradigm>
+    <paradigm id="masculine-soft-sign" pattern="(?i)ь$">
+      <when attribute="gender" values="masculine"/>
+      <surface form="genitive" strip="1" append="я"/>
+      <surface form="dative" strip="1" append="ю"/>
+      <surface form="accusative" strip="1" append="я"/>
+      <surface form="instrumental" strip="1" append="ем"/>
+      <surface form="prepositional" strip="1" append="е"/>
+    </paradigm>
+    <paradigm id="masculine-consonant" pattern="(?i)[^\W\d_]$">
+      <when attribute="gender" values="masculine"/>
+      <surface form="genitive" append="а"/>
+      <surface form="dative" append="у"/>
+      <surface form="accusative" append="а"/>
+      <surface form="instrumental" append="ом"/>
+      <surface form="prepositional" append="е"/>
+    </paradigm>
+  </paradigms>
+</morphology-pack>

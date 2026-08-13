@@ -15,7 +15,7 @@ from manuskript.domain.morphology import (
     MorphologyIndex,
     MorphologyProfile,
 )
-from manuskript.linguistics import first_party_morphology_providers
+from manuskript.linguistics import first_party_morphology_schemas
 
 
 def _entity(identifier, title, path, aliases=(), entity_type="character"):
@@ -128,9 +128,10 @@ def test_entity_update_keeps_identity_and_address_while_editing_semantics():
 
 
 def test_generated_morphology_participates_in_exact_matching_and_scanning():
-    index = MorphologyIndex(first_party_morphology_providers())
+    index = MorphologyIndex(first_party_morphology_schemas())
     catalog = EntityCatalog(morphology_index=index)
     profile = MorphologyProfile(
+        "uk",
         "uk.personal-names",
         (MorphologyComponent(
             "given-name", "Олена", (("gender", "feminine"),)

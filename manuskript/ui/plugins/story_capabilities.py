@@ -32,7 +32,7 @@ from manuskript.plugins.api import (
     DocumentProseMetricsSnapshot,
     DocumentRevisionWorkflowSnapshot,
     EntitySnapshot,
-    MorphologyProviderSnapshot,
+    MorphologySchemaSnapshot,
     ProseAnalysisSnapshot,
     ProseOccurrenceSnapshot,
     ReferenceOccurrenceSnapshot,
@@ -57,7 +57,7 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_PROSE_ANALYSIS,
     CAPABILITY_ENTITIES_READ,
     CAPABILITY_ENTITIES_WRITE,
-    CAPABILITY_MORPHOLOGY_REGISTRY,
+    CAPABILITY_MORPHOLOGY_SCHEMAS,
     CAPABILITY_QUERY_EXECUTE,
     CAPABILITY_REFERENCES_READ,
     CAPABILITY_REFERENCES_WRITE,
@@ -182,8 +182,8 @@ def build_story_capability(
             manager
         ),
         CAPABILITY_QUERY_EXECUTE: lambda: QueryExecuteCapability(manager),
-        CAPABILITY_MORPHOLOGY_REGISTRY: lambda: (
-            MorphologyRegistryCapability(manager, plugin_id)
+        CAPABILITY_MORPHOLOGY_SCHEMAS: lambda: (
+            MorphologySchemaCapability(manager, plugin_id)
         ),
     }
     builder = builders.get(name)
@@ -880,27 +880,32 @@ class QueryExecuteCapability:
         return self._query.execute(expression)
 
 
-class MorphologyRegistryCapability:
+class MorphologySchemaCapability:
     def __init__(self, manager, plugin_id):
         self._manager = manager
         self._pluginId = plugin_id
 
-    def providers(self):
+    def schemas(self):
         return tuple(
-            MorphologyProviderSnapshot(
-                provider.id, provider.label, provider.language
+            MorphologySchemaSnapshot(
+                schema.id, schema.label, schema.language_tag, schema.version
             )
-            for provider in self._manager.storage.morphology_providers.providers
+            for schema in self._manager.storage.morphology_schemas.schemas
         )
 
-    def register(self, provider):
-        if not str(provider.id).startswith(self._pluginId + "."):
+    def register_xml(self, source):
+        from manuskript.linguistics import parse_morphology_pack
+
+        schema = parse_morphology_pack(
+            source, source_name="plugin {}".format(self._pluginId)
+        )
+        if not str(schema.id).startswith(self._pluginId + "."):
             raise ValueError(
-                "Plugin morphology provider IDs must start with {}.".format(
+                "Plugin morphology schema IDs must start with {}.".format(
                     self._pluginId + "."
                 )
             )
-        self._manager.storage.register_morphology_provider(provider)
-        return MorphologyProviderSnapshot(
-            provider.id, provider.label, provider.language
+        self._manager.storage.register_morphology_schema(schema)
+        return MorphologySchemaSnapshot(
+            schema.id, schema.label, schema.language_tag, schema.version
         )

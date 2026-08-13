@@ -46,7 +46,7 @@ CAPABILITY_PROSE_ANALYSIS = "analysis.prose"
 CAPABILITY_WORKFLOW_READ = "workflow.read"
 CAPABILITY_WORKFLOW_WRITE = "workflow.write"
 CAPABILITY_QUERY_EXECUTE = "query.execute"
-CAPABILITY_MORPHOLOGY_REGISTRY = "morphology.registry"
+CAPABILITY_MORPHOLOGY_SCHEMAS = "morphology.schemas"
 
 
 @dataclass(frozen=True)
@@ -239,10 +239,10 @@ CAPABILITIES = (
         ),
     ),
     Capability(
-        name=CAPABILITY_MORPHOLOGY_REGISTRY,
+        name=CAPABILITY_MORPHOLOGY_SCHEMAS,
         summary=(
-            "Register a namespaced deterministic morphology provider and "
-            "inspect available providers."
+            "Register a namespaced declarative morphology pack and inspect "
+            "available schemas."
         ),
     ),
 )

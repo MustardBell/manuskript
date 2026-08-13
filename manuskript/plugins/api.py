@@ -324,10 +324,11 @@ class AssertionDiagnosticSnapshot:
 
 
 @dataclass(frozen=True)
-class MorphologyProviderSnapshot:
+class MorphologySchemaSnapshot:
     id: str
     label: str
-    language: str
+    language_tag: str
+    version: str
 
 
 @dataclass(frozen=True)

@@ -40,7 +40,7 @@ class EntityWorkspaceController:
                 self.parent,
                 self.catalog,
                 self.manager.updateEntity,
-                self.manager.storage.morphology_providers,
+                self.manager.storage.morphology_schemas,
                 host_panel=panel.editor,
             )
             for panel in self.panels
