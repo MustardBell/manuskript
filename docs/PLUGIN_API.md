@@ -82,7 +82,16 @@ that already owns it, so collisions are a load error rather than a surprise.
 `runtime` declares how the host starts the plugin without encoding a language
 assumption into discovery. A Python plugin names its module and callable as
 separate values. External-process runtimes use an argument array and never a
-shell; their protocol is being implemented while API 1 remains draft.
+shell.
+
+RPC protocol 1 uses JSON-RPC 2.0 messages with `Content-Length` framing over
+standard input and output. Standard output is protocol-only; diagnostics go
+to standard error and are logged with the plugin identity. The host owns the
+process group, applies message and deadline limits, sends cancellation for a
+timed-out request, and terminates the group when orderly shutdown does not
+finish. This supervisor is available in the draft; remote contribution
+registration is the next API milestone, so a process manifest is still shown
+as unsatisfied rather than partially loaded.
 
 `api_version` gates the whole surface. `requires` names services without
 which the plugin cannot run. `optional` names services the plugin can use when
