@@ -84,3 +84,41 @@ jobs:
       if: runner.os != 'Linux'
       run: python .github/ci/run_pytest_batches.py
       shell: bash
+
+    - name: Test maintained plugins in isolated processes
+      run: python .github/ci/run_maintained_plugin_tests.py
+      shell: bash
+
+  api_conformance:
+    name: Plugin API 1 conformance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Set up Erlang/OTP
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: "27"
+
+    - name: Install C compiler
+      run: sudo apt-get -qq update && sudo apt-get -qq install build-essential
+
+    - name: Run every language reference through one conformance profile
+      run: >-
+        python plugin_api/conformance/run_all.py
+        --require python,node,c,rust,erlang
