@@ -107,6 +107,11 @@ class Registry:
 
 def a_window(instances=(), descriptors=()):
     window = MagicMock()
+    # WorkspaceStateViews reads this as a boolean. An unconstrained
+    # MagicMock is truthy and makes save() recursively describe another
+    # unconstrained mock as though it were a live document area.
+    window._projectSurfaceActive = False
+    window._activePanelId = None
     window.panelHost = Host(dict(instances))
     window.panelRegistry = Registry(descriptors)
     return window
