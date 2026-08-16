@@ -314,20 +314,23 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
         == "Live Preview"
     )
     assert window.actMarkdownLivePreview.isChecked()
+    # The button walks the modes this leaf allows, in their order, so what it
+    # offers next is whatever follows the current one rather than a mode it
+    # was built to prefer.
     assert (
         first_editor.markdownModeButton.toolTip()
-        == "Switch to Reading"
+        == "Switch to Clean Editing"
     )
 
     first_editor.markdownModeButton.click()
 
     assert (
         first_editor.markdownPresentation.mode
-        is MarkdownPresentationMode.READING
+        is MarkdownPresentationMode.CLEAN_EDITING
     )
     assert (
         first_editor.markdownModeButton.toolTip()
-        == "Switch to Live Preview"
+        == "Switch to Reading"
     )
     assert (
         second_editor.markdownPresentation.mode

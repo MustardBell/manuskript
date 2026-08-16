@@ -78,6 +78,22 @@ class MarkdownPresentationState(QObject):
         self.modeChanged.emit(mode)
 
     def set_allowed_modes(self, modes):
+        """Settle the order of the modes a leaf offers.
+
+        Two rules make an order out of whatever was asked for, so that
+        whoever composed the list -- a page type, a markup profile, a plugin
+        adding to what another already chose -- does not have to reconcile it
+        themselves:
+
+        A mode named more than once keeps its *last* place, because naming it
+        again is how a later voice says where it should sit. So source, live,
+        source asks for live then source.
+
+        Source is always offered. It is the one mode a document can always be
+        shown in, and losing it would leave prose with no plain way back. Not
+        asking for it puts it first; asking for it puts it where asked.
+        """
+
         modes = tuple(
             MarkdownPresentationMode.from_value(mode)
             for mode in modes
@@ -86,7 +102,15 @@ class MarkdownPresentationState(QObject):
             raise ValueError(
                 "At least one presentation mode must remain available."
             )
-        modes = tuple(dict.fromkeys(modes))
+        seen = set()
+        kept = []
+        for mode in reversed(modes):
+            if mode not in seen:
+                seen.add(mode)
+                kept.append(mode)
+        modes = tuple(reversed(kept))
+        if MarkdownPresentationMode.SOURCE not in modes:
+            modes = (MarkdownPresentationMode.SOURCE,) + modes
         if modes == self._allowed_modes:
             return
         self._allowed_modes = modes

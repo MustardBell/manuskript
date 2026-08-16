@@ -1318,3 +1318,45 @@ def test_auto_resizing_reading_projection_has_no_nested_scrollbar():
         assert host.minimumHeight() > 0
     finally:
         host.hide()
+
+
+def test_a_mode_named_twice_keeps_its_later_place():
+    """Naming a mode again is how a later voice says where it belongs."""
+
+    state = MarkdownPresentationState()
+
+    state.set_allowed_modes((
+        MarkdownPresentationMode.SOURCE,
+        MarkdownPresentationMode.LIVE_PREVIEW,
+        MarkdownPresentationMode.SOURCE,
+    ))
+
+    assert state.allowed_modes == (
+        MarkdownPresentationMode.LIVE_PREVIEW,
+        MarkdownPresentationMode.SOURCE,
+    )
+
+
+def test_source_is_offered_even_when_nobody_asked_for_it():
+    state = MarkdownPresentationState()
+
+    state.set_allowed_modes((MarkdownPresentationMode.READING,))
+
+    assert state.allowed_modes == (
+        MarkdownPresentationMode.SOURCE,
+        MarkdownPresentationMode.READING,
+    )
+
+
+def test_source_sits_where_it_was_asked_for():
+    state = MarkdownPresentationState()
+
+    state.set_allowed_modes((
+        MarkdownPresentationMode.READING,
+        MarkdownPresentationMode.SOURCE,
+    ))
+
+    assert state.allowed_modes == (
+        MarkdownPresentationMode.READING,
+        MarkdownPresentationMode.SOURCE,
+    )
