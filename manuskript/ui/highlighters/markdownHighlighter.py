@@ -817,11 +817,21 @@ class MarkdownHighlighter(BasicHighlighter):
 
     def onTypingPaused(self):
         self.typingPaused = True
-        block = self.document().findBlock(self.editor.textCursor().position())
+        document = self.document()
+        if document is None:
+            return
+        block = document.findBlock(self.editor.textCursor().position())
         self.rehighlightBlock(block)
 
     def onHighlightBlockAtPosition(self, position):
-        block = self.document().findBlock(position)
+        # Delivered on a queued connection, so this arrives after the
+        # highlighting that asked for it.  By then the highlighter may have
+        # been detached -- a pane switched to reading, an editor torn down --
+        # and the position names a document that is no longer ours to touch.
+        document = self.document()
+        if document is None:
+            return
+        block = document.findBlock(position)
         self.rehighlightBlock(block)
 
     def onTextBlockRemoved(self, block):

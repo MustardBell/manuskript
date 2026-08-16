@@ -359,3 +359,26 @@ def test_legacy_markdown_format_function_routes_to_editor(
 def test_legacy_markdown_format_function_rejects_unknown_style():
     with pytest.raises(ValueError, match="Unknown Markdown"):
         MDFormatSelection(MagicMock(), 99)
+
+
+def test_a_queued_highlight_survives_losing_its_document():
+    """The highlighter outlives the document it was highlighting.
+
+    ``highlightBlockAtPosition`` is delivered on a queued connection, so a
+    backtrack requested while highlighting arrives a turn of the loop later.
+    Switching a pane to reading, or tearing an editor down to open another,
+    detaches the highlighter in that gap: the request then names a position
+    in a document the highlighter no longer has. Entering fullscreen from
+    reading did exactly this and raised AttributeError on None.
+    """
+
+    editor = make_editor()
+    editor.setPlainText("A paragraph\n\nand another one.\n")
+    highlighter = editor.highlighter
+    position = editor.document().findBlockByNumber(2).position()
+
+    highlighter.setDocument(None)
+
+    assert highlighter.document() is None
+    highlighter.onHighlightBlockAtPosition(position)
+    highlighter.onTypingPaused()
