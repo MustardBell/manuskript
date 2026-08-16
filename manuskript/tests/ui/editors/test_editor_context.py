@@ -1,6 +1,11 @@
 import importlib
 from unittest.mock import patch
 
+
+class _declining:
+    def enter(self, request):
+        return None
+
 from PyQt5.QtWidgets import qApp
 
 from manuskript.enums import Outline
@@ -54,37 +59,72 @@ def test_opened_editor_tab_inherits_project_context(MWEmptyProject):
     window.mainEditor.closeAllTabs()
 
 
-def test_full_screen_editor_receives_existing_editor_context(
+def test_full_screen_asks_the_mode_and_hands_it_the_editor_context(
         MWEmptyProject):
+    """The button carries no knowledge of modes, only of what it is showing.
+
+    What it must still do is describe the pane completely, so whichever
+    presentation answers has everything it needs without reaching back.
+    """
     window = MWEmptyProject
     item = outlineItem(title="Chapter", _type="md")
     window.projectRuntime.models.outline.appendItem(item)
     index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    editor = window.mainEditor.currentEditor()
+    asked = []
+
+    class Recording:
+        def enter(self, request):
+            asked.append(request)
+            return None
 
     with patch.object(
         main_editor_module,
         "QDesktopWidget",
     ) as desktop, patch.object(
         main_editor_module,
-        "fullScreenEditor",
-    ) as full_screen:
+        "fullscreen_presentation_for",
+        lambda mode: Recording(),
+    ):
         desktop.return_value.screenNumber.return_value = 0
 
         window.mainEditor.showFullScreen()
 
-    full_screen.assert_called_once_with(
-        index,
-        settings=window.projectRuntime.settingsManager,
-        text_editor_context=window.workspaceProject.text_editor_context,
-        screenNumber=0,
-        presentation_mode=(
-            window.mainEditor.currentEditor().markdownPresentation.mode
-        ),
-        markup_profile=(
-            window.mainEditor.currentEditor().markupProfile
-        ),
+    request, = asked
+    assert request.index == index
+    assert request.widget is editor
+    assert request.settings is window.projectRuntime.settingsManager
+    assert request.text_editor_context is (
+        window.workspaceProject.text_editor_context
     )
+    assert request.markup_profile is editor.markupProfile
+    assert request.screen_number == 0
+
+
+def test_full_screen_routes_through_the_mode_on_screen(MWEmptyProject):
+    """A mode is asked for itself, not for whatever the button assumed."""
+    window = MWEmptyProject
+    item = outlineItem(title="Chapter", _type="md")
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
+    window.mainEditor.setCurrentModelIndex(index, newTab=True)
+    editor = window.mainEditor.currentEditor()
+    asked = []
+
+    with patch.object(
+        main_editor_module,
+        "QDesktopWidget",
+    ) as desktop, patch.object(
+        main_editor_module,
+        "fullscreen_presentation_for",
+        lambda mode: asked.append(mode) or _declining(),
+    ):
+        desktop.return_value.screenNumber.return_value = 0
+
+        window.mainEditor.showFullScreen()
+
+    assert asked == [editor.markdownPresentation.mode]
     window.mainEditor.closeAllTabs()
 
 

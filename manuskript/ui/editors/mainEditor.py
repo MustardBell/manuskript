@@ -11,7 +11,10 @@ from manuskript.enums import Outline
 from manuskript.functions import AUC, drawProgress, appPath, uiParse
 from manuskript.ui import style
 from manuskript.ui.editors.editorWidget import editorWidget
-from manuskript.ui.editors.fullScreenEditor import fullScreenEditor
+from manuskript.ui.editors.fullscreen_presentation import (
+    FullscreenRequest,
+    fullscreen_presentation_for,
+)
 from manuskript.ui.editors.mainEditor_ui import Ui_mainEditor
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationBinding,
@@ -578,22 +581,30 @@ class mainEditor(QWidget, Ui_mainEditor):
             w.outlineView.viewport().update()
 
     def showFullScreen(self):
-        if self.currentEditor():
-            currentScreenNumber = QDesktopWidget().screenNumber(widget=self)
-            self._fullScreen = fullScreenEditor(
-                self.currentEditor().currentIndex,
-                settings=self.settings,
-                text_editor_context=self.editor_context.text_editor,
-                screenNumber=currentScreenNumber,
-                presentation_mode=(
-                    self.currentEditor().markdownPresentation.mode
-                ),
-                markup_profile=(
-                    self.currentEditor().markupProfile
-                ),
-            )
-            # Clean the variable when closing fullscreen prevent errors
-            self._fullScreen.exited.connect(self.clearFullScreen)
+        """Ask the mode on screen to take the screen.
+
+        This control is a state switch. Which modes can be shown full size,
+        and how, is the modes' business: deciding it here meant a mode the
+        button had not been told about was shown the wrong surface, or none.
+        """
+
+        editor = self.currentEditor()
+        if not editor:
+            return
+        mode = editor.markdownPresentation.mode
+        request = FullscreenRequest(
+            index=editor.currentIndex,
+            settings=self.settings,
+            widget=editor,
+            text_editor_context=self.editor_context.text_editor,
+            markup_profile=editor.markupProfile,
+            screen_number=QDesktopWidget().screenNumber(widget=self),
+        )
+        self._fullScreen = fullscreen_presentation_for(mode).enter(request)
+        if self._fullScreen is None:
+            return
+        # Clean the variable when closing fullscreen prevent errors
+        self._fullScreen.exited.connect(self.clearFullScreen)
 
     def clearFullScreen(self):
         self._fullScreen = None
