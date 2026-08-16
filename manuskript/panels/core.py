@@ -68,7 +68,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             default_visible=False,
             widget_factory=factories.get(GENERAL),
             navigator=NavigatorEntry(
-                label="General", icon="stock_view-details", order=100,
+                label="General", icon="general", order=100,
             ),
         ),
         PanelDescriptor(
@@ -108,7 +108,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             default_visible=False,
             widget_factory=factories.get(PROJECT_ENTITIES),
             navigator=NavigatorEntry(
-                label="Summary", icon="application-text-template", order=200,
+                label="Summary", icon="summary", order=200,
             ),
         ),
         PanelDescriptor(
@@ -168,7 +168,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             default_visible=True,
             widget_factory=factories.get(EDITOR),
             navigator=NavigatorEntry(
-                label="Editor", icon="gtk-edit", order=700,
+                label="Editor", icon="editor", order=700,
             ),
         ),
     )

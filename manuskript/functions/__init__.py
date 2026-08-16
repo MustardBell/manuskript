@@ -161,20 +161,22 @@ def themeIcon(name):
         "plot":         "stock_shuffle",
         "plots":        "stock_shuffle",
         "world":        "emblem-web", #stock_timezone applications-internet
-        "outline":      "gtk-index", #applications-versioncontrol
+        "general":      "stock_view-details",
+        "summary":      "application-text-template",
+        "editor":       "gtk-edit",
         "label":        "folder_color_picker",
         "status":       "applications-development",
         "text":         "view-text",
         "card":         "view-card",
-        "outline":      "view-outline",
+        "outline":      "view-outline", #applications-versioncontrol
         "tree":         "view-list-tree",
         "spelling":     "tools-check-spelling"
     }
 
-    if name in db:
-        return QIcon.fromTheme(db[name])
-    else:
-        return QIcon()
+    # A name this does not know is still a name the theme might: a plugin
+    # contributing a panel cannot add a line here, and answering it with a
+    # blank icon loses silently rather than showing what it asked for.
+    return QIcon.fromTheme(db.get(name, name))
 
 def randomColor(mix=None):
     """Generates a random color. If mix (QColor) is given, mixes the random color and mix."""
