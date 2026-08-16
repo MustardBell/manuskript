@@ -284,6 +284,11 @@ class WorkspaceEditorEndpoint(QObject):
     cursorChanged = pyqtSignal(int, int)
     selectionChanged = pyqtSignal(int, int)
     textChanged = pyqtSignal()
+    #: The document has finished laying itself out and now reports a real
+    #: size. Anything a workspace measures in pixels before this -- block
+    #: positions, scroll extents -- describes a document that has not been
+    #: laid out, so a plugin waits for this rather than guessing.
+    layoutChanged = pyqtSignal()
 
     def __init__(
             self, item_id, editor, host, presentation,
@@ -299,7 +304,15 @@ class WorkspaceEditorEndpoint(QObject):
         scrollbar.valueChanged.connect(self.scrolled)
         editor.cursorPositionChanged.connect(self._cursor_changed)
         editor.selectionChanged.connect(self._selection_changed)
-        editor.textChanged.connect(self.textChanged)
+        editor.textChanged.connect(self._text_changed)
+        #: Whether the layout has reported a size since the text last
+        #: changed. Asking the document how big it is does not answer this:
+        #: it answers with whatever it last computed, which for text that has
+        #: just been set is a size describing the text before it.
+        self._laid_out = False
+        layout = editor.document().documentLayout()
+        if layout is not None:
+            layout.documentSizeChanged.connect(self._document_size_changed)
 
     @property
     def title(self):
@@ -364,6 +377,27 @@ class WorkspaceEditorEndpoint(QObject):
                 "Workspace editors support source presentation modes only."
             )
         self.presentation.set_mode(mode)
+
+    def _text_changed(self):
+        self._laid_out = False
+        self.textChanged.emit()
+
+    def _document_size_changed(self, *_args):
+        self._laid_out = True
+        self.layoutChanged.emit()
+
+    @property
+    def layout_is_ready(self):
+        """Whether this pane's geometry describes a laid-out document.
+
+        Until the layout has run, block positions and the scroll extent
+        describe nothing: a document of eighty blocks can report a scroll
+        maximum of zero. A workspace that places panes against those numbers
+        gets an answer the scrollbar then silently clamps into something
+        plausible and wrong.
+        """
+
+        return self._laid_out
 
     def set_maximum_text_width(self, width):
         self.widget.setMaximumWidthOverride(width)

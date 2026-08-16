@@ -566,7 +566,16 @@ itself. `endpoint.widget` is a `QWidget` to put in your layout.
 | `first_visible_block`, `first_visible_block_fraction`, `block_count` | where the reader is |
 | `scroll_value_for_block(block, fraction=0.0)`, `scroll_value_for_text_offset(offset)` | where a place in the document would put the scrollbar |
 | `scroll_to_block(block, fraction=0.0)`, `scroll_to_text_offset(offset)` | going there |
-| `scrolled`, `cursorChanged`, `selectionChanged`, `textChanged` | signals |
+| `layout_is_ready` | whether the pane's geometry describes a document that has been laid out |
+| `scrolled`, `cursorChanged`, `selectionChanged`, `textChanged`, `layoutChanged` | signals |
+
+Every pixel above is meaningless until `layout_is_ready` is true. Between
+setting text and the layout running, a document of eighty paragraphs reports
+a scroll maximum of zero and block positions to match, and a scrollbar
+silently clamps whatever you compute from them into something plausible and
+wrong. Wait for `layoutChanged`, and tell the reader that is what they are
+waiting for; do not place panes against a document that has not been laid
+out.
 
 Positions come in three currencies and they are not interchangeable:
 **text offsets** are characters, **blocks** are paragraphs, and **scroll
