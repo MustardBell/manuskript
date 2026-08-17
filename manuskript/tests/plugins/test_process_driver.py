@@ -293,6 +293,23 @@ def create_process_plugin(tmp_path, contributions=None, requires=()):
     return plugin_root
 
 
+def wait_for(path, timeout=5.0):
+    """Wait for a file another process writes, rather than assuming it has.
+
+    ``initialized`` is a notification: the host does not wait for an answer,
+    so the plugin writes this marker whenever it gets round to it. Asserting
+    the moment the host returns tests the runner's scheduler, not the
+    protocol, and a loaded macOS runner is where that assertion loses.
+    """
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists():
+            return True
+        time.sleep(0.01)
+    return path.exists()
+
+
 def load_process_plugin(tmp_path, project_capability_resolver=None, **kwargs):
     plugin_root = create_process_plugin(tmp_path, **kwargs)
     runtime = PluginRuntime(
@@ -325,7 +342,7 @@ def test_process_driver_negotiates_and_installs_atomically(tmp_path):
     assert seen["contribution_kinds"]["exporter"] == "portable"
     assert seen["contribution_kinds"]["project_panel"] == "portable"
     assert seen["value_schema"]["api_version"] == 1
-    assert (plugin_root / "initialized").exists()
+    assert wait_for(plugin_root / "initialized")
 
     runtime.disable("example.remote")
     assert not record.session
