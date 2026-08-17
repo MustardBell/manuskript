@@ -30,3 +30,30 @@ contract is a substantial piece of work in its own right.
 
 **Revisit when:** a plugin wants to contribute a presentation mode from a
 process runtime, or when the RPC-only boundary is taken up in earnest.
+
+## Waiting on a plugin process by polling for a file
+
+`test_process_driver_negotiates_and_installs_atomically` waits up to five
+seconds for the plugin subprocess to write an `initialized` marker, checking
+every ten milliseconds. This is a dirty fix and is marked as one.
+
+Why it is dirty: five seconds is arbitrary, polling is a guess dressed as a
+wait, and the failure mode it buys is a slow false failure instead of a fast
+one. On a runner slower than any we have seen, it fails for the same reason
+it failed before.
+
+Why it was taken anyway: there is nothing to await. `initialized` is a
+notification in RPC protocol 1 — the host sends it and does not expect an
+answer — so no observable event says the plugin has acted on it.
+
+The clean fix is not in the test. The protocol has no readiness
+acknowledgement, which means the *host* also cannot know when a plugin has
+finished activating and is able to receive calls. It proceeds regardless.
+Today that is invisible because contributions are declared during
+`initialize`, before the notification; it stops being invisible as soon as a
+plugin needs to do work on activation. Giving protocol 1 a readiness signal
+would remove the guess from the test and the assumption from the host at the
+same time.
+
+**Revisit when:** protocol 1's lifecycle is next opened, or when a plugin
+needs to do work in response to `initialized`.

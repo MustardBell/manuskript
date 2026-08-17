@@ -300,6 +300,11 @@ def wait_for(path, timeout=5.0):
     so the plugin writes this marker whenever it gets round to it. Asserting
     the moment the host returns tests the runner's scheduler, not the
     protocol, and a loaded macOS runner is where that assertion loses.
+
+    Polling for a deadline is a dirty fix, recorded as one in DEFERRED.md.
+    Protocol 1 offers nothing to await, which is a gap in the protocol rather
+    than in this test: the host cannot tell when a plugin has finished
+    activating either.
     """
 
     deadline = time.monotonic() + timeout
