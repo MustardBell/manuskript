@@ -26,3 +26,10 @@ manuskript.log
 snowflake*
 test-projects
 main.pyproject.user
+
+# Development documentation is not shipped in the tree.
+/docs/architecture/
+/docs/STORY_ASSERTIONS.md
+/docs/STORY_DEBUGGER.md
+/docs/TEMPORAL_STORY_MODEL.md
+/docs/WORKSTATION_COMPLETION.md
