@@ -402,12 +402,18 @@ class GitHistoryCapability:
                 "ls-files", "--cached", "--others", "--exclude-standard",
                 "-z", "--", *backend.repository.project_paths,
             ))
-            return tuple(
-                GitFile(path=record.decode("utf-8", errors="replace"),
-                        content_id="")
-                for record in result.stdout.split(b"\0")
-                if record
-            )
+            root = backend.repository.root
+            found = []
+            for record in result.stdout.split(b"\0"):
+                if not record:
+                    continue
+                path = record.decode("utf-8", errors="replace")
+                # --cached lists the index, which remembers files the disk
+                # no longer has: staged deletions, renames not yet
+                # committed. The working tree is what is actually there.
+                if os.path.isfile(os.path.join(root, path)):
+                    found.append(GitFile(path=path, content_id=""))
+            return tuple(found)
 
         return self._answer(read)
 
@@ -468,3 +474,9 @@ class GitHistoryCapability:
         except GitRevisionError as error:
             code = GIT_UNKNOWN_REVISION if unknown_revision else GIT_FAILED
             return GitAnswer(error=GitError(code, str(error)))
+        except OSError as error:
+            # The promise is to answer, not to raise, and the filesystem
+            # does not know that. A file the index lists but disk does not
+            # hold reached a caller as FileNotFoundError and ended a search
+            # that should have skipped it.
+            return GitAnswer(error=GitError(GIT_FAILED, str(error)))

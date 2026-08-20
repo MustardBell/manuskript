@@ -363,10 +363,13 @@ def test_staged_prose_is_its_own_source_not_a_revision(monkeypatch):
     assert staged[0].content_id == "cccc333"
 
 
-def test_untracked_prose_has_no_content_identity(monkeypatch):
+def test_untracked_prose_has_no_content_identity(monkeypatch, tmp_path):
     """Git has never seen it, so the field is empty rather than invented."""
 
-    git = sources_capability(monkeypatch)
+    (tmp_path / "book").mkdir()
+    for name in ("chapter-1.md", "untracked.md"):
+        (tmp_path / "book" / name).write_text("prose", encoding="utf-8")
+    git = sources_capability(monkeypatch, root=str(tmp_path))
 
     working = git.working_files().unwrap()
 
@@ -413,3 +416,37 @@ def test_sources_put_uncommitted_prose_first(monkeypatch):
     assert [source.label for source in found[:2]] == [
         "working tree", "staged",
     ]
+
+
+def test_an_os_failure_is_answered_rather_than_raised(monkeypatch, tmp_path):
+    """The promise is to answer. The filesystem does not know that.
+
+    A file the index lists but the disk does not hold reached a caller as
+    FileNotFoundError and ended a search that should have skipped it.
+    """
+
+    git = sources_capability(monkeypatch, root=str(tmp_path))
+    (tmp_path / "book").mkdir()
+    (tmp_path / "book" / "chapter-1.md").write_text("x", encoding="utf-8")
+
+    listed = git.working_files().unwrap()
+    (tmp_path / "book" / "chapter-1.md").unlink()
+    answer = git.read_working_file(listed[0].path)
+
+    assert not answer.ok
+    assert isinstance(answer.error, GitError)
+
+
+def test_the_working_tree_does_not_offer_files_the_disk_lacks(
+        monkeypatch, tmp_path):
+    """--cached remembers staged deletions and renames; disk is the truth."""
+
+    git = sources_capability(monkeypatch, root=str(tmp_path))
+    (tmp_path / "book").mkdir()
+    (tmp_path / "book" / "chapter-1.md").write_text("here", encoding="utf-8")
+
+    listed = [entry.path for entry in git.working_files().unwrap()]
+
+    # The double lists chapter-1.md and untracked.md; only the first exists.
+    assert "book/chapter-1.md" in listed
+    assert "book/untracked.md" not in listed
