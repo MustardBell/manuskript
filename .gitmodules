@@ -13,3 +13,7 @@
 	path = manuskript/plugins/story_workstation
 	url = https://github.com/MustardBell/manuskript-story-workstation.git
 	branch = main
+[submodule "manuskript/plugins/text_provenance"]
+	path = manuskript/plugins/text_provenance
+	url = git@github-mustardbell:MustardBell/manuskript-text-provenance.git
+	branch = main
