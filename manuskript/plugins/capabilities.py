@@ -281,6 +281,13 @@ CAPABILITIES = (
             "available schemas."
         ),
     ),
+    Capability(
+        name=CAPABILITY_GIT_HISTORY,
+        summary=(
+            "Read the project's Git history: commits, revisions, and "
+            "working-tree state. Reading only; committing is not offered."
+        ),
+    ),
 )
 
 

@@ -209,3 +209,18 @@ def test_a_plugin_that_did_not_declare_it_is_refused_at_resolution():
         build_story_capability(
             runtime, manager, "vendor.provenance", CAPABILITY_GIT_HISTORY
         )
+
+
+def test_the_capability_is_published_in_the_catalogue():
+    """A resolver without a catalogue entry is a capability nobody can ask for.
+
+    The entry was missing while the resolver existed, and the resolver test
+    hid it by supplying a runtime that declares everything.
+    """
+
+    from manuskript.plugins.capabilities import (
+        CAPABILITY_GIT_HISTORY,
+        capability_catalogue,
+    )
+
+    assert CAPABILITY_GIT_HISTORY in capability_catalogue()
