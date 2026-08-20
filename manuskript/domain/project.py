@@ -29,10 +29,23 @@ class ProjectSession:
     def __init__(self):
         self._path = None
         self._state = ProjectState.CLOSED
+        self._generation = 0
 
     @property
     def path(self):
         return self._path
+
+    @property
+    def generation(self):
+        """How many times a project has been opened in this session.
+
+        Path alone does not identify an opening. Closing a project and
+        opening the same one again is a new authority domain: anything that
+        was granted access to the first must not silently carry over, and
+        with only a path to compare against it would.
+        """
+
+        return self._generation
 
     @property
     def state(self):
@@ -66,6 +79,7 @@ class ProjectSession:
             raise ValueError("A project path is required.")
         self._transition_to(ProjectState.CLEAN)
         self._path = path
+        self._generation += 1
 
     def rename(self, path):
         if not self.is_open:

@@ -87,6 +87,13 @@ class PluginRuntime:
         self.discovery_issues = []
         self.projectFormat = project_format
         self.projectGeneration = 0
+        #: Who may hold which capability. Deliberately owned here, at the
+        #: plugin-runtime boundary, rather than decided privately inside
+        #: whatever builds a capability -- a builder that also invents
+        #: authorization policy is a second policy nobody can see. None
+        #: until the composition root installs one, and a capability built
+        #: without it simply carries no grant.
+        self.capabilityAuthority = None
         self._applicationCapabilityResolver = application_capability_resolver
         self._projectCapabilityResolver = project_capability_resolver
         drivers = tuple(
@@ -226,6 +233,12 @@ class PluginRuntime:
     def disable(self, plugin_id):
         record = self._record(plugin_id)
         self.preferences.disable(plugin_id)
+        if self.capabilityAuthority is not None:
+            # A disabled plugin keeps none of its authority. Anything it
+            # left running -- a search on a worker thread, a panel not yet
+            # torn down -- still holds capability objects, and those objects
+            # are the reason this is not left to the teardown path.
+            self.capabilityAuthority.retire_plugin(plugin_id)
         self._deactivate_record(record)
         record.status = PluginStatus.DISABLED
         record.error = ""
@@ -400,6 +413,11 @@ class PluginRuntime:
                     self.projectFormat,
                 )
         return tuple(self.records.values())
+
+    def set_capability_authority(self, authority):
+        """Install the one owner of who may hold which capability."""
+
+        self.capabilityAuthority = authority
 
     def set_project_capability_resolver(self, resolver):
         """Install the composition-root bridge to current project services."""

@@ -294,6 +294,17 @@ def prepare(arguments, tests=False):
     # startup. A process request after close or project replacement therefore
     # cannot retain authority over the previous project.
     from manuskript.ui.plugins.story_capabilities import build_story_capability
+    from manuskript.plugins.authority import CapabilityAuthority, session_of
+
+    # One owner of who may hold what, installed here because this is where
+    # the plugin runtime and the project runtime first see each other. The
+    # session source is the only live thing it reads: a lease captures which
+    # opening of which project it was granted over, and closing or replacing
+    # that project makes every lease over it refuse -- without anything
+    # having to remember to sweep a table.
+    plugin_runtime.set_capability_authority(CapabilityAuthority(
+        session_source=lambda: session_of(project_runtime.projectManager)
+    ))
 
     plugin_runtime.set_project_capability_resolver(
         lambda plugin_id, name: build_story_capability(

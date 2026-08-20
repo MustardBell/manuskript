@@ -540,6 +540,36 @@ def test_preinstalled_plugin_uses_normal_enable_disable_state(tmp_path):
     assert preferences.enabled_plugin_ids == ()
 
 
+def test_disabling_a_plugin_takes_the_authority_it_was_holding(tmp_path):
+    """Teardown is not enough, because objects outlive the record.
+
+    A disabled plugin can have a panel not yet destroyed and a search still
+    running on a worker thread, and both hold capability objects. Those
+    objects ask the authority on every call, so ending the authority is what
+    actually stops them.
+    """
+
+    from manuskript.plugins.authority import (
+        CapabilityAuthority,
+        SessionIdentity,
+    )
+
+    create_plugin(tmp_path, plugin_id="vendor.provenance")
+    runtime = PluginRuntime([tmp_path], InMemoryPluginPreferences())
+    session = SessionIdentity(project="/books/one.msk", generation=1)
+    authority = CapabilityAuthority(session_source=lambda: session)
+    runtime.set_capability_authority(authority)
+    runtime.discover()
+    runtime.enable("vendor.provenance")
+    lease = authority.issue("vendor.provenance", "git.history")
+
+    assert authority.allows(lease)
+
+    runtime.disable("vendor.provenance")
+
+    assert "reloaded" in authority.refusal(lease)
+
+
 def test_duplicate_plugin_ids_across_roots_are_rejected(tmp_path):
     first = tmp_path / "first"
     second = tmp_path / "second"

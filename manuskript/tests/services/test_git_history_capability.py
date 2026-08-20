@@ -7,6 +7,7 @@ and this surface is meant to survive being served over one.
 
 import pytest
 
+from manuskript.plugins.authority import CapabilityAuthority, SessionIdentity
 from manuskript.services.git_history_capability import (
     GIT_UNAVAILABLE,
     GitAnswer,
@@ -549,6 +550,16 @@ def test_a_staged_file_read_after_it_changed_is_refused(monkeypatch, tmp_path):
     assert stale.error.code == "git.source_changed"
 
 
+def authority_over(project="/books/one.msk", generation=1):
+    """An authority whose current session is whatever we point it at."""
+
+    holder = {"session": SessionIdentity(project=project, generation=generation)}
+    return (
+        CapabilityAuthority(session_source=lambda: holder["session"]),
+        holder,
+    )
+
+
 def test_a_revoked_grant_refuses_without_consulting_git(monkeypatch):
     """The holder keeps the object; the host keeps the authority.
 
@@ -558,33 +569,31 @@ def test_a_revoked_grant_refuses_without_consulting_git(monkeypatch):
     whatever project happens to be current.
     """
 
-    from manuskript.plugins.leases import GrantRegistry
-
-    grants = GrantRegistry()
-    lease = grants.issue("vendor.provenance", "git.history", 7)
+    grants, _ = authority_over()
+    lease = grants.issue("vendor.provenance", "git.history")
     git = capability(monkeypatch)
-    git._lease, git._grants, git._project_generation = lease, grants, 7
+    git._lease, git._authority = lease, grants
 
     assert git.is_available()
 
-    grants.revoke_plugin("vendor.provenance")
+    grants.retire_plugin("vendor.provenance")
 
     answer = git.history()
     assert not answer.ok
     assert answer.error.code == "plugin.capability_revoked"
     assert not git.is_available()
-    assert "withdrawn" in git.availability().reason
+    # And the reader is told which authority ended, not that their Git broke.
+    assert "reloaded" in git.availability().reason
 
 
 def test_a_grant_over_a_closed_project_does_not_reach_the_next_one(
         monkeypatch):
-    from manuskript.plugins.leases import GrantRegistry
-
-    grants = GrantRegistry()
-    lease = grants.issue("vendor.provenance", "git.history", 1)
+    grants, holder = authority_over()
+    lease = grants.issue("vendor.provenance", "git.history")
     git = capability(monkeypatch)
-    # The project was replaced; this handle still names the old generation.
-    git._lease, git._grants, git._project_generation = lease, grants, 2
+    git._lease, git._authority = lease, grants
+    # The project was replaced; the lease still names the one it was for.
+    holder["session"] = SessionIdentity(project="/books/two.msk", generation=1)
 
     answer = git.history()
 
@@ -592,15 +601,38 @@ def test_a_grant_over_a_closed_project_does_not_reach_the_next_one(
     assert "no longer open" in answer.error.message
 
 
+def test_a_grant_withdrawn_during_the_call_does_not_deliver_the_result(
+        monkeypatch):
+    """Checking on the way in is not enough, because Git takes real time.
+
+    A project closed while ``git blame`` runs would still have its contents
+    handed to the holder afterwards, because the only check had already
+    passed. This cannot interrupt Git; it refuses to deliver what Git
+    returned, which is the part that matters.
+    """
+
+    grants, holder = authority_over()
+    lease = grants.issue("vendor.provenance", "git.history")
+    git = capability(monkeypatch)
+    git._lease, git._authority = lease, grants
+
+    def the_project_closes_while_git_runs(backend):
+        holder["session"] = None
+        return ("what Git found before it closed",)
+
+    answer = git._answer(the_project_closes_while_git_runs)
+
+    assert not answer.ok
+    assert answer.error.code == "plugin.capability_revoked"
+
+
 def test_switching_revisions_off_is_not_a_withdrawal(monkeypatch):
     """Authorized but unavailable, so switching it back on just works."""
 
-    from manuskript.plugins.leases import GrantRegistry
-
-    grants = GrantRegistry()
-    lease = grants.issue("vendor.provenance", "git.history", 1)
+    grants, _ = authority_over()
+    lease = grants.issue("vendor.provenance", "git.history")
     git = capability(monkeypatch, enabled=False)
-    git._lease, git._grants, git._project_generation = lease, grants, 1
+    git._lease, git._authority = lease, grants
 
     snapshot = git.availability()
 

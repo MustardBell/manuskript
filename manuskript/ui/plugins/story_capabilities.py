@@ -73,6 +73,7 @@ from manuskript.plugins.capabilities import (
     CAPABILITY_WORKFLOW_READ,
     CAPABILITY_WORKFLOW_WRITE,
 )
+from manuskript.plugins.authority import session_of
 from manuskript.plugins.errors import PluginScopeError
 from manuskript.plugins.values import ContentEnvelope
 
@@ -169,6 +170,20 @@ def build_story_capability(
         if source_gateway is not None
         else ProjectSourceGateway(manager)
     )
+    # Who may hold this is not decided here. The builder constructs the
+    # service and asks the one authority for a grant over the project it is
+    # being built against; if there is no authority installed, the service
+    # carries no lease and refuses nothing, which is what every test that
+    # builds one directly relies on.
+    authority = getattr(runtime, "capabilityAuthority", None)
+
+    def grant():
+        return (
+            authority.issue(plugin_id, name, session_of(manager))
+            if authority is not None
+            else None
+        )
+
     builders = {
         # Availability is settled inside the capability, not here: a caller
         # that asks for Git on a machine without it receives an answer
@@ -178,6 +193,8 @@ def build_story_capability(
             enabled=RevisionConfiguration.from_mapping(
                 manager.settings.revisions
             ).uses_git,
+            lease=grant(),
+            authority=authority,
         ),
         CAPABILITY_ENTITIES_READ: lambda: EntityReadCapability(manager),
         CAPABILITY_ENTITIES_WRITE: lambda: EntityWriteCapability(manager),

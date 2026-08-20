@@ -25,7 +25,7 @@ import os
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional
 
-from manuskript.plugins.leases import CAPABILITY_REVOKED
+from manuskript.plugins.authority import CAPABILITY_REVOKED
 from manuskript.services.git_revisions import (
     GitNotAvailableError,
     GitRevisionBackend,
@@ -432,19 +432,17 @@ class GitHistoryCapability:
 
     def __init__(
             self, project_file, runner=None, enabled=True,
-            backend_factory=None, lease=None, grants=None,
-            project_generation=None):
+            backend_factory=None, lease=None, authority=None):
         self._project_file = project_file
         self._runner = runner
         self._enabled = bool(enabled)
         self._backend_factory = backend_factory or GitRevisionBackend
-        #: The grant this object acts under, and the register that can take
+        #: The grant this object acts under, and the authority that can take
         #: it away. Holding the object is not holding the authority: every
         #: call asks whether the lease is still live, and the host may
         #: withdraw it at any moment without this object knowing in advance.
         self._lease = lease
-        self._grants = grants
-        self._project_generation = project_generation
+        self._authority = authority
 
     # -- availability ----------------------------------------------------
 
@@ -715,19 +713,17 @@ class GitHistoryCapability:
         return tuple(found)
 
     def _refusal(self):
-        """Whether this handle may still act, asked of the grant register.
+        """Whether this handle may still act, asked of the authority.
 
         Deliberately not asked of the current manifest or the currently open
         project: authority that follows the world around is how a panel
         outliving its project came to hold authority over the next one.
         """
 
-        if self._grants is None:
+        if self._authority is None:
             return ""
-        return self._grants.refusal(
-            self._lease,
-            capability=CAPABILITY_GIT_HISTORY_NAME,
-            project_generation=self._project_generation,
+        return self._authority.refusal(
+            self._lease, capability=CAPABILITY_GIT_HISTORY_NAME
         )
 
     def _answer(self, read, unknown_revision=False, source_changed=False):
@@ -756,7 +752,7 @@ class GitHistoryCapability:
             backend = self._backend_factory(
                 self._project_file, runner=self._runner
             )
-            return GitAnswer(value=read(backend))
+            value = read(backend)
         except GitError as error:
             # A read that already knows which failure this is says so. The
             # alternative is flattening every refusal into "git failed",
@@ -775,3 +771,12 @@ class GitHistoryCapability:
             # hold reached a caller as FileNotFoundError and ended a search
             # that should have skipped it.
             return GitAnswer(error=GitError(GIT_FAILED, str(error)))
+        # Asked again, because a Git command takes real time and authority
+        # can end during it. Checking only on the way in means a project
+        # closed mid-read still hands its contents to the holder afterwards.
+        # This cannot interrupt Git; it can refuse to deliver what Git
+        # returned, which is the part that matters.
+        refusal = self._refusal()
+        if refusal:
+            return GitAnswer(error=GitError(CAPABILITY_REVOKED, refusal))
+        return GitAnswer(value=value)
