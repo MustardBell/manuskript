@@ -1,3 +1,4 @@
+import logging
 """One window's panels: which of them it has, and where they are.
 
 Each workspace window owns one host. It builds a panel's widget from its
@@ -30,6 +31,8 @@ from manuskript.ui.connections import weak_callback
 from manuskript.ui.panels.mounts import mounts_for
 from manuskript.ui.panels.visibility import PanelVisibility
 
+LOGGER = logging.getLogger(__name__)
+
 
 class PanelScopeError(Exception):
     """A panel was asked for in a way its declaration does not allow."""
@@ -60,6 +63,24 @@ class PanelInstance:
     #: to a panel that has gone still emits while Qt tears the window
     #: down, into a Python object that is no longer whole.
     container_watch: Optional[Any] = None
+
+
+def _prepare_close(widget):
+    """Let a panel wind down, without letting it stop the window closing.
+
+    Optional by design: most panels are only widgets. One that has taken on
+    something longer-lived says so by offering this, and a panel that raises
+    on the way out is a plugin defect that must not become a window that
+    cannot be closed.
+    """
+
+    prepare = getattr(widget, "prepare_close", None)
+    if not callable(prepare):
+        return
+    try:
+        prepare()
+    except Exception:
+        LOGGER.exception("A panel failed while preparing to close.")
 
 
 class PanelHost:
@@ -259,6 +280,12 @@ class PanelHost:
         if keep:
             self.views.park_widget(widget)
         else:
+            # Going for good, so tell it. A panel may own work that
+            # outlives its widget -- a thread reading Git, a request in
+            # flight -- and dropping the widget silently leaves that work
+            # holding something about to be freed. Transfer between windows
+            # is not destruction and deliberately does not say this.
+            _prepare_close(widget)
             widget.setParent(None)
         widget.hide()
         if container is not None:

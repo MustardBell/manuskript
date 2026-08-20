@@ -489,3 +489,70 @@ def test_a_place_is_kept_while_a_panel_is_away():
     )
     returned.close()
     present.close()
+
+
+def test_a_closing_panel_is_told_so_it_can_wind_down_its_own_work():
+    """A panel may own work that outlives its widget.
+
+    Closing drops the widget without asking Qt to close it, so a panel
+    holding a thread had no way to learn it was going: the object its work
+    reported to was freed while that work continued. Panels that have taken
+    on something longer-lived say so by offering prepare_close.
+    """
+
+    told = []
+
+    class Busy(QLabel):
+        def prepare_close(self):
+            told.append(True)
+
+    host, _window = make_host(PanelDescriptor(
+        id="core.busy",
+        title="Busy",
+        widget_factory=lambda context, parent: Busy("body", parent),
+    ))
+    host.open("core.busy", PanelContext())
+
+    host.close("core.busy")
+
+    assert told == [True]
+
+
+def test_a_panel_moving_between_windows_is_not_told_it_is_closing():
+    """Transfer is not destruction, and its work should keep running."""
+
+    told = []
+
+    class Busy(QLabel):
+        def prepare_close(self):
+            told.append(True)
+
+    host, _window = make_host(PanelDescriptor(
+        id="core.busy",
+        title="Busy",
+        widget_factory=lambda context, parent: Busy("body", parent),
+    ))
+    host.open("core.busy", PanelContext())
+
+    host.release("core.busy")
+
+    assert told == []
+
+
+def test_a_panel_that_fails_on_the_way_out_does_not_trap_the_window():
+    """A plugin defect must not become a window that cannot be closed."""
+
+    class Awkward(QLabel):
+        def prepare_close(self):
+            raise RuntimeError("badly behaved plugin")
+
+    host, _window = make_host(PanelDescriptor(
+        id="core.awkward",
+        title="Awkward",
+        widget_factory=lambda context, parent: Awkward("body", parent),
+    ))
+    host.open("core.awkward", PanelContext())
+
+    host.close("core.awkward")
+
+    assert "core.awkward" not in host.instances
