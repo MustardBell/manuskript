@@ -4,6 +4,10 @@ import uuid
 from dataclasses import replace
 
 from manuskript.enums import Outline
+from manuskript.domain.revisions import RevisionConfiguration
+from manuskript.services.git_history_capability import (
+    GitHistoryCapability,
+)
 from manuskript.domain.assertion_dsl import (
     assertions_from_source,
     encode_assertion_block,
@@ -53,6 +57,7 @@ from manuskript.plugins.api import (
     WorkspaceDocument,
 )
 from manuskript.plugins.capabilities import (
+    CAPABILITY_GIT_HISTORY,
     CAPABILITY_ASSERTIONS_READ,
     CAPABILITY_ASSERTIONS_WRITE,
     CAPABILITY_PROSE_ANALYSIS,
@@ -165,6 +170,15 @@ def build_story_capability(
         else ProjectSourceGateway(manager)
     )
     builders = {
+        # Availability is settled inside the capability, not here: a caller
+        # that asks for Git on a machine without it receives an answer
+        # carrying an error, which is the point of the surface.
+        CAPABILITY_GIT_HISTORY: lambda: GitHistoryCapability(
+            manager.currentProject,
+            enabled=RevisionConfiguration.from_mapping(
+                manager.settings.revisions
+            ).uses_git,
+        ),
         CAPABILITY_ENTITIES_READ: lambda: EntityReadCapability(manager),
         CAPABILITY_ENTITIES_WRITE: lambda: EntityWriteCapability(manager),
         CAPABILITY_REFERENCES_READ: lambda: ReferenceReadCapability(manager),

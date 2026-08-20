@@ -15,6 +15,14 @@ from typing import Any, Callable, Optional
 from manuskript.plugins.contracts import ContractPortability
 
 
+#: Read the project's Git history: commits, revisions, working-tree state.
+#: Reading is a different authority from committing and is granted alone --
+#: a plugin holding this cannot write a commit. Availability is a fact about
+#: the machine, the project and the reader's settings; a plugin observes it
+#: and cannot change it. Every method answers with a value carrying either a
+#: result or an error, and raises nothing.
+CAPABILITY_GIT_HISTORY = "git.history"
+
 #: Markdown to forum BBCode conversion, extendable per plugin.
 CAPABILITY_MARKUP_BBCODE = "markup.bbcode"
 

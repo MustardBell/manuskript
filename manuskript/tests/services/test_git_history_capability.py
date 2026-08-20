@@ -162,3 +162,50 @@ def test_the_working_tree_is_readable_for_uncommitted_text(monkeypatch):
     status = git.working_tree().unwrap()
 
     assert status.untracked == 2
+
+
+def test_the_capability_is_reachable_through_the_plugin_resolver():
+    """A plugin asks for it by the catalogue name, like any other service."""
+
+    from types import SimpleNamespace
+    from manuskript.plugins.capabilities import CAPABILITY_GIT_HISTORY
+    from manuskript.ui.plugins.story_capabilities import (
+        build_story_capability,
+    )
+
+    runtime = SimpleNamespace(declares=lambda plugin_id, name: True)
+    manager = SimpleNamespace(
+        session=SimpleNamespace(is_open=True),
+        currentProject="/project/book.msk",
+        settings=SimpleNamespace(revisions={"backend": "git"}),
+    )
+
+    capability = build_story_capability(
+        runtime, manager, "vendor.provenance", CAPABILITY_GIT_HISTORY
+    )
+
+    assert isinstance(capability, GitHistoryCapability)
+
+
+def test_a_plugin_that_did_not_declare_it_is_refused_at_resolution():
+    """Rule 3 governs Git failures, not manifest violations.
+
+    Asking for a capability the manifest never declared is a scope error and
+    still raises: the plugin is not entitled to the object at all, which is a
+    different matter from Git being unavailable to a plugin that is.
+    """
+
+    from types import SimpleNamespace
+    from manuskript.plugins.capabilities import CAPABILITY_GIT_HISTORY
+    from manuskript.plugins.errors import PluginScopeError
+    from manuskript.ui.plugins.story_capabilities import (
+        build_story_capability,
+    )
+
+    runtime = SimpleNamespace(declares=lambda plugin_id, name: False)
+    manager = SimpleNamespace(session=SimpleNamespace(is_open=True))
+
+    with pytest.raises(PluginScopeError):
+        build_story_capability(
+            runtime, manager, "vendor.provenance", CAPABILITY_GIT_HISTORY
+        )
