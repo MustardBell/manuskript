@@ -360,3 +360,34 @@ def test_history_keeps_a_branch_whose_merge_resolved_against_it(git_project):
         "the branch the merge resolved against was pruned from history"
     )
     assert "merge keeping trunk" in subjects
+
+
+def test_blame_names_the_commit_that_last_wrote_these_lines(git_project):
+    """The direct answer, against a real repository.
+
+    Walking history reads every version of every file to learn this. Git
+    already knows, so the fast path asks rather than recomputes.
+    """
+
+    from manuskript.services.git_history_capability import GitHistoryCapability
+
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("first\nthe scene as it is now\nlast\n", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "wrote the scene")
+    wanted = run_git(
+        repository, "rev-parse", "HEAD"
+    ).stdout.decode().strip()
+    scene.write_text(
+        "first\nthe scene as it is now\nlast\nadded later\n", encoding="utf-8"
+    )
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "added elsewhere")
+
+    blamed = GitHistoryCapability(project_file).blame(
+        "book/outline/scene.md", 2, 2
+    )
+
+    assert blamed.ok, blamed.error
+    assert blamed.value == (wanted,)

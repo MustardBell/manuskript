@@ -1,4 +1,3 @@
-import logging
 """One window's panels: which of them it has, and where they are.
 
 Each workspace window owns one host. It builds a panel's widget from its
@@ -30,8 +29,6 @@ from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
 from manuskript.ui.connections import weak_callback
 from manuskript.ui.panels.mounts import mounts_for
 from manuskript.ui.panels.visibility import PanelVisibility
-
-LOGGER = logging.getLogger(__name__)
 
 
 class PanelScopeError(Exception):
@@ -80,7 +77,11 @@ def _prepare_close(widget):
     try:
         prepare()
     except Exception:
-        LOGGER.exception("A panel failed while preparing to close.")
+        # Swallowed here on purpose, and not reported here either: this
+        # host does not know how a window talks to a person, and a panel
+        # that fails on its way out must not become a window that cannot
+        # close. Whoever built the panel is the one able to say so.
+        pass
 
 
 class PanelHost:

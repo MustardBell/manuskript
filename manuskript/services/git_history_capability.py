@@ -519,6 +519,47 @@ class GitHistoryCapability:
 
         return self._answer(read)
 
+    def blame(self, path, first_line, last_line):
+        """Which commits last touched these lines, newest state first.
+
+        The direct answer to where prose that is on disk came from. Walking
+        history reads every version of every file to find out; blame asks
+        Git, which already knows, and answers in one pass.
+
+        Whitespace is ignored and moved text is followed within a file and
+        between files, because prose gets reflowed and scenes get shuffled
+        between chapters, and neither means the words are new.
+        """
+
+        wanted = str(path)
+        first, last = int(first_line), int(last_line)
+
+        def read(backend):
+            if wanted not in {
+                entry.path for entry in _working_entries(backend)
+            }:
+                raise GitRevisionError(
+                    "{!r} is not a project file in the working tree."
+                    .format(wanted)
+                )
+            result = backend._execute((
+                "blame", "--porcelain", "-w", "-M", "-C",
+                "-L", "{},{}".format(max(1, first), max(1, last)),
+                "--", wanted,
+            ))
+            found = []
+            for line in result.stdout.decode(
+                "utf-8", errors="replace"
+            ).splitlines():
+                fields = line.split()
+                if len(fields) == 4 and len(fields[0]) == 40:
+                    identifier = fields[0]
+                    if identifier not in found:
+                        found.append(identifier)
+            return tuple(found)
+
+        return self._answer(read)
+
     def sources(self, revisions=()):
         """Every place a passage might be, newest first.
 
