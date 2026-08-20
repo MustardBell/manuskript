@@ -94,13 +94,24 @@ def test_node_reference_passes_without_an_sdk():
     run_reference("node", [shutil.which("node"), script.name], script.parent)
 
 
+#: Compiling is not the thing under test, and how long a cold toolchain
+#: takes is not ours to predict. A Windows runner linking rustc for the
+#: first time has exceeded a minute; the protocol exchange it guards is
+#: bounded separately and tightly. Generous here, strict there.
+#:
+#: This must stay below the ceiling the CI batch runner gives this file, or
+#: the batch is killed first and the failure arrives as a timeout with no
+#: indication of which compiler was slow.
+COMPILE_TIMEOUT_SECONDS = 240
+
+
 @pytest.mark.skipif(shutil.which("cc") is None, reason="C compiler not installed")
 def test_c_reference_passes_without_an_sdk(tmp_path):
     source = ROOT / "plugin_api" / "reference" / "c" / "plugin.c"
     executable = tmp_path / "c-plugin"
     subprocess.run(
         ["cc", "-std=c11", "-O2", str(source), "-o", str(executable)],
-        timeout=60,
+        timeout=COMPILE_TIMEOUT_SECONDS,
         check=True,
     )
     run_reference("c", [str(executable)], tmp_path)
@@ -114,7 +125,7 @@ def test_rust_reference_passes_without_an_sdk(tmp_path):
     executable = tmp_path / "rust-plugin"
     subprocess.run(
         ["rustc", "--edition=2021", "-O", str(source), "-o", str(executable)],
-        timeout=60,
+        timeout=COMPILE_TIMEOUT_SECONDS,
         check=True,
     )
     run_reference("rust", [str(executable)], tmp_path)

@@ -18,7 +18,7 @@ from typing import Iterable, List, Sequence, Tuple
 
 DEFAULT_BATCHES = 8
 DEFAULT_TIMEOUT_SECONDS = 90
-SLOW_TEST_TIMEOUT_SECONDS = 240
+SLOW_TEST_TIMEOUT_SECONDS = 600
 SLOW_TEST_FILES = frozenset(("test_conformance_package.py",))
 WORKSPACE_FIXTURES = frozenset((
     "MW",
@@ -93,6 +93,11 @@ def batch_timeout(files: Sequence[Path], default: int) -> int:
     the platform under test. A cold Windows toolchain legitimately needs more
     than the normal UI/domain ceiling, so that file gets an isolated process
     and an explicit larger limit rather than making every test less bounded.
+
+    The ceiling must exceed the file's own inner timeouts, not merely one of
+    them: two compilers at up to four minutes each, plus five protocol
+    exchanges. A ceiling below them turns a specific "rustc was slow" into an
+    unhelpful "the batch timed out".
     """
 
     if any(path.name in SLOW_TEST_FILES for path in files):
