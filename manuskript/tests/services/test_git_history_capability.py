@@ -547,3 +547,63 @@ def test_a_staged_file_read_after_it_changed_is_refused(monkeypatch, tmp_path):
 
     assert not stale.ok
     assert stale.error.code == "git.source_changed"
+
+
+def test_a_revoked_grant_refuses_without_consulting_git(monkeypatch):
+    """The holder keeps the object; the host keeps the authority.
+
+    Nothing here asks what the manifest says now or which project is open
+    now. It asks whether this grant is still live, which is the difference
+    between authority that can be withdrawn and authority that follows
+    whatever project happens to be current.
+    """
+
+    from manuskript.plugins.leases import GrantRegistry
+
+    grants = GrantRegistry()
+    lease = grants.issue("vendor.provenance", "git.history", 7)
+    git = capability(monkeypatch)
+    git._lease, git._grants, git._project_generation = lease, grants, 7
+
+    assert git.is_available()
+
+    grants.revoke_plugin("vendor.provenance")
+
+    answer = git.history()
+    assert not answer.ok
+    assert answer.error.code == "plugin.capability_revoked"
+    assert not git.is_available()
+    assert "withdrawn" in git.availability().reason
+
+
+def test_a_grant_over_a_closed_project_does_not_reach_the_next_one(
+        monkeypatch):
+    from manuskript.plugins.leases import GrantRegistry
+
+    grants = GrantRegistry()
+    lease = grants.issue("vendor.provenance", "git.history", 1)
+    git = capability(monkeypatch)
+    # The project was replaced; this handle still names the old generation.
+    git._lease, git._grants, git._project_generation = lease, grants, 2
+
+    answer = git.history()
+
+    assert not answer.ok
+    assert "no longer open" in answer.error.message
+
+
+def test_switching_revisions_off_is_not_a_withdrawal(monkeypatch):
+    """Authorized but unavailable, so switching it back on just works."""
+
+    from manuskript.plugins.leases import GrantRegistry
+
+    grants = GrantRegistry()
+    lease = grants.issue("vendor.provenance", "git.history", 1)
+    git = capability(monkeypatch, enabled=False)
+    git._lease, git._grants, git._project_generation = lease, grants, 1
+
+    snapshot = git.availability()
+
+    assert not snapshot.usable
+    assert not snapshot.revoked
+    assert "switched off" in snapshot.reason

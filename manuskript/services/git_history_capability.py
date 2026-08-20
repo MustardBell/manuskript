@@ -25,6 +25,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
+from manuskript.plugins.leases import CAPABILITY_REVOKED
 from manuskript.services.git_revisions import (
     GitNotAvailableError,
     GitRevisionBackend,
@@ -41,6 +42,8 @@ GIT_FAILED = "git.failed"
 GIT_UNKNOWN_REVISION = "git.unknown_revision"
 #: What was listed is not what is there any more.
 GIT_SOURCE_CHANGED = "git.source_changed"
+#: The catalogue name this capability is granted under.
+CAPABILITY_GIT_HISTORY_NAME = "git.history"
 
 
 class GitSourceChanged(GitRevisionError):
@@ -103,6 +106,9 @@ class GitAvailabilitySnapshot:
     in_repository: bool
     enabled: bool = True
     repository_root: Optional[str] = None
+    #: Set when the grant itself was withdrawn, which is not a fact about
+    #: this machine's Git and must not be reported as one.
+    revoked: str = ""
 
     @property
     def usable(self):
@@ -113,6 +119,8 @@ class GitAvailabilitySnapshot:
 
     @property
     def reason(self):
+        if self.revoked:
+            return self.revoked
         if not self.installed:
             return "Git is not installed on this machine."
         if not self.in_repository:
@@ -310,17 +318,36 @@ class GitHistoryCapability:
 
     def __init__(
             self, project_file, runner=None, enabled=True,
-            backend_factory=None):
+            backend_factory=None, lease=None, grants=None,
+            project_generation=None):
         self._project_file = project_file
         self._runner = runner
         self._enabled = bool(enabled)
         self._backend_factory = backend_factory or GitRevisionBackend
+        #: The grant this object acts under, and the register that can take
+        #: it away. Holding the object is not holding the authority: every
+        #: call asks whether the lease is still live, and the host may
+        #: withdraw it at any moment without this object knowing in advance.
+        self._lease = lease
+        self._grants = grants
+        self._project_generation = project_generation
 
     # -- availability ----------------------------------------------------
 
     def availability(self):
-        """Never fails, because a caller must be able to ask safely."""
+        """Never fails, because a caller must be able to ask safely.
 
+        A withdrawn grant is reported here as unusable rather than as a Git
+        problem: the reader should be told the plugin may no longer ask,
+        not that their Git is broken.
+        """
+
+        refusal = self._refusal()
+        if refusal:
+            return GitAvailabilitySnapshot(
+                installed=False, in_repository=False, enabled=False,
+                revoked=refusal,
+            )
         report = inspect_git_availability(
             self._project_file, runner=self._runner
         )
@@ -509,7 +536,26 @@ class GitHistoryCapability:
             ))
         return tuple(found)
 
+    def _refusal(self):
+        """Whether this handle may still act, asked of the grant register.
+
+        Deliberately not asked of the current manifest or the currently open
+        project: authority that follows the world around is how a panel
+        outliving its project came to hold authority over the next one.
+        """
+
+        if self._grants is None:
+            return ""
+        return self._grants.refusal(
+            self._lease,
+            capability=CAPABILITY_GIT_HISTORY_NAME,
+            project_generation=self._project_generation,
+        )
+
     def _answer(self, read, unknown_revision=False, source_changed=False):
+        refusal = self._refusal()
+        if refusal:
+            return GitAnswer(error=GitError(CAPABILITY_REVOKED, refusal))
         try:
             snapshot = self.availability()
         except OSError as error:
