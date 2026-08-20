@@ -590,8 +590,8 @@ class GitRevisionBackend:
     def snapshot(self, revision):
         """Read a complete project snapshot without touching the worktree."""
         commit_id = self.resolve_commit(revision)
-        entries = self._tree_entries(commit_id)
-        blobs = self._read_blobs(
+        entries = self.tree_entries(commit_id)
+        blobs = self.read_blobs(
             tuple(entry[1] for entry in entries)
         )
         repository_files = {
@@ -617,7 +617,13 @@ class GitRevisionBackend:
             zipped=zipped,
         )
 
-    def _tree_entries(self, commit_id):
+    def tree_entries(self, commit_id):
+        """The project's files at a commit, as ``(path, blob id)`` pairs.
+
+        Public because the Git history capability is built on it: a
+        published surface should not rest on a name that reads as private.
+        """
+
         result = self._execute((
             "ls-tree",
             "-r",
@@ -649,7 +655,9 @@ class GitRevisionBackend:
             entries.append((path, object_id.decode("ascii")))
         return entries
 
-    def _read_blobs(self, object_ids):
+    def read_blobs(self, object_ids):
+        """The bytes of project blobs, read in one batch, keyed by id."""
+
         object_ids = tuple(dict.fromkeys(object_ids))
         if not object_ids:
             return {}

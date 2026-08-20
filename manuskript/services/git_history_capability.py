@@ -20,6 +20,8 @@ are facts about the machine, the project and the reader's settings. A caller
 observes them.
 """
 
+import os
+
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
@@ -115,6 +117,21 @@ class GitAvailabilitySnapshot:
 
 
 @dataclass(frozen=True)
+class GitFile:
+    """One project file at one revision.
+
+    ``content_id`` is Git's identity for the bytes -- the blob object id.
+    A caller that has already read those bytes at another revision can skip
+    reading them again, which is the whole optimization for a file that sits
+    unchanged across two hundred commits. It is a hint, not an address: a
+    caller cannot ask for a content id, only for a path it is allowed to see.
+    """
+
+    path: str
+    content_id: str
+
+
+@dataclass(frozen=True)
 class GitCommit:
     """One commit, in the terms a reader picks one out by."""
 
@@ -127,6 +144,85 @@ class GitCommit:
     @property
     def short_id(self):
         return self.commit_id[:10]
+
+
+class TextSource:
+    """Somewhere a passage of prose might be found.
+
+    Committed revisions, the index and the working tree answer the same two
+    questions -- what files are here, and what does one of them say -- but
+    they answer them by entirely different means: tree plumbing, the staged
+    index, and ordinary files on disk. Forcing all three through a
+    revision-shaped pipeline would distort each of them, so each is its own
+    strategy behind one small interface, and a caller iterates sources
+    without knowing which kind it holds.
+    """
+
+    #: What to call this source when reporting a match found in it.
+    label = ""
+    #: Whether this source is a commit a reader can copy the hash of.
+    commit_id = None
+
+    def files(self):
+        raise NotImplementedError
+
+    def read(self, path):
+        raise NotImplementedError
+
+
+class CommittedRevision(TextSource):
+    """One commit's trees, read through Git."""
+
+    def __init__(self, capability, commit_id, subject=""):
+        self.capability = capability
+        self.commit_id = commit_id
+        self.label = subject or commit_id[:10]
+
+    def files(self):
+        return self.capability.files(self.commit_id)
+
+    def read(self, path):
+        return self.capability.read_file(self.commit_id, path)
+
+
+class StagedIndex(TextSource):
+    """What is staged but not committed.
+
+    Addressed through the index rather than a tree, because there is no
+    commit to name. Prose a writer has staged and not yet committed is a
+    perfectly good answer to where a passage came from.
+    """
+
+    label = "staged"
+
+    def __init__(self, capability):
+        self.capability = capability
+
+    def files(self):
+        return self.capability.staged_files()
+
+    def read(self, path):
+        return self.capability.read_staged_file(path)
+
+
+class WorkingTree(TextSource):
+    """What is on disk right now, including files never added.
+
+    No Git plumbing at all: these are ordinary files. A passage the writer
+    typed this morning and has not added is still theirs, and a search that
+    could not see it would look broken rather than thorough.
+    """
+
+    label = "working tree"
+
+    def __init__(self, capability):
+        self.capability = capability
+
+    def files(self):
+        return self.capability.working_files()
+
+    def read(self, path):
+        return self.capability.read_working_file(path)
 
 
 class GitHistoryCapability:
@@ -197,11 +293,156 @@ class GitHistoryCapability:
         )
 
     def working_tree(self):
-        """What is staged, modified or untracked right now."""
+        """What is staged, modified or untracked right now, in counts."""
 
         return self._answer(lambda backend: backend.status())
 
+    def files(self, revision):
+        """The project's files at a revision, with their content identities.
+
+        Scoped to the project. A repository may hold anything beside a
+        manuscript, and none of it is a plugin's business.
+        """
+
+        def read(backend):
+            commit_id = backend.resolve_commit(revision)
+            return tuple(
+                GitFile(path=path, content_id=content_id)
+                for path, content_id in backend.tree_entries(commit_id)
+            )
+
+        return self._answer(read, unknown_revision=True)
+
+    def read_file(self, revision, path):
+        """One project file's text at a revision.
+
+        Deliberately addressed by path and not by content id. An object id
+        names anything in the repository, including files outside the
+        project, so accepting one would hand out a way around the scoping
+        that listing carefully applies.
+        """
+
+        wanted = str(path)
+
+        def read(backend):
+            commit_id = backend.resolve_commit(revision)
+            entries = dict(backend.tree_entries(commit_id))
+            if wanted not in entries:
+                raise GitRevisionError(
+                    "{!r} is not a project file at {}.".format(
+                        wanted, commit_id[:10]
+                    )
+                )
+            blobs = backend.read_blobs((entries[wanted],))
+            content = blobs[entries[wanted]]
+            return content.decode("utf-8", errors="replace")
+
+        return self._answer(read, unknown_revision=True)
+
     # -- plumbing --------------------------------------------------------
+
+    # -- the index and the working tree, which are not revisions ---------
+
+    def staged_files(self):
+        """Project files in the index, with their staged content ids."""
+
+        def read(backend):
+            result = backend._execute((
+                "ls-files", "--stage", "-z", "--",
+                *backend.repository.project_paths,
+            ))
+            entries = []
+            for record in result.stdout.split(b"\0"):
+                if not record:
+                    continue
+                metadata, separator, raw_path = record.partition(b"\t")
+                if not separator:
+                    continue
+                fields = metadata.split(b" ")
+                if len(fields) != 3:
+                    continue
+                entries.append(GitFile(
+                    path=raw_path.decode("utf-8", errors="replace"),
+                    content_id=fields[1].decode("ascii"),
+                ))
+            return tuple(entries)
+
+        return self._answer(read)
+
+    def read_staged_file(self, path):
+        """One staged file's text, by the path the index lists it under."""
+
+        wanted = str(path)
+
+        def read(backend):
+            staged = {
+                entry.path: entry.content_id
+                for entry in self.staged_files().unwrap()
+            }
+            if wanted not in staged:
+                raise GitRevisionError(
+                    "{!r} is not a staged project file.".format(wanted)
+                )
+            blobs = backend.read_blobs((staged[wanted],))
+            return blobs[staged[wanted]].decode("utf-8", errors="replace")
+
+        return self._answer(read)
+
+    def working_files(self):
+        """Project files on disk, tracked or not.
+
+        Untracked prose has no content id, because Git has never seen it.
+        The field is empty rather than invented.
+        """
+
+        def read(backend):
+            result = backend._execute((
+                "ls-files", "--cached", "--others", "--exclude-standard",
+                "-z", "--", *backend.repository.project_paths,
+            ))
+            return tuple(
+                GitFile(path=record.decode("utf-8", errors="replace"),
+                        content_id="")
+                for record in result.stdout.split(b"\0")
+                if record
+            )
+
+        return self._answer(read)
+
+    def read_working_file(self, path):
+        """One file's text from disk, scoped to what working_files lists."""
+
+        wanted = str(path)
+
+        def read(backend):
+            listed = {entry.path for entry in self.working_files().unwrap()}
+            if wanted not in listed:
+                raise GitRevisionError(
+                    "{!r} is not a project file in the working tree."
+                    .format(wanted)
+                )
+            location = os.path.join(backend.repository.root, wanted)
+            with open(location, "rb") as handle:
+                return handle.read().decode("utf-8", errors="replace")
+
+        return self._answer(read)
+
+    def sources(self, revisions=()):
+        """Every place a passage might be, newest first.
+
+        The working tree and the index come first because prose found there
+        is the most recent it could be, and a reader hunting for where
+        something came from wants to know it is not yet committed.
+        """
+
+        found = [WorkingTree(self), StagedIndex(self)]
+        for commit in revisions:
+            found.append(CommittedRevision(
+                self,
+                getattr(commit, "commit_id", commit),
+                getattr(commit, "subject", ""),
+            ))
+        return tuple(found)
 
     def _answer(self, read, unknown_revision=False):
         snapshot = self.availability()

@@ -224,3 +224,192 @@ def test_the_capability_is_published_in_the_catalogue():
     )
 
     assert CAPABILITY_GIT_HISTORY in capability_catalogue()
+
+
+class TreeBackend(FakeBackend):
+    """A worktree with two project files, one of them unchanged."""
+
+    ENTRIES = (
+        ("book/chapter-1.md", "aaaa111"),
+        ("book/chapter-2.md", "bbbb222"),
+    )
+
+    def resolve_commit(self, revision):
+        if revision == "nope":
+            raise GitRevisionError("unknown revision")
+        return "0123456789abcdef"
+
+    def tree_entries(self, commit_id):
+        return list(self.ENTRIES)
+
+    def read_blobs(self, object_ids):
+        return {
+            object_id: "She left quietly.".encode("utf-8")
+            for object_id in object_ids
+        }
+
+
+def tree_capability(monkeypatch):
+    import manuskript.services.git_history_capability as module
+
+    class Report:
+        git_installed = True
+        repository_root = "/repo"
+
+    monkeypatch.setattr(
+        module, "inspect_git_availability",
+        lambda project_file, runner=None: Report(),
+    )
+    return GitHistoryCapability(
+        "/project/book.msk",
+        backend_factory=lambda project_file, runner=None: TreeBackend(
+            project_file, runner
+        ),
+    )
+
+
+def test_listing_a_revision_carries_content_identities(monkeypatch):
+    """The identity is what lets a caller skip a blob it has already read."""
+
+    git = tree_capability(monkeypatch)
+
+    files = git.files("HEAD").unwrap()
+
+    assert [entry.path for entry in files] == [
+        "book/chapter-1.md", "book/chapter-2.md",
+    ]
+    assert files[0].content_id == "aaaa111"
+
+
+def test_a_project_file_reads_back_as_text(monkeypatch):
+    git = tree_capability(monkeypatch)
+
+    assert git.read_file("HEAD", "book/chapter-1.md").unwrap() == (
+        "She left quietly."
+    )
+
+
+def test_a_path_outside_the_project_is_refused(monkeypatch):
+    """Listing is scoped, so reading must be scoped by the same list.
+
+    Addressing by content id instead would hand out a way around that: an
+    object id names anything in the repository.
+    """
+
+    git = tree_capability(monkeypatch)
+
+    answer = git.read_file("HEAD", "../../etc/passwd")
+
+    assert not answer.ok
+    assert "not a project file" in answer.error.message
+
+
+def test_reading_at_an_unknown_revision_answers_rather_than_raises(
+        monkeypatch):
+    git = tree_capability(monkeypatch)
+
+    answer = git.read_file("nope", "book/chapter-1.md")
+
+    assert not answer.ok
+    assert answer.error.code == "git.unknown_revision"
+
+
+class SourcesBackend(TreeBackend):
+    """Answers the index and the working tree as Git plumbing would."""
+
+    def __init__(self, project_file, runner=None, root=None):
+        super().__init__(project_file, runner)
+        self.repository = type("Repo", (), {
+            "root": root or "/repo",
+            "project_paths": ("book",),
+        })()
+
+    def _execute(self, arguments, **kwargs):
+        joined = " ".join(arguments)
+        if "--stage" in joined:
+            payload = b"100644 cccc333 0\tbook/staged.md\x00"
+        else:
+            payload = b"book/chapter-1.md\x00book/untracked.md\x00"
+        return type("Result", (), {"stdout": payload})()
+
+
+def sources_capability(monkeypatch, root=None):
+    import manuskript.services.git_history_capability as module
+
+    class Report:
+        git_installed = True
+        repository_root = "/repo"
+
+    monkeypatch.setattr(
+        module, "inspect_git_availability",
+        lambda project_file, runner=None: Report(),
+    )
+    return GitHistoryCapability(
+        "/project/book.msk",
+        backend_factory=lambda project_file, runner=None: SourcesBackend(
+            project_file, runner, root
+        ),
+    )
+
+
+def test_staged_prose_is_its_own_source_not_a_revision(monkeypatch):
+    """There is no commit to name, so it is not addressed like one."""
+
+    git = sources_capability(monkeypatch)
+
+    staged = git.staged_files().unwrap()
+
+    assert [entry.path for entry in staged] == ["book/staged.md"]
+    assert staged[0].content_id == "cccc333"
+
+
+def test_untracked_prose_has_no_content_identity(monkeypatch):
+    """Git has never seen it, so the field is empty rather than invented."""
+
+    git = sources_capability(monkeypatch)
+
+    working = git.working_files().unwrap()
+
+    assert "book/untracked.md" in [entry.path for entry in working]
+    assert all(entry.content_id == "" for entry in working)
+
+
+def test_a_working_file_outside_the_listing_is_refused(monkeypatch, tmp_path):
+    git = sources_capability(monkeypatch, root=str(tmp_path))
+
+    answer = git.read_working_file("../secrets.txt")
+
+    assert not answer.ok
+    assert "not a project file" in answer.error.message
+
+
+def test_a_working_file_reads_from_disk(monkeypatch, tmp_path):
+    (tmp_path / "book").mkdir()
+    (tmp_path / "book" / "chapter-1.md").write_text(
+        "Typed this morning.", encoding="utf-8"
+    )
+    git = sources_capability(monkeypatch, root=str(tmp_path))
+
+    assert git.read_working_file("book/chapter-1.md").unwrap() == (
+        "Typed this morning."
+    )
+
+
+def test_sources_put_uncommitted_prose_first(monkeypatch):
+    """Prose found on disk is the most recent it could be, so it leads."""
+
+    from manuskript.services.git_history_capability import (
+        CommittedRevision, StagedIndex, WorkingTree,
+    )
+
+    git = sources_capability(monkeypatch)
+
+    found = git.sources(revisions=("abc1234def",))
+
+    assert isinstance(found[0], WorkingTree)
+    assert isinstance(found[1], StagedIndex)
+    assert isinstance(found[2], CommittedRevision)
+    assert found[2].commit_id == "abc1234def"
+    assert [source.label for source in found[:2]] == [
+        "working tree", "staged",
+    ]
