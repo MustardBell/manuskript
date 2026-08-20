@@ -269,3 +269,23 @@ def test_project_outside_git_repository_is_unavailable(tmp_path):
         match="not contained",
     ):
         GitRevisionBackend(str(project_file))
+
+
+def test_history_carries_parents_including_for_a_root_commit(git_project):
+    """A root commit has no parents, and must not vanish for saying so.
+
+    Packing parents into the history format made exactly that happen: the
+    fields are NUL-separated and records are separated by two NULs, so an
+    empty trailing field ended the record early and the first commit in the
+    repository disappeared from its own history.
+    """
+
+    repository, project_file = git_project
+    backend = GitRevisionBackend(project_file)
+
+    revisions = backend.history()
+
+    assert revisions, "the root commit must still be reported"
+    assert revisions[-1].parents == ()
+    if len(revisions) > 1:
+        assert revisions[0].parents == (revisions[1].commit_id,)

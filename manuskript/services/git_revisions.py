@@ -135,6 +135,9 @@ class GitRevision:
     author_email: str
     subject: str
     tags: tuple = ()
+    #: Parent commit ids in Git's order, so a caller can tell a merge from a
+    #: straight line and a first parent from the branch that joined.
+    parents: tuple = ()
 
     @property
     def short_id(self):
@@ -336,6 +339,7 @@ class GitRevisionBackend:
 
     def history(self, *, tagged_only=False, limit=250):
         tags = self._tags_by_commit()
+        parents = self._parents_by_commit()
         arguments = [
             "log",
             "--date-order",
@@ -383,6 +387,7 @@ class GitRevisionBackend:
                     errors="replace",
                 ),
                 tags=tags.get(commit_id, ()),
+                parents=parents.get(commit_id, ()),
             )
             if tagged_only and not revision.tagged:
                 continue
@@ -390,6 +395,28 @@ class GitRevisionBackend:
             if tagged_only and limit and len(revisions) >= limit:
                 break
         return revisions
+
+    def _parents_by_commit(self):
+        """Parent ids per commit, asked for separately and on purpose.
+
+        The history format packs fields between NUL bytes and separates
+        records by two of them, so any empty field looks exactly like the end
+        of a record. A root commit has no parents, so adding them to that
+        format made root commits disappear. Tags are already fetched
+        separately for their own reasons; parents join them.
+        """
+
+        result = self._execute((
+            "log", "--format=%H %P", "--", *self.repository.project_paths,
+        ), allow_failure=True)
+        if result.return_code:
+            return {}
+        found = {}
+        for line in result.stdout.decode("ascii", errors="replace").split("\n"):
+            identifiers = line.split()
+            if identifiers:
+                found[identifiers[0]] = tuple(identifiers[1:])
+        return found
 
     def _tags_by_commit(self):
         result = self._execute((

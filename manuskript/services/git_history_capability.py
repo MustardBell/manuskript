@@ -140,6 +140,7 @@ class GitCommit:
     subject: str
     author_name: str = ""
     tags: tuple = ()
+    parents: tuple = ()
 
     @property
     def short_id(self):
@@ -276,6 +277,7 @@ class GitHistoryCapability:
                     subject=revision.subject,
                     author_name=revision.author_name,
                     tags=tuple(revision.tags),
+                    parents=tuple(getattr(revision, "parents", ())),
                 )
                 for revision in backend.history(
                     tagged_only=tagged_only, limit=limit
