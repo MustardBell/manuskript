@@ -22,7 +22,7 @@ observes them.
 
 import os
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional
 
 from manuskript.plugins.leases import CAPABILITY_REVOKED
@@ -42,6 +42,8 @@ GIT_FAILED = "git.failed"
 GIT_UNKNOWN_REVISION = "git.unknown_revision"
 #: What was listed is not what is there any more.
 GIT_SOURCE_CHANGED = "git.source_changed"
+#: The file holds an unresolved merge, so its text is not anyone's prose.
+GIT_UNMERGED = "git.unmerged"
 #: The catalogue name this capability is granted under.
 CAPABILITY_GIT_HISTORY_NAME = "git.history"
 
@@ -146,6 +148,33 @@ class GitFile:
 
 
 @dataclass(frozen=True)
+class BlameOrigin:
+    """Where Git says a run of lines was last written.
+
+    Three states rather than a hash, because two of them are not commits and
+    were being reported as if they were. Lines a writer has edited and not
+    committed carry Git's all-zero identity, which is forty zeroes in a SHA-1
+    repository and passed for a hash. And a commit Git stopped at is not
+    necessarily where the words began: in a shallow clone it is merely as far
+    back as the clone was allowed to look.
+
+    A root commit is also reported by Git as a boundary, which is why
+    ``truncated`` exists separately. At a true root "as far as Git looked" and
+    "as far back as there is" are the same statement, and telling a reader
+    their answer might be older when nothing is older teaches them to
+    distrust the one certain answer.
+    """
+
+    commit_id: str = ""
+    #: Not committed yet: a working-tree edit, or an unresolved conflict.
+    uncommitted: bool = False
+    #: Git would not look further back through this commit.
+    boundary: bool = False
+    #: And the history really is incomplete here, so the words may be older.
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class GitCommit:
     """One commit, in the terms a reader picks one out by."""
 
@@ -227,6 +256,91 @@ def _working_entries(backend):
             continue
         found.append(GitFile(path=path, content_id=""))
     return tuple(found)
+
+
+def _is_object_id(field):
+    """Hexadecimal and nothing else, at whatever width this repository uses.
+
+    Deliberately not a length test. SHA-1 identifiers are forty characters
+    and SHA-256 identifiers are sixty-four, and code that checks for forty is
+    describing one repository format while claiming to parse Git.
+    """
+
+    return bool(field) and all(
+        character in "0123456789abcdef" for character in field
+    )
+
+
+def _uncommitted_id(identifier):
+    """Git's identity for lines that are not in any commit: all zeroes."""
+
+    return bool(identifier) and set(identifier) == {"0"}
+
+
+def _parse_incremental_blame(payload):
+    """Origins from ``git blame --incremental``, in the order Git reports.
+
+    Parsed as the documented grammar -- a header of an object id and three
+    line numbers, then tagged records until ``filename`` closes the entry,
+    with unknown tags ignored so a future Git can add them.
+
+    An earlier version parsed ``--porcelain`` by the *shape* of a line: four
+    whitespace-separated fields whose first was forty characters long. That
+    is a description of SHA-1 output rather than a rule, so in a SHA-256
+    repository it matched nothing and the search reported success with no
+    results. It could also match a line of prose that happened to contain a
+    forty-character hexadecimal word. ``--incremental`` omits file contents
+    altogether, which removes that second class of mistake by construction.
+
+    The order is Git's resolution order: neither line order nor chronology,
+    and callers must not present it as either.
+    """
+
+    seen = []
+    boundaries = set()
+    current = None
+    for line in payload.decode("utf-8", errors="replace").splitlines():
+        if current is None:
+            fields = line.split(" ")
+            if (
+                len(fields) >= 4
+                and _is_object_id(fields[0])
+                and all(field.isdigit() for field in fields[1:4])
+            ):
+                current = fields[0]
+                if current not in seen:
+                    seen.append(current)
+            continue
+        if line == "boundary":
+            boundaries.add(current)
+        elif line.startswith("filename "):
+            # The value is a quoted pathname, but it is only ever a
+            # terminator here, so it is never unquoted and never trusted.
+            current = None
+    return tuple(
+        BlameOrigin(
+            commit_id="" if _uncommitted_id(identifier) else identifier,
+            uncommitted=_uncommitted_id(identifier),
+            boundary=identifier in boundaries,
+        )
+        for identifier in seen
+    )
+
+
+def _is_shallow(backend):
+    """Whether this clone's history has a floor Git cannot see past."""
+
+    result = backend._execute(("rev-parse", "--is-shallow-repository"))
+    return result.stdout.decode("ascii", errors="replace").strip() == "true"
+
+
+def _is_unmerged(backend, path):
+    """Whether the path is in the middle of an unresolved merge."""
+
+    result = backend._execute((
+        "ls-files", "--unmerged", "-z", "--", path,
+    ))
+    return bool(result.stdout.strip(b"\0"))
 
 
 class TextSource:
@@ -519,20 +633,28 @@ class GitHistoryCapability:
 
         return self._answer(read)
 
-    def blame(self, path, first_line, last_line):
-        """Which commits last touched these lines, newest state first.
+    def blame(self, path, ranges):
+        """Which commits last wrote these lines, as evidence rather than proof.
 
-        The direct answer to where prose that is on disk came from. Walking
-        history reads every version of every file to find out; blame asks
-        Git, which already knows, and answers in one pass.
+        Blame is the fastest way to find where prose on disk came from, and
+        it answers a narrower question than a reader asks. Git attributes
+        each *line* to the revision that last modified it, so a passage whose
+        surrounding sentence was edited yesterday is attributed to yesterday
+        even though the words are years old. These are origin hints. What is
+        earliest is settled by reading history, not here.
 
         Whitespace is ignored and moved text is followed within a file and
         between files, because prose gets reflowed and scenes get shuffled
         between chapters, and neither means the words are new.
+
+        ``ranges`` is every line range worth asking about, so a passage a
+        writer used twice is one call rather than one answer.
         """
 
         wanted = str(path)
-        first, last = int(first_line), int(last_line)
+        asked = tuple(
+            (max(1, int(first)), max(1, int(last))) for first, last in ranges
+        )
 
         def read(backend):
             if wanted not in {
@@ -542,21 +664,36 @@ class GitHistoryCapability:
                     "{!r} is not a project file in the working tree."
                     .format(wanted)
                 )
-            result = backend._execute((
-                "blame", "--porcelain", "-w", "-M", "-C",
-                "-L", "{},{}".format(max(1, first), max(1, last)),
-                "--", wanted,
-            ))
-            found = []
-            for line in result.stdout.decode(
-                "utf-8", errors="replace"
-            ).splitlines():
-                fields = line.split()
-                if len(fields) == 4 and len(fields[0]) == 40:
-                    identifier = fields[0]
-                    if identifier not in found:
-                        found.append(identifier)
-            return tuple(found)
+            if _is_unmerged(backend, wanted):
+                # A conflicted file is not a manuscript. Its text is two
+                # drafts and three markers, and because normalization throws
+                # punctuation away, prose either side of a "=======" reads as
+                # one continuous passage that no commit ever contained.
+                raise GitError(
+                    GIT_UNMERGED,
+                    "{!r} has an unresolved merge, so where its text came "
+                    "from cannot be answered until it is resolved."
+                    .format(wanted),
+                )
+            if not asked:
+                return ()
+            arguments = ["blame", "--incremental", "-w", "-M", "-C"]
+            for first, last in asked:
+                arguments += ["-L", "{},{}".format(first, last)]
+            arguments += ["--", wanted]
+            result = backend._execute(tuple(arguments))
+            origins = _parse_incremental_blame(result.stdout)
+            if not any(origin.boundary for origin in origins):
+                return origins
+            # Only a shallow clone makes a boundary mean "there is more you
+            # cannot see". Grafts and replacements are taken at face value:
+            # this promises effective Git history, which is the history the
+            # reader's own commands would show them.
+            shallow = _is_shallow(backend)
+            return tuple(
+                replace(origin, truncated=origin.boundary and shallow)
+                for origin in origins
+            )
 
         return self._answer(read)
 
@@ -620,6 +757,11 @@ class GitHistoryCapability:
                 self._project_file, runner=self._runner
             )
             return GitAnswer(value=read(backend))
+        except GitError as error:
+            # A read that already knows which failure this is says so. The
+            # alternative is flattening every refusal into "git failed",
+            # which is exactly the ambiguity the code field exists to end.
+            return GitAnswer(error=error)
         except GitNotAvailableError as error:
             return GitAnswer(error=GitError(GIT_UNAVAILABLE, str(error)))
         except GitSourceChanged as error:

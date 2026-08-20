@@ -386,8 +386,206 @@ def test_blame_names_the_commit_that_last_wrote_these_lines(git_project):
     run_git(repository, "commit", "-m", "added elsewhere")
 
     blamed = GitHistoryCapability(project_file).blame(
-        "book/outline/scene.md", 2, 2
+        "book/outline/scene.md", [(2, 2)]
     )
 
     assert blamed.ok, blamed.error
-    assert blamed.value == (wanted,)
+    assert [origin.commit_id for origin in blamed.value] == [wanted]
+    assert not blamed.value[0].uncommitted
+
+
+def test_blame_is_parsed_at_whatever_width_the_repository_hashes_at():
+    """A parser that checks for forty characters is not parsing Git.
+
+    SHA-256 repositories identify objects in sixty-four characters. The old
+    parser kept any line of four fields whose first was forty long, so in
+    such a repository it matched nothing, the capability answered with an
+    empty tuple, and the panel reported a successful search that had found
+    the passage nowhere.
+    """
+
+    from manuskript.services.git_history_capability import (
+        _parse_incremental_blame,
+    )
+
+    wide = "a1" * 32  # sixty-four characters, as SHA-256 writes them
+    payload = (
+        "{} 1 1 2\n"
+        "author Revision Tester\n"
+        "summary wrote the scene\n"
+        "filename book/outline/scene.md\n"
+    ).format(wide).encode("utf-8")
+
+    origins = _parse_incremental_blame(payload)
+
+    assert [origin.commit_id for origin in origins] == [wide]
+
+
+def test_blame_parsing_ignores_records_a_later_git_might_add():
+    """Unknown tags are skipped, which is what the format asks of readers."""
+
+    from manuskript.services.git_history_capability import (
+        _parse_incremental_blame,
+    )
+
+    payload = (
+        "b" * 40 + " 1 1 1\n"
+        "author Revision Tester\n"
+        "something-git-invented later\n"
+        "boundary\n"
+        "filename book/outline/scene.md\n"
+    ).encode("utf-8")
+
+    (origin,) = _parse_incremental_blame(payload)
+
+    assert origin.commit_id == "b" * 40
+    assert origin.boundary
+
+
+def test_blame_answers_about_every_range_in_one_call(git_project):
+    """A passage a writer used twice is two questions and one command."""
+
+    from manuskript.services.git_history_capability import GitHistoryCapability
+
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("the refrain\nsomething else\n", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "wrote the refrain")
+    first = run_git(repository, "rev-parse", "HEAD").stdout.decode().strip()
+    scene.write_text(
+        "the refrain\nsomething else\nthe refrain\n", encoding="utf-8"
+    )
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "used it again")
+    second = run_git(repository, "rev-parse", "HEAD").stdout.decode().strip()
+
+    blamed = GitHistoryCapability(project_file).blame(
+        "book/outline/scene.md", [(1, 1), (3, 3)]
+    )
+
+    assert blamed.ok, blamed.error
+    assert {origin.commit_id for origin in blamed.value} == {first, second}
+
+
+def test_blame_reports_uncommitted_lines_as_uncommitted_not_as_a_hash(
+    git_project,
+):
+    """Git's all-zero identity is not a commit and must never be copyable.
+
+    In a SHA-1 repository it is forty zeroes, which passed every test the
+    old parser made of a hash, so "Not Committed Yet" was offered to a
+    reader as the commit their prose came from.
+    """
+
+    from manuskript.services.git_history_capability import GitHistoryCapability
+
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("committed line\n", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "wrote a line")
+    scene.write_text("committed line\njust typed this\n", encoding="utf-8")
+
+    blamed = GitHistoryCapability(project_file).blame(
+        "book/outline/scene.md", [(2, 2)]
+    )
+
+    assert blamed.ok, blamed.error
+    (origin,) = blamed.value
+    assert origin.uncommitted
+    assert origin.commit_id == ""
+
+
+def test_blame_refuses_a_file_in_the_middle_of_a_merge(git_project):
+    """Conflicted text is two drafts and three markers, not anyone's prose.
+
+    Git blames it happily, attributing the markers to nobody and each side
+    to the history it came from. Worse, normalization discards punctuation,
+    so prose either side of a "=======" reads as one continuous passage that
+    no commit ever contained -- and the search would report provenance for
+    it confidently.
+    """
+
+    from manuskript.services.git_history_capability import (
+        GIT_UNMERGED,
+        GitHistoryCapability,
+    )
+
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("base\n", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "base")
+    trunk = run_git(
+        repository, "rev-parse", "--abbrev-ref", "HEAD"
+    ).stdout.decode().strip()
+    run_git(repository, "checkout", "-q", "-b", "side")
+    scene.write_text("theirs\n", encoding="utf-8")
+    run_git(repository, "commit", "-q", "-am", "theirs")
+    run_git(repository, "checkout", "-q", trunk)
+    scene.write_text("ours\n", encoding="utf-8")
+    run_git(repository, "commit", "-q", "-am", "ours")
+    subprocess.run(  # conflicts on purpose, so it must not be checked
+        ["git", "-C", str(repository), "merge", "side"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+
+    blamed = GitHistoryCapability(project_file).blame(
+        "book/outline/scene.md", [(1, 5)]
+    )
+
+    assert not blamed.ok
+    assert blamed.error.code == GIT_UNMERGED
+
+
+def test_blame_distinguishes_a_root_from_a_history_it_cannot_see_past(
+    git_project, tmp_path
+):
+    """Git calls both a boundary, and only one of them is certain.
+
+    A root commit means "nothing precedes this". A shallow clone's floor
+    means "you were not given what precedes this". Reporting them alike
+    either teaches a reader to doubt a certain answer or hides an uncertain
+    one.
+    """
+
+    from manuskript.services.git_history_capability import GitHistoryCapability
+
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("the oldest words\nand more\n", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "wrote more")
+
+    # "settings.txt" has not changed since the project's first commit, so
+    # blaming it reaches a real root: nothing precedes it, and Git says
+    # boundary because there is genuinely nothing there.
+    root = GitHistoryCapability(project_file).blame(
+        "book/settings.txt", [(1, 1)]
+    )
+
+    assert root.ok, root.error
+    assert root.value[0].boundary
+    assert not root.value[0].truncated
+
+    # And a commit Git can see past is not a boundary at all.
+    whole = GitHistoryCapability(project_file).blame(
+        "book/outline/scene.md", [(1, 1)]
+    )
+
+    assert whole.ok, whole.error
+    assert not whole.value[0].boundary
+
+    clone = tmp_path.parent / "shallow"
+    run_git(
+        tmp_path, "clone", "-q", "--depth", "1",
+        "file://{}".format(repository), str(clone),
+    )
+    shallow = GitHistoryCapability(str(clone / "book.msk")).blame(
+        "book/outline/scene.md", [(1, 1)]
+    )
+
+    assert shallow.ok, shallow.error
+    assert shallow.value[0].boundary
+    assert shallow.value[0].truncated
