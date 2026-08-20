@@ -450,3 +450,100 @@ def test_the_working_tree_does_not_offer_files_the_disk_lacks(
     # The double lists chapter-1.md and untracked.md; only the first exists.
     assert "book/chapter-1.md" in listed
     assert "book/untracked.md" not in listed
+
+
+class ConflictBackend(SourcesBackend):
+    """An index mid-merge, and a symlink pointing out of the project."""
+
+    def _execute(self, arguments, **kwargs):
+        joined = " ".join(arguments)
+        if "--stage" in joined:
+            payload = (
+                b"100644 aaa111 1\tbook/fight.md\x00"
+                b"100644 bbb222 2\tbook/fight.md\x00"
+                b"100644 ccc333 3\tbook/fight.md\x00"
+                b"100644 ddd444 0\tbook/calm.md\x00"
+                b"120000 eee555 0\tbook/link.md\x00"
+            )
+        else:
+            payload = b"book/calm.md\x00book/escape.md\x00"
+        return type("Result", (), {"stdout": payload})()
+
+
+def conflict_capability(monkeypatch, root):
+    import manuskript.services.git_history_capability as module
+
+    class Report:
+        git_installed = True
+        repository_root = root
+
+    monkeypatch.setattr(
+        module, "inspect_git_availability",
+        lambda project_file, runner=None: Report(),
+    )
+    return GitHistoryCapability(
+        "/project/book.msk",
+        backend_factory=lambda project_file, runner=None: ConflictBackend(
+            project_file, runner, root
+        ),
+    )
+
+
+def test_a_conflicted_path_is_not_offered_as_staged_prose(
+        monkeypatch, tmp_path):
+    """Stages one, two and three are an unresolved argument, not a file."""
+
+    git = conflict_capability(monkeypatch, str(tmp_path))
+
+    staged = {entry.path for entry in git.staged_files().unwrap()}
+
+    assert "book/fight.md" not in staged
+    assert "book/calm.md" in staged
+
+
+def test_a_staged_symlink_is_not_read_as_prose(monkeypatch, tmp_path):
+    git = conflict_capability(monkeypatch, str(tmp_path))
+
+    staged = {entry.path for entry in git.staged_files().unwrap()}
+
+    assert "book/link.md" not in staged
+
+
+def test_a_working_symlink_cannot_reach_outside_the_project(
+        monkeypatch, tmp_path):
+    """isfile follows links, so the check has to refuse them itself.
+
+    A link inside the project pointing anywhere at all would otherwise be
+    read as manuscript prose -- the escape that refusing blob ids was meant
+    to prevent, arriving by another door.
+    """
+
+    outside = tmp_path.parent / "outside.txt"
+    outside.write_text("not the manuscript", encoding="utf-8")
+    root = tmp_path / "repo"
+    (root / "book").mkdir(parents=True)
+    (root / "book" / "calm.md").write_text("prose", encoding="utf-8")
+    (root / "book" / "escape.md").symlink_to(outside)
+    git = conflict_capability(monkeypatch, str(root))
+
+    listed = {entry.path for entry in git.working_files().unwrap()}
+
+    assert "book/calm.md" in listed
+    assert "book/escape.md" not in listed
+    assert not git.read_working_file("book/escape.md").ok
+
+
+def test_a_staged_file_read_after_it_changed_is_refused(monkeypatch, tmp_path):
+    """Listing and reading are two moments, and the index moves between them.
+
+    Serving the new bytes under the identity the caller was given would let
+    a search file blob B's text under blob A's name, and every later commit
+    holding A would then be answered from B.
+    """
+
+    git = conflict_capability(monkeypatch, str(tmp_path))
+
+    stale = git.read_staged_file("book/calm.md", expected_content_id="old")
+
+    assert not stale.ok
+    assert stale.error.code == "git.source_changed"

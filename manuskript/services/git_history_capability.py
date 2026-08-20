@@ -39,6 +39,12 @@ GIT_UNAVAILABLE = "git.unavailable"
 GIT_FAILED = "git.failed"
 #: The caller asked for something Git could not identify.
 GIT_UNKNOWN_REVISION = "git.unknown_revision"
+#: What was listed is not what is there any more.
+GIT_SOURCE_CHANGED = "git.source_changed"
+
+
+class GitSourceChanged(GitRevisionError):
+    """The thing being read stopped being the thing that was listed."""
 
 
 class GitError(RuntimeError):
@@ -147,6 +153,74 @@ class GitCommit:
         return self.commit_id[:10]
 
 
+def _staged_entries(backend):
+    """Project files in the index, at stage zero only.
+
+    A conflicted path is reported at stages 1, 2 and 3 -- base, ours,
+    theirs. Treating those as ordinary entries lets whichever survives a
+    dictionary become "the staged file", chosen by parse order rather than
+    by anything meaningful. Stage zero is the index; the rest is an
+    unresolved argument, and prose is not read out of one.
+
+    Symlinks are refused for the same reason tree entries refuse them: the
+    target's text is not this project's prose, and following one leaves the
+    scope the caller was granted.
+    """
+
+    result = backend._execute((
+        "ls-files", "--stage", "-z", "--",
+        *backend.repository.project_paths,
+    ))
+    entries = []
+    for record in result.stdout.split(b"\0"):
+        if not record:
+            continue
+        metadata, separator, raw_path = record.partition(b"\t")
+        if not separator:
+            continue
+        fields = metadata.split(b" ")
+        if len(fields) != 3:
+            continue
+        mode, object_id, stage = fields
+        if stage != b"0" or mode == b"120000":
+            continue
+        entries.append(GitFile(
+            path=raw_path.decode("utf-8", errors="replace"),
+            content_id=object_id.decode("ascii"),
+        ))
+    return tuple(entries)
+
+
+def _working_entries(backend):
+    """Project files on disk, tracked or not, that are really files.
+
+    ``--cached`` reports the index, which remembers what disk no longer
+    holds. And ``isfile`` follows symlinks, so a link inside the project
+    pointing anywhere at all would be read as manuscript prose -- the same
+    escape from project scope that refusing blob ids was meant to prevent.
+    Both are settled here rather than trusted to the caller.
+    """
+
+    result = backend._execute((
+        "ls-files", "--cached", "--others", "--exclude-standard",
+        "-z", "--", *backend.repository.project_paths,
+    ))
+    root = os.path.realpath(backend.repository.root)
+    found = []
+    for record in result.stdout.split(b"\0"):
+        if not record:
+            continue
+        path = record.decode("utf-8", errors="replace")
+        location = os.path.join(root, path)
+        if os.path.islink(location) or not os.path.isfile(location):
+            continue
+        resolved = os.path.realpath(location)
+        if os.path.commonpath((root, resolved)) != root:
+            continue
+        found.append(GitFile(path=path, content_id=""))
+    return tuple(found)
+
+
 class TextSource:
     """Somewhere a passage of prose might be found.
 
@@ -202,8 +276,8 @@ class StagedIndex(TextSource):
     def files(self):
         return self.capability.staged_files()
 
-    def read(self, path):
-        return self.capability.read_staged_file(path)
+    def read(self, path, expected_content_id=""):
+        return self.capability.read_staged_file(path, expected_content_id)
 
 
 class WorkingTree(TextSource):
@@ -355,47 +429,41 @@ class GitHistoryCapability:
     def staged_files(self):
         """Project files in the index, with their staged content ids."""
 
-        def read(backend):
-            result = backend._execute((
-                "ls-files", "--stage", "-z", "--",
-                *backend.repository.project_paths,
-            ))
-            entries = []
-            for record in result.stdout.split(b"\0"):
-                if not record:
-                    continue
-                metadata, separator, raw_path = record.partition(b"\t")
-                if not separator:
-                    continue
-                fields = metadata.split(b" ")
-                if len(fields) != 3:
-                    continue
-                entries.append(GitFile(
-                    path=raw_path.decode("utf-8", errors="replace"),
-                    content_id=fields[1].decode("ascii"),
-                ))
-            return tuple(entries)
+        return self._answer(_staged_entries)
 
-        return self._answer(read)
+    def read_staged_file(self, path, expected_content_id=""):
+        """One staged file's text, by the path the index lists it under.
 
-    def read_staged_file(self, path):
-        """One staged file's text, by the path the index lists it under."""
+        The index is not a snapshot. Listing it and then reading from it are
+        two moments, and a writer staging work between them changes what the
+        second one finds. A caller that remembers what it was offered can
+        say so, and a mismatch is reported rather than served: the caller
+        had been about to file the new bytes under the old identity, which
+        would poison a cache keyed by that identity for the rest of the
+        search.
+        """
 
         wanted = str(path)
 
         def read(backend):
             staged = {
                 entry.path: entry.content_id
-                for entry in self.staged_files().unwrap()
+                for entry in _staged_entries(backend)
             }
             if wanted not in staged:
                 raise GitRevisionError(
                     "{!r} is not a staged project file.".format(wanted)
                 )
-            blobs = backend.read_blobs((staged[wanted],))
-            return blobs[staged[wanted]].decode("utf-8", errors="replace")
+            found = staged[wanted]
+            if expected_content_id and found != expected_content_id:
+                raise GitSourceChanged(
+                    "{!r} was staged again while it was being read."
+                    .format(wanted)
+                )
+            blobs = backend.read_blobs((found,))
+            return blobs[found].decode("utf-8", errors="replace")
 
-        return self._answer(read)
+        return self._answer(read, source_changed=True)
 
     def working_files(self):
         """Project files on disk, tracked or not.
@@ -404,25 +472,7 @@ class GitHistoryCapability:
         The field is empty rather than invented.
         """
 
-        def read(backend):
-            result = backend._execute((
-                "ls-files", "--cached", "--others", "--exclude-standard",
-                "-z", "--", *backend.repository.project_paths,
-            ))
-            root = backend.repository.root
-            found = []
-            for record in result.stdout.split(b"\0"):
-                if not record:
-                    continue
-                path = record.decode("utf-8", errors="replace")
-                # --cached lists the index, which remembers files the disk
-                # no longer has: staged deletions, renames not yet
-                # committed. The working tree is what is actually there.
-                if os.path.isfile(os.path.join(root, path)):
-                    found.append(GitFile(path=path, content_id=""))
-            return tuple(found)
-
-        return self._answer(read)
+        return self._answer(_working_entries)
 
     def read_working_file(self, path):
         """One file's text from disk, scoped to what working_files lists."""
@@ -430,7 +480,7 @@ class GitHistoryCapability:
         wanted = str(path)
 
         def read(backend):
-            listed = {entry.path for entry in self.working_files().unwrap()}
+            listed = {entry.path for entry in _working_entries(backend)}
             if wanted not in listed:
                 raise GitRevisionError(
                     "{!r} is not a project file in the working tree."
@@ -459,8 +509,15 @@ class GitHistoryCapability:
             ))
         return tuple(found)
 
-    def _answer(self, read, unknown_revision=False):
-        snapshot = self.availability()
+    def _answer(self, read, unknown_revision=False, source_changed=False):
+        try:
+            snapshot = self.availability()
+        except OSError as error:
+            # Asking whether Git exists runs Git, and launching a process
+            # can fail for reasons that are not Git's. "Never fails" has to
+            # survive that too, or the promise holds only while nothing is
+            # wrong.
+            return GitAnswer(error=GitError(GIT_UNAVAILABLE, str(error)))
         if not snapshot.usable:
             return GitAnswer(error=GitError(
                 GIT_UNAVAILABLE,
@@ -478,6 +535,8 @@ class GitHistoryCapability:
             return GitAnswer(value=read(backend))
         except GitNotAvailableError as error:
             return GitAnswer(error=GitError(GIT_UNAVAILABLE, str(error)))
+        except GitSourceChanged as error:
+            return GitAnswer(error=GitError(GIT_SOURCE_CHANGED, str(error)))
         except GitRevisionError as error:
             code = GIT_UNKNOWN_REVISION if unknown_revision else GIT_FAILED
             return GitAnswer(error=GitError(code, str(error)))
