@@ -19,6 +19,15 @@ PLUGIN_API_VERSION = int(_PROTOCOL_SPECIFICATION["api_version"])
 PLUGIN_API_STABILITY = "draft"
 PLUGIN_PROTOCOL_VERSION = int(_PROTOCOL_SPECIFICATION["protocol_version"])
 
+#: A grant a plugin was holding has ended: it was disabled or reloaded, the
+#: project was closed or replaced, or the grant was withdrawn by name.
+#:
+#: Published here rather than kept inside the authority because it is a wire
+#: value. A plugin in another language receives this same string and must be
+#: able to recognise it, which is also why a plugin naming the literal is
+#: reading the protocol rather than duplicating an implementation detail.
+CAPABILITY_REVOKED = "plugin.capability_revoked"
+
 
 class ContractPortability(str, Enum):
     """How a contract can be supplied by a plugin runtime."""

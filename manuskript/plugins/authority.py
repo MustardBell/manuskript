@@ -45,10 +45,11 @@ import threading
 
 from dataclasses import dataclass
 
-
 #: The lease is gone: the plugin was disabled or reloaded, the project was
-#: closed or replaced, or the grant was withdrawn.
-CAPABILITY_REVOKED = "plugin.capability_revoked"
+#: closed or replaced, or the grant was withdrawn. Defined with the rest of
+#: the transport-neutral contract, because a plugin that has to recognise it
+#: may be reading it off a wire rather than importing it.
+from manuskript.plugins.contracts import CAPABILITY_REVOKED  # noqa: F401
 
 
 @dataclass(frozen=True)
