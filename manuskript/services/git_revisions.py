@@ -342,6 +342,12 @@ class GitRevisionBackend:
         parents = self._parents_by_commit()
         arguments = [
             "log",
+            # Default path history prunes a side branch whose merge was
+            # TREESAME to one parent, which for provenance means prose can
+            # live in a reachable commit the search never sees. Reproduced:
+            # a passage written on a branch, resolved away at the merge,
+            # is absent from the default log and present under this flag.
+            "--full-history",
             "--date-order",
             "-z",
             "--format=%H%x00%ct%x00%an%x00%ae%x00%s%x00",
@@ -414,7 +420,7 @@ class GitRevisionBackend:
         # without it every commit looks like a first appearance, because
         # none of them can see its predecessor.
         result = self._execute((
-            "log", "--parents", "--format=%H %P",
+            "log", "--full-history", "--parents", "--format=%H %P",
             "--", *self.repository.project_paths,
         ), allow_failure=True)
         if result.return_code:

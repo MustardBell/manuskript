@@ -266,8 +266,15 @@ class GitHistoryCapability:
 
     # -- reading ---------------------------------------------------------
 
-    def history(self, *, limit=250, tagged_only=False):
-        """Commits touching this project, newest first."""
+    def history(self, *, limit=None, tagged_only=False):
+        """Commits touching this project, newest first.
+
+        ``limit=None`` means all of them, and is the default because the
+        callers that matter are asking about provenance. A limit here is a
+        silent false negative: prose older than the cut is reported as
+        absent rather than as unsearched, and no amount of care further
+        down can recover a commit that was never offered.
+        """
 
         def read(backend):
             return tuple(
@@ -280,7 +287,7 @@ class GitHistoryCapability:
                     parents=tuple(getattr(revision, "parents", ())),
                 )
                 for revision in backend.history(
-                    tagged_only=tagged_only, limit=limit
+                    tagged_only=tagged_only, limit=limit or 0
                 )
             )
 

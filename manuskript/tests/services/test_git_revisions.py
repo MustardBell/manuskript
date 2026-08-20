@@ -327,3 +327,36 @@ def test_parents_connect_the_history_that_was_actually_searched(git_project):
         revision.subject for revision in revisions
     ]
     assert len(set(identifiers)) == len(identifiers)
+
+
+def test_history_keeps_a_branch_whose_merge_resolved_against_it(git_project):
+    """Default path simplification loses provenance.
+
+    Git may prune a side branch entirely when the merge is TREESAME to one
+    parent. For provenance that means prose can live in a reachable commit
+    the search never sees: written on a branch, resolved away at the merge,
+    absent from the log and therefore reported as never having existed.
+    """
+
+    repository, project_file = git_project
+    scene = repository / "book" / "outline" / "scene.md"
+    run_git(repository, "checkout", "-b", "side")
+    scene.write_text("secret passage", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "side prose")
+    run_git(repository, "checkout", "-")
+    scene.write_text("trunk prose", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "trunk prose")
+    run_git(repository, "merge", "--no-commit", "-s", "ours", "side")
+    run_git(repository, "commit", "-m", "merge keeping trunk")
+
+    subjects = [
+        revision.subject
+        for revision in GitRevisionBackend(project_file).history()
+    ]
+
+    assert "side prose" in subjects, (
+        "the branch the merge resolved against was pruned from history"
+    )
+    assert "merge keeping trunk" in subjects
