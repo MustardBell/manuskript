@@ -406,8 +406,16 @@ class GitRevisionBackend:
         separately for their own reasons; parents join them.
         """
 
+        # --parents is the whole point rather than decoration. History here
+        # is limited to the project's paths, so the surviving commits are a
+        # subsequence of the graph and their true parents are mostly not
+        # among them. Git rewrites the edges to the nearest surviving
+        # ancestor when asked, which makes the filtered history connected --
+        # without it every commit looks like a first appearance, because
+        # none of them can see its predecessor.
         result = self._execute((
-            "log", "--format=%H %P", "--", *self.repository.project_paths,
+            "log", "--parents", "--format=%H %P",
+            "--", *self.repository.project_paths,
         ), allow_failure=True)
         if result.return_code:
             return {}

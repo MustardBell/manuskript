@@ -289,3 +289,41 @@ def test_history_carries_parents_including_for_a_root_commit(git_project):
     assert revisions[-1].parents == ()
     if len(revisions) > 1:
         assert revisions[0].parents == (revisions[1].commit_id,)
+
+
+def test_parents_connect_the_history_that_was_actually_searched(git_project):
+    """History is limited to the project, so its edges must be too.
+
+    The log is filtered to project paths, which makes the surviving commits
+    a subsequence of the graph. Their true parents are mostly not among
+    them, so a caller asking "did this commit's parent already have the
+    passage?" always heard no, and every match looked like a first
+    appearance. Git rewrites the edges to the nearest surviving ancestor
+    when asked; this checks that it was asked.
+    """
+
+    repository, project_file = git_project
+    # A commit that does not touch the project at all, between two that do.
+    (repository / "unrelated.txt").write_text("noise", encoding="utf-8")
+    run_git(repository, "add", "unrelated.txt")
+    run_git(repository, "commit", "-m", "unrelated work")
+    scene = repository / "book" / "outline" / "scene.md"
+    scene.write_text("Later prose", encoding="utf-8")
+    run_git(repository, "add", str(scene))
+    run_git(repository, "commit", "-m", "later scene")
+
+    revisions = GitRevisionBackend(project_file).history()
+    identifiers = [revision.commit_id for revision in revisions]
+
+    assert len(revisions) >= 2
+    # Every commit but the oldest points at the next one in the searched
+    # history, rather than at a commit the search never looked at.
+    for newer, older in zip(revisions, revisions[1:]):
+        assert older.commit_id in newer.parents, (
+            "the filtered history is not connected"
+        )
+    assert revisions[-1].parents == ()
+    assert "unrelated work" not in [
+        revision.subject for revision in revisions
+    ]
+    assert len(set(identifiers)) == len(identifiers)
