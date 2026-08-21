@@ -125,6 +125,13 @@ class PanelPlacementViews:
     docks: DockLayoutPort
     translate: Callable[[str], str]
     targets: Callable[[], tuple]
+    #: Make a workspace that can accept a panel, and answer with its
+    #: placement target. Distinct from floating a panel, which makes a
+    #: utility window owned by this one: that window has no taskbar entry,
+    #: no minimize or maximize, raises with its owner and can host nothing.
+    #: A reader who tears an editor out and then wants the project tree
+    #: beside it is asking for a workspace, and this is how they get one.
+    open_workspace: Callable[[], Any] = lambda: None
 
     @classmethod
     def for_window(cls, window, anchor=None):
@@ -198,6 +205,14 @@ class PanelPlacementViews:
                 and candidate.panelPlacement.target is not target
             )
 
+        def open_workspace():
+            owner = window_ref()
+            if owner is None:
+                return None
+            created = owner.workspaceWindows.open()
+            placement = getattr(created, "panelPlacement", None)
+            return placement.target if placement is not None else None
+
         return cls(
             target=target,
             floating_menu=floating_menu,
@@ -206,6 +221,7 @@ class PanelPlacementViews:
             docks=docks,
             translate=translate,
             targets=targets,
+            open_workspace=open_workspace,
         )
 
 
@@ -447,12 +463,23 @@ class PanelPlacementController:
         menu.deleteLater()
 
     def build_float_menu(self):
-        """Offer each owned panel as a float/re-dock toggle."""
+        """Offer each owned panel as a float/re-dock toggle.
+
+        Panels the navigator offers are left out. Those are windows: they
+        may be docked, and docked they may fill the frame, but floating one
+        does not give it a window of its own. It gives it a utility window
+        owned by this one, and "Move panel to → New window" is where that
+        reader is actually going.
+        """
+
         menu = self.floating_menu
         host = self.target.host
         menu.clear()
         floating = set(host.floating())
+        offered = 0
         for panel_id, instance in sorted(host.instances.items()):
+            if instance.descriptor.navigator is not None:
+                continue
             action = menu.addAction(
                 self.views.translate(instance.descriptor.title)
             )
@@ -462,14 +489,27 @@ class PanelPlacementController:
             action.triggered.connect(
                 weak_slot(self.toggle_floating, panel_id)
             )
-        if not host.instances:
-            action = menu.addAction(
-                self.views.translate("No panel in this window")
-            )
+            offered += 1
+        if not offered:
+            action = menu.addAction(self.views.translate(
+                "No panel in this window can float"
+                if host.instances
+                else "No panel in this window"
+            ))
             action.setEnabled(False)
 
     def build_move_menu(self):
-        """Offer owned panels only to workspaces able to accept them."""
+        """Offer owned panels to workspaces able to accept them.
+
+        A new window is always among them. Without it the only way to get a
+        panel out of this workspace was to float it, which makes a utility
+        window owned by this one -- no taskbar entry of its own, no minimize
+        or maximize, raising with its owner, and unable to hold a second
+        panel. A reader who tears an editor out and then wants the project
+        tree beside it was asking for a workspace and being handed a tool
+        window, and no amount of window flags would have made it one.
+        """
+
         menu = self.move_menu
         menu.clear()
         peers = self.views.targets()
@@ -482,13 +522,18 @@ class PanelPlacementController:
                 for target in peers
                 if target.host.instance(panel_id) is None
             ]
-            if not targets:
-                continue
             submenu = menu.addMenu(
                 self.views.translate(instance.descriptor.title)
             )
             submenu.menuAction().setData(panel_id)
             offered += 1
+            fresh = submenu.addAction(self.views.translate("New window"))
+            fresh.setData(panel_id)
+            fresh.triggered.connect(
+                weak_slot(self.move_to_new_window, panel_id)
+            )
+            if targets:
+                submenu.addSeparator()
             for target in targets:
                 action = submenu.addAction(target.title())
                 action.setData(panel_id)
@@ -496,12 +541,23 @@ class PanelPlacementController:
                     weak_target_slot(self.move_to, panel_id, target)
                 )
         if not offered:
-            action = menu.addAction(self.views.translate(
-                "No panel can move to another window"
-                if peers
-                else "No other window open"
-            ))
+            action = menu.addAction(
+                self.views.translate("No panel to move")
+            )
             action.setEnabled(False)
+
+    def move_to_new_window(self, panel_id, _checked=False):
+        """Give a panel a workspace of its own, rather than a tool window.
+
+        The workspace is made first and the panel handed to it, so a failure
+        to create one leaves the panel where it was rather than belonging to
+        nobody.
+        """
+
+        target = self.views.open_workspace()
+        if target is None:
+            return None
+        return self.move_to(panel_id, target)
 
     def dispose(self):
         """Release child-widget wrappers before Qt destroys their window.

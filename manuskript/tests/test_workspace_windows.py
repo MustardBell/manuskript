@@ -12,14 +12,20 @@ from pathlib import Path
 import subprocess
 import sys
 from unittest.mock import patch
+from dataclasses import replace
 from weakref import ref
 
 import pytest
 from PyQt5.QtCore import QSettings, Qt
-from PyQt5.QtWidgets import QPlainTextEdit, qApp
+from PyQt5.QtWidgets import QDockWidget, QPlainTextEdit, qApp
 
 from manuskript.panels import PanelContext, PanelDescriptor
-from manuskript.panels.core import METADATA, PROJECT_TREE, STORYLINE
+from manuskript.panels.core import (
+    EDITOR,
+    METADATA,
+    PROJECT_TREE,
+    STORYLINE,
+)
 from manuskript.services.workspace_state import WorkspaceStateStore
 from manuskript.services.workspace_window_services import (
     WorkspaceWindowServices,
@@ -819,50 +825,76 @@ def test_panel_placement_receives_explicit_workspace_ports(
         other.close()
 
 
-def test_the_move_menu_offers_only_panels_that_can_move(MWEmptyProject):
-    """Core panels exist in every window, so they have nowhere to go."""
+def test_a_panel_a_peer_already_has_can_still_go_to_a_new_window(
+        MWEmptyProject):
+    """Core panels exist in every window, so no peer will take them.
+
+    They used to be left out of the menu entirely for that reason, which
+    made floating the only way to get one out of this workspace -- and
+    floating makes a tool window owned by this one rather than a workspace.
+    """
+
+    window = MWEmptyProject
+    other = window.workspaceWindows.open()
+    try:
+        window.panelPlacement.build_move_menu()
+
+        submenus = [
+            action.menu()
+            for action in window.panelPlacement.move_menu.actions()
+            if action.menu() is not None
+        ]
+        assert submenus, "every owned panel is offered somewhere to go"
+        for submenu in submenus:
+            assert [
+                action.text() for action in submenu.actions()
+            ][0] == "New window"
+    finally:
+        other.close()
+
+
+def test_a_peer_that_can_take_a_panel_is_offered_beside_a_new_window(
+        MWEmptyProject):
     window = MWEmptyProject
     other = window.workspaceWindows.open()
     try:
         with movable_panel(window):
             window.panelPlacement.build_move_menu()
 
-            titles = [
-                action.menu().title()
+            submenu = next(
+                action.menu()
                 for action in window.panelPlacement.move_menu.actions()
                 if action.menu() is not None
+                and action.menu().title() == "Movable notes"
+            )
+
+            offered = [
+                action.text() for action in submenu.actions()
+                if not action.isSeparator()
             ]
-            assert titles == ["Movable notes"]
-            targets = window.panelPlacement.move_menu.actions()[0].menu()
-            assert len(targets.actions()) == 1
+            assert offered[0] == "New window"
+            assert len(offered) == 2
     finally:
         other.close()
 
 
-def test_the_move_menu_says_when_nothing_can_move(MWEmptyProject):
-    window = MWEmptyProject
-    other = window.workspaceWindows.open()
-    try:
-        window.panelPlacement.build_move_menu()
+def test_a_panel_can_leave_even_when_no_other_window_is_open(MWEmptyProject):
+    """There is always somewhere to go, because one can be made."""
 
-        entries = window.panelPlacement.move_menu.actions()
-        assert len(entries) == 1
-        assert "No panel can move" in entries[0].text()
-        assert not entries[0].isEnabled()
-    finally:
-        other.close()
-
-
-def test_the_move_menu_says_when_there_is_nowhere_to_move(
-        MWEmptyProject):
     window = MWEmptyProject
 
     window.panelPlacement.build_move_menu()
 
-    entries = window.panelPlacement.move_menu.actions()
-    assert len(entries) == 1
-    assert "No other window" in entries[0].text()
-    assert not entries[0].isEnabled()
+    submenus = [
+        action.menu()
+        for action in window.panelPlacement.move_menu.actions()
+        if action.menu() is not None
+    ]
+    assert submenus
+    for submenu in submenus:
+        assert [action.text() for action in submenu.actions()] == [
+            "New window"
+        ]
 
 
 def test_a_move_menu_does_not_retain_a_closed_target(MWEmptyProject):
@@ -1427,3 +1459,98 @@ def test_a_cancelled_quit_leaves_both_real_windows_open(MWEmptyProject):
     finally:
         del manager.settleBeforeClosing
         other.close()
+
+
+def test_moving_a_panel_to_a_new_window_gives_it_a_workspace(MWEmptyProject):
+    """The whole point of the entry, and the answer to a window report.
+
+    Floating a panel makes a QDockWidget owned by this window: no taskbar
+    entry of its own, no minimize or maximize, raising with its owner, and
+    unable to hold a second panel. A reader who tore an editor out and then
+    wanted the project tree beside it was asking for a workspace. This makes
+    one and hands the panel to it.
+    """
+
+    window = MWEmptyProject
+    before = set(window.windowRegistry.workspace_windows)
+
+    with movable_panel(window) as panel:
+        panel_id = panel.descriptor.id
+
+        moved = window.panelPlacement.move_to_new_window(panel_id)
+
+        try:
+            created = [
+                candidate
+                for candidate in window.windowRegistry.workspace_windows
+                if candidate not in before
+            ]
+            assert len(created) == 1
+            fresh = created[0]
+            # A workspace, not a dock: registered, unparented, and able to
+            # hold panels of its own.
+            assert fresh.parent() is None
+            assert moved is not None
+            assert fresh.panelHost.instance(panel_id) is not None
+            assert window.panelHost.instance(panel_id) is None
+        finally:
+            for candidate in window.windowRegistry.workspace_windows:
+                if candidate not in before:
+                    candidate.close()
+
+
+def test_a_workspace_that_cannot_be_made_leaves_the_panel_where_it_was(
+        MWEmptyProject):
+    """Made first, handed over second, so a failure loses nothing."""
+
+    window = MWEmptyProject
+
+    with movable_panel(window) as panel:
+        panel_id = panel.descriptor.id
+        window.panelPlacement.views = replace(
+            window.panelPlacement.views, open_workspace=lambda: None
+        )
+
+        assert window.panelPlacement.move_to_new_window(panel_id) is None
+        assert window.panelHost.instance(panel_id) is not None
+
+
+def test_a_surface_the_navigator_offers_is_a_window_and_cannot_float(
+        MWEmptyProject):
+    """The user's rule: anything navigation has is not a dock.
+
+    It may be docked, and docked it may fill most of the frame, but that is
+    a placement rather than what it is. Floating one does not give it a
+    window of its own -- it gives it a utility window owned by this one,
+    with no taskbar entry, no minimize or maximize, raising with its owner
+    and unable to hold anything else. That is what a reader got when they
+    dragged an editor out, so Qt is not offered the chance.
+    """
+
+    window = MWEmptyProject
+
+    editor = window.panelHost.instance(EDITOR)
+    tree = window.panelHost.instance(PROJECT_TREE)
+
+    assert editor.descriptor.navigator is not None
+    assert tree.descriptor.navigator is None
+    assert not (
+        editor.container.features() & QDockWidget.DockWidgetFloatable
+    )
+    # And a dock is still a dock: the project tree floats as before.
+    assert tree.container.features() & QDockWidget.DockWidgetFloatable
+
+
+def test_the_float_menu_leaves_out_the_surfaces_that_are_windows(
+        MWEmptyProject):
+    window = MWEmptyProject
+
+    window.panelPlacement.build_float_menu()
+
+    offered = {
+        action.data()
+        for action in window.panelPlacement.floating_menu.actions()
+        if action.data()
+    }
+    assert EDITOR not in offered
+    assert PROJECT_TREE in offered

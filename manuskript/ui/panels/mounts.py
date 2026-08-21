@@ -23,6 +23,7 @@ than asking which kind it has.
 """
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QDockWidget
 from manuskript.panels import DOCK, SPLITTER_SLOT
 
 
@@ -100,6 +101,17 @@ class DockMount:
         dock = self.views.create_dock(descriptor.title)
         dock.setObjectName(dock_name(descriptor))
         dock.setAttribute(Qt.WA_DeleteOnClose, False)
+        if descriptor.navigator is not None:
+            # A surface the navigator offers is a window. It may be docked,
+            # and docked it may fill most of the frame, but floating it does
+            # not make it a window of its own -- it makes a utility window
+            # owned by this one, with no taskbar entry, no minimize or
+            # maximize, raising with its owner and unable to hold anything
+            # else. Dragging one out looked like making a window and made
+            # the opposite, so Qt is not offered the chance.
+            dock.setFeatures(
+                dock.features() & ~QDockWidget.DockWidgetFloatable
+            )
         return dock, dock
 
     def install(self, descriptor, widget, container):

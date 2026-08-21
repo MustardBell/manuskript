@@ -84,17 +84,30 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
 
-def test_every_core_panel_is_movable_floatable_and_nestable(MWEmptyProject):
+def test_every_core_panel_is_movable_closable_and_nestable(MWEmptyProject):
+    """Floatable is no longer among them, and that is the point.
+
+    A surface the navigator offers is a window. It may be docked, and
+    docked it may fill the frame, but floating it does not give it a window
+    of its own -- it gives it a utility window owned by this one, which is
+    what a reader got when they dragged an editor out and then could not
+    minimize it, find it in the taskbar, or dock anything beside it. Those
+    surfaces leave by "Move panel to → New window" instead.
+    """
+
     window = MWEmptyProject
     required = (
-        QDockWidget.DockWidgetClosable
-        | QDockWidget.DockWidgetMovable
-        | QDockWidget.DockWidgetFloatable
+        QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable
     )
     for panel_id in CORE_IDS:
-        dock = window.panelHost.instance(panel_id).container
+        instance = window.panelHost.instance(panel_id)
+        dock = instance.container
         assert dock.features() & required == required
         assert dock.allowedAreas() == Qt.AllDockWidgetAreas
+        floatable = bool(
+            dock.features() & QDockWidget.DockWidgetFloatable
+        )
+        assert floatable is (instance.descriptor.navigator is None)
     assert window.dockOptions() & QMainWindow.AllowNestedDocks
     assert window.dockOptions() & QMainWindow.AllowTabbedDocks
 
