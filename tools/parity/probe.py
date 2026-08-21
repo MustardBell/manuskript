@@ -59,10 +59,11 @@ CENTRAL_STACK = "tabMain"
 #: reason that has nothing to do with either.
 WINDOW_SIZE = (1280, 800)
 
-#: Positions are reported in whole percent of the window. A reader notices
-#: a panel on the wrong side; they do not notice four pixels, and comparing
-#: exact pixels would fail on a font metric.
-GRID = 100
+#: Geometry is reported in raw pixels. Both windows run on one machine, one
+#: Qt, one font set and one fixed size, so the numbers are comparable -- and
+#: the tolerance for a difference nobody can see belongs in the comparator,
+#: stated, rather than hidden inside a rounding step here. Whole percent was
+#: about thirteen pixels at this width, which can hide a moved pane boundary.
 
 
 def _ancestry(widget):
@@ -116,36 +117,26 @@ def _second_selector(window):
 
     stack = window.findChild(_qt().QTabWidget, CENTRAL_STACK)
     if stack is None:
-        return {"present": False}
+        return {"visible": False}
     bar = stack.tabBar()
-    return {
-        "present": True,
-        "tab_bar_visible": bool(bar is not None and bar.isVisible()),
-        "count": stack.count(),
-    }
+    if bar is None or not bar.isVisible():
+        # A hidden selector is not a second way to choose a mode, however
+        # many pages it has behind it. Page counts and existence are
+        # method, and belong in the diagnostics.
+        return {"visible": False}
+    return {"visible": True, "where": _where(window, bar)}
 
 
 def _where(window, widget):
-    """Where a widget sits in the window, in percent of it.
-
-    What a reader sees: this much of the way across, this much down, this
-    big. Rounded to whole percent because a difference smaller than that is
-    a font metric rather than a rearrangement.
-    """
+    """Where a widget sits in the window, in pixels from its top left."""
 
     top_left = widget.mapTo(window, widget.rect().topLeft())
-    size, frame = widget.size(), window.size()
-    if not frame.width() or not frame.height():
-        return None
-
-    def percent(value, total):
-        return round(GRID * value / total)
-
+    size = widget.size()
     return {
-        "x": percent(top_left.x(), frame.width()),
-        "y": percent(top_left.y(), frame.height()),
-        "width": percent(size.width(), frame.width()),
-        "height": percent(size.height(), frame.height()),
+        "x": top_left.x(),
+        "y": top_left.y(),
+        "width": size.width(),
+        "height": size.height(),
     }
 
 
@@ -156,9 +147,12 @@ def _surfaces(window):
         if widget is None:
             found[surface] = {"present": False}
             continue
+        # Existence is deliberately absent: a widget sitting on a page
+        # nobody selected looks exactly like one that was never built, and
+        # neither is something a reader can see. Whether it *appears* when
+        # its row is chosen is the navigation question, asked separately.
         visible = widget.isVisible()
         found[surface] = {
-            "present": True,
             "visible": visible,
             "where": _where(window, widget) if visible else None,
         }
@@ -188,19 +182,41 @@ def _method(window):
     return found
 
 
-def _docks(window):
+def _visible_docks(window):
+    """Docks a reader can see, and where they are.
+
+    Only the visible ones. An inventory of every dock including the hidden
+    ones puts zero pixels on screen and still fails a comparison, which is
+    method wearing a verdict's clothes -- and this fork has docks upstream
+    has no equivalent for, all of them hidden at first open.
+    """
+
     docks = []
+    for dock in window.findChildren(_qt().QDockWidget):
+        if dock.parent() is not window or not dock.isVisible():
+            continue
+        docks.append({
+            "title": dock.windowTitle(),
+            "floating": dock.isFloating(),
+            "where": _where(window, dock),
+        })
+    return sorted(docks, key=lambda entry: entry["title"])
+
+
+def _dock_inventory(window):
+    """Every dock, shown or not. Diagnostic, never a verdict."""
+
+    found = []
     for dock in window.findChildren(_qt().QDockWidget):
         if dock.parent() is not window:
             continue
-        docks.append({
+        found.append({
             "name": dock.objectName(),
             "title": dock.windowTitle(),
             "visible": dock.isVisible(),
             "floating": dock.isFloating(),
-            "area": int(window.dockWidgetArea(dock)),
         })
-    return sorted(docks, key=lambda entry: entry["name"])
+    return sorted(found, key=lambda entry: entry["name"])
 
 
 _QT = None
@@ -223,26 +239,51 @@ def open_project(window, path):
     """
 
     routes = (
-        ("projectManager.loadProject", lambda: window.projectManager.loadProject(path)),
-        ("loadProject", lambda: window.loadProject(path)),
+        ("projectManager.loadProject", ("projectManager", "loadProject")),
+        ("loadProject", ("loadProject",)),
     )
-    for name, route in routes:
-        try:
-            route()
-        except AttributeError:
+    for name, attributes in routes:
+        target = window
+        for attribute in attributes:
+            target = getattr(target, attribute, None)
+            if target is None:
+                break
+        if target is None:
             continue
+        # Called outside the existence check on purpose. Wrapping the call
+        # in "except AttributeError" would read a loader that is merely
+        # broken as one that is absent, and quietly fall through to the
+        # older route -- a probe agreeing with itself about which version
+        # it is looking at.
+        target(path)
         return name
     raise RuntimeError("No way to open a project in this version.")
 
 
 def describe(window, opened_by):
+    """What a reader sees, and separately, how it was built.
+
+    Two subtrees rather than a flat record with an ignore list. The
+    comparator compares ``visual`` and nothing else, so a diagnostic added
+    later cannot become part of the verdict by somebody forgetting to
+    exclude it -- which is exactly what happened: the first version
+    documented parentage as ignored while the comparator's default ignored
+    only one field, and the twenty differences reported required a flag
+    nobody would know to pass.
+    """
+
     return {
-        "opened_by": opened_by,
-        "navigator": _navigator_rows(window),
-        "second_selector": _second_selector(window),
-        "surfaces": _surfaces(window),
-        "docks": _docks(window),
-        "method": _method(window),
+        "visual": {
+            "navigator": _navigator_rows(window),
+            "second_selector": _second_selector(window),
+            "surfaces": _surfaces(window),
+            "docks": _visible_docks(window),
+        },
+        "diagnostic": {
+            "opened_by": opened_by,
+            "method": _method(window),
+            "dock_inventory": _dock_inventory(window),
+        },
     }
 
 

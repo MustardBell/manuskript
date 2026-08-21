@@ -69,6 +69,23 @@ def _run(checkout, project, home):
     return json.loads(finished.stdout.decode("utf-8"))
 
 
+#: How far a rectangle may move before a reader would notice. Stated here
+#: rather than rounded away in the probe, so the allowance is visible and
+#: arguable instead of buried in an arithmetic step.
+TOLERANCE = 3
+
+#: Geometry keys the tolerance applies to.
+PIXELS = ("x", "y", "width", "height")
+
+
+def _within_tolerance(path, upstream, fork):
+    if not path.rsplit("/", 1)[-1] in PIXELS:
+        return False
+    if not isinstance(upstream, int) or not isinstance(fork, int):
+        return False
+    return abs(upstream - fork) <= TOLERANCE
+
+
 def differences(upstream, fork, path=""):
     """Every place the two readings disagree, as a flat list."""
 
@@ -88,7 +105,7 @@ def differences(upstream, fork, path=""):
                 "{}[{}]".format(path, index),
             ))
         return found
-    if upstream != fork:
+    if upstream != fork and not _within_tolerance(path, upstream, fork):
         return [(path, upstream, fork)]
     return []
 
@@ -97,8 +114,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--upstream", default=UPSTREAM)
     parser.add_argument(
-        "--ignore", action="append", default=["/opened_by"],
-        help="path prefixes that may legitimately differ",
+        "--ignore", action="append", default=[],
+        help="paths under visual/ that may legitimately differ",
+    )
+    parser.add_argument(
+        "--diagnostic", action="store_true",
+        help="also print how each side is built, for a difference you have",
     )
     arguments = parser.parse_args(argv)
 
@@ -121,15 +142,29 @@ def main(argv=None):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
 
+    # Only the visual subtree is the verdict. An ignore list was the first
+    # design and it was wrong: the comparator's default excluded one field
+    # while the probe documented parentage as diagnostic, so every run
+    # included method unless somebody passed a flag they would have to know
+    # about. A subtree cannot be forgotten.
     found = [
-        entry for entry in differences(upstream, fork)
+        entry for entry in differences(upstream["visual"], fork["visual"])
         if not any(entry[0].startswith(prefix) for prefix in arguments.ignore)
     ]
     for where, was, now in found:
         print("{}\n    upstream: {!r}\n    fork:     {!r}".format(
             where, was, now
         ))
-    print("\n{} differences".format(len(found)))
+    print("\n{} visual differences (tolerance {}px)".format(
+        len(found), TOLERANCE
+    ))
+    if arguments.diagnostic:
+        print("\nupstream method: {}".format(
+            json.dumps(upstream["diagnostic"], indent=2, sort_keys=True)
+        ))
+        print("\nfork method: {}".format(
+            json.dumps(fork["diagnostic"], indent=2, sort_keys=True)
+        ))
     return 1 if found else 0
 
 
