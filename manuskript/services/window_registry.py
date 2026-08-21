@@ -15,6 +15,8 @@ does not.
 
 import logging
 
+from manuskript.services.window_inventory import report_inventory
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,6 +106,14 @@ class WindowRegistry:
         if new is None:
             return
         window = new.window() if hasattr(new, "window") else None
+        # Off unless asked for, and only when the *window* changed. Qt emits
+        # this for every widget that takes focus, so reporting on each one
+        # would bury the report in itself. Moving between windows is the
+        # moment worth recording: it is the only one that catches an
+        # arrangement somebody made earlier, since creating a window is not
+        # when the interesting state exists.
+        if window is not self._active:
+            report_inventory(registry=self)
         if window not in self._windows:
             return
         self._active = window
