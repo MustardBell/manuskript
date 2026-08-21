@@ -590,3 +590,56 @@ def test_duplicate_plugin_ids_across_roots_are_rejected(tmp_path):
     assert record.status is PluginStatus.FAILED
     assert runtime.registry.exporters == ()
     assert "Duplicate plugin ID" in runtime.discovery_issues[0].error
+
+
+def test_reloading_a_plugin_takes_its_authority_too(tmp_path):
+    """Not only disabling. The documentation said "disabled or reloaded".
+
+    Rediscovery that replaces a loaded record goes through the same
+    deactivation as disabling, and only disabling was retiring the epoch --
+    so a reloaded plugin's old leases stayed live.
+    """
+
+    from manuskript.plugins.authority import (
+        CapabilityAuthority,
+        SessionIdentity,
+    )
+
+    create_plugin(tmp_path, plugin_id="vendor.provenance")
+    runtime = PluginRuntime(
+        [tmp_path], InMemoryPluginPreferences(["vendor.provenance"])
+    )
+    session = SessionIdentity(generation=1, project="/books/one.msk")
+    authority = CapabilityAuthority(session_source=lambda: session)
+    runtime.set_capability_authority(authority)
+    runtime.discover()
+    runtime.load_enabled()
+    lease = authority.issue("vendor.provenance", "git.history")
+
+    assert authority.allows(lease)
+
+    runtime._deactivate_record(runtime.records["vendor.provenance"])
+
+    assert "reloaded" in authority.refusal(lease)
+
+
+def test_disabling_advances_the_epoch_once_rather_than_twice(tmp_path):
+    """One event, one increment. Two would still refuse, but for a lie."""
+
+    from manuskript.plugins.authority import (
+        CapabilityAuthority,
+        SessionIdentity,
+    )
+
+    create_plugin(tmp_path, plugin_id="vendor.provenance")
+    runtime = PluginRuntime([tmp_path], InMemoryPluginPreferences())
+    session = SessionIdentity(generation=1, project="/books/one.msk")
+    authority = CapabilityAuthority(session_source=lambda: session)
+    runtime.set_capability_authority(authority)
+    runtime.discover()
+    runtime.enable("vendor.provenance")
+
+    before = authority.epoch("vendor.provenance")
+    runtime.disable("vendor.provenance")
+
+    assert authority.epoch("vendor.provenance") == before + 1

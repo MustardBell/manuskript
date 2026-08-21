@@ -1,12 +1,19 @@
 import io
+import logging
 import os
 import shutil
 import subprocess
 import tempfile
+import time
 import zipfile
 from dataclasses import dataclass
 
 from manuskript.domain.project_paths import normalize_project_path
+
+
+#: Every Git command this project runs passes through one place, so this is
+#: where a search that is stuck can be seen to be stuck, and in which command.
+LOGGER = logging.getLogger(__name__)
 
 
 class GitRevisionError(RuntimeError):
@@ -65,16 +72,70 @@ class GitCommandResult:
     return_code: int
 
 
+#: Variables that redirect Git at a repository other than the one we asked
+#: about. ``GIT_DIR`` beats ``git -C`` outright, so a reader who exported it
+#: in the shell that launched Manuskript would have every command answered
+#: from somewhere else entirely -- silently, and with plausible results.
+_REDIRECTING_VARIABLES = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_NAMESPACE",
+)
+
+#: How long any one Git command may take before it is treated as wedged.
+#: Not a ration on how much history may be searched: the search reads as
+#: many commits as it likes, and this bounds one external process. Without
+#: it a single command that never returns is indistinguishable from a search
+#: still working, because stderr is a pipe nobody is reading.
+COMMAND_SECONDS = 120
+
+
+class GitTimedOut(GitRevisionError):
+    """One Git command took long enough to be treated as wedged."""
+
+
 class GitCommandRunner:
     """Execute Git without a shell and preserve byte-exact object output."""
 
-    def __init__(self, executable=None, run=None):
+    def __init__(self, executable=None, run=None, timeout=COMMAND_SECONDS):
         self.executable = executable or shutil.which("git")
         self._run = run or subprocess.run
+        self._timeout = timeout
 
     @property
     def available(self):
         return self.executable is not None
+
+    def environment(self, overrides=None):
+        """The environment Git is given: this one, minus the redirections.
+
+        Sanitized centrally rather than at each call site, because the
+        variables that do the damage are the ones nobody remembers to think
+        about, and a caller that builds its own environment inherits this
+        base rather than starting from ``os.environ``.
+        """
+
+        base = {
+            name: value
+            for name, value in os.environ.items()
+            if name not in _REDIRECTING_VARIABLES
+        }
+        # Reading history must not become network access. A partly-cloned
+        # repository will otherwise fetch a missing object from its promisor
+        # remote in the middle of a search, which turns "where did this
+        # paragraph come from" into a request that can wait on a network, a
+        # credential helper, or nothing at all.
+        base["GIT_NO_LAZY_FETCH"] = "1"
+        # And nothing here may ever stop to ask a question. There is no
+        # terminal to answer it on.
+        base["GIT_TERMINAL_PROMPT"] = "0"
+        base.update(overrides or {})
+        return base
 
     def execute(self, arguments, *, stdin=None, environment=None):
         if not self.available:
@@ -88,10 +149,37 @@ class GitCommandRunner:
             "stdout": subprocess.PIPE,
             "stderr": subprocess.PIPE,
             "check": False,
+            "env": self.environment(environment),
+            "timeout": self._timeout,
         }
-        if environment is not None:
-            options["env"] = environment
-        completed = self._run(list(command), **options)
+        started = time.monotonic()
+        try:
+            completed = self._run(list(command), **options)
+        except subprocess.TimeoutExpired:
+            LOGGER.error(
+                "git %s did not return within %ss",
+                " ".join(str(part) for part in arguments), self._timeout,
+            )
+            raise GitTimedOut(
+                "Git did not answer within {} seconds: {}".format(
+                    self._timeout,
+                    " ".join(str(part) for part in arguments[:3]),
+                )
+            )
+        elapsed = time.monotonic() - started
+        if elapsed > 1:
+            # Only the slow ones, so the log stays readable while still
+            # naming the command a stalled search was sitting in.
+            LOGGER.info(
+                "git %s took %.1fs",
+                " ".join(str(part) for part in arguments[:4]), elapsed,
+            )
+        else:
+            LOGGER.debug(
+                "git %s -> %d in %.3fs",
+                " ".join(str(part) for part in arguments[:4]),
+                completed.returncode, elapsed,
+            )
         return GitCommandResult(
             arguments=command,
             stdout=completed.stdout,
@@ -138,6 +226,11 @@ class GitRevision:
     #: Parent commit ids in Git's order, so a caller can tell a merge from a
     #: straight line and a first parent from the branch that joined.
     parents: tuple = ()
+    #: False where Git is presenting a commit as a root that is not one. A
+    #: shallow clone grafts its boundary commits to look parentless, so a
+    #: caller reasoning about ancestry would otherwise call "as far back as
+    #: this clone was given" the same thing as "as far back as there is".
+    parents_complete: bool = True
 
     @property
     def short_id(self):
@@ -340,6 +433,7 @@ class GitRevisionBackend:
     def history(self, *, tagged_only=False, limit=250):
         tags = self._tags_by_commit()
         parents = self._parents_by_commit()
+        boundaries = self.shallow_boundaries()
         arguments = [
             "log",
             # Default path history prunes a side branch whose merge was
@@ -394,6 +488,7 @@ class GitRevisionBackend:
                 ),
                 tags=tags.get(commit_id, ()),
                 parents=parents.get(commit_id, ()),
+                parents_complete=commit_id not in boundaries,
             )
             if tagged_only and not revision.tagged:
                 continue
@@ -401,6 +496,34 @@ class GitRevisionBackend:
             if tagged_only and limit and len(revisions) >= limit:
                 break
         return revisions
+
+    def shallow_boundaries(self):
+        """Commits Git presents as roots because this clone stops there.
+
+        Git records them in the shallow file, which is the only place the
+        difference between "nothing precedes this" and "you were not given
+        what precedes this" is written down. Traversal deliberately hides
+        it: a shallow boundary looks exactly like a root to every command
+        that walks parents.
+        """
+
+        result = self._execute(
+            ("rev-parse", "--git-path", "shallow"), allow_failure=True
+        )
+        if result.return_code:
+            return frozenset()
+        location = result.stdout.decode("utf-8", errors="replace").strip()
+        if not location:
+            return frozenset()
+        if not os.path.isabs(location):
+            location = os.path.join(self.repository.root, location)
+        try:
+            with open(location, "r", encoding="utf-8") as handle:
+                return frozenset(
+                    line.strip() for line in handle if line.strip()
+                )
+        except OSError:
+            return frozenset()
 
     def _parents_by_commit(self):
         """Parent ids per commit, asked for separately and on purpose.
@@ -504,8 +627,10 @@ class GitRevisionBackend:
 
         head = self.status().head
         temporary_index = self._temporary_index_path()
-        environment = os.environ.copy()
-        environment["GIT_INDEX_FILE"] = temporary_index
+        # Built on the sanitized base rather than on os.environ, so the one
+        # place that legitimately sets a redirecting variable does not also
+        # let through the seven it does not want.
+        environment = {"GIT_INDEX_FILE": temporary_index}
         try:
             if head:
                 self._execute(

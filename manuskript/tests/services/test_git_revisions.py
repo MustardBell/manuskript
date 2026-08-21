@@ -589,3 +589,84 @@ def test_blame_distinguishes_a_root_from_a_history_it_cannot_see_past(
     assert shallow.ok, shallow.error
     assert shallow.value[0].boundary
     assert shallow.value[0].truncated
+
+
+def test_git_is_not_answered_from_whatever_repository_the_shell_pointed_at(
+        monkeypatch):
+    """GIT_DIR beats git -C, so a reader's shell could redirect everything.
+
+    Silently, and with plausible results: a search would answer from the
+    wrong repository rather than fail in a way anyone would notice.
+    """
+
+    from manuskript.services.git_revisions import GitCommandRunner
+
+    monkeypatch.setenv("GIT_DIR", "/somewhere/else/.git")
+    monkeypatch.setenv("GIT_WORK_TREE", "/somewhere/else")
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", "/")
+    monkeypatch.setenv("HOME", "/home/writer")
+
+    environment = GitCommandRunner(executable="/usr/bin/git").environment()
+
+    assert "GIT_DIR" not in environment
+    assert "GIT_WORK_TREE" not in environment
+    assert "GIT_CEILING_DIRECTORIES" not in environment
+    # And the rest of the reader's environment is left alone.
+    assert environment["HOME"] == "/home/writer"
+
+
+def test_reading_history_never_reaches_the_network_or_asks_a_question():
+    """A partly-cloned repository will fetch a missing object mid-search.
+
+    That turns "where did this paragraph come from" into a request that can
+    wait on a network, a credential helper, or nothing at all -- which is a
+    search that appears to hang with nothing on stderr, because stderr is a
+    pipe nobody is reading.
+    """
+
+    from manuskript.services.git_revisions import GitCommandRunner
+
+    environment = GitCommandRunner(executable="/usr/bin/git").environment()
+
+    assert environment["GIT_NO_LAZY_FETCH"] == "1"
+    assert environment["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_a_caller_that_needs_its_own_variable_still_gets_a_clean_base(
+        monkeypatch):
+    """The commit path sets GIT_INDEX_FILE and wants none of the others."""
+
+    from manuskript.services.git_revisions import GitCommandRunner
+
+    monkeypatch.setenv("GIT_DIR", "/somewhere/else/.git")
+
+    environment = GitCommandRunner(executable="/usr/bin/git").environment(
+        {"GIT_INDEX_FILE": "/tmp/index"}
+    )
+
+    assert environment["GIT_INDEX_FILE"] == "/tmp/index"
+    assert "GIT_DIR" not in environment
+
+
+def test_a_wedged_git_command_is_given_up_on_rather_than_waited_for():
+    """The Stop button cannot interrupt subprocess.run, so this bounds it.
+
+    Not a ration on how much history may be searched -- the search reads as
+    many commits as it likes. This bounds one external process, because a
+    command that never returns is indistinguishable from a search still
+    working.
+    """
+
+    import subprocess
+
+    from manuskript.services.git_revisions import GitCommandRunner, GitTimedOut
+
+    def never_returns(command, **options):
+        raise subprocess.TimeoutExpired(command, options["timeout"])
+
+    runner = GitCommandRunner(
+        executable="/usr/bin/git", run=never_returns, timeout=5
+    )
+
+    with pytest.raises(GitTimedOut, match="5 seconds"):
+        runner.execute(("log", "--oneline"))

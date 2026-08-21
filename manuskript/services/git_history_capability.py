@@ -184,6 +184,10 @@ class GitCommit:
     author_name: str = ""
     tags: tuple = ()
     parents: tuple = ()
+    #: False where an empty parent list means "this clone stops here" rather
+    #: than "nothing precedes this". A caller deciding what is earliest must
+    #: not read a shallow boundary as a root.
+    parents_complete: bool = True
 
     @property
     def short_id(self):
@@ -498,6 +502,9 @@ class GitHistoryCapability:
                     author_name=revision.author_name,
                     tags=tuple(revision.tags),
                     parents=tuple(getattr(revision, "parents", ())),
+                    parents_complete=bool(
+                        getattr(revision, "parents_complete", True)
+                    ),
                 )
                 for revision in backend.history(
                     tagged_only=tagged_only, limit=limit or 0

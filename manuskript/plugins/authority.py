@@ -43,7 +43,7 @@ not the host's to say on a preference's behalf.
 import itertools
 import threading
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 #: The lease is gone: the plugin was disabled or reloaded, the project was
 #: closed or replaced, or the grant was withdrawn. Defined with the rest of
@@ -56,16 +56,25 @@ from manuskript.plugins.contracts import CAPABILITY_REVOKED  # noqa: F401
 class SessionIdentity:
     """One opening of one project.
 
-    Both halves are load-bearing. A path alone cannot tell a reopening from
-    the original, and a generation alone means an application holding two
-    projects would treat one project's third opening as the other's.
+    Identity is the *opening*, not the file. An earlier version compared
+    ``(path, generation)`` and that was wrong in a way only Save As reveals:
+    renaming a project changes its path without starting a new opening, so
+    every lease granted over it was refused mid-session. The lifecycle model
+    already says renaming is not a new opening -- the generation does not
+    advance -- so authority must not disagree with it.
+
+    The path is kept beside the identity because a refusal that can name the
+    project is worth more than one that cannot, and is deliberately excluded
+    from equality.
     """
 
-    project: str
     generation: int
+    project: str = field(default="", compare=False)
 
     def __str__(self):
-        return "{} (opening {})".format(self.project, self.generation)
+        return "{} (opening {})".format(
+            self.project or "project", self.generation
+        )
 
 
 def session_of(manager):
@@ -80,8 +89,8 @@ def session_of(manager):
     if session is None or not getattr(session, "is_open", False):
         return None
     return SessionIdentity(
-        project=str(getattr(session, "path", "") or ""),
         generation=int(getattr(session, "generation", 0)),
+        project=str(getattr(session, "path", "") or ""),
     )
 
 

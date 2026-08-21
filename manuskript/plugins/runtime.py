@@ -233,12 +233,9 @@ class PluginRuntime:
     def disable(self, plugin_id):
         record = self._record(plugin_id)
         self.preferences.disable(plugin_id)
-        if self.capabilityAuthority is not None:
-            # A disabled plugin keeps none of its authority. Anything it
-            # left running -- a search on a worker thread, a panel not yet
-            # torn down -- still holds capability objects, and those objects
-            # are the reason this is not left to the teardown path.
-            self.capabilityAuthority.retire_plugin(plugin_id)
+        # Authority is taken in _deactivate_record, which every path that
+        # ends a loaded incarnation goes through. Retiring here as well
+        # would advance the epoch twice for one event.
         self._deactivate_record(record)
         record.status = PluginStatus.DISABLED
         record.error = ""
@@ -566,7 +563,22 @@ class PluginRuntime:
         return self.records[plugin_id]
 
     def _deactivate_record(self, record):
+        """The one boundary where a loaded plugin incarnation ends.
+
+        Authority is retired here rather than in ``disable`` alone, because
+        this is reached three ways -- disabled, rediscovered and replaced,
+        or found incompatible with the project format -- and only the first
+        was taking a plugin's capabilities away. A reload therefore left the
+        old incarnation's leases live, which is exactly what the epoch
+        exists to prevent.
+        """
+
         plugin_id = record.manifest.id
+        if self.capabilityAuthority is not None:
+            # Anything the old incarnation left running -- a search on a
+            # worker thread, a panel not yet torn down -- still holds
+            # capability objects, and those objects ask on every call.
+            self.capabilityAuthority.retire_plugin(plugin_id)
         self.registry.remove_plugin(plugin_id)
         if record.driver is not None:
             record.driver.deactivate(record.manifest, record.session)

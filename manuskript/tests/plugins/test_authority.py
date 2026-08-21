@@ -10,9 +10,12 @@ from manuskript.plugins.authority import (
 )
 
 
-BOOK = SessionIdentity(project="/books/one.msk", generation=1)
-REOPENED = SessionIdentity(project="/books/one.msk", generation=2)
-OTHER = SessionIdentity(project="/books/two.msk", generation=1)
+BOOK = SessionIdentity(generation=1, project="/books/one.msk")
+REOPENED = SessionIdentity(generation=2, project="/books/one.msk")
+# Replacing a project closes the first and opens the second, so the opening
+# advances. Two projects cannot share an opening in one runtime.
+OTHER = SessionIdentity(generation=2, project="/books/two.msk")
+RENAMED = SessionIdentity(generation=1, project="/books/renamed.msk")
 
 
 def authority_over(session=BOOK):
@@ -94,6 +97,23 @@ def test_a_lease_never_follows_the_project_that_replaced_its_own():
     holder["session"] = OTHER
 
     assert "no longer open" in grants.refusal(lease)
+
+
+def test_renaming_a_project_does_not_end_the_opening_it_is_part_of():
+    """Save As is not a new project, and authority must agree.
+
+    Identity was ``(path, generation)``, so renaming changed it without the
+    opening changing -- and every lease granted over that project was
+    refused mid-session. The lifecycle model already says a rename is not a
+    new opening; the path is diagnostic, not identity.
+    """
+
+    grants, holder = authority_over()
+    lease = grants.issue("vendor.provenance", "git.history")
+
+    holder["session"] = RENAMED
+
+    assert not grants.refusal(lease)
 
 
 def test_reopening_the_same_project_is_a_new_authority_domain():

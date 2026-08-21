@@ -553,7 +553,7 @@ def test_a_staged_file_read_after_it_changed_is_refused(monkeypatch, tmp_path):
 def authority_over(project="/books/one.msk", generation=1):
     """An authority whose current session is whatever we point it at."""
 
-    holder = {"session": SessionIdentity(project=project, generation=generation)}
+    holder = {"session": SessionIdentity(generation=generation, project=project)}
     return (
         CapabilityAuthority(session_source=lambda: holder["session"]),
         holder,
@@ -593,7 +593,9 @@ def test_a_grant_over_a_closed_project_does_not_reach_the_next_one(
     git = capability(monkeypatch)
     git._lease, git._authority = lease, grants
     # The project was replaced; the lease still names the one it was for.
-    holder["session"] = SessionIdentity(project="/books/two.msk", generation=1)
+    # Replacing a project closes the first and opens the next, so the
+    # opening advances; a path change alone is a rename, not a new one.
+    holder["session"] = SessionIdentity(generation=2, project="/books/two.msk")
 
     answer = git.history()
 
