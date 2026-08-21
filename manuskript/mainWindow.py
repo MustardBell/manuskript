@@ -879,15 +879,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         The objects are the factory-built panel widgets, not reparented
         Designer pages. Keeping aliases for one migration window lets small
         adapters move independently without there being two live surfaces.
-        """
-        general = self.corePanels.general
-        for name in (
-            "txtGeneralTitle", "txtGeneralSubtitle", "txtGeneralSerie",
-            "txtGeneralVolume", "txtGeneralGenre", "txtGeneralLicense",
-            "txtGeneralAuthor", "txtGeneralEmail",
-        ):
-            setattr(self, name, general.findChild(QWidget, name))
 
+        These resolve structure that already exists and must never make any:
+        the moment an alias can construct a surface, "which surfaces does
+        this workspace have" stops being something a workspace states and
+        becomes a consequence of whatever happened to be read first.
+        """
+        # The eight General aliases are gone: nothing read them. Checked for
+        # dynamic access as well as literal, because a name reached by
+        # getattr or from a .ui file would not show up in a search for the
+        # attribute -- and reporting something absent because a search for
+        # its name found nothing is a mistake this session has already made
+        # twice.
         outline = self.corePanels.outline
         for name in (
             "splitterOutlineH", "splitterOutlineV", "lstOutlinePlots",

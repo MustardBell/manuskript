@@ -84,30 +84,29 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
 
-def test_every_core_panel_is_movable_closable_and_nestable(MWEmptyProject):
-    """Floatable is no longer among them, and that is the point.
+def test_every_core_panel_is_movable_floatable_and_nestable(MWEmptyProject):
+    """Floatable stays until there is a gesture to replace it with.
 
-    A surface the navigator offers is a window. It may be docked, and
-    docked it may fill the frame, but floating it does not give it a window
-    of its own -- it gives it a utility window owned by this one, which is
-    what a reader got when they dragged an editor out and then could not
-    minimize it, find it in the taskbar, or dock anything beside it. Those
-    surfaces leave by "Move panel to → New window" instead.
+    A navigator surface is a window rather than a dock, and floating one
+    gives it a utility window owned by this workspace. Saying so by taking
+    Qt's floatable feature away was worse than the thing it corrected: Qt
+    still begins the drag and the model vetoes the outcome, so the dock
+    snaps back on release, and a session saved with the editor detached
+    snapped it home the moment it was touched. The distinction lives in the
+    Float Panel menu instead, until a detach gesture exists that ends in a
+    real workspace.
     """
 
     window = MWEmptyProject
     required = (
-        QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable
+        QDockWidget.DockWidgetClosable
+        | QDockWidget.DockWidgetMovable
+        | QDockWidget.DockWidgetFloatable
     )
     for panel_id in CORE_IDS:
-        instance = window.panelHost.instance(panel_id)
-        dock = instance.container
+        dock = window.panelHost.instance(panel_id).container
         assert dock.features() & required == required
         assert dock.allowedAreas() == Qt.AllDockWidgetAreas
-        floatable = bool(
-            dock.features() & QDockWidget.DockWidgetFloatable
-        )
-        assert floatable is (instance.descriptor.navigator is None)
     assert window.dockOptions() & QMainWindow.AllowNestedDocks
     assert window.dockOptions() & QMainWindow.AllowTabbedDocks
 

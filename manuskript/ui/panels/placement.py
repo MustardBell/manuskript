@@ -132,6 +132,8 @@ class PanelPlacementViews:
     #: A reader who tears an editor out and then wants the project tree
     #: beside it is asking for a workspace, and this is how they get one.
     open_workspace: Callable[[], Any] = lambda: None
+    #: And how one made for a move that could not happen is taken away.
+    close_workspace: Callable[[Any], None] = lambda _target: None
 
     @classmethod
     def for_window(cls, window, anchor=None):
@@ -213,6 +215,13 @@ class PanelPlacementViews:
             placement = getattr(created, "panelPlacement", None)
             return placement.target if placement is not None else None
 
+        def close_workspace(destination):
+            for candidate in registry.workspace_windows:
+                placement = getattr(candidate, "panelPlacement", None)
+                if placement is not None and placement.target is destination:
+                    candidate.close()
+                    return
+
         return cls(
             target=target,
             floating_menu=floating_menu,
@@ -222,6 +231,7 @@ class PanelPlacementViews:
             translate=translate,
             targets=targets,
             open_workspace=open_workspace,
+            close_workspace=close_workspace,
         )
 
 
@@ -522,6 +532,15 @@ class PanelPlacementController:
                 for target in peers
                 if target.host.instance(panel_id) is None
             ]
+            # Every panel is offered a new window, and whether a fresh
+            # workspace can actually take one is not knowable from here:
+            # core surfaces are built by every window as it is constructed,
+            # plugin panels are opened on demand, and no descriptor says
+            # which. Guessing from the peers that happen to be open would
+            # make this menu change shape depending on how many windows a
+            # reader has, which is not a rule anybody could learn. So the
+            # offer is uniform and move_to_new_window undoes the window when
+            # it turns out there was nothing to hand over.
             submenu = menu.addMenu(
                 self.views.translate(instance.descriptor.title)
             )
@@ -549,15 +568,28 @@ class PanelPlacementController:
     def move_to_new_window(self, panel_id, _checked=False):
         """Give a panel a workspace of its own, rather than a tool window.
 
-        The workspace is made first and the panel handed to it, so a failure
-        to create one leaves the panel where it was rather than belonging to
-        nobody.
+        Refused before a workspace is made when the panel could not go into
+        one anyway. A per-window surface is built afresh by every workspace,
+        so a new one already has its own and ``move_to`` declines a
+        destination that holds this id -- which meant a window opened, an
+        editor appeared in it, the original stayed put, and the whole thing
+        looked like it had worked. Opening a window that cannot receive the
+        panel is worse than declining.
         """
 
+        if self.target.host.instance(panel_id) is None:
+            return None
         target = self.views.open_workspace()
         if target is None:
             return None
-        return self.move_to(panel_id, target)
+        moved = self.move_to(panel_id, target)
+        if moved is None:
+            # The workspace built its own copy of this surface, so there was
+            # nothing to hand it. Undo the window rather than leave it
+            # standing: one opened, an editor appeared in it, the original
+            # stayed put, and the whole thing looked like it had worked.
+            self.views.close_workspace(target)
+        return moved
 
     def dispose(self):
         """Release child-widget wrappers before Qt destroys their window.

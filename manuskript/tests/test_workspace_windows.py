@@ -825,32 +825,41 @@ def test_panel_placement_receives_explicit_workspace_ports(
         other.close()
 
 
-def test_a_panel_a_peer_already_has_can_still_go_to_a_new_window(
+def test_the_menu_offers_the_same_thing_however_many_windows_are_open(
         MWEmptyProject):
-    """Core panels exist in every window, so no peer will take them.
+    """A menu that changes shape with the window count teaches nobody.
 
-    They used to be left out of the menu entirely for that reason, which
-    made floating the only way to get one out of this workspace -- and
-    floating makes a tool window owned by this one rather than a workspace.
+    Whether a fresh workspace could take a given panel is not knowable from
+    the descriptor, and guessing it from the peers that happen to be open
+    made the offer appear and disappear for reasons a reader cannot see.
+    So it is offered uniformly, and the window is undone when there turns
+    out to be nothing to hand over.
     """
 
     window = MWEmptyProject
-    other = window.workspaceWindows.open()
-    try:
-        window.panelPlacement.build_move_menu()
 
-        submenus = [
-            action.menu()
+    def first_entries():
+        window.panelPlacement.build_move_menu()
+        return {
+            action.menu().menuAction().data(): [
+                entry.text() for entry in action.menu().actions()
+                if not entry.isSeparator()
+            ][0]
             for action in window.panelPlacement.move_menu.actions()
             if action.menu() is not None
-        ]
-        assert submenus, "every owned panel is offered somewhere to go"
-        for submenu in submenus:
-            assert [
-                action.text() for action in submenu.actions()
-            ][0] == "New window"
+        }
+
+    alone = first_entries()
+    other = window.workspaceWindows.open()
+    try:
+        with_peer = first_entries()
     finally:
         other.close()
+
+    assert alone, "every owned panel is offered somewhere to go"
+    assert set(alone) == set(with_peer)
+    assert set(alone.values()) == {"New window"}
+    assert set(with_peer.values()) == {"New window"}
 
 
 def test_a_peer_that_can_take_a_panel_is_offered_beside_a_new_window(
@@ -1515,7 +1524,7 @@ def test_a_workspace_that_cannot_be_made_leaves_the_panel_where_it_was(
         assert window.panelHost.instance(panel_id) is not None
 
 
-def test_a_surface_the_navigator_offers_is_a_window_and_cannot_float(
+def test_a_surface_the_navigator_offers_is_a_window_not_a_dock(
         MWEmptyProject):
     """The user's rule: anything navigation has is not a dock.
 
@@ -1534,10 +1543,12 @@ def test_a_surface_the_navigator_offers_is_a_window_and_cannot_float(
 
     assert editor.descriptor.navigator is not None
     assert tree.descriptor.navigator is None
-    assert not (
-        editor.container.features() & QDockWidget.DockWidgetFloatable
-    )
-    # And a dock is still a dock: the project tree floats as before.
+    # Qt's floatable feature stays on both: removing it from the editor made
+    # Qt begin a drag the model then vetoed, so the dock snapped back on
+    # release and a session saved with the editor detached snapped it home.
+    # The distinction is made where it can be made without breaking a
+    # gesture -- the Float Panel menu, below.
+    assert editor.container.features() & QDockWidget.DockWidgetFloatable
     assert tree.container.features() & QDockWidget.DockWidgetFloatable
 
 
@@ -1554,3 +1565,28 @@ def test_the_float_menu_leaves_out_the_surfaces_that_are_windows(
     }
     assert EDITOR not in offered
     assert PROJECT_TREE in offered
+
+
+def test_a_window_made_for_a_move_that_cannot_happen_is_taken_away(
+        MWEmptyProject):
+    """The surface this feature exists for, and it cannot use it yet.
+
+    Every workspace builds its own Editor as it is constructed, so a new
+    one already holds that id and move_to declines a destination that does.
+    The first version left the window standing: one opened, an editor was
+    in it, the original stayed where it was, and the whole thing looked
+    like it had worked.
+
+    Moving one for real means carrying view state between two instances,
+    which is architecture rather than a menu entry. This test records what
+    is true now and is expected to be rewritten when that lands.
+    """
+
+    window = MWEmptyProject
+    before = set(window.windowRegistry.workspace_windows)
+
+    assert window.panelPlacement.move_to_new_window(EDITOR) is None
+    assert set(window.windowRegistry.workspace_windows) == before, (
+        "the workspace it made for a move that could not happen is gone"
+    )
+    assert window.panelHost.instance(EDITOR) is not None

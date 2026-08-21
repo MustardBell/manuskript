@@ -101,17 +101,19 @@ class DockMount:
         dock = self.views.create_dock(descriptor.title)
         dock.setObjectName(dock_name(descriptor))
         dock.setAttribute(Qt.WA_DeleteOnClose, False)
-        if descriptor.navigator is not None:
-            # A surface the navigator offers is a window. It may be docked,
-            # and docked it may fill most of the frame, but floating it does
-            # not make it a window of its own -- it makes a utility window
-            # owned by this one, with no taskbar entry, no minimize or
-            # maximize, raising with its owner and unable to hold anything
-            # else. Dragging one out looked like making a window and made
-            # the opposite, so Qt is not offered the chance.
-            dock.setFeatures(
-                dock.features() & ~QDockWidget.DockWidgetFloatable
-            )
+        # Navigator surfaces are windows rather than docks, and floating one
+        # gives it a utility window owned by this workspace rather than a
+        # window of its own. Taking Qt's floatable feature away was the wrong
+        # way to say so: Qt still begins the drag and the model vetoes the
+        # outcome, so the dock snaps back on release, and a session saved
+        # with the editor detached snapped it home the moment it was touched
+        # -- off the screen the reader had put it on. A gesture offered and
+        # then undone is worse than either answer.
+        #
+        # The feature stays until there is a gesture to replace it with: one
+        # that ends in a real workspace instead of being refused. Those
+        # surfaces are still kept out of the explicit Float Panel menu,
+        # which says the same thing without breaking what already works.
         return dock, dock
 
     def install(self, descriptor, widget, container):
