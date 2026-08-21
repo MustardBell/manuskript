@@ -77,16 +77,23 @@ class WorkspaceNavigator:
         return None
 
     @classmethod
-    def compose(cls, pages=(), descriptors=()):
-        """Rows from the pages a window keeps and the panels that ask.
+    def compose(cls, pages=(), surfaces=()):
+        """Rows from the pages a window keeps and the surfaces it can show.
 
         ``pages`` are ``NavigatorTarget``s the window states itself.
-        ``descriptors`` is every panel available; the ones declaring a
-        navigator entry contribute a row.
+        ``surfaces`` are workspace surfaces -- the places the writer goes.
+
+        It used to take every panel and pick out the ones with a navigator
+        entry, reaching for the field with ``getattr`` and accepting its
+        absence. That made this the last place deciding what kind of thing
+        it was holding by looking at a field, which is exactly what the two
+        descriptor types exist to stop. A surface may still leave its entry
+        unset and take no row; nothing else can take one at all.
         """
+
         targets = list(pages)
-        for descriptor in descriptors:
-            entry = getattr(descriptor, "navigator", None)
+        for descriptor in surfaces:
+            entry = descriptor.navigator
             if entry is None:
                 continue
             targets.append(NavigatorTarget(

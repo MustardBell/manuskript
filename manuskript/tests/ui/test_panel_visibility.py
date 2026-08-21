@@ -11,7 +11,7 @@ import inspect
 
 from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow
 
-from manuskript.panels import PanelDescriptor
+from manuskript.panels import ToolPanelDescriptor
 from manuskript.ui.panels import host as host_module
 from manuskript.ui.panels.host import PanelInstance
 from manuskript.ui.panels.visibility import PanelVisibility
@@ -19,7 +19,7 @@ from manuskript.ui.panels.window_port import PanelWindow
 
 
 def a_panel(default_visible=True):
-    return PanelDescriptor(
+    return ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         default_visible=default_visible,

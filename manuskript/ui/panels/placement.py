@@ -14,6 +14,9 @@ from weakref import ref, WeakKeyDictionary, WeakMethod
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDockWidget, QMenu
 
+from manuskript.panels import WorkspaceSurfaceDescriptor
+from manuskript.panels import group_of as _group_of
+
 
 def weak_slot(method, *leading_args):
     """Connect Qt to a controller without making the signal own it."""
@@ -311,7 +314,7 @@ class PanelPlacementController:
         target.toggles.add(
             instance.action,
             instance.widget,
-            instance.descriptor.group,
+            _group_of(instance.descriptor),
             panel_id=instance.descriptor.id,
         )
         target.watch_dock(instance.container)
@@ -488,7 +491,7 @@ class PanelPlacementController:
         floating = set(host.floating())
         offered = 0
         for panel_id, instance in sorted(host.instances.items()):
-            if instance.descriptor.navigator is not None:
+            if isinstance(instance.descriptor, WorkspaceSurfaceDescriptor):
                 continue
             action = menu.addAction(
                 self.views.translate(instance.descriptor.title)

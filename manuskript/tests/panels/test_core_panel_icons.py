@@ -7,14 +7,19 @@ happens to hold, which is the part that regressed.
 """
 
 from manuskript.functions import themeIcon
+from manuskript.panels import WorkspaceSurfaceDescriptor
 from manuskript.panels.core import core_panel_descriptors
 
 
 def navigator_icons():
+    # Surfaces only. Asking every descriptor for a navigator, and treating
+    # absence as "no row", was how a reader worked out which kind it held
+    # by looking at a field -- which the two types exist to stop.
     return tuple(
         descriptor.navigator.icon
         for descriptor in core_panel_descriptors()
-        if descriptor.navigator is not None
+        if isinstance(descriptor, WorkspaceSurfaceDescriptor)
+        and descriptor.navigator is not None
     )
 
 

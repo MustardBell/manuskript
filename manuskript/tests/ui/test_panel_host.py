@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow, QTabBar, qApp
 
 from manuskript.panels import (
     PanelContext,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     PanelRegistry,
 )
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
@@ -40,7 +40,7 @@ def label_factory(context, parent):
 
 
 def test_panel_infrastructure_has_no_main_window_service_locator():
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         widget_factory=label_factory,
@@ -60,7 +60,7 @@ def test_a_dock_panel_keeps_its_declared_object_name():
     """Window layouts are saved against dock objectNames, so the name a
     dock always had must survive its move into the panel vocabulary.
     """
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="plugin.example.notes",
         title="Notes",
         object_name="pluginProjectPanel.example.notes.panel",
@@ -79,7 +79,7 @@ def test_a_dock_panel_keeps_its_declared_object_name():
 
 
 def test_opening_twice_reuses_the_living_instance():
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         widget_factory=label_factory,
@@ -94,7 +94,7 @@ def test_opening_twice_reuses_the_living_instance():
 
 
 def test_revealing_a_dock_raises_its_tab():
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         default_visible=False,
@@ -115,7 +115,7 @@ def test_revealing_a_tabified_dock_selects_its_native_tab():
     window = QMainWindow()
     registry = PanelRegistry()
     for panel_id, title in (("core.first", "First"), ("core.second", "Second")):
-        registry.register(PanelDescriptor(
+        registry.register(ToolPanelDescriptor(
             id=panel_id,
             title=title,
             widget_factory=label_factory,
@@ -158,7 +158,7 @@ def test_putting_away_a_panel_shown_behind_its_toggle_still_hides_it():
     an implementation that only re-checks the action would emit nothing
     and leave the panel showing.
     """
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         default_visible=True,
@@ -183,7 +183,7 @@ def test_closing_a_docked_panel_with_its_x_unchecks_the_toggle():
     could not tell them apart, so a docked panel closed with its X left
     every button still claiming it was showing.
     """
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         default_visible=True,
@@ -211,7 +211,7 @@ def test_a_closed_dock_panel_leaves_nothing_holding_its_instance():
     import gc
     import weakref
 
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         widget_factory=label_factory,
@@ -228,7 +228,7 @@ def test_a_closed_dock_panel_leaves_nothing_holding_its_instance():
 
 
 def test_syncing_visibility_makes_the_toggle_say_what_is_showing():
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         default_visible=False,
@@ -245,7 +245,7 @@ def test_syncing_visibility_makes_the_toggle_say_what_is_showing():
 
 
 def test_a_panel_declared_hidden_starts_hidden_and_in_agreement():
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         default_visible=False,
@@ -272,7 +272,7 @@ def test_a_failing_factory_reports_instead_of_raising():
     def broken(context, parent):
         raise RuntimeError("no widget today")
 
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.broken",
         title="Broken",
         widget_factory=broken,
@@ -294,7 +294,7 @@ def test_a_failing_factory_never_waits_for_anybody():
     def broken(context, parent):
         raise RuntimeError("no widget today")
 
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.silent",
         title="Silent",
         widget_factory=broken,
@@ -306,7 +306,7 @@ def test_a_failing_factory_never_waits_for_anybody():
 
 
 def test_close_forgets_the_instance():
-    host, window = make_host(PanelDescriptor(
+    host, window = make_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         widget_factory=label_factory,
@@ -341,7 +341,7 @@ def test_a_dock_is_restored_by_name_before_being_placed():
     later.setCentralWidget(QLabel("body"))
     later.restoreState(saved)
     registry = PanelRegistry()
-    registry.register(PanelDescriptor(
+    registry.register(ToolPanelDescriptor(
         id="vendor.notes",
         title="Notes",
         widget_factory=label_factory,
@@ -361,7 +361,7 @@ def test_a_dock_the_layout_never_saw_goes_to_its_default_area():
     window = QMainWindow()
     window.setCentralWidget(QLabel("body"))
     registry = PanelRegistry()
-    registry.register(PanelDescriptor(
+    registry.register(ToolPanelDescriptor(
         id="vendor.fresh",
         title="Fresh",
         widget_factory=label_factory,
@@ -386,7 +386,7 @@ def test_a_singleton_panel_is_refused_a_second_window():
     from manuskript.ui.panels import PanelScopeError
 
     registry = PanelRegistry()
-    registry.register(PanelDescriptor(
+    registry.register(ToolPanelDescriptor(
         id="vendor.only-one",
         title="Only one",
         multiplicity=SINGLETON,
@@ -415,7 +415,7 @@ def test_a_singleton_panel_is_refused_a_second_window():
 
 def test_a_per_window_panel_is_built_once_per_window():
     registry = PanelRegistry()
-    registry.register(PanelDescriptor(
+    registry.register(ToolPanelDescriptor(
         id="vendor.each",
         title="Each",
         widget_factory=label_factory,
@@ -448,7 +448,7 @@ def test_a_place_is_kept_while_a_panel_is_away():
     """
     name = "panel.vendor.away"
     registry = PanelRegistry()
-    registry.register(PanelDescriptor(
+    registry.register(ToolPanelDescriptor(
         id="vendor.away",
         title="Away",
         object_name=name,
@@ -506,7 +506,7 @@ def test_a_closing_panel_is_told_so_it_can_wind_down_its_own_work():
         def prepare_close(self):
             told.append(True)
 
-    host, _window = make_host(PanelDescriptor(
+    host, _window = make_host(ToolPanelDescriptor(
         id="core.busy",
         title="Busy",
         widget_factory=lambda context, parent: Busy("body", parent),
@@ -527,7 +527,7 @@ def test_a_panel_moving_between_windows_is_not_told_it_is_closing():
         def prepare_close(self):
             told.append(True)
 
-    host, _window = make_host(PanelDescriptor(
+    host, _window = make_host(ToolPanelDescriptor(
         id="core.busy",
         title="Busy",
         widget_factory=lambda context, parent: Busy("body", parent),
@@ -546,7 +546,7 @@ def test_a_panel_that_fails_on_the_way_out_does_not_trap_the_window():
         def prepare_close(self):
             raise RuntimeError("badly behaved plugin")
 
-    host, _window = make_host(PanelDescriptor(
+    host, _window = make_host(ToolPanelDescriptor(
         id="core.awkward",
         title="Awkward",
         widget_factory=lambda context, parent: Awkward("body", parent),

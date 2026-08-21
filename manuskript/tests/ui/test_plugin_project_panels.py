@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QMainWindow, QMenu, QPlainTextEdit
 from PyQt5.QtWidgets import qApp
 
 from manuskript.domain.plugin_data import ProjectPluginData
-from manuskript.panels import DOCK
+from manuskript.panels import DOCK, ToolPanelDescriptor
 from manuskript.plugins.api import (
     ExtensionDescriptor,
     ProjectPanelContribution,
@@ -149,7 +149,9 @@ def test_a_declarative_project_panel_supplies_its_host_widget():
 
     panel_id = host._panelIds["example.notes.panel"]
     descriptor = window.panelRegistry.descriptor(panel_id)
-    assert descriptor.navigator is None
+    # A tool panel, asked of its type. It has no navigator field at all
+    # now -- the absence is the type's, not a value to check.
+    assert isinstance(descriptor, ToolPanelDescriptor)
     assert descriptor.placement == DOCK
     dock = host.open_panel("example.notes.panel")
     deadline = time.monotonic() + 2

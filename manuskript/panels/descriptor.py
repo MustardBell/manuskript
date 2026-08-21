@@ -141,9 +141,11 @@ class ToolPanelDescriptor:
     grouped toggles around a central tab. Independent docks leave it None
     and are offered everywhere.
 
-    A tool panel has no navigator row. Asking for one is asking to be a
-    place the writer goes, which is a workspace surface and a different
-    type -- see ``WorkspaceSurfaceDescriptor``.
+    A tool panel has no navigator row, and no field for one. It briefly had
+    one that only accepted None, so that a refusal could explain itself --
+    which is a contradiction kept in the type to improve an error message.
+    Asking for a navigator row is asking to be a place the writer goes, and
+    that is ``WorkspaceSurfaceDescriptor``.
 
     ``scope`` and ``multiplicity`` say what a panel belongs to and how
     many of it there may be. They are stated rather than inferred
@@ -168,19 +170,7 @@ class ToolPanelDescriptor:
     #: What this panel remembers between sessions, beyond whether it was
     #: showing. Empty for the panels whose whole state is their visibility.
     state: Tuple[PanelState, ...] = ()
-    #: Always None. Kept as a field so the two descriptors answer the same
-    #: question rather than making every reader check the type first, and
-    #: refused in __post_init__ so it cannot become a second way to say
-    #: "surface".
-    navigator: Optional["NavigatorEntry"] = None
-
     def __post_init__(self):
-        if self.navigator is not None:
-            raise ValueError(
-                "Tool panel {} asked for a navigator row. A navigator row "
-                "says the writer goes there, which is a workspace surface: "
-                "declare it as one.".format(self.id)
-            )
         if not self.id or "." not in self.id:
             raise ValueError(
                 "Panel IDs are dotted names like 'core.metadata': "
@@ -240,6 +230,13 @@ class WorkspaceSurfaceDescriptor:
     reading is what made a second window construct its own Editor and left
     nothing for a move to hand over. Which surfaces a particular workspace
     holds is the workspace's state, not this description.
+
+    There is deliberately no ``placement``. A surface briefly answered
+    ``DOCK`` from a property so the existing host could mount it, which let
+    every old consumer go on believing everything has a placement. The
+    temporary wrongness belongs in the host that is about to lose it, where
+    it is one conspicuous branch to delete, rather than in the description
+    of what a surface is.
     """
 
     id: str
@@ -280,26 +277,6 @@ class WorkspaceSurfaceDescriptor:
             )
 
     @property
-    def placement(self):
-        """Docked, for as long as there is nowhere else to put it.
-
-        A property rather than a field, because it is not a choice a
-        surface makes. It exists so the panel host can still mount one
-        while the central surface host is being built, and it goes when
-        that lands.
-        """
-
-        return DOCK
-
-    @property
-    def slot(self):
-        return None
-
-    @property
-    def group(self):
-        return None
-
-    @property
     def requires_project(self):
         return self.scope == PROJECT
 
@@ -308,7 +285,23 @@ class WorkspaceSurfaceDescriptor:
         return self.multiplicity == PER_WINDOW
 
 
-#: What a tool panel was called while it was the only kind. Kept so the
-#: places that declare one need not all move in the same change; new code
-#: should say which of the two it means.
-PanelDescriptor = ToolPanelDescriptor
+#: Either kind, for the few places that genuinely hold both while surfaces
+#: are still mounted by the panel host. Deliberately not called
+#: ``PanelDescriptor``: that name meant "tool panel" for years, and reusing
+#: it for the union would make every annotation ambiguous again.
+WorkspaceItemDescriptor = (ToolPanelDescriptor, WorkspaceSurfaceDescriptor)
+
+
+def group_of(descriptor):
+    """The toggle group a tool panel belongs to, or None for a surface.
+
+    Asked here rather than with ``getattr``: reaching for a field and
+    accepting its absence is how a reader ends up inferring what kind of
+    thing they are holding, which is the habit the two types exist to end.
+    A surface has no group because it is not a toggle in a group -- it is a
+    place the writer goes.
+    """
+
+    if isinstance(descriptor, ToolPanelDescriptor):
+        return descriptor.group
+    return None

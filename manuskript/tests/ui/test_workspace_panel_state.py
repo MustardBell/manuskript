@@ -15,7 +15,7 @@ from manuskript.panels import (
     DOCK,
     PROJECT,
     SPLITTER_SLOT,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     PanelState,
     SplitterSlot,
 )
@@ -52,7 +52,7 @@ class Notebook:
 NOTEBOOK = "plugin.notes.notebook"
 
 #: A panel the controller has never heard of, that remembers something.
-NOTEBOOK_PANEL = PanelDescriptor(
+NOTEBOOK_PANEL = ToolPanelDescriptor(
     id=NOTEBOOK,
     title="Notebook",
     placement=DOCK,
@@ -98,10 +98,15 @@ class Registry:
         self._descriptors = tuple(descriptors)
 
     def descriptors(self, placement=None):
+        # Mirrors the real registry: filtering by placement is a tool
+        # panel's question, so a surface is never a candidate for it.
+        if placement is None:
+            return self._descriptors
         return tuple(
             descriptor
             for descriptor in self._descriptors
-            if placement is None or descriptor.placement == placement
+            if isinstance(descriptor, ToolPanelDescriptor)
+            and descriptor.placement == placement
         )
 
 
@@ -153,7 +158,7 @@ def test_a_panel_the_controller_never_heard_of_keeps_its_state():
 
 
 def test_a_panel_that_remembers_nothing_files_nothing():
-    plain = PanelDescriptor(id="plugin.notes.plain", title="Plain")
+    plain = ToolPanelDescriptor(id="plugin.notes.plain", title="Plain")
     window = a_window(
         instances={
             plain.id: PanelInstance(descriptor=plain, widget=MagicMock()),
@@ -190,21 +195,21 @@ def test_the_splitters_remembered_are_the_ones_panels_sit_in():
     sizes forgotten until somebody came and added it.
     """
     descriptors = (
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id="core.first", title="First", placement=SPLITTER_SLOT,
             slot=SplitterSlot("splitterOne", 0),
         ),
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id="core.second", title="Second", placement=SPLITTER_SLOT,
             slot=SplitterSlot("splitterTwo", 1),
         ),
         # Same splitter as the first: named once, not twice.
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id="core.third", title="Third", placement=SPLITTER_SLOT,
             slot=SplitterSlot("splitterOne", 2),
         ),
         # A dock sits in no splitter.
-        PanelDescriptor(id="core.docked", title="Docked"),
+        ToolPanelDescriptor(id="core.docked", title="Docked"),
     )
     window = a_window(descriptors=descriptors)
     controller = state_controller(window, MagicMock())

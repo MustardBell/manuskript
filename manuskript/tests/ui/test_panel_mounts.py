@@ -22,7 +22,7 @@ from manuskript.panels import (
     DOCK,
     SPLITTER_SLOT,
     PanelContext,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     PanelRegistry,
     SplitterSlot,
 )
@@ -57,12 +57,12 @@ def a_host(descriptor):
 
 
 def test_a_dock_answers_to_the_name_its_panel_declares():
-    declared = PanelDescriptor(
+    declared = ToolPanelDescriptor(
         id="plugin.example.notes",
         title="Notes",
         object_name="pluginProjectPanel.example.notes.panel",
     )
-    undeclared = PanelDescriptor(id="core.notes", title="Notes")
+    undeclared = ToolPanelDescriptor(id="core.notes", title="Notes")
 
     assert dock_name(declared) == "pluginProjectPanel.example.notes.panel"
     assert dock_name(undeclared) == "panel.core.notes"
@@ -74,7 +74,7 @@ def test_a_splitter_mount_puts_a_panel_in_the_slot_it_names():
     splitter.setObjectName("splitterTest")
     splitter.addWidget(QLabel("first"))
     splitter.addWidget(QLabel("second"))
-    descriptor = PanelDescriptor(
+    descriptor = ToolPanelDescriptor(
         id="core.slotted",
         title="Slotted",
         placement=SPLITTER_SLOT,
@@ -118,7 +118,7 @@ def test_panel_window_inventories_splitters_once_at_composition():
 def test_a_splitter_this_window_has_not_got_says_so():
     import pytest
 
-    descriptor = PanelDescriptor(
+    descriptor = ToolPanelDescriptor(
         id="core.missing",
         title="Missing",
         placement=SPLITTER_SLOT,
@@ -137,13 +137,13 @@ def test_a_dock_panel_is_in_no_splitter():
     """
     mount = SplitterMount(PanelWindow.for_window(QMainWindow()))
 
-    assert mount.find(PanelDescriptor(id="core.docked", title="D")) is None
+    assert mount.find(ToolPanelDescriptor(id="core.docked", title="D")) is None
 
 
 def test_a_dock_mount_makes_the_container_the_widget_is_built_into():
     window = QMainWindow()
     window.setCentralWidget(QLabel("body"))
-    descriptor = PanelDescriptor(id="core.notes", title="Notes")
+    descriptor = ToolPanelDescriptor(id="core.notes", title="Notes")
     mount = DockMount(PanelWindow.for_window(window))
 
     parent, container = mount.prepare(descriptor)
@@ -165,7 +165,7 @@ def test_a_floating_dock_keeps_the_name_it_has_when_docked():
     would mean a panel left floating came back docked.
     """
     window = QMainWindow()
-    descriptor = PanelDescriptor(id="core.notes", title="Notes")
+    descriptor = ToolPanelDescriptor(id="core.notes", title="Notes")
     mount = DockMount(PanelWindow.for_window(window))
 
     _parent, container = mount.prepare(descriptor)
@@ -231,7 +231,7 @@ def test_the_host_asks_a_mount_rather_than_knowing_how():
     """Dispatch is a lookup by placement, so a third way of mounting is a
     third class and no change here.
     """
-    host, window = a_host(PanelDescriptor(
+    host, window = a_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         widget_factory=label_factory,
@@ -255,7 +255,7 @@ def test_a_mount_that_never_got_its_widget_is_told_to_let_go():
     def broken(context, parent):
         raise RuntimeError("no widget today")
 
-    host, window = a_host(PanelDescriptor(
+    host, window = a_host(ToolPanelDescriptor(
         id="core.broken",
         title="Broken",
         widget_factory=broken,
@@ -280,7 +280,7 @@ def test_a_placement_this_window_cannot_mount_is_reported_not_raised():
     """A panel asking for a mounting that does not exist is still just a
     broken panel: whatever opened it carries on.
     """
-    host, window = a_host(PanelDescriptor(
+    host, window = a_host(ToolPanelDescriptor(
         id="core.notes",
         title="Notes",
         widget_factory=label_factory,

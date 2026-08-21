@@ -19,7 +19,11 @@ import pytest
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtWidgets import QDockWidget, QPlainTextEdit, qApp
 
-from manuskript.panels import PanelContext, PanelDescriptor
+from manuskript.panels import (
+    PanelContext,
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
+)
 from manuskript.panels.core import (
     EDITOR,
     METADATA,
@@ -554,7 +558,7 @@ class movable_panel:
         self.instance = None
 
     def __enter__(self):
-        self.window.panelRegistry.register(PanelDescriptor(
+        self.window.panelRegistry.register(ToolPanelDescriptor(
             id=NOTES,
             title="Movable notes",
             widget_factory=lambda context, parent: QPlainTextEdit(parent),
@@ -1541,8 +1545,11 @@ def test_a_surface_the_navigator_offers_is_a_window_not_a_dock(
     editor = window.panelHost.instance(EDITOR)
     tree = window.panelHost.instance(PROJECT_TREE)
 
-    assert editor.descriptor.navigator is not None
-    assert tree.descriptor.navigator is None
+    # Asked of the type, not of a field. Reading .navigator to find out
+    # which kind something is was the habit the split ended -- and a tool
+    # panel has no such field to read any more.
+    assert isinstance(editor.descriptor, WorkspaceSurfaceDescriptor)
+    assert isinstance(tree.descriptor, ToolPanelDescriptor)
     # Qt's floatable feature stays on both: removing it from the editor made
     # Qt begin a drag the model then vetoed, so the dock snapped back on
     # release and a session saved with the editor detached snapped it home.

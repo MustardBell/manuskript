@@ -25,7 +25,12 @@ from typing import Any, Optional
 
 from PyQt5.QtWidgets import QWidget
 
-from manuskript.panels import DOCK, SPLITTER_SLOT, PanelDescriptor
+from manuskript.panels import (
+    DOCK,
+    SPLITTER_SLOT,
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
+)
 from manuskript.ui.connections import weak_callback
 from manuskript.ui.panels.mounts import mounts_for
 from manuskript.ui.panels.visibility import PanelVisibility
@@ -45,7 +50,11 @@ class PanelInstance:
     host at a time; transfer means release from one and adopt by another.
     """
 
-    descriptor: PanelDescriptor
+    #: Either kind. The host owns both while surfaces are still mounted
+    #: as docks; saying PanelDescriptor here was a false statement, since
+    #: that name means a tool panel and this class holds all seven
+    #: surfaces too.
+    descriptor: Any
     widget: QWidget
     container: Optional[QWidget] = None
     action: Optional[Any] = None
@@ -149,6 +158,13 @@ class PanelHost:
     def _mount(self, descriptor):
         """How this panel is fastened, by what its descriptor declares."""
         try:
+            if isinstance(descriptor, WorkspaceSurfaceDescriptor):
+                # Transitional, and deliberately ugly so it is easy to find:
+                # a surface belongs in the central host and there is not one
+                # yet, so it is mounted as a dock. Delete this branch when
+                # WorkspaceSurfaceHost lands -- it is the only place that
+                # still treats a place the writer goes as a dock.
+                return self._mounts[DOCK]
             return self._mounts[descriptor.placement]
         except KeyError:
             raise LookupError(

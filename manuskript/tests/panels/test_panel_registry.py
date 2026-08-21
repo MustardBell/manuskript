@@ -11,7 +11,7 @@ import pytest
 from manuskript.panels import (
     DOCK,
     SPLITTER_SLOT,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     PanelRegistry,
     PanelRegistryError,
     SplitterSlot,
@@ -19,7 +19,7 @@ from manuskript.panels import (
 
 
 def dock_panel(panel_id="vendor.notes", title="Notes"):
-    return PanelDescriptor(id=panel_id, title=title)
+    return ToolPanelDescriptor(id=panel_id, title=title)
 
 
 def test_descriptors_come_back_in_registration_order():
@@ -36,7 +36,7 @@ def test_descriptors_come_back_in_registration_order():
 def test_descriptors_can_be_filtered_by_placement():
     registry = PanelRegistry()
     registry.register(dock_panel("vendor.notes"))
-    registry.register(PanelDescriptor(
+    registry.register(ToolPanelDescriptor(
         id="core.metadata",
         title="Metadata",
         placement=SPLITTER_SLOT,
@@ -115,15 +115,15 @@ def test_a_splitter_panel_must_say_which_slot():
     and a dotless id could never carry its owner's namespace.
     """
     with pytest.raises(ValueError, match="which slot"):
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id="core.metadata",
             title="Metadata",
             placement=SPLITTER_SLOT,
         )
     with pytest.raises(ValueError, match="dotted"):
-        PanelDescriptor(id="metadata", title="Metadata")
+        ToolPanelDescriptor(id="metadata", title="Metadata")
     with pytest.raises(ValueError, match="placement"):
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id="core.metadata",
             title="Metadata",
             placement="floating",
@@ -144,13 +144,13 @@ def test_a_panel_says_what_it_belongs_to_and_how_many_there_may_be():
         SINGLETON,
     )
 
-    default = PanelDescriptor(id="vendor.notes", title="Notes")
+    default = ToolPanelDescriptor(id="vendor.notes", title="Notes")
     assert default.scope == APPLICATION
     assert default.multiplicity == PER_WINDOW
     assert default.requires_project is False
     assert default.per_window is True
 
-    scoped = PanelDescriptor(
+    scoped = ToolPanelDescriptor(
         id="vendor.scoped",
         title="Scoped",
         scope=PROJECT,
@@ -162,6 +162,6 @@ def test_a_panel_says_what_it_belongs_to_and_how_many_there_may_be():
 
 def test_an_unknown_scope_or_multiplicity_is_refused():
     with pytest.raises(ValueError, match="scope"):
-        PanelDescriptor(id="v.x", title="X", scope="document")
+        ToolPanelDescriptor(id="v.x", title="X", scope="document")
     with pytest.raises(ValueError, match="multiplicity"):
-        PanelDescriptor(id="v.x", title="X", multiplicity="many")
+        ToolPanelDescriptor(id="v.x", title="X", multiplicity="many")

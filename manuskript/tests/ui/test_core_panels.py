@@ -155,9 +155,12 @@ def test_declaring_core_panels_twice_is_harmless():
     register_core_panels(registry, 6)
 
     assert tuple(entry.id for entry in registry.descriptors()) == CORE_IDS
+    # Only a tool panel has a placement to be asked about. A surface is
+    # hosted centrally, and answering DOCK from a property was how every
+    # old consumer went on believing everything has one.
     assert all(
         descriptor.placement == DOCK
-        for descriptor in core_panel_descriptors(6)
+        for descriptor in registry.tool_panels()
     )
 
 
@@ -172,8 +175,10 @@ ENTITY_IDS = (
 def test_core_panels_belong_to_no_single_main_tab():
     """Independent surfaces have no central tab owning their toggle."""
 
+    from manuskript.panels import group_of
+
     groups = {
-        descriptor.id: descriptor.group
+        descriptor.id: group_of(descriptor)
         for descriptor in core_panel_descriptors(6)
     }
     assert all(groups[panel_id] is None for panel_id in CORE_IDS)
@@ -359,17 +364,13 @@ def test_the_two_kinds_are_declared_as_two_kinds():
     )
 
 
-def test_a_tool_panel_cannot_quietly_become_a_place_the_writer_goes():
-    """Refused where it is written, rather than half-honoured at runtime.
-
-    One type with a navigator field bolted on made contradictions
-    expressible -- a navigator row on something with a splitter slot -- and
-    left every consumer to remember which fields meant anything.
-    """
+def test_a_tool_panel_has_no_navigator_row_to_ask_for():
+    """Not a field that only accepts None, which is the contradiction kept
+    in the type to make an error message nicer. There is no field."""
 
     from manuskript.panels import NavigatorEntry, ToolPanelDescriptor
 
-    with pytest.raises(ValueError, match="workspace surface"):
+    with pytest.raises(TypeError, match="navigator"):
         ToolPanelDescriptor(
             id="core.notes",
             title="Notes",
@@ -377,16 +378,22 @@ def test_a_tool_panel_cannot_quietly_become_a_place_the_writer_goes():
         )
 
 
-def test_a_surface_has_no_placement_to_choose():
-    """It is hosted centrally; being in a dock today is transitional."""
+def test_a_surface_has_no_placement_to_be_asked_about():
+    """It is hosted centrally, so the question does not apply to it.
+
+    It briefly answered DOCK from a property so the panel host could mount
+    one, which let every old consumer go on believing everything has a
+    placement. The transitional wrongness lives in the host that is about
+    to lose it instead.
+    """
 
     from manuskript.panels import DOCK, WorkspaceSurfaceDescriptor
 
     surface = WorkspaceSurfaceDescriptor(id="core.editor", title="Editor")
 
-    assert surface.placement == DOCK
-    assert surface.slot is None
-    assert surface.group is None
+    assert not hasattr(surface, "placement")
+    assert not hasattr(surface, "slot")
+    assert not hasattr(surface, "group")
     with pytest.raises(TypeError):
         WorkspaceSurfaceDescriptor(
             id="core.editor", title="Editor", placement=DOCK,

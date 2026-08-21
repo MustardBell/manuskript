@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 from PyQt5.QtWidgets import QMainWindow
 
-from manuskript.panels import PanelContext, PanelDescriptor
+from manuskript.panels import PanelContext, ToolPanelDescriptor
 from manuskript.ui.panels import host as host_module
 from manuskript.ui.panels.failures import (
     DURATION,
@@ -23,7 +23,7 @@ from manuskript.ui.panels.failures import (
 from manuskript.ui.panels.window_port import PanelWindow
 
 
-BROKEN = PanelDescriptor(id="core.notes", title="Notes")
+BROKEN = ToolPanelDescriptor(id="core.notes", title="Notes")
 
 
 def reporter_for(window):

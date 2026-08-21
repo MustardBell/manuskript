@@ -24,6 +24,7 @@ from manuskript.controllers.view_configuration_controller import (
 )
 from manuskript.panels import PanelContext
 from manuskript.panels import core as core_panels
+from manuskript.panels import group_of as _group_of
 from manuskript.panels.core import register_core_panels
 from manuskript.ui.panels import PanelHost
 from manuskript.ui.panels.placement import (
@@ -603,7 +604,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.toolbar.addPanelToggle(
             instance.action,
             instance.widget,
-            instance.descriptor.group,
+            _group_of(instance.descriptor),
             panel_id=instance.descriptor.id,
         )
         placement = getattr(self, "panelPlacement", None)
@@ -830,7 +831,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # became a dock.
         self.navigator = WorkspaceNavigator.compose(
             pages=self.NAVIGATOR_PAGES,
-            descriptors=self.panelRegistry.descriptors(),
+            surfaces=self.panelRegistry.surfaces(),
         )
         self.lstTabs.setIconSize(QSize(48, 48))
         for target in self.navigator.targets:

@@ -9,7 +9,10 @@ exists.
 
 import logging
 
-from manuskript.panels.descriptor import WorkspaceSurfaceDescriptor
+from manuskript.panels.descriptor import (
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -27,6 +30,17 @@ class PanelRegistry:
         self._listeners = []
 
     def register(self, descriptor):
+        if not isinstance(
+            descriptor, (ToolPanelDescriptor, WorkspaceSurfaceDescriptor)
+        ):
+            # There are exactly two kinds, and anything else must not become
+            # one by having an id. Accepting whatever had the right shape is
+            # how a third thing would have quietly been filed as a tool
+            # panel, since that used to mean "not a surface".
+            raise PanelRegistryError(
+                "{!r} is neither a workspace surface nor a tool panel."
+                .format(descriptor)
+            )
         if descriptor.id in self._descriptors:
             raise PanelRegistryError(
                 "Panel ID {!r} is already registered.".format(
@@ -56,10 +70,19 @@ class PanelRegistry:
             ) from None
 
     def descriptors(self, placement=None):
+        """Everything registered, or the tool panels with one placement.
+
+        Filtering by placement is a tool panel's question: a surface has no
+        placement, so asking for one can only ever mean the docks and
+        splitter slots.
+        """
+
+        if placement is None:
+            return tuple(self._descriptors.values())
         return tuple(
             descriptor
-            for descriptor in self._descriptors.values()
-            if placement is None or descriptor.placement == placement
+            for descriptor in self.tool_panels()
+            if descriptor.placement == placement
         )
 
     def surfaces(self):
@@ -78,12 +101,16 @@ class PanelRegistry:
         )
 
     def tool_panels(self):
-        """The things kept beside what is being written."""
+        """The things kept beside what is being written.
+
+        Tested positively. Defining a tool panel as "not a surface" would
+        make anything unrecognised into one.
+        """
 
         return tuple(
             descriptor
             for descriptor in self._descriptors.values()
-            if not isinstance(descriptor, WorkspaceSurfaceDescriptor)
+            if isinstance(descriptor, ToolPanelDescriptor)
         )
 
     def subscribe(self, listener):

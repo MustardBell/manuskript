@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import QLabel, QMainWindow
 from manuskript.panels import (
     SINGLETON,
     PanelContext,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     PanelRegistry,
 )
 from manuskript.ui.panels import (
@@ -52,7 +52,7 @@ def test_the_holder_of_a_panel_is_never_the_host_asking():
     """The asking host has already looked at what it holds itself; being
     told about its own panel would refuse it its own panel.
     """
-    registry = a_registry(PanelDescriptor(
+    registry = a_registry(ToolPanelDescriptor(
         id="vendor.only-one",
         title="Only one",
         multiplicity=SINGLETON,
@@ -78,7 +78,7 @@ def test_two_directories_are_two_applications():
     apart still saw each other, so a test could not have two applications
     and neither could anything else.
     """
-    registry = a_registry(PanelDescriptor(
+    registry = a_registry(ToolPanelDescriptor(
         id="vendor.only-one",
         title="Only one",
         multiplicity=SINGLETON,

@@ -21,7 +21,7 @@ from manuskript.panels import (
     PER_WINDOW,
     PROJECT,
     PanelContext,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     PanelRegistry,
 )
 from manuskript.ui.plugins.story_capabilities import build_story_capability
@@ -181,7 +181,7 @@ class ProjectPanelHost:
             contribution_id,
         )
         if panel_id not in self.panelRegistry:
-            self.panelRegistry.register(PanelDescriptor(
+            self.panelRegistry.register(ToolPanelDescriptor(
                 id=panel_id,
                 title=record.contribution.descriptor.name,
                 placement=DOCK,

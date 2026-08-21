@@ -9,7 +9,7 @@ import pytest
 
 from manuskript.panels import (
     NavigatorEntry,
-    PanelDescriptor,
+    ToolPanelDescriptor,
     WorkspaceSurfaceDescriptor,
 )
 from manuskript.ui.workspace_navigator import (
@@ -31,28 +31,30 @@ def test_panels_contribute_rows_and_the_order_declares_the_reading():
             NavigatorTarget("General", order=100, page=0),
             NavigatorTarget("Editor", order=700, page=6),
         ),
-        descriptors=(
+        surfaces=(
             WorkspaceSurfaceDescriptor(
                 id="core.entities.characters",
                 title="Characters",
                 navigator=NavigatorEntry("Characters", "characters", 300),
             ),
-            PanelDescriptor(id="core.metadata", title="Metadata"),
+            # A surface may exist without being listed. A tool panel cannot
+            # be here at all -- that is the type's job now, not a field
+            # this has to check.
+            WorkspaceSurfaceDescriptor(id="core.drafts", title="Drafts"),
         ),
     )
 
     assert [target.label for target in navigator.targets] == [
         "General", "Characters", "Editor",
     ]
-    # A panel that asked for no row contributes none.
-    assert navigator.row_for_panel("core.metadata") is None
+    assert navigator.row_for_panel("core.drafts") is None
 
 
 def test_a_plugin_panel_takes_a_row_on_the_same_terms_as_core():
     """Nothing here knows which panels the application ships."""
     navigator = WorkspaceNavigator.compose(
         pages=(NavigatorTarget("General", order=100, page=0),),
-        descriptors=(
+        surfaces=(
             WorkspaceSurfaceDescriptor(
                 id="plugin.research.sources",
                 title="Sources",
@@ -73,7 +75,7 @@ def test_a_page_row_is_found_again_when_the_page_changes():
             NavigatorTarget("General", order=100, page=0),
             NavigatorTarget("Editor", order=700, page=6),
         ),
-        descriptors=(),
+        surfaces=(),
     )
 
     assert navigator.row_for_page(6) == 1

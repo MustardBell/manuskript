@@ -24,7 +24,11 @@ than asking which kind it has.
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDockWidget
-from manuskript.panels import DOCK, SPLITTER_SLOT
+from manuskript.panels import (
+    DOCK,
+    SPLITTER_SLOT,
+    WorkspaceSurfaceDescriptor,
+)
 
 
 def dock_name(descriptor):
@@ -51,6 +55,10 @@ class SplitterMount:
         to find out -- remembering a splitter's sizes when a panel leaves
         it, and giving them back when it returns.
         """
+        if isinstance(descriptor, WorkspaceSurfaceDescriptor):
+            # A surface has no splitter to sit in, and asking it would be
+            # asking a tool panel's question of a place the writer goes.
+            return None
         if descriptor.placement != SPLITTER_SLOT or descriptor.slot is None:
             return None
         return self.views.find_splitter(descriptor.slot.splitter)
