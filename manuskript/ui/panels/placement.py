@@ -568,13 +568,17 @@ class PanelPlacementController:
     def move_to_new_window(self, panel_id, _checked=False):
         """Give a panel a workspace of its own, rather than a tool window.
 
-        Refused before a workspace is made when the panel could not go into
-        one anyway. A per-window surface is built afresh by every workspace,
-        so a new one already has its own and ``move_to`` declines a
-        destination that holds this id -- which meant a window opened, an
-        editor appeared in it, the original stayed put, and the whole thing
-        looked like it had worked. Opening a window that cannot receive the
-        panel is worse than declining.
+        Only a panel this workspace does not own is refused without making
+        anything. Whether a *fresh* workspace could accept one cannot be
+        known until there is one to ask: every workspace builds its own copy
+        of the core surfaces, so a new one already holds that id and
+        ``move_to`` declines it. So the workspace is made, asked, and closed
+        again when there was nothing to hand over.
+
+        That is a transaction rather than a refusal, and it is temporary.
+        Once a workspace is created for the surface it is meant to receive
+        rather than populated with everything and then interrogated, this
+        stops being a question that has to be asked by trying.
         """
 
         if self.target.host.instance(panel_id) is None:

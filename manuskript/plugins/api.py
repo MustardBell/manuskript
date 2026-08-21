@@ -486,10 +486,25 @@ class ConversionContribution:
 
 @dataclass(frozen=True)
 class ProjectPanelContribution:
+    """A tool panel: something the writer keeps beside what they are writing.
+
+    Deliberately not a place the writer *goes*. Those are workspace
+    surfaces -- the manuscript, the cast, the outline -- and they live in
+    the window's central host rather than in a dock, cannot be floated into
+    a utility window, and move between windows by changing which workspace
+    owns them.
+
+    This contribution used to carry a ``navigator`` entry, which made a
+    contradiction expressible: the navigator row said "a place the writer
+    goes" while the host built a dock regardless. Nothing ever set it. It
+    is refused rather than quietly dropped, because a plugin that asks for
+    a navigator row is asking for surface semantics and should be told they
+    are not available here yet, not handed a dock that looks like one.
+    """
+
     descriptor: ExtensionDescriptor
     default_file: str
     ui: Any = None
-    navigator: Any = None
     widget_factory: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):

@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QMainWindow, QMenu, QPlainTextEdit
 from PyQt5.QtWidgets import qApp
 
 from manuskript.domain.plugin_data import ProjectPluginData
+from manuskript.panels import DOCK
 from manuskript.plugins.api import (
     ExtensionDescriptor,
     ProjectPanelContribution,
@@ -115,7 +116,16 @@ def test_project_panel_receives_scoped_raw_file_context():
     host.close_all()
 
 
-def test_declarative_project_panel_supplies_its_navigator_and_host_widget():
+def test_a_declarative_project_panel_supplies_its_host_widget():
+    """And takes no navigator row: a contribution is a tool panel.
+
+    It used to be able to ask for one, which made a contradiction
+    expressible -- a navigator row says "a place the writer goes" while the
+    host built a dock regardless. A plugin wanting a navigator destination
+    is asking for workspace surface semantics, and that contract does not
+    exist yet.
+    """
+
     registry = PluginRegistry()
     registrar = registry.registrar("example.notes")
     registrar.register_project_panel(ProjectPanelContribution(
@@ -124,7 +134,6 @@ def test_declarative_project_panel_supplies_its_navigator_and_host_widget():
             name="Project notes",
         ),
         default_file="notes/main.txt",
-        navigator=UiNavigatorEntry("Notes", "document-edit", 250),
         ui=UiDocument("example.notes.panel", 0, (
             UiControl(
                 "message",
@@ -140,8 +149,8 @@ def test_declarative_project_panel_supplies_its_navigator_and_host_widget():
 
     panel_id = host._panelIds["example.notes.panel"]
     descriptor = window.panelRegistry.descriptor(panel_id)
-    assert descriptor.navigator.label == "Notes"
-    assert descriptor.navigator.icon == "document-edit"
+    assert descriptor.navigator is None
+    assert descriptor.placement == DOCK
     dock = host.open_panel("example.notes.panel")
     deadline = time.monotonic() + 2
     while dock.widget().document is None:
@@ -376,3 +385,34 @@ def test_a_second_window_builds_through_no_other_window():
     assert second.open_panel("example.notes.panel") is not None
     assert seen == ["/project/second.msk"]
     second.close_all()
+
+
+def test_a_project_panel_cannot_ask_for_a_navigator_row():
+    """A contribution says tool panel, and there is no way to say otherwise.
+
+    The field used to exist and made a contradiction expressible: a
+    navigator row says "a place the writer goes", while the host built a
+    dock regardless -- which under the surface/tool distinction is two
+    different kinds of thing claimed at once. Nothing ever set it.
+
+    A plugin that wants a navigator destination is asking for workspace
+    surface semantics: a central host rather than a dock, no floating into
+    an owned utility window, and moving between windows by changing which
+    workspace owns it. That contract does not exist yet, and refusing is
+    how it says so instead of handing back a dock that resembles one.
+    """
+
+    from manuskript.plugins.api import (
+        ExtensionDescriptor,
+        ProjectPanelContribution,
+    )
+
+    with pytest.raises(TypeError, match="navigator"):
+        ProjectPanelContribution(
+            descriptor=ExtensionDescriptor(id="vendor.notes", name="Notes"),
+            default_file="notes.json",
+            navigator=object(),
+        )
+
+
+
