@@ -2,6 +2,8 @@
 
 from dataclasses import fields
 
+import pytest
+
 from PyQt5 import sip
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDockWidget, QMainWindow, QTabBar, qApp
@@ -318,3 +320,74 @@ def test_every_core_panel_toggle_is_always_reachable(
         for panel_id in CORE_IDS:
             entry = toolbar._panelToggles[panel_id][1]
             assert entry.isVisible(), (panel_id, group)
+
+
+def test_the_two_kinds_are_declared_as_two_kinds():
+    """The user's rule, made a type rather than a field to read.
+
+    "Anything that navigation has is NOT a dock. It could be docked but
+    anything that navigation has and can enable is a window." So the seven
+    places the writer goes are workspace surfaces and the three things kept
+    beside the writing are tool panels, and nothing has to inspect a
+    navigator field to work out which it is holding.
+    """
+
+    from manuskript.panels import (
+        PanelRegistry,
+        ToolPanelDescriptor,
+        WorkspaceSurfaceDescriptor,
+    )
+
+    registry = PanelRegistry()
+    register_core_panels(registry, 6)
+
+    surfaces = {descriptor.id for descriptor in registry.surfaces()}
+    tools = {descriptor.id for descriptor in registry.tool_panels()}
+
+    assert surfaces == {
+        GENERAL, PROJECT_ENTITIES, CHARACTER_ENTITIES, PLOT_ENTITIES,
+        WORLD_ENTITIES, OUTLINE, EDITOR,
+    }
+    assert tools == {PROJECT_TREE, METADATA, STORYLINE}
+    assert all(
+        isinstance(descriptor, WorkspaceSurfaceDescriptor)
+        for descriptor in registry.surfaces()
+    )
+    assert all(
+        isinstance(descriptor, ToolPanelDescriptor)
+        for descriptor in registry.tool_panels()
+    )
+
+
+def test_a_tool_panel_cannot_quietly_become_a_place_the_writer_goes():
+    """Refused where it is written, rather than half-honoured at runtime.
+
+    One type with a navigator field bolted on made contradictions
+    expressible -- a navigator row on something with a splitter slot -- and
+    left every consumer to remember which fields meant anything.
+    """
+
+    from manuskript.panels import NavigatorEntry, ToolPanelDescriptor
+
+    with pytest.raises(ValueError, match="workspace surface"):
+        ToolPanelDescriptor(
+            id="core.notes",
+            title="Notes",
+            navigator=NavigatorEntry(label="Notes"),
+        )
+
+
+def test_a_surface_has_no_placement_to_choose():
+    """It is hosted centrally; being in a dock today is transitional."""
+
+    from manuskript.panels import DOCK, WorkspaceSurfaceDescriptor
+
+    surface = WorkspaceSurfaceDescriptor(id="core.editor", title="Editor")
+
+    assert surface.placement == DOCK
+    assert surface.slot is None
+    assert surface.group is None
+    with pytest.raises(TypeError):
+        WorkspaceSurfaceDescriptor(
+            id="core.editor", title="Editor", placement=DOCK,
+        )

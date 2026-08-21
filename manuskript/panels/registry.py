@@ -9,6 +9,8 @@ exists.
 
 import logging
 
+from manuskript.panels.descriptor import WorkspaceSurfaceDescriptor
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +60,30 @@ class PanelRegistry:
             descriptor
             for descriptor in self._descriptors.values()
             if placement is None or descriptor.placement == placement
+        )
+
+    def surfaces(self):
+        """The places the writer goes, in registration order.
+
+        Asked separately from tool panels because almost nothing wants
+        both: a navigator lists surfaces, a float menu offers tool panels,
+        and code that had to filter one out of a mixed list was deciding
+        which kind something was by looking at a field.
+        """
+
+        return tuple(
+            descriptor
+            for descriptor in self._descriptors.values()
+            if isinstance(descriptor, WorkspaceSurfaceDescriptor)
+        )
+
+    def tool_panels(self):
+        """The things kept beside what is being written."""
+
+        return tuple(
+            descriptor
+            for descriptor in self._descriptors.values()
+            if not isinstance(descriptor, WorkspaceSurfaceDescriptor)
         )
 
     def subscribe(self, listener):

@@ -11,8 +11,9 @@ from manuskript.panels.descriptor import (
     PER_WINDOW,
     PROJECT,
     NavigatorEntry,
-    PanelDescriptor,
     PanelState,
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
 )
 
 
@@ -59,10 +60,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
     """
     factories = factories or {}
     return (
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=GENERAL,
             title="General",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=False,
@@ -71,7 +71,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
                 label="General", icon="general", order=100,
             ),
         ),
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id=PROJECT_TREE,
             title="Project tree",
             placement=DOCK,
@@ -80,7 +80,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             default_visible=True,
             widget_factory=factories.get(PROJECT_TREE),
         ),
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id=METADATA,
             title="Metadata",
             placement=DOCK,
@@ -90,7 +90,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             widget_factory=factories.get(METADATA),
             state=METADATA_STATE,
         ),
-        PanelDescriptor(
+        ToolPanelDescriptor(
             id=STORYLINE,
             title="Story line",
             placement=DOCK,
@@ -99,10 +99,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             default_visible=False,
             widget_factory=factories.get(STORYLINE),
         ),
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=PROJECT_ENTITIES,
             title="Project",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=False,
@@ -111,10 +110,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
                 label="Summary", icon="summary", order=200,
             ),
         ),
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=CHARACTER_ENTITIES,
             title="Characters",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=True,
@@ -123,10 +121,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
                 label="Characters", icon="characters", order=300,
             ),
         ),
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=PLOT_ENTITIES,
             title="Plots",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=False,
@@ -135,10 +132,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
                 label="Plots", icon="plots", order=400,
             ),
         ),
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=WORLD_ENTITIES,
             title="World & entities",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=False,
@@ -147,10 +143,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
                 label="World", icon="world", order=500,
             ),
         ),
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=OUTLINE,
             title="Outline",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=False,
@@ -159,10 +154,9 @@ def core_panel_descriptors(redaction_group=None, factories=None):
                 label="Outline", icon="outline", order=600,
             ),
         ),
-        PanelDescriptor(
+        WorkspaceSurfaceDescriptor(
             id=EDITOR,
             title="Editor",
-            placement=DOCK,
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=True,

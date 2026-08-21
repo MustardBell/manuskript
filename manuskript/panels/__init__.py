@@ -13,6 +13,8 @@ from manuskript.panels.descriptor import (
     SINGLETON,
     SPLITTER_SLOT,
     PanelDescriptor,
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
     PanelState,
     SplitterSlot,
 )
@@ -34,6 +36,8 @@ __all__ = [
     "SPLITTER_SLOT",
     "PanelContext",
     "PanelDescriptor",
+    "ToolPanelDescriptor",
+    "WorkspaceSurfaceDescriptor",
     "PanelState",
     "PanelRegistry",
     "PanelRegistryError",

@@ -1,10 +1,27 @@
-"""What a side panel is, said without Qt.
+"""What a workspace shows, said without Qt, in two kinds.
 
-A panel is anything the workspace shows beside the document: the project
-tree, the metadata editor, a plugin's notes. Naming them all in one
-vocabulary is what lets one host build any of them for any window, and
-later move one between windows by handing over its instance instead of
-rewiring signals.
+There are two of them and they were one for too long.
+
+A **workspace surface** is a place the writer goes: the manuscript, the
+cast, the outline, the editor. It is what the navigator lists. It lives in
+the window's central host, it is not a dock, and it may be docked without
+that being what it is -- the user's rule, and the correction that produced
+this split: *"anything that navigation has is NOT a dock. It could be
+docked but anything that navigation has and can enable is a window."*
+
+A **tool panel** is something kept beside what is being written: the
+project tree, the metadata editor, a plugin's notes. It lives in a dock,
+it may float into a utility window, and that is the whole of what it is.
+
+They were one type with a `navigator` field bolted on, which made
+contradictions expressible -- a navigator row with a splitter slot, a dock
+placement on a place the writer goes -- and left every consumer to
+remember which fields meant anything for which kind. The fields have
+different domains, so the types do.
+
+One registry still holds both, because there is one id namespace and one
+place to ask what exists. It answers `surfaces()` and `tool_panels()`
+separately, since almost nothing wants both.
 """
 
 from dataclasses import dataclass
@@ -111,8 +128,8 @@ class PanelState:
 
 
 @dataclass(frozen=True)
-class PanelDescriptor:
-    """One panel, by name, before any widget of it exists.
+class ToolPanelDescriptor:
+    """One tool panel, by name, before any widget of it exists.
 
     ``widget_factory(context, parent)`` builds the panel's widget and is
     what makes a second window able to have its own copy. It may be None
@@ -121,9 +138,12 @@ class PanelDescriptor:
     not to design against.
 
     ``group`` is retained for compatibility with older extensions that
-    grouped toggles around a central tab. Independent dock surfaces leave it
-    None and are offered everywhere; new code should express reachability
-    with ``navigator`` and relationships with placement commands.
+    grouped toggles around a central tab. Independent docks leave it None
+    and are offered everywhere.
+
+    A tool panel has no navigator row. Asking for one is asking to be a
+    place the writer goes, which is a workspace surface and a different
+    type -- see ``WorkspaceSurfaceDescriptor``.
 
     ``scope`` and ``multiplicity`` say what a panel belongs to and how
     many of it there may be. They are stated rather than inferred
@@ -148,13 +168,19 @@ class PanelDescriptor:
     #: What this panel remembers between sessions, beyond whether it was
     #: showing. Empty for the panels whose whole state is their visibility.
     state: Tuple[PanelState, ...] = ()
-    #: A row in the window's navigator, for a panel that is one of the
-    #: places a person goes rather than a tool they turn on. Declared
-    #: here so anything that can register a panel can offer one, rather
-    #: than the window holding a list of the rows it happens to know.
+    #: Always None. Kept as a field so the two descriptors answer the same
+    #: question rather than making every reader check the type first, and
+    #: refused in __post_init__ so it cannot become a second way to say
+    #: "surface".
     navigator: Optional["NavigatorEntry"] = None
 
     def __post_init__(self):
+        if self.navigator is not None:
+            raise ValueError(
+                "Tool panel {} asked for a navigator row. A navigator row "
+                "says the writer goes there, which is a workspace surface: "
+                "declare it as one.".format(self.id)
+            )
         if not self.id or "." not in self.id:
             raise ValueError(
                 "Panel IDs are dotted names like 'core.metadata': "
@@ -198,3 +224,91 @@ class PanelDescriptor:
     def per_window(self):
         """Whether each window builds its own, rather than sharing one."""
         return self.multiplicity == PER_WINDOW
+
+
+@dataclass(frozen=True)
+class WorkspaceSurfaceDescriptor:
+    """One place the writer goes, before any widget of it exists.
+
+    A surface is hosted by the window's central surface host, and moving one
+    between windows changes which workspace owns it rather than where it is
+    docked. So it has no ``placement`` to choose, no splitter ``slot`` and no
+    ``group``: those are a tool panel's vocabulary and mean nothing here.
+
+    ``multiplicity`` says at most one presentation of this surface **may**
+    belong to a workspace. It does not say every workspace gets one -- that
+    reading is what made a second window construct its own Editor and left
+    nothing for a move to hand over. Which surfaces a particular workspace
+    holds is the workspace's state, not this description.
+    """
+
+    id: str
+    title: str
+    scope: str = PROJECT
+    multiplicity: str = PER_WINDOW
+    #: The Qt objectName a saved layout files this by. Kept while surfaces
+    #: are still hosted in docks; it is layout identity rather than
+    #: placement, and outlives the container it currently names.
+    object_name: str = ""
+    widget_factory: Optional[Callable[..., Any]] = None
+    state: Tuple[PanelState, ...] = ()
+    #: Where this sits in the navigator. Optional: a surface may exist
+    #: without being listed, but anything listed is a surface.
+    navigator: Optional["NavigatorEntry"] = None
+    #: Transitional, and only while surfaces are mounted as docks. Once the
+    #: central host exists, which surface is showing is the host's current
+    #: one and this stops meaning anything.
+    default_visible: bool = False
+
+    def __post_init__(self):
+        if not self.id or "." not in self.id:
+            raise ValueError(
+                "Surface IDs are dotted names like 'core.editor': "
+                "got {!r}.".format(self.id)
+            )
+        if not self.title:
+            raise ValueError("Surface {} needs a title.".format(self.id))
+        if self.scope not in SCOPES:
+            raise ValueError(
+                "Surface {} has scope {!r}; it must be one of {}."
+                .format(self.id, self.scope, ", ".join(SCOPES))
+            )
+        if self.multiplicity not in MULTIPLICITIES:
+            raise ValueError(
+                "Surface {} has multiplicity {!r}; it must be one of {}."
+                .format(self.id, self.multiplicity, ", ".join(MULTIPLICITIES))
+            )
+
+    @property
+    def placement(self):
+        """Docked, for as long as there is nowhere else to put it.
+
+        A property rather than a field, because it is not a choice a
+        surface makes. It exists so the panel host can still mount one
+        while the central surface host is being built, and it goes when
+        that lands.
+        """
+
+        return DOCK
+
+    @property
+    def slot(self):
+        return None
+
+    @property
+    def group(self):
+        return None
+
+    @property
+    def requires_project(self):
+        return self.scope == PROJECT
+
+    @property
+    def per_window(self):
+        return self.multiplicity == PER_WINDOW
+
+
+#: What a tool panel was called while it was the only kind. Kept so the
+#: places that declare one need not all move in the same change; new code
+#: should say which of the two it means.
+PanelDescriptor = ToolPanelDescriptor

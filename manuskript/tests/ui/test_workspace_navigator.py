@@ -7,7 +7,11 @@ row -- which is exactly what happened to Characters.
 
 import pytest
 
-from manuskript.panels import NavigatorEntry, PanelDescriptor
+from manuskript.panels import (
+    NavigatorEntry,
+    PanelDescriptor,
+    WorkspaceSurfaceDescriptor,
+)
 from manuskript.ui.workspace_navigator import (
     NavigatorTarget,
     WorkspaceNavigator,
@@ -28,7 +32,7 @@ def test_panels_contribute_rows_and_the_order_declares_the_reading():
             NavigatorTarget("Editor", order=700, page=6),
         ),
         descriptors=(
-            PanelDescriptor(
+            WorkspaceSurfaceDescriptor(
                 id="core.entities.characters",
                 title="Characters",
                 navigator=NavigatorEntry("Characters", "characters", 300),
@@ -49,7 +53,7 @@ def test_a_plugin_panel_takes_a_row_on_the_same_terms_as_core():
     navigator = WorkspaceNavigator.compose(
         pages=(NavigatorTarget("General", order=100, page=0),),
         descriptors=(
-            PanelDescriptor(
+            WorkspaceSurfaceDescriptor(
                 id="plugin.research.sources",
                 title="Sources",
                 navigator=NavigatorEntry("Sources", "folder", 150),
