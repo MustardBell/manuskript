@@ -26,8 +26,10 @@ surfaces does this workspace have" a consequence of what happened to be
 touched rather than something the workspace states.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
+
+from manuskript.panels import WorkspaceSurfaceDescriptor
 
 
 @dataclass
@@ -40,7 +42,7 @@ class WorkspaceSurfaceInstance:
     without rebuilding, so what the surface was showing survives the move.
     """
 
-    descriptor: Any
+    descriptor: WorkspaceSurfaceDescriptor
     widget: Any
     host: Optional["WorkspaceSurfaceHost"] = None
     #: What the presentation wrapped it in, when it wrapped it in anything.
@@ -60,8 +62,12 @@ class WorkspaceSurfaceHost:
 
     ``presentation`` is how they are shown -- given rather than chosen here,
     because whether that is a central stack or docks is a question for the
-    parity oracle rather than for this class. It needs ``show(instance)``,
-    ``hide(instance)``, ``remove(instance)`` and ``raise_(instance)``.
+    parity oracle rather than for this class. It needs ``mount(instance)``,
+    ``unmount(instance)`` and ``activate(instance)``.
+
+    An earlier port also declared ``hide``, which nothing called: a mounted
+    surface is not individually shown or hidden, because one of them is
+    current and the rest are simply not the current one.
     """
 
     def __init__(self, registry, presentation, context=None):
@@ -101,20 +107,27 @@ class WorkspaceSurfaceHost:
         if existing is not None:
             return existing
         descriptor = self.registry.descriptor(surface_id)
-        factory = getattr(descriptor, "widget_factory", None)
-        if factory is None:
+        if not isinstance(descriptor, WorkspaceSurfaceDescriptor):
+            # Asked of the type. Accepting whatever had a widget_factory
+            # would let a tool panel be opened here, which is kind inferred
+            # from a shared field -- the habit the two descriptors exist to
+            # end, reappearing inside the thing that enforces them.
+            raise WorkspaceSurfaceError(
+                "{} is a tool panel; the panel host owns those."
+                .format(surface_id)
+            )
+        if descriptor.widget_factory is None:
             raise WorkspaceSurfaceError(
                 "Surface {} has no factory, so this workspace cannot build "
                 "one.".format(surface_id)
             )
-        widget = factory(context or self.context, None)
+        widget = descriptor.widget_factory(context or self.context, None)
         instance = WorkspaceSurfaceInstance(
             descriptor=descriptor, widget=widget, host=self
         )
-        instance.container = self.presentation.show(instance)
+        instance.container = self.presentation.mount(instance)
         self._instances[surface_id] = instance
-        if self._current is None:
-            self._current = surface_id
+        self._settle_current(surface_id)
         return instance
 
     def detach(self, surface_id):
@@ -128,11 +141,18 @@ class WorkspaceSurfaceHost:
         instance = self._instances.pop(surface_id, None)
         if instance is None:
             return None
-        self.presentation.remove(instance)
+        self.presentation.unmount(instance)
         instance.host = None
         instance.container = None
         if self._current == surface_id:
-            self._current = next(iter(self._instances), None)
+            # Whatever becomes current has to be shown, not merely recorded.
+            # Naming a new current without telling the presentation left the
+            # host's answer and the reader's view disagreeing, and the fake
+            # in the tests could not see the difference.
+            self._current = None
+            remaining = next(iter(self._instances), None)
+            if remaining is not None:
+                self.activate(remaining)
         return instance
 
     def attach(self, instance):
@@ -140,16 +160,24 @@ class WorkspaceSurfaceHost:
 
         if instance is None:
             return None
+        if instance.host is not None:
+            # Still owned elsewhere. Adopting it would put one living
+            # surface in two workspaces while it named only one owner --
+            # exactly the invariant this class exists to hold, broken by
+            # the class itself. Detach it from where it is first.
+            raise WorkspaceSurfaceError(
+                "{} still belongs to another workspace; detach it there "
+                "first.".format(instance.id)
+            )
         surface_id = instance.id
         if surface_id in self._instances:
             raise WorkspaceSurfaceError(
                 "This workspace already holds {}.".format(surface_id)
             )
         instance.host = self
-        instance.container = self.presentation.show(instance)
+        instance.container = self.presentation.mount(instance)
         self._instances[surface_id] = instance
-        if self._current is None:
-            self._current = surface_id
+        self._settle_current(surface_id)
         return instance
 
     def activate(self, surface_id):
@@ -158,9 +186,24 @@ class WorkspaceSurfaceHost:
         instance = self._instances.get(surface_id)
         if instance is None:
             return None
-        self.presentation.raise_(instance)
+        self.presentation.activate(instance)
         self._current = surface_id
         return instance
+
+    def _settle_current(self, surface_id):
+        """Make this one current if nothing is, showing it as well.
+
+        One operation owns both halves. Recording a current surface without
+        telling the presentation is how the host's answer and what a reader
+        sees came apart, and it is not the sort of thing a fake notices.
+
+        A fallback, not a policy: which surface a fresh workspace starts on
+        is composition's to state, not an accident of which id was passed
+        to ``open`` first.
+        """
+
+        if self._current is None:
+            self.activate(surface_id)
 
     def close(self, surface_id):
         """Put a surface away and let it go."""

@@ -34,22 +34,19 @@ class Presentation:
     """
 
     def __init__(self):
-        self.shown = []
-        self.removed = []
-        self.raised = []
+        self.mounted = []
+        self.unmounted = []
+        self.activated = []
 
-    def show(self, instance):
-        self.shown.append(instance.id)
+    def mount(self, instance):
+        self.mounted.append(instance.id)
         return "container-for-{}".format(instance.id)
 
-    def remove(self, instance):
-        self.removed.append(instance.id)
+    def unmount(self, instance):
+        self.unmounted.append(instance.id)
 
-    def raise_(self, instance):
-        self.raised.append(instance.id)
-
-    def hide(self, instance):
-        pass
+    def activate(self, instance):
+        self.activated.append(instance.id)
 
 
 def surface(surface_id, title="Surface", factory=None):
@@ -91,7 +88,7 @@ def test_opening_the_same_surface_twice_gives_the_same_one():
     second = host.open("core.editor")
 
     assert first is second
-    assert host.presentation.shown == ["core.editor"]
+    assert host.presentation.mounted == ["core.editor"]
 
 
 def test_only_open_may_build_one():
@@ -145,7 +142,7 @@ def test_moving_a_surface_carries_the_living_widget():
     assert destination.instance("core.editor").widget is opened.widget
     assert destination.instance("core.editor").widget.showing == "half a chapter"
     assert not source.contains("core.editor")
-    assert destination.presentation.shown == ["core.editor"]
+    assert destination.presentation.mounted == ["core.editor"]
 
 
 def test_a_detached_surface_belongs_to_nobody_until_it_is_attached():
@@ -156,7 +153,7 @@ def test_a_detached_surface_belongs_to_nobody_until_it_is_attached():
 
     assert moved.host is None
     assert moved.container is None
-    assert source.presentation.removed == ["core.editor"]
+    assert source.presentation.unmounted == ["core.editor"]
 
 
 def test_a_workspace_that_already_holds_one_refuses_the_second():
@@ -169,9 +166,15 @@ def test_a_workspace_that_already_holds_one_refuses_the_second():
     source = a_host(surface("core.editor"))
     destination = a_host(surface("core.editor"))
     destination.open("core.editor")
+    live = source.open("core.editor")
 
+    with pytest.raises(WorkspaceSurfaceError, match="still belongs"):
+        destination.attach(live)
+
+    # And once it has been let go of, the destination refuses it for the
+    # other reason: it already has one of these.
     with pytest.raises(WorkspaceSurfaceError, match="already holds"):
-        destination.attach(source.open("core.editor"))
+        destination.attach(source.detach("core.editor"))
 
 
 def test_activating_shows_the_one_asked_for():
@@ -182,7 +185,9 @@ def test_activating_shows_the_one_asked_for():
     host.activate("core.outline")
 
     assert host.current() == "core.outline"
-    assert host.presentation.raised == ["core.outline"]
+    # The first one opened was activated too, because being current and
+    # being shown are one operation now.
+    assert host.presentation.activated == ["core.editor", "core.outline"]
 
 
 def test_activating_something_this_workspace_does_not_hold_does_nothing():
@@ -220,3 +225,67 @@ def test_closing_the_last_surface_leaves_nothing_showing():
     assert host.close("core.editor")
     assert host.current() is None
     assert not host.contains("core.editor")
+
+
+def test_a_surface_still_owned_elsewhere_is_refused():
+    """One living surface, one workspace, and this class says which.
+
+    Attaching without detaching first put the same instance in two hosts'
+    dictionaries while it named only one of them as owner -- the exactly-one
+    invariant, broken by the class that exists to hold it. The destination
+    was empty, so the already-holds check could not see it.
+    """
+
+    source = a_host(surface("core.editor"))
+    destination = a_host(surface("core.editor"))
+    live = source.open("core.editor")
+
+    with pytest.raises(WorkspaceSurfaceError, match="still belongs"):
+        destination.attach(live)
+
+    assert source.contains("core.editor")
+    assert not destination.contains("core.editor")
+    assert live.host is source
+
+
+def test_a_tool_panel_cannot_be_opened_as_a_surface():
+    """Asked of the type, not of whether it happens to have a factory."""
+
+    from manuskript.panels import ToolPanelDescriptor
+
+    registry = PanelRegistry()
+    registry.register(ToolPanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        widget_factory=lambda context, parent: Widget("notes"),
+    ))
+    host = WorkspaceSurfaceHost(registry, Presentation())
+
+    with pytest.raises(WorkspaceSurfaceError, match="tool panel"):
+        host.open("core.notes")
+
+
+def test_whatever_becomes_current_is_shown_and_not_merely_recorded():
+    """The host's answer and the reader's view have to agree.
+
+    Naming a new current surface without telling the presentation left them
+    disagreeing, and a fake that only recorded mounts could not see it.
+    """
+
+    host = a_host(surface("core.editor"), surface("core.outline"))
+    host.open("core.editor")
+    host.open("core.outline")
+
+    host.detach("core.editor")
+
+    assert host.current() == "core.outline"
+    assert host.presentation.activated[-1] == "core.outline"
+
+
+def test_the_first_surface_is_shown_as_well_as_recorded():
+    host = a_host(surface("core.editor"))
+
+    host.open("core.editor")
+
+    assert host.current() == "core.editor"
+    assert host.presentation.activated == ["core.editor"]

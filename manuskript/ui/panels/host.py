@@ -21,7 +21,7 @@ coming back.
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from PyQt5.QtWidgets import QWidget
 
@@ -50,11 +50,12 @@ class PanelInstance:
     host at a time; transfer means release from one and adopt by another.
     """
 
-    #: Either kind. The host owns both while surfaces are still mounted
-    #: as docks; saying PanelDescriptor here was a false statement, since
-    #: that name means a tool panel and this class holds all seven
-    #: surfaces too.
-    descriptor: Any
+    #: Either kind, and only while surfaces are still mounted here. Any
+    #: threw the information away: there are exactly two things this can
+    #: be, and saying so is what will make the migration's end visible --
+    #: when surfaces leave, this becomes ToolPanelDescriptor and anything
+    #: still routing one through here stops compiling as a sentence.
+    descriptor: Union[ToolPanelDescriptor, WorkspaceSurfaceDescriptor]
     widget: QWidget
     container: Optional[QWidget] = None
     action: Optional[Any] = None
