@@ -167,18 +167,16 @@ class GitCommandRunner:
                 )
             )
         elapsed = time.monotonic() - started
+        # The whole command, not the first few words of it. Truncating kept
+        # the log tidy and threw away the revision and the path -- which are
+        # exactly what tells the source a stalled search was sitting in from
+        # the three hundred before it.
+        spoken = " ".join(str(part) for part in arguments)
         if elapsed > 1:
-            # Only the slow ones, so the log stays readable while still
-            # naming the command a stalled search was sitting in.
-            LOGGER.info(
-                "git %s took %.1fs",
-                " ".join(str(part) for part in arguments[:4]), elapsed,
-            )
+            LOGGER.info("git %s took %.1fs", spoken, elapsed)
         else:
             LOGGER.debug(
-                "git %s -> %d in %.3fs",
-                " ".join(str(part) for part in arguments[:4]),
-                completed.returncode, elapsed,
+                "git %s -> %d in %.3fs", spoken, completed.returncode, elapsed
             )
         return GitCommandResult(
             arguments=command,
