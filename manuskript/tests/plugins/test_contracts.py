@@ -70,3 +70,26 @@ def test_portable_contract_modules_do_not_import_qt():
             module.startswith(("PyQt", "PySide"))
             for module in imports
         ), name
+
+
+def test_the_api_offers_no_way_to_ask_for_a_navigator_row():
+    """Removed rather than reserved for a contribution that may never come.
+
+    It was the type ``ProjectPanelContribution.navigator`` took, and that
+    field is gone: a project panel is a tool panel, and a navigator row
+    says the writer goes there, which is a workspace surface. Nothing can
+    consume this any more.
+
+    API 1 is draft, so this is exactly when an orphan should go. Keeping an
+    unused wire record would make today's accidental shape -- a label, an
+    icon and an integer order -- into the shape a real surface contribution
+    has to live with, and plugin ordering may well want anchors or
+    categories rather than unconstrained integers.
+    """
+
+    import manuskript.plugins as api
+    from manuskript.plugins.specification import api_schema_document
+
+    assert not hasattr(api, "UiNavigatorEntry")
+    assert "UiNavigatorEntry" not in api.__all__
+    assert "ui_navigator_entry" not in api_schema_document()["records"]

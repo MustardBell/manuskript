@@ -1701,26 +1701,6 @@
       ],
       "version": 1
     },
-    "ui_navigator_entry": {
-      "fields": [
-        {
-          "name": "label",
-          "required": true,
-          "type": "string"
-        },
-        {
-          "name": "icon",
-          "required": false,
-          "type": "string"
-        },
-        {
-          "name": "order",
-          "required": false,
-          "type": "integer"
-        }
-      ],
-      "version": 1
-    },
     "ui_response": {
       "fields": [
         {

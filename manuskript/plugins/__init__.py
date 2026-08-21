@@ -143,7 +143,6 @@ from manuskript.plugins.ui_contract import (
     UiEvent,
     UiEventKind,
     UiItem,
-    UiNavigatorEntry,
     UiResponse,
 )
 
@@ -277,6 +276,5 @@ __all__ = [
     "UiEvent",
     "UiEventKind",
     "UiItem",
-    "UiNavigatorEntry",
     "UiResponse",
 ]

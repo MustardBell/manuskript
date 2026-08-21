@@ -177,15 +177,3 @@ class UiResponse:
         if not isinstance(self.document, UiDocument):
             raise TypeError("UI responses require a UI document.")
 
-
-@dataclass(frozen=True)
-class UiNavigatorEntry:
-    label: str
-    icon: str = ""
-    order: int = 1000
-
-    def __post_init__(self):
-        if not str(self.label).strip():
-            raise ValueError("Navigator entries require a visible label.")
-        if isinstance(self.order, bool) or not isinstance(self.order, int):
-            raise ValueError("Navigator entry order must be an integer.")

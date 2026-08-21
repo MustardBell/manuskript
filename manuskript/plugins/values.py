@@ -574,7 +574,6 @@ def _default_record_types():
         UiDocument,
         UiEvent,
         UiItem,
-        UiNavigatorEntry,
         UiResponse,
     )
 
@@ -679,7 +678,6 @@ def _default_record_types():
         ("ui_control", UiControl),
         ("ui_document", UiDocument),
         ("ui_event", UiEvent),
-        ("ui_navigator_entry", UiNavigatorEntry),
         ("ui_response", UiResponse),
     ) + tuple(zip(names, classes))
 

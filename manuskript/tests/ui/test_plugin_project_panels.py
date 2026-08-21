@@ -20,7 +20,6 @@ from manuskript.plugins.ui_contract import (
     UiControl,
     UiControlKind,
     UiDocument,
-    UiNavigatorEntry,
 )
 from manuskript.panels import PanelRegistry
 from manuskript.ui.panels import PanelHost, PanelInstanceDirectory
