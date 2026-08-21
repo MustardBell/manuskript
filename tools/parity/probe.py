@@ -144,14 +144,14 @@ def _surfaces(window):
     found = {}
     for surface, name in LANDMARKS:
         widget = window.findChild(_qt().QWidget, name)
-        if widget is None:
-            found[surface] = {"present": False}
-            continue
-        # Existence is deliberately absent: a widget sitting on a page
-        # nobody selected looks exactly like one that was never built, and
-        # neither is something a reader can see. Whether it *appears* when
-        # its row is chosen is the navigation question, asked separately.
-        visible = widget.isVisible()
+        # A widget that was never built and one sitting on a page nobody
+        # selected look identical to a reader, so they answer identically
+        # here. Reporting "present: false" for one of them left existence
+        # in the verdict through the back door -- visible in one direction
+        # only, which is worse than leaving it in openly. Whether a surface
+        # *appears* when its row is chosen is the navigation question, and
+        # it is asked separately.
+        visible = widget is not None and widget.isVisible()
         found[surface] = {
             "visible": visible,
             "where": _where(window, widget) if visible else None,
@@ -172,9 +172,11 @@ def _method(window):
     for surface, name in LANDMARKS:
         widget = window.findChild(_qt().QWidget, name)
         if widget is None:
+            found[surface] = {"present": False}
             continue
         names, classes = _ancestry(widget)
         found[surface] = {
+            "present": True,
             "docked": _in_a_dock(widget),
             "ancestor_names": names,
             "ancestor_classes": classes,
