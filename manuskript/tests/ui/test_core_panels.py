@@ -111,9 +111,14 @@ def test_surfaces_are_pages_of_the_window_rather_than_docks(MWEmptyProject):
 
 
 def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
-    assert [
-        field.name for field in fields(type(MWEmptyProject.corePanels))
-    ] == [
+    views = MWEmptyProject.corePanels
+    names = {
+        name
+        for name in dir(views)
+        if not name.startswith("_")
+        and name not in {"from_hosts"}
+    }
+    assert names == {
         "general",
         "project_tree",
         "metadata",
@@ -124,7 +129,7 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
         "world_entities",
         "outline",
         "editor",
-    ]
+    }
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
 

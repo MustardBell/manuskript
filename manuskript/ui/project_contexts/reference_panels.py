@@ -6,6 +6,9 @@ reference service, which is handed in: it is made of models and belongs to
 the project, not to any of these panels.
 """
 
+from manuskript.panels.core import EDITOR
+from manuskript.ui.views.MDEditCompleter import MDEditCompleter
+
 
 class ReferencePanelBinding:
     """The storyline, the cheat sheet and the completing editors."""
@@ -13,6 +16,8 @@ class ReferencePanelBinding:
     def __init__(self, views, models):
         self.views = views
         self.models = models
+        self.references = None
+        self._completers = {}
 
     def bind(self, connect, references):
         views = self.views
@@ -32,15 +37,26 @@ class ReferencePanelBinding:
             references,
             connect=connect,
         )
-        # Asked for when a completion is offered, not now: the cheat sheet
-        # fills in as the project loads.
-        completion_data = lambda: views.cheat_sheet.data
-        for editor in views.completers():
-            editor.setReferenceService(references, completion_data)
+        self.references = references
+
+    def attach_surface(self, instance):
+        if self.references is None or instance.id != EDITOR:
+            return
+        completers = tuple(instance.widget.findChildren(MDEditCompleter))
+        completion_data = lambda: self.views.cheat_sheet.data
+        for editor in completers:
+            editor.setReferenceService(self.references, completion_data)
+        self._completers[instance.id] = completers
+
+    def detach_surface(self, instance):
+        for editor in self._completers.pop(instance.id, ()):
+            editor.setReferenceService(None)
 
     def unbind(self):
         views = self.views
-        for editor in views.completers():
-            editor.setReferenceService(None)
+        for instance_id in tuple(self._completers):
+            for editor in self._completers.pop(instance_id):
+                editor.setReferenceService(None)
         views.cheat_sheet.clearModels()
         views.storyline.clearModels()
+        self.references = None

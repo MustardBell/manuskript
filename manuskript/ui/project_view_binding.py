@@ -1,5 +1,7 @@
 from manuskript import functions as F
 from manuskript.enums import Character, Plot
+from manuskript.panels.core import EDITOR, GENERAL, OUTLINE
+from manuskript.ui.connections import SignalConnectionRegistry
 
 
 class FlatDataProjectBinding:
@@ -8,6 +10,7 @@ class FlatDataProjectBinding:
     def __init__(self, views, runtime):
         self.views = views
         self._runtime = runtime
+        self.bound = False
 
     @property
     def models(self):
@@ -15,13 +18,26 @@ class FlatDataProjectBinding:
         return self._runtime.models
 
     def bind(self, _connect):
+        self.bound = True
+
+    def attach_surface(self, instance):
+        if not self.bound or instance.id != GENERAL:
+            return
         models = self.models
-        for widget, column in self.views.general_fields:
+        for widget, column in self.views.fields_for_surface(instance):
             widget.setModel(models.flat_data)
             widget.setColumn(column)
             widget.setCurrentModelIndex(
                 models.flat_data.index(0, column)
             )
+
+    def detach_surface(self, instance):
+        # These fields have no signal subscriptions of their own. The next
+        # workspace/project binding points them at the authoritative model.
+        pass
+
+    def unbind(self):
+        self.bound = False
 
 
 class OutlineSelectionProjectBinding:
@@ -29,24 +45,13 @@ class OutlineSelectionProjectBinding:
 
     def __init__(self, views):
         self.views = views
+        self.bound = False
+        self._surface_connections = {}
 
     def bind(self, connect):
         views = self.views
-        outline_selection = views.outline_tree.selectionModel()
         project_selection = views.project_tree.selectionModel()
         for signal, slot in [
-            (
-                outline_selection.selectionChanged,
-                views.outline_changed,
-            ),
-            (
-                outline_selection.selectionChanged,
-                views.outline_item_editor.selectionChanged,
-            ),
-            (
-                views.outline_tree.clicked,
-                views.outline_item_editor.selectionChanged,
-            ),
             (
                 project_selection.selectionChanged,
                 views.project_tree_changed,
@@ -59,12 +64,51 @@ class OutlineSelectionProjectBinding:
                 views.project_tree.clicked,
                 views.metadata.selectionChanged,
             ),
-            (
-                project_selection.selectionChanged,
-                views.document_area.selectionChanged,
-            ),
         ]:
             connect(signal, slot, F.AUC)
+        self.bound = True
+
+    def attach_surface(self, instance):
+        if not self.bound or instance.id not in (OUTLINE, EDITOR):
+            return
+        connections = SignalConnectionRegistry()
+        views = self.views
+        if instance.id == OUTLINE:
+            panel = instance.widget
+            selection = panel.treeOutlineOutline.selectionModel()
+            connections.connect(
+                selection.selectionChanged,
+                views.outline_changed,
+                F.AUC,
+            )
+            connections.connect(
+                selection.selectionChanged,
+                panel.outlineItemEditor.selectionChanged,
+                F.AUC,
+            )
+            connections.connect(
+                panel.treeOutlineOutline.clicked,
+                panel.outlineItemEditor.selectionChanged,
+                F.AUC,
+            )
+        else:
+            connections.connect(
+                views.project_tree.selectionModel().selectionChanged,
+                instance.widget.editor.selectionChanged,
+                F.AUC,
+            )
+        self._surface_connections[instance.id] = connections
+
+    def detach_surface(self, instance):
+        connections = self._surface_connections.pop(instance.id, None)
+        if connections is not None:
+            connections.disconnect_all()
+
+    def unbind(self):
+        for connections in self._surface_connections.values():
+            connections.disconnect_all()
+        self._surface_connections.clear()
+        self.bound = False
 
 
 class DebugProjectBinding:

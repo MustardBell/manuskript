@@ -74,9 +74,9 @@ class ProjectLifecycleView:
             )
         with timing.span("settings.view_menu"):
             views.rebuild_view_menu()
-        views.editor.sldCorkSizeFactor.setValue(
-            settings.corkSizeFactor
-        )
+        editor = views.editor()
+        if editor is not None:
+            editor.sldCorkSizeFactor.setValue(settings.corkSizeFactor)
         with timing.span("settings.spellcheck"):
             views.spellcheck_action.setChecked(settings.spellcheck)
             views.set_spellcheck(settings.spellcheck)
@@ -88,13 +88,12 @@ class ProjectLifecycleView:
         views.project_tree.setIconSize(
             QSize(icon_size, icon_size)
         )
-        with timing.span("settings.folder_view"):
-            views.editor.setFolderView(settings.folderView)
-            views.editor.updateFolderViewButtons(
-                settings.folderView
-            )
-            views.editor.tabSplitter.updateStyleSheet()
-            views.editor.updateCorkBackground()
+        if editor is not None:
+            with timing.span("settings.folder_view"):
+                editor.setFolderView(settings.folderView)
+                editor.updateFolderViewButtons(settings.folderView)
+                editor.tabSplitter.updateStyleSheet()
+                editor.updateCorkBackground()
         with timing.span("settings.view_mode"):
             if settings.viewMode == "simple":
                 views.set_simple_mode()
@@ -196,8 +195,10 @@ class ProjectLifecycleView:
         undo_stack = workspace.undo_stack
         if undo_stack is not None:
             undo_stack.clear()
-        workspace.editor.close()
-        workspace.editor.closeAllTabs()
+        editor = workspace.editor()
+        if editor is not None:
+            editor.close()
+            editor.closeAllTabs()
 
     def flush_pending_edits(self):
         """Write out this window's own unsubmitted text.
@@ -218,9 +219,9 @@ class ProjectLifecycleView:
     def capture_project_state(self):
         """Copy project-scoped view state into persisted settings."""
         workspace = self.views.workspace
-        self.settings.openIndexes = (
-            workspace.editor.tabSplitter.openIndexes()
-        )
+        editor = workspace.editor()
+        if editor is not None:
+            self.settings.openIndexes = editor.tabSplitter.openIndexes()
 
     def disconnect_project(self):
         self.views.workspace.disconnect_project()

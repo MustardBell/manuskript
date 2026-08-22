@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QAction, QActionGroup, QMenu
 
 from manuskript import functions as F
 from manuskript.enums import Outline
-from manuskript.panels.core import EDITOR
+from manuskript.panels.core import EDITOR, OUTLINE
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.propertiesView import propertiesView
@@ -30,13 +30,24 @@ class ViewConfigurationViews:
     def for_window(cls, window):
         toolbar = window.toolbar
         navigation = window.dckNavigation
-        main_editor = window.corePanels.editor.editor
-        outline_tree = window.corePanels.outline.treeOutlineOutline
         project_tree = window.corePanels.project_tree.tree
 
+        def surface_widget(surface_id):
+            instance = window.surfaceHost.instance(surface_id)
+            return instance.widget if instance is not None else None
+
+        def refresh_cork():
+            panel = surface_widget(EDITOR)
+            if panel is not None:
+                panel.editor.updateCorkView()
+
         def refresh_outline():
-            main_editor.updateTreeView()
-            outline_tree.viewport().update()
+            editor = surface_widget(EDITOR)
+            if editor is not None:
+                editor.editor.updateTreeView()
+            outline = surface_widget(OUTLINE)
+            if outline is not None:
+                outline.treeOutlineOutline.viewport().update()
 
         return cls(
             select_editor=lambda: window.activatePanel(EDITOR),
@@ -50,7 +61,7 @@ class ViewConfigurationViews:
             ),
             outlines=lambda: tuple(window.findChildren(outlineView)),
             refreshers=MappingProxyType({
-                "Cork": main_editor.updateCorkView,
+                "Cork": refresh_cork,
                 "Outline": refresh_outline,
                 "Tree": project_tree.viewport().update,
             }),

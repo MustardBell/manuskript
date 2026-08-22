@@ -20,18 +20,15 @@ FieldBinding = Tuple[Any, int]
 class FlatDataBindingViews:
     """Project-level publication metadata fields."""
 
-    general_fields: Tuple[FieldBinding, ...]
+    fields_for_surface: Callable[[Any], Tuple[FieldBinding, ...]]
 
 
 @dataclass(frozen=True)
 class OutlineSelectionBindingViews:
     """The two outline selections and the consumers they drive."""
 
-    outline_tree: Any
     project_tree: Any
-    outline_item_editor: Any
     metadata: Any
-    document_area: Any
     outline_changed: Callable[..., None]
     project_tree_changed: Callable[..., None]
 
@@ -59,28 +56,30 @@ class ProjectBindingViews:
     flat_data: FlatDataBindingViews
     outline_selection: OutlineSelectionBindingViews
     debug: DebugBindingViews
+    surface_instances: Callable[[], Tuple[Any, ...]]
 
     @classmethod
     def for_window(cls, window):
+        def general_fields(instance):
+            panel = instance.widget
+            return (
+                (panel.title, 0),
+                (panel.subtitle, 1),
+                (panel.series, 2),
+                (panel.volume, 3),
+                (panel.genre, 4),
+                (panel.license, 5),
+                (panel.author, 6),
+                (panel.email, 7),
+            )
+
         return cls(
             flat_data=FlatDataBindingViews(
-                general_fields=(
-                    (window.corePanels.general.title, 0),
-                    (window.corePanels.general.subtitle, 1),
-                    (window.corePanels.general.series, 2),
-                    (window.corePanels.general.volume, 3),
-                    (window.corePanels.general.genre, 4),
-                    (window.corePanels.general.license, 5),
-                    (window.corePanels.general.author, 6),
-                    (window.corePanels.general.email, 7),
-                ),
+                fields_for_surface=general_fields,
             ),
             outline_selection=OutlineSelectionBindingViews(
-                outline_tree=window.corePanels.outline.treeOutlineOutline,
                 project_tree=window.corePanels.project_tree.tree,
-                outline_item_editor=window.corePanels.outline.outlineItemEditor,
                 metadata=window.corePanels.metadata,
-                document_area=window.corePanels.editor.editor,
                 outline_changed=(
                     window.workspaceSelection.outline_selection_changed
                 ),
@@ -99,5 +98,8 @@ class ProjectBindingViews:
                 outline=window.treeDebugOutline,
                 labels=window.lstDebugLabels,
                 statuses=window.lstDebugStatus,
+            ),
+            surface_instances=lambda: tuple(
+                window.surfaceHost.instances.values()
             ),
         )

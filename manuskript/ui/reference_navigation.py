@@ -22,10 +22,12 @@ def reference_navigation_for(window, models, open_entity=None):
         index = models.outline.getIndexByID(text_id)
         if not index.isValid():
             return False
-        window.activatePanel(EDITOR)
-        window.corePanels.editor.editor.setCurrentModelIndex(
-            index, newTab=True
-        )
+        if not window.activatePanel(EDITOR):
+            return False
+        instance = window.surfaceHost.instance(EDITOR)
+        if instance is None:
+            return False
+        instance.widget.editor.setCurrentModelIndex(index, newTab=True)
         return True
 
     def open_plot(plot_id):

@@ -45,6 +45,7 @@ def make_binding():
     # what that factory hands back rather than assigning afterwards.
     contexts = MagicMock()
     views = MagicMock()
+    views.surface_instances.return_value = ()
     features = MagicMock()
     binding = ProjectBinding(
         views,
@@ -124,3 +125,23 @@ def test_project_binding_rolls_back_a_failed_context_install():
     binding.features.unbind.assert_called_once_with()
     binding.outline_selection.bind.assert_not_called()
     assert not binding.bound
+
+
+def test_project_binding_attaches_and_detaches_living_surfaces():
+    binding = make_binding()
+    first = MagicMock(id="core.general")
+    binding.surfaceInstances = MagicMock(return_value=(first,))
+
+    binding.bind()
+
+    binding.flat_data.attach_surface.assert_called_once_with(first)
+    binding.contexts.attach_surface.assert_called_once_with(first)
+    binding.outline_selection.attach_surface.assert_called_once_with(first)
+
+    second = MagicMock(id="core.editor")
+    binding.attach_surface(second)
+    binding.detach_surface(second)
+
+    binding.outline_selection.detach_surface.assert_any_call(second)
+    binding.contexts.detach_surface.assert_any_call(second)
+    binding.flat_data.detach_surface.assert_any_call(second)

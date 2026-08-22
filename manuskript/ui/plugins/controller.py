@@ -133,7 +133,9 @@ class PluginUiController:
         self.refresh_commands()
 
     def _page_source(self, item):
-        editor_host = self.views.editor_host
+        editor_host = self.views.editor_host()
+        if editor_host is None:
+            return item.text()
         current = editor_host.currentEditor()
         editors = [current] if current is not None else []
         editors.extend(
@@ -152,6 +154,14 @@ class PluginUiController:
                 if source_editor is not None:
                     return source_editor.toPlainText()
         return item.text()
+
+    def attach_surface(self, instance):
+        if self.editorWorkspaces is not None:
+            self.editorWorkspaces.attach_surface(instance)
+
+    def detach_surface(self, instance):
+        if self.editorWorkspaces is not None:
+            self.editorWorkspaces.detach_surface(instance)
 
     def show_manager(self):
         if self.manager is None:

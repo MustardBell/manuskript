@@ -129,9 +129,15 @@ def test_the_written_out_ownership_matches_the_declarations():
 def test_each_owner_is_asked_only_for_what_it_owns():
     tools, surfaces = hosts()
 
-    CorePanelViewSet.from_hosts(tools=tools, surfaces=surfaces)
+    views = CorePanelViewSet.from_hosts(tools=tools, surfaces=surfaces)
 
     assert set(tools.asked) == TOOL_PANEL_IDS
+    assert surfaces.asked == []
+
+    # Reading existing structure is allowed; constructing it is not.
+    for member in CORE_MEMBERS:
+        if member.owner == SURFACE:
+            getattr(views, member.attribute)
     assert set(surfaces.asked) == SURFACE_IDS
 
 
@@ -175,8 +181,9 @@ def test_a_missing_member_says_which_owner_was_asked():
     tools, surfaces = hosts()
     del surfaces.instances["core.editor"]
 
+    views = CorePanelViewSet.from_hosts(tools=tools, surfaces=surfaces)
     with pytest.raises(LookupError) as raised:
-        CorePanelViewSet.from_hosts(tools=tools, surfaces=surfaces)
+        _ = views.editor
 
     message = str(raised.value)
     assert "core.editor" in message
@@ -191,5 +198,6 @@ def test_a_member_built_as_the_wrong_widget_is_refused():
         widget=MagicMock(spec=QWidget)
     )
 
+    views = CorePanelViewSet.from_hosts(tools=tools, surfaces=surfaces)
     with pytest.raises(TypeError, match="core.editor"):
-        CorePanelViewSet.from_hosts(tools=tools, surfaces=surfaces)
+        _ = views.editor

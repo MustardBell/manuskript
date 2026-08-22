@@ -72,11 +72,7 @@ def test_a_window_supplies_its_own_views(MWEmptyProject):
     views = ProjectViewSet.for_window(window)
 
     # This window's own views, in the group that binds each.
-    assert views.editors.outline_trees == (
-        window.corePanels.project_tree.tree,
-        window.corePanels.outline.treeOutlineOutline,
-    )
-    assert views.editors.document_area is window.corePanels.editor.editor
+    assert views.editors.project_tree is window.corePanels.project_tree.tree
     assert views.metadata.panel is window.corePanels.metadata
     assert views.reference_panels.storyline is window.corePanels.storyline
     assert views.search.view is window.widget
@@ -97,10 +93,7 @@ def test_two_windows_name_their_own_views_over_one_project(
         mine = ProjectViewSet.for_window(window)
         theirs = ProjectViewSet.for_window(other)
 
-        assert mine.editors.outline_trees != theirs.editors.outline_trees
-        assert (
-            mine.editors.document_area is not theirs.editors.document_area
-        )
+        assert mine.editors.project_tree is not theirs.editors.project_tree
         assert mine.metadata.panel is not theirs.metadata.panel
         assert (
             mine.editors.selection_changed
@@ -114,16 +107,11 @@ def test_two_windows_name_their_own_views_over_one_project(
         other.close()
 
 
-def test_editors_are_asked_for_freshly_each_time(MWEmptyProject):
-    """Panels come and go -- one can move to another window between a
-    bind and an unbind -- so the set holds a way to ask rather than a
-    list captured once.
-    """
+def test_the_view_set_does_not_capture_movable_surfaces(MWEmptyProject):
+    """The binding receives living surface instances from their host."""
     window = MWEmptyProject
     views = ProjectViewSet.for_window(window)
 
-    first = views.editors.text_editors()
-    second = views.editors.text_editors()
-
-    assert first is not second
-    assert list(first) == list(second)
+    assert not hasattr(views.editors, "outline_trees")
+    assert not hasattr(views.editors, "document_area")
+    assert not hasattr(views.metadata, "item_editor")

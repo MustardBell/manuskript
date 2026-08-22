@@ -27,9 +27,37 @@ touched rather than something the workspace states.
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from manuskript.panels import WorkspaceSurfaceDescriptor
+from manuskript.panels.core import CORE_SURFACE_IDS, GENERAL
+
+
+@dataclass(frozen=True)
+class WorkspaceBuildIntent:
+    """Which surfaces a new workspace must contain before it is composed."""
+
+    surface_ids: Tuple[str, ...] = CORE_SURFACE_IDS
+    incoming: Tuple["WorkspaceSurfaceInstance", ...] = ()
+    active_surface: Optional[str] = GENERAL
+
+    def __post_init__(self):
+        ids = tuple(self.surface_ids)
+        incoming = tuple(self.incoming)
+        incoming_ids = tuple(instance.id for instance in incoming)
+        all_ids = ids + incoming_ids
+        if len(all_ids) != len(set(all_ids)):
+            raise ValueError("A workspace build intent names a surface twice.")
+        object.__setattr__(self, "surface_ids", ids)
+        object.__setattr__(self, "incoming", incoming)
+
+    @classmethod
+    def for_transfer(cls, instance):
+        return cls(
+            surface_ids=(),
+            incoming=(instance,),
+            active_surface=instance.id,
+        )
 
 
 @dataclass
@@ -363,11 +391,14 @@ class WorkspaceSurfaceHost:
         """
 
         # Nothing is told about the emptying: this workspace is going, and
-        # whatever lists its surfaces is going with it.
+        # whatever lists or binds its surfaces is going with it. Bindings are
+        # disposed independently in the workspace's reverse construction
+        # order; invoking them again here would call already-disposed
+        # controllers while tearing down the native widget tree.
         self.on_membership_changed = None
+        self._bindings.clear()
         for surface_id in tuple(self._instances):
             self.close(surface_id)
-        self._bindings.clear()
         self.presentation = None
         self.registry = None
         self.context = None

@@ -33,7 +33,11 @@ from manuskript.ui.panels.placement import (
 )
 from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.surface_presentation import CentralSurfacePresentation
-from manuskript.ui.workspace_surfaces import WorkspaceSurfaceHost
+from manuskript.ui.workspace_surfaces import (
+    WorkspaceBuildIntent,
+    WorkspaceSurfaceError,
+    WorkspaceSurfaceHost,
+)
 from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
@@ -154,7 +158,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     SHOW_DEBUG_TAB = False
 
-    def __init__(self, services, window_id=WORKSPACE_PRIMARY):
+    def __init__(
+        self,
+        services,
+        window_id=WORKSPACE_PRIMARY,
+        build_intent=None,
+    ):
         """One view of an application composed elsewhere.
 
         Everything application- or project-scope arrives in ``services``,
@@ -234,6 +243,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # This window's layout, filed under this window. Two windows
         # sharing one set of keys meant the second saved over the first.
         self.windowId = window_id
+        self.buildIntent = build_intent or WorkspaceBuildIntent()
 
         # Application scope: every window reads the same panel list.
         self.panelRegistry = services.panel_registry
@@ -410,6 +420,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.pluginContributions is not None
             else None
         )
+        if self.pluginUi is not None:
+            self.surfaceHost.add_binding(self.pluginUi)
         # Project bindings receive stable, grouped widget contracts. Models
         # remain runtime-owned and are resolved only when a project binds,
         # because opening another project replaces the entire model set.
@@ -425,6 +437,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 ),
             )
         )
+        self.surfaceHost.add_binding(self.projectBinding)
         self.workspaceProject = self.workspaceLifetime.own(
             WorkspaceProjectBinding(
                 self.projectBinding,
@@ -886,27 +899,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # built for one surface is not obliged to build the other six --
         # but a person opening a project gets all of them, which is what
         # the navigator has always listed.
-        for surface_id in (
-            core_panels.GENERAL,
-            core_panels.PROJECT_ENTITIES,
-            core_panels.CHARACTER_ENTITIES,
-            core_panels.PLOT_ENTITIES,
-            core_panels.WORLD_ENTITIES,
-            core_panels.OUTLINE,
-            core_panels.EDITOR,
-        ):
+        for surface_id in self.buildIntent.surface_ids:
             self.surfaceHost.open(surface_id, context)
+        for instance in self.buildIntent.incoming:
+            self.surfaceHost.attach(instance)
+        if not self.surfaceHost.instances:
+            raise WorkspaceSurfaceError(
+                "A visible workspace must contain at least one surface."
+            )
         # Said here rather than left to whichever surface was opened first.
         # Which surface a fresh workspace starts on is composition's to
         # state, and upstream's answer -- the one a new reader gets -- is
         # General. A saved layout replaces this when there is one.
-        self.surfaceHost.activate(core_panels.GENERAL)
+        active_surface = self.buildIntent.active_surface
+        if not self.surfaceHost.contains(active_surface):
+            active_surface = next(iter(self.surfaceHost.instances))
+        self.surfaceHost.activate(active_surface)
+        self._activePanelId = active_surface
 
         self.corePanels = CorePanelViewSet.from_hosts(
             tools=self.panelHost, surfaces=self.surfaceHost,
         )
-        self._installCorePanelAliases()
-
         style.styleMainWindow(self)
 
         self.actGitRevisions = QAction(
@@ -933,20 +946,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabMain.currentChanged.connect(self._selectNavigatorPage)
 
         # Help box
+        help_text = {
+            core_panels.GENERAL: self.tr(
+                "Enter information about your book, and yourself."
+            ),
+            core_panels.OUTLINE: self.tr(
+                "Create the outline of your masterpiece."
+            ),
+            core_panels.EDITOR: self.tr("Write."),
+        }
         references = [
-            (self.corePanels.general,
-             self.tr("Enter information about your book, and yourself."),
-             0),
-            (self.corePanels.outline,
-             self.tr("Create the outline of your masterpiece."),
-             0),
-            (self.corePanels.editor,
-             self.tr("Write."),
-             0),
-            (self.lytTabDebug,
-             self.tr("Debug info. Sometimes useful."),
-             0)
-        ]
+            (instance.widget, help_text[instance.id], 0)
+            for instance in self.surfaceHost.instances.values()
+            if instance.id in help_text
+        ] + [(
+            self.lytTabDebug,
+            self.tr("Debug info. Sometimes useful."),
+            0,
+        )]
 
         for widget, text, pos in references:
             label = helpLabel(text, self)
@@ -955,33 +972,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.actShowHelp.setChecked(False)
 
-    def _installCorePanelAliases(self):
-        """Bridge old widget names while ports migrate to typed panels.
+    @property
+    def mainEditor(self):
+        """Compatibility view of an Editor this workspace already owns."""
 
-        The objects are the factory-built panel widgets, not reparented
-        Designer pages. Keeping aliases for one migration window lets small
-        adapters move independently without there being two live surfaces.
-
-        These resolve structure that already exists and must never make any:
-        the moment an alias can construct a surface, "which surfaces does
-        this workspace have" stops being something a workspace states and
-        becomes a consequence of whatever happened to be read first.
-        """
-        # The eight General aliases are gone: nothing read them. Checked for
-        # dynamic access as well as literal, because a name reached by
-        # getattr or from a .ui file would not show up in a search for the
-        # attribute -- and reporting something absent because a search for
-        # its name found nothing is a mistake this session has already made
-        # twice.
-        outline = self.corePanels.outline
-        for name in (
-            "splitterOutlineH", "splitterOutlineV", "lstOutlinePlots",
-            "treeOutlineOutline", "outlineItemEditor",
-            "btnOutlineAddFolder", "btnOutlineAddText",
-            "btnOutlineRemoveItem", "btnPlanShowDetails",
-        ):
-            setattr(self, name, getattr(outline, name))
-        self.mainEditor = self.corePanels.editor.editor
+        instance = self.surfaceHost.instance(core_panels.EDITOR)
+        if instance is None:
+            raise AttributeError("This workspace does not contain an Editor.")
+        return instance.widget.editor
 
     def buildDeveloperMenu(self):
         """Tools that inspect Manuskript rather than the manuscript.

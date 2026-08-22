@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional, Tuple
 
 from PyQt5.QtWidgets import QWidget
 
+from manuskript.panels.core import EDITOR
 from manuskript.ui.editors.tabSplitter import tabSplitter
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.textEditView import textEditView
@@ -74,8 +75,12 @@ class SettingsWindowViews:
         runtime = window.projectRuntime
         manager = window.projectManager
         history = window.projectHistory
-        editor = window.corePanels.editor.editor
         project_tree = window.corePanels.project_tree.tree
+
+        def update_editor(method):
+            instance = window.surfaceHost.instance(EDITOR)
+            if instance is not None:
+                getattr(instance.widget.editor, method)()
 
         return cls(
             parent=(
@@ -106,9 +111,11 @@ class SettingsWindowViews:
                 rebuild_view_menu=window.viewSettingsMenu.rebuild,
                 outlines=lambda: tuple(window.findChildren(outlineView)),
                 project_tree=project_tree,
-                update_stats=editor.updateStats,
-                update_cork_view=editor.updateCorkView,
-                update_cork_background=editor.updateCorkBackground,
+                update_stats=lambda: update_editor("updateStats"),
+                update_cork_view=lambda: update_editor("updateCorkView"),
+                update_cork_background=lambda: update_editor(
+                    "updateCorkBackground"
+                ),
             ),
             editors=SettingsEditorViews(
                 text_editors=lambda: tuple(

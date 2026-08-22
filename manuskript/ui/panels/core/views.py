@@ -1,10 +1,10 @@
 """Typed access to the core widgets a workspace window is built from.
 
 Qt ``objectName`` values remain useful for saved layouts and UI inspection,
-but they are not an application interface.  This module resolves those names
-once, immediately after the core panels are built, and gives the rest of the
-application a small, explicit view set instead of copying Designer-era widget
-names onto :class:`MainWindow`.
+but they are not an application interface.  This module resolves stable tool
+panels once and observes movable surfaces through their owner.  It gives the
+rest of the application a small, explicit view set instead of copying
+Designer-era widget names onto :class:`MainWindow`.
 
 Ten widgets, two owners. Three are tool panels and come from the window's
 ``PanelHost``; seven are the places a writer goes and come from its
@@ -162,36 +162,36 @@ CORE_MEMBERS: Tuple[CoreMember, ...] = (
 )
 
 
-@dataclass(frozen=True)
 class CorePanelViewSet:
-    """The core panel views belonging to one workspace window."""
+    """Typed observation of the core widgets a workspace currently holds.
 
-    general: GeneralPanel
-    project_tree: ProjectTreePanelViews
-    metadata: metadataView
-    storyline: storylineView
-    project_entities: EntityBrowserPanel
-    character_entities: EntityBrowserPanel
-    plot_entities: EntityBrowserPanel
-    world_entities: EntityBrowserPanel
-    outline: OutlinePanel
-    editor: EditorPanel
+    Tool panels are stable members of every workspace and are resolved once.
+    Surfaces are movable, so their compatibility properties ask the surface
+    host for existing structure each time.  They never call ``open`` and
+    therefore never turn observation into QWidget construction.
+    """
+
+    def __init__(self, project_tree, metadata, storyline, surfaces):
+        self.project_tree = project_tree
+        self.metadata = metadata
+        self.storyline = storyline
+        self._surfaces = surfaces
 
     @classmethod
     def from_hosts(cls, tools, surfaces):
         """Ask each owner for what it owns, and nothing else.
 
-        ``tools`` and ``surfaces`` are the same object until the cutover:
-        the panel host owns all ten today. Passing it twice is a true
-        statement of that, and it means the cutover changes one argument
-        at one call site rather than introducing this seam under pressure.
+        Tool panels are part of every workspace.  Surfaces are not: a sparse
+        window may own only one, so they remain lookups against the living
+        surface host rather than construction-time fields.
         """
 
-        hosts = {TOOL_PANEL: tools, SURFACE: surfaces}
         resolved = {}
         for member in CORE_MEMBERS:
+            if member.owner != TOOL_PANEL:
+                continue
             widget = _panel_widget(
-                hosts[member.owner],
+                tools,
                 member.panel_id,
                 member.widget_type,
                 member.owner,
@@ -199,4 +199,45 @@ class CorePanelViewSet:
             resolved[member.attribute] = (
                 member.views(widget) if member.views else widget
             )
-        return cls(**resolved)
+        return cls(surfaces=surfaces, **resolved)
+
+    def _surface(self, attribute):
+        member = next(
+            item for item in CORE_MEMBERS
+            if item.owner == SURFACE and item.attribute == attribute
+        )
+        widget = _panel_widget(
+            self._surfaces,
+            member.panel_id,
+            member.widget_type,
+            member.owner,
+        )
+        return member.views(widget) if member.views else widget
+
+    @property
+    def general(self):
+        return self._surface("general")
+
+    @property
+    def project_entities(self):
+        return self._surface("project_entities")
+
+    @property
+    def character_entities(self):
+        return self._surface("character_entities")
+
+    @property
+    def plot_entities(self):
+        return self._surface("plot_entities")
+
+    @property
+    def world_entities(self):
+        return self._surface("world_entities")
+
+    @property
+    def outline(self):
+        return self._surface("outline")
+
+    @property
+    def editor(self):
+        return self._surface("editor")

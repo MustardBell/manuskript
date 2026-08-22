@@ -17,6 +17,7 @@ from manuskript.panels import (
     PanelRegistryError,
     WorkspaceSurfaceDescriptor,
 )
+from manuskript.panels.core import EDITOR
 from manuskript.services.workspace_state import (
     PRIMARY,
     WorkspaceStateStore,
@@ -45,7 +46,7 @@ class WorkspaceStateViews:
     project_active: Callable[[], bool]
     project_docks: Tuple[Any, ...]
     default_dock_visibility: Mapping[str, bool]
-    document_area: Any
+    document_area: Callable[[], Any]
     #: The surface this window is showing, from the one owner that knows.
     #: It used to be the window's record of whatever last had semantic
     #: focus, which is a different fact and may name a tool panel -- so a
@@ -69,6 +70,13 @@ class WorkspaceStateViews:
             window.dckCheatSheet,
             window.dckSearch,
         )
+        def document_area():
+            instance = window.surfaceHost.instance(EDITOR)
+            return (
+                instance.widget.editor.tabSplitter
+                if instance is not None else None
+            )
+
         return cls(
             restore_geometry=window.restoreGeometry,
             restore_window_state=window.restoreState,
@@ -82,7 +90,7 @@ class WorkspaceStateViews:
                 project_docks[1].objectName(): False,
                 project_docks[2].objectName(): False,
             }),
-            document_area=window.corePanels.editor.editor.tabSplitter,
+            document_area=document_area,
             current_surface=lambda: window.surfaceHost.current() or "",
             select_surface=window.goToSurface,
             legacy_panel_for_tab=window.panelIdForLegacyTab,
@@ -251,7 +259,8 @@ class WorkspaceStateController:
         """
         if not self.views.project_active():
             return self._documents
-        return describe_area(self.views.document_area)
+        area = self.views.document_area()
+        return describe_area(area) if area is not None else self._documents
 
     def _current_surface(self):
         """Which work surface this window was showing."""
@@ -291,7 +300,9 @@ class WorkspaceStateController:
         """
         if not self.views.project_active():
             return
-        self._documents = describe_area(self.views.document_area)
+        area = self.views.document_area()
+        if area is not None:
+            self._documents = describe_area(area)
         self._activeSurface = self.views.current_surface()
 
     def capture_layout(self):
@@ -326,13 +337,14 @@ class WorkspaceStateController:
         somebody opening the file for the first time gets.
         """
         recorded = self._documents
-        if recorded:
+        area = self.views.document_area()
+        if recorded and area is not None:
             restore_area(
-                self.views.document_area,
+                area,
                 recorded,
             )
-        elif documents and documents != [""]:
-            self.views.document_area.restoreOpenIndexes(
+        elif area is not None and documents and documents != [""]:
+            area.restoreOpenIndexes(
                 documents
             )
         surface_id = self._activeSurface

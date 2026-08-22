@@ -130,6 +130,12 @@ class tabSplitter(QWidget, Ui_tabSplitter):
         if context is not None and context.text_editor is not None:
             self.settings = context.text_editor.settings
             self.updateStyleSheet()
+        for index in range(self.tab.count()):
+            editor = self.tab.widget(index)
+            if context is None:
+                editor.clear_context()
+            else:
+                editor.set_context(context)
         for child in self.children_areas():
             child.set_context(context)
 

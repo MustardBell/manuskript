@@ -18,7 +18,7 @@ from manuskript.models.reference_identity import (
     world_reference,
 )
 from manuskript.models.flatDataModelWrapper import flatDataModelWrapper
-from manuskript.panels.core import METADATA
+from manuskript.panels.core import EDITOR, METADATA
 
 
 @dataclass(frozen=True)
@@ -74,8 +74,15 @@ class SearchResultViews:
     def for_window(cls, window):
         metadata = window.corePanels.metadata
         properties = metadata.properties
-        main_editor = window.corePanels.editor.editor
         panel_host = window.panelHost
+
+        def current_document_text():
+            instance = window.surfaceHost.instance(EDITOR)
+            if instance is None:
+                return None
+            editor = instance.widget.editor.currentEditor()
+            return editor.txtRedacText if editor is not None else None
+
         return cls(
             entity_workspace=window.entityWorkspace,
             metadata_fields=MappingProxyType({
@@ -87,9 +94,7 @@ class SearchResultViews:
                 Outline.status: properties.lblStatus,
                 Outline.label: properties.lblLabel,
             }),
-            current_document_text=lambda: (
-                main_editor.currentEditor().txtRedacText
-            ),
+            current_document_text=current_document_text,
             show_metadata=partial(panel_host.set_visible, METADATA),
         )
 

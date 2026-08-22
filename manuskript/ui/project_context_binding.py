@@ -66,6 +66,16 @@ class ProjectContextBinding:
         self.reference_panels.bind(connect, self.reference_service)
         self.search.bind(self.reference_service)
 
+    def attach_surface(self, instance):
+        self.editors.attach_surface(instance)
+        self.metadata.attach_surface(instance)
+        self.reference_panels.attach_surface(instance)
+
+    def detach_surface(self, instance):
+        self.reference_panels.detach_surface(instance)
+        self.metadata.detach_surface(instance)
+        self.editors.detach_surface(instance)
+
     def unbind(self):
         """Release each area in turn, editors first.
 
@@ -76,6 +86,7 @@ class ProjectContextBinding:
         is.
         """
         self.editors.unbind()
+        self.metadata.unbind()
         self.reference_panels.unbind()
         self.search.unbind()
         self.text_editor_context = None

@@ -43,14 +43,13 @@ def identifiers(module):
 #: rather than a view of one area.
 AREA_VIEWS = {
     "editors": {
-        "outline_trees",
-        "document_area",
-        "text_editors",
+        "project_tree",
+        "treeOutlineOutline",
         "bind_project_model",
         "unbind_project_model",
     },
-    "metadata": {"item_editor", "page_types"},
-    "reference_panels": {"storyline", "cheat_sheet", "completers"},
+    "metadata": {"outlineItemEditor", "page_types"},
+    "reference_panels": {"storyline", "cheat_sheet", "MDEditCompleter"},
     "search": {"result_views", "clearContext"},
 }
 

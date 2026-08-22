@@ -28,6 +28,16 @@ CHARACTER_ENTITIES = "core.entities.characters"
 PLOT_ENTITIES = "core.entities.plots"
 WORLD_ENTITIES = "core.entities.world"
 
+CORE_SURFACE_IDS = (
+    GENERAL,
+    PROJECT_ENTITIES,
+    CHARACTER_ENTITIES,
+    PLOT_ENTITIES,
+    WORLD_ENTITIES,
+    OUTLINE,
+    EDITOR,
+)
+
 #: Where the metadata panel's revision list files its own arrangement.
 #: Its own key rather than part of the panel's, because that is how it
 #: has always been stored and saved layouts outlive this refactoring.

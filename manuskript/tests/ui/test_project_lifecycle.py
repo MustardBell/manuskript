@@ -88,6 +88,7 @@ def test_lifecycle_view_captures_project_state_before_cleanup():
     window = MagicMock()
     open_indexes = [1, ["scene-1"], None]
     editor = window.corePanels.editor.editor
+    window.surfaceHost.instance.return_value.widget.editor = editor
     editor.tabSplitter.openIndexes.return_value = open_indexes
     original_last_tab = window.projectRuntime.settingsManager.lastTab
     view = lifecycle_for(window)

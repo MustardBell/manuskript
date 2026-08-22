@@ -218,13 +218,25 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self.outline_context = editor_context.outline_views
         if editor_context.text_editor is not None:
             self.settings = editor_context.text_editor.settings
-            self.txtRedacText.set_text_editor_context(
-                editor_context.text_editor
-            )
-            for editor in getattr(self, "txtEdits", []):
-                editor.set_text_editor_context(editor_context.text_editor)
+        for editor in self.sourceEditors():
+            editor.set_text_editor_context(editor_context.text_editor)
         self.corkView.set_outline_context(self.outline_context)
         self.outlineView.set_outline_context(self.outline_context)
+
+    def clear_context(self):
+        """Release services owned by the workspace around this tab.
+
+        The document projection belongs to the living Editor surface and may
+        travel to another window.  Its command routes, settings and outline
+        views do not: those are supplied by the workspace that currently owns
+        the surface and must not remain callable between detach and attach.
+        """
+        self.editor_context = None
+        self.outline_context = None
+        for editor in self.sourceEditors():
+            editor.set_text_editor_context(None)
+        self.corkView.set_outline_context(None)
+        self.outlineView.set_outline_context(None)
 
     def resizeEvent(self, event):
         """

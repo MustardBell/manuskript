@@ -15,6 +15,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from manuskript.panels.core import EDITOR
+
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.plugins.api import EditorWorkspaceContext, WorkspaceDocument
@@ -618,7 +620,7 @@ class EditorWorkspaceHost(QObject):
     """Own plugin workspace actions and project-scoped lifecycles."""
 
     def __init__(self, views, runtime, menu, parent=None):
-        super().__init__(parent or views.editor_host)
+        super().__init__(parent or views.object_parent)
         self.views = views
         self.runtime = runtime
         self.menu = menu
@@ -679,6 +681,9 @@ class EditorWorkspaceHost(QObject):
     def open_workspace(self, contribution_id):
         if not self._project_open:
             return None
+        editor_host = self.views.editor_host()
+        if editor_host is None:
+            return None
         record = next((
             value
             for value in self.runtime.registry.records("editor_workspace")
@@ -714,7 +719,7 @@ class EditorWorkspaceHost(QObject):
         try:
             workspace = contribution.workspace_factory(
                 context,
-                self.views.editor_host,
+                editor_host,
             )
             if not isinstance(workspace, QWidget):
                 raise TypeError(
@@ -729,11 +734,11 @@ class EditorWorkspaceHost(QObject):
             contribution.descriptor.description,
             workspace,
             self.close_workspace,
-            parent=self.views.editor_host,
+            parent=editor_host,
         )
         self._active_id = contribution_id
         self._active_plugin_id = record.plugin_id
-        self.views.editor_host.showPluginWorkspace(self._shell)
+        editor_host.showPluginWorkspace(self._shell)
         return self._shell
 
     def close_workspace(self):
@@ -756,7 +761,9 @@ class EditorWorkspaceHost(QObject):
         self._shell = None
         self._active_id = None
         self._active_plugin_id = None
-        self.views.editor_host.closePluginWorkspace()
+        editor_host = self.views.editor_host()
+        if editor_host is not None:
+            editor_host.closePluginWorkspace()
         if shell is not None:
             shell.deleteLater()
 
@@ -821,7 +828,10 @@ class EditorWorkspaceHost(QObject):
     def _install_services(self):
         if self._outline is not None:
             return
-        context = self.views.editor_host.editor_context
+        editor_host = self.views.editor_host()
+        if editor_host is None:
+            return
+        context = editor_host.editor_context
         if context is None:
             return
         self._outline = WorkspaceOutlineGateway(
@@ -835,6 +845,18 @@ class EditorWorkspaceHost(QObject):
             self._outline,
             parent=self,
         )
+
+    def attach_surface(self, instance):
+        if instance.id == EDITOR and self._project_open:
+            self._install_services()
+            self._update_action_states()
+
+    def detach_surface(self, instance):
+        if instance.id != EDITOR:
+            return
+        self.close_workspace()
+        self._release_services()
+        self._update_action_states()
 
     def _release_services(self):
         if self._editors is not None:
@@ -860,6 +882,7 @@ class EditorWorkspaceHost(QObject):
             record = records.get(contribution_id)
             action.setEnabled(bool(
                 self._project_open
+                and self.views.editor_host() is not None
                 and record is not None
                 and self._selection_allowed(
                     record.contribution,

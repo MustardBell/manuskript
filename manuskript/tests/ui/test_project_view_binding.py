@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 from manuskript.enums import Character, Plot
+from manuskript.panels.core import EDITOR, GENERAL, OUTLINE
 from manuskript.ui.project_view_binding import (
     DebugProjectBinding,
     FlatDataProjectBinding,
@@ -14,7 +16,12 @@ def test_flat_data_binding_configures_general_fields_but_not_legacy_summary():
     runtime = MagicMock()
     views = ProjectBindingViews.for_window(window)
 
-    FlatDataProjectBinding(views.flat_data, runtime).bind(MagicMock())
+    binding = FlatDataProjectBinding(views.flat_data, runtime)
+    binding.bind(MagicMock())
+    binding.attach_surface(SimpleNamespace(
+        id=GENERAL,
+        widget=window.corePanels.general,
+    ))
 
     window.txtSummarySituation.setModel.assert_not_called()
     window.corePanels.general.email.setModel.assert_called_once_with(
@@ -33,20 +40,46 @@ def test_outline_selection_binding_registers_project_connections():
 
     OutlineSelectionProjectBinding(views.outline_selection).bind(connect)
 
-    assert connect.call_count == 7
+    assert connect.call_count == 3
     connected_slots = [call.args[1] for call in connect.call_args_list]
-    assert (
-        window.workspaceSelection.outline_selection_changed
-        in connected_slots
-    )
     assert (
         window.workspaceSelection.project_selection_changed
         in connected_slots
     )
-    assert (
-        window.corePanels.editor.editor.selectionChanged
-        in connected_slots
+
+
+def test_outline_and_editor_selection_connections_follow_their_surfaces():
+    window = MagicMock()
+    views = ProjectBindingViews.for_window(window)
+    binding = OutlineSelectionProjectBinding(views.outline_selection)
+    binding.bind(MagicMock())
+    outline = SimpleNamespace(
+        id=OUTLINE,
+        widget=window.corePanels.outline,
     )
+    editor = SimpleNamespace(
+        id=EDITOR,
+        widget=window.corePanels.editor,
+    )
+
+    binding.attach_surface(outline)
+    binding.attach_surface(editor)
+
+    (
+        window.corePanels.outline.treeOutlineOutline.selectionModel()
+        .selectionChanged.connect.assert_called()
+    )
+    project_signal = (
+        window.corePanels.project_tree.tree.selectionModel()
+        .selectionChanged
+    )
+    assert any(
+        call.args[0] is window.corePanels.editor.editor.selectionChanged
+        for call in project_signal.connect.call_args_list
+    )
+
+    binding.detach_surface(editor)
+    project_signal.disconnect.assert_called()
 
 
 def test_debug_binding_configures_models_and_named_selection_handlers():

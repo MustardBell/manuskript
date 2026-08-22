@@ -9,6 +9,7 @@ to the window, its application services, or unrelated plugin state.
 from dataclasses import dataclass
 from typing import Any, Callable, Tuple
 
+from manuskript.panels.core import EDITOR
 from manuskript.ui.views.textEditView import textEditView
 
 
@@ -28,7 +29,7 @@ class LoadedSettingsViews:
 
     view_state: Any
     rebuild_view_menu: Callable[[], None]
-    editor: Any
+    editor: Callable[[], Any]
     spellcheck_action: Any
     set_spellcheck: Callable[[bool], None]
     rebuild_dictionary_menu: Callable[[], None]
@@ -55,7 +56,7 @@ class ProjectWorkspaceViews:
     connect_project: Callable[[], None]
     disconnect_project: Callable[[], None]
     undo_stack: Any
-    editor: Any
+    editor: Callable[[], Any]
     private_text_editors: Callable[[], Tuple[Any, ...]]
     activate_surface: Callable[[], None]
 
@@ -101,6 +102,10 @@ class ProjectLifecycleViews:
                 window.entityWorkspace.pending_editors()
             )
 
+        def editor():
+            instance = window.surfaceHost.instance(EDITOR)
+            return instance.widget.editor if instance is not None else None
+
         return cls(
             commands=ProjectCommandViews(
                 closed_only=(window.actOpen, window.menuRecents),
@@ -125,7 +130,7 @@ class ProjectLifecycleViews:
             loaded_settings=LoadedSettingsViews(
                 view_state=window.windowState,
                 rebuild_view_menu=window.viewSettingsMenu.rebuild,
-                editor=window.corePanels.editor.editor,
+                editor=editor,
                 spellcheck_action=window.actSpellcheck,
                 set_spellcheck=window.spellcheck.set_enabled,
                 rebuild_dictionary_menu=(
@@ -156,7 +161,7 @@ class ProjectLifecycleViews:
                 connect_project=window.workspaceProject.connect,
                 disconnect_project=window.workspaceProject.disconnect,
                 undo_stack=window.projectRuntime.undoStack,
-                editor=window.corePanels.editor.editor,
+                editor=editor,
                 private_text_editors=private_text_editors,
                 activate_surface=lambda: window.workspaceSelection.surface_changed(
                     window._activePanelId

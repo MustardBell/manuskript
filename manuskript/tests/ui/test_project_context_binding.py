@@ -11,9 +11,11 @@ the coordinator: the two objects the areas share, and the order.
 """
 
 from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 import pytest
 
+from manuskript.panels.core import EDITOR, OUTLINE
 from manuskript.ui import project_context_binding as binding_module
 from manuskript.ui.project_contexts import editors as editors_module
 from manuskript.ui.project_contexts import search as search_module
@@ -38,9 +40,7 @@ def make_views(text_editor=None, completer=None, text_context=None):
         models=MagicMock(),
         navigation=MagicMock(),
         editors=EditorViews(
-            outline_trees=(MagicMock(), MagicMock()),
-            document_area=MagicMock(),
-            text_editors=lambda: [text_editor],
+            project_tree=MagicMock(),
             text_editor_context=lambda: text_context,
             open_index=MagicMock(),
             open_indexes=MagicMock(),
@@ -52,13 +52,11 @@ def make_views(text_editor=None, completer=None, text_context=None):
         ),
         metadata=MetadataViews(
             panel=MagicMock(),
-            item_editor=MagicMock(),
             page_types=lambda: page_types,
         ),
         reference_panels=ReferencePanelViews(
             storyline=MagicMock(),
             cheat_sheet=MagicMock(),
-            completers=lambda: [completer],
         ),
         search=SearchViews(
             view=MagicMock(),
@@ -108,24 +106,36 @@ def test_project_context_binding_installs_and_releases_contexts():
     references, outlines, editors, searches = patched_contexts(
         reference_service, outline_context, editor_context, search_context,
     )
+    editor_panel = MagicMock()
+    editor_panel.findChildren.side_effect = lambda widget_type: (
+        [text_editor]
+        if widget_type.__name__ == "textEditView"
+        else [completer]
+    )
+    editor_surface = SimpleNamespace(id=EDITOR, widget=editor_panel)
+    outline_surface = SimpleNamespace(id=OUTLINE, widget=MagicMock())
     with references, outlines, editors, searches:
         binding = ProjectContextBinding(views)
         binding.bind(connect)
+        binding.attach_surface(outline_surface)
+        binding.attach_surface(editor_surface)
 
     assert binding.reference_service is reference_service
     assert binding.text_editor_context is text_context
     text_editor.set_text_editor_context.assert_called_once_with(
         text_context
     )
-    views.editors.document_area.set_context.assert_called_once_with(
+    editor_panel.editor.set_context.assert_called_once_with(
         editor_context
     )
-    # Every tree the set names, rather than two the binding knew about.
-    for tree in views.editors.outline_trees:
-        tree.bind_project_model.assert_called_once_with(
-            views.models.outline,
-            outline_context,
-        )
+    views.editors.project_tree.bind_project_model.assert_called_once_with(
+        views.models.outline,
+        outline_context,
+    )
+    (
+        outline_surface.widget.treeOutlineOutline.bind_project_model
+        .assert_called_once_with(views.models.outline, outline_context)
+    )
     completer.setReferenceService.assert_called_once()
     views.search.view.setContext.assert_called_once_with(search_context)
 
@@ -133,9 +143,12 @@ def test_project_context_binding_installs_and_releases_contexts():
 
     text_editor.set_text_editor_context.assert_called_with(None)
     completer.setReferenceService.assert_called_with(None)
-    for tree in views.editors.outline_trees:
-        tree.unbind_project_model.assert_called_once_with()
-    views.editors.document_area.clear_context.assert_called_once_with()
+    views.editors.project_tree.unbind_project_model.assert_called_once_with()
+    (
+        outline_surface.widget.treeOutlineOutline.unbind_project_model
+        .assert_called_once_with()
+    )
+    editor_panel.editor.clear_context.assert_called_once_with()
     views.search.view.clearContext.assert_called_once_with()
     assert binding.reference_service is None
     assert binding.text_editor_context is None

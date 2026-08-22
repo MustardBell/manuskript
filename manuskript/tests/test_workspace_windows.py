@@ -36,8 +36,8 @@ from manuskript.services.workspace_window_services import (
 )
 
 
-def test_a_window_is_given_its_services_rather_than_composing_them():
-    """What a workspace window takes is the services object and its own id.
+def test_a_window_is_given_services_and_window_scoped_composition_only():
+    """A workspace receives shared services and declares its own structure.
 
     It used to take ten separate optional services and build a fallback
     for every one it was not given, so a window handed nothing composed a
@@ -51,7 +51,9 @@ def test_a_window_is_given_its_services_rather_than_composing_them():
         inspect.signature(MainWindow.__init__).parameters
     )
 
-    assert parameters == ["self", "services", "window_id"]
+    assert parameters == [
+        "self", "services", "window_id", "build_intent",
+    ]
 
 
 def test_a_second_window_shares_every_application_scope_service(
@@ -1625,3 +1627,85 @@ def test_a_window_made_for_a_move_that_cannot_happen_is_taken_away(
     # before: the menu moves panels between panel hosts, and the editor
     # is not one of those.
     assert window.surfaceHost.contains(EDITOR)
+
+
+def test_a_workspace_can_be_composed_for_one_living_surface(
+        MWEmptyProject):
+    """Sparse membership is an input, not widgets removed after wiring."""
+    from manuskript.services.workspace_state import WorkspaceStateStore
+    from manuskript.panels.core import OUTLINE
+    from manuskript.ui.workspace_surfaces import WorkspaceBuildIntent
+
+    window = MWEmptyProject
+    fresh_id = "window-sparse-editor"
+    WorkspaceStateStore().forget(fresh_id)
+    other = type(window)(
+        window.services,
+        window_id=fresh_id,
+        build_intent=WorkspaceBuildIntent(
+            surface_ids=(EDITOR,),
+            active_surface=EDITOR,
+        ),
+    )
+    try:
+        other.workspaceWindows.adopt_open_project()
+
+        assert set(other.surfaceHost.instances) == {EDITOR}
+        assert other.surfaceHost.current() == EDITOR
+        assert other.mainEditor.editor_context is not None
+        assert other.navigator.row_for_panel(EDITOR) is not None
+        assert other.navigator.row_for_panel(OUTLINE) is None
+        with pytest.raises(LookupError):
+            _ = other.corePanels.outline
+    finally:
+        other.close()
+        WorkspaceStateStore().forget(fresh_id)
+
+
+def test_a_living_editor_takes_its_project_bindings_to_a_sparse_window(
+        MWEmptyProject):
+    from manuskript.models.outlineItem import outlineItem
+    from manuskript.services.workspace_state import WorkspaceStateStore
+    from manuskript.ui.workspace_surfaces import WorkspaceBuildIntent
+
+    window = MWEmptyProject
+    original = window.mainEditor
+    item = outlineItem(title="Travelling scene", _type="md")
+    window.projectRuntime.models.outline.appendItem(item)
+    index = window.projectRuntime.models.outline.indexFromItem(item)
+    original.setCurrentModelIndex(index, newTab=True)
+    open_editor = original.currentEditor()
+    moved = window.surfaceHost.detach(EDITOR)
+    fresh_id = "window-transferred-editor"
+    WorkspaceStateStore().forget(fresh_id)
+    other = None
+    try:
+        other = type(window)(
+            window.services,
+            window_id=fresh_id,
+            build_intent=WorkspaceBuildIntent.for_transfer(moved),
+        )
+        other.workspaceWindows.adopt_open_project()
+
+        assert other.mainEditor is original
+        assert other.mainEditor.currentEditor() is open_editor
+        assert (
+            open_editor.editor_context.text_editor
+            is other.projectBinding.text_editor_context
+        )
+        assert other.mainEditor.editor_context is not None
+        assert EDITOR not in window.projectBinding._surfaces
+        assert other.projectBinding._surfaces[EDITOR] is moved
+        with pytest.raises(AttributeError):
+            _ = window.mainEditor
+        with pytest.raises(LookupError):
+            _ = window.corePanels.editor
+    finally:
+        if other is not None and other.surfaceHost.contains(EDITOR):
+            window.surfaceHost.attach(other.surfaceHost.detach(EDITOR))
+        if other is not None:
+            other.close()
+        WorkspaceStateStore().forget(fresh_id)
+
+    assert window.mainEditor is original
+    assert window.mainEditor.editor_context is not None
