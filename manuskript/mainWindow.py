@@ -806,7 +806,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         ):
             self.panelHost.open(panel_id, PanelContext(translate=self.tr))
 
-        self.corePanels = CorePanelViewSet.from_host(self.panelHost)
+        # Both owners are the panel host until the cutover moves the seven
+        # surfaces to the workspace's surface host. Named twice rather than
+        # once so that move is a change of argument here, not a change of
+        # shape everywhere the view set is built.
+        self.corePanels = CorePanelViewSet.from_hosts(
+            tools=self.panelHost, surfaces=self.panelHost,
+        )
         self._installCorePanelAliases()
 
         style.styleMainWindow(self)
