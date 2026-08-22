@@ -192,6 +192,10 @@ class ProjectPanelHost:
                 object_name="pluginProjectPanel.{}".format(
                     contribution_id
                 ),
+                visible_with_surfaces=(
+                    record.contribution.visible_with_surfaces
+                ),
+                preferred_extent=record.contribution.preferred_extent,
                 # Application scope, like the descriptor holding it: the
                 # plugin runtime and an id, never this host and never
                 # this window. Builds against whatever window the

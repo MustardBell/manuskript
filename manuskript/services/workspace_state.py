@@ -40,6 +40,10 @@ LOGGER = logging.getLogger(__name__)
 #: 5 -- workspace surface membership became explicit. A missing surfaces
 #: key is the pre-v5 canonical workspace; a stored list is the exact subset
 #: that window owned when the session ended.
+#: 6 -- visibility of surface-routed tool panels is interpreted as the
+#: reader's choice for the saved active surface. Earlier versions always
+#: opened the project tree globally, so their saved ``true`` is an obsolete
+#: default rather than evidence that it was requested on General or Outline.
 #:
 #: The version says what shape the stored keys are in, and nothing else.
 #: Whether an arrangement of docks may be applied is not asked here and is
@@ -47,7 +51,7 @@ LOGGER = logging.getLogger(__name__)
 #: layout what it contains, because a version answers that wrongly for the
 #: readers who matter most -- one upgrading from upstream arrives stamped
 #: 1 with a layout naming no work-surface docks at all.
-WORKSPACE_STATE_VERSION = 5
+WORKSPACE_STATE_VERSION = 6
 
 #: Everything this module owns lives under here.
 ROOT = "workspace"

@@ -105,6 +105,10 @@ from manuskript.ui.workspace_selection import (
     WorkspaceSelectionHistory,
     WorkspaceSelectionViews,
 )
+from manuskript.ui.surface_panel_routing import (
+    SurfacePanelRoutingController,
+    SurfacePanelRoutingViews,
+)
 from manuskript.ui.workspace_search import (
     WorkspaceSearchController,
     WorkspaceSearchViews,
@@ -192,6 +196,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # safely once C++-owned child wrappers are involved.
             self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
+        # The Designer string doubles as a menu mnemonic in old code, but a
+        # dock title has no mnemonic rendering and displayed the ampersand as
+        # a literal character once the title bar became visible.
+        self.dckNavigation.setWindowTitle(
+            self.dckNavigation.windowTitle().replace("&", "")
+        )
         # The welcome screen, and the pages the project is shown in. The
         # central widget used to be taken out of the window entirely while
         # a project was open, so that docked surfaces could have its space;
@@ -350,6 +360,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.projectRuntime,
                 self.selectionHistory,
                 {},
+            )
+        )
+        self.surfacePanelRouting = self.workspaceLifetime.own(
+            SurfacePanelRoutingController(
+                SurfacePanelRoutingViews.for_window(self)
             )
         )
         self.workspaceFocus.subscribe(self.workspaceSelection.focus_changed)
@@ -580,6 +595,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._activePanelId = core_panels.GENERAL
         self.activatePanel(self._activePanelId)
 
+    def showEvent(self, event):
+        """Settle routed dock extents once native window geometry exists."""
+
+        super().showEvent(event)
+        routing = getattr(self, "surfacePanelRouting", None)
+        if routing is not None:
+            routing.settle_layout()
+
     def closeEvent(self, event):
         """Close this window, and the project only with the last one.
 
@@ -643,6 +666,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         placement = getattr(self, "panelPlacement", None)
         if placement is not None:
             placement.watch_dock(instance.container)
+        routing = getattr(self, "surfacePanelRouting", None)
+        if routing is not None:
+            routing.panel_opened(instance.descriptor.id)
 
     def navigateTo(self, row):
         """Open what a navigator row stands for: a page, or a surface."""
@@ -695,9 +721,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Go to a surface, or reveal a tool panel, by stable identity."""
         if not panel_id:
             return False
-        if not self.goToSurface(panel_id) and not self.panelHost.reveal(
-            panel_id
-        ):
+        surface_activated = self.goToSurface(panel_id)
+        if not surface_activated and not self.panelHost.reveal(panel_id):
             return False
         self._activePanelId = panel_id
         row = self.navigator.row_for_panel(panel_id)
@@ -708,6 +733,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         selection = getattr(self, "workspaceSelection", None)
         if selection is not None:
             selection.surface_changed(panel_id)
+        routing = getattr(self, "surfacePanelRouting", None)
+        if surface_activated and routing is not None:
+            routing.surface_changed(panel_id)
         return True
 
     def notePanelFocus(self, panel_id):
@@ -838,7 +866,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.resizeDocks(
             (self.dckNavigation, project_tree),
-            (160, 340),
+            # The familiar frame is 200 pixels of navigation and, on the
+            # Editor surface where its routed companion is shown, about 187
+            # pixels of project tree.  These are defaults only; Qt's saved
+            # layout remains authoritative once the reader moves them.
+            (200, 187),
             Qt.Horizontal,
         )
         project_tree.raise_()

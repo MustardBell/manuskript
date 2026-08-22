@@ -369,20 +369,35 @@ def test_the_catalogue_browsers_are_four_places_not_one(MWEmptyProject):
         assert window.surfaceHost.current() == panel_id
 
 
-def test_opening_a_project_brings_its_panels_back(MWEmptyProject):
-    window = MWEmptyProject
+def test_project_panels_return_with_the_surface_scene_they_declare(
+        MWEmptyProject):
+    from manuskript.services.workspace_state import WorkspaceStateStore
 
-    visible = {
-        panel_id
-        for panel_id, instance in window.panelHost.instances.items()
-        if instance.descriptor.requires_project
-        and instance.container is not None
-        and not instance.container.isHidden()
-    }
-    assert PROJECT_TREE in visible
-    # A surface is not brought back by being made visible: the workspace
-    # is showing one of them, and which one is what it remembered.
-    assert window.surfaceHost.current() in SURFACE_IDS
+    source = MWEmptyProject
+    fresh_id = "window-surface-panel-defaults"
+    WorkspaceStateStore().forget(fresh_id)
+    window = source.workspaceWindows.open(fresh_id)
+    try:
+        independent_before = {
+            panel_id: window.panelHost.instance(panel_id).container.isHidden()
+            for panel_id in (METADATA, STORYLINE)
+        }
+
+        assert window.activatePanel(GENERAL)
+        assert window.panelHost.instance(PROJECT_TREE).container.isHidden()
+
+        assert window.activatePanel(EDITOR)
+        assert not window.panelHost.instance(PROJECT_TREE).container.isHidden()
+        assert independent_before == {
+            panel_id: window.panelHost.instance(panel_id).container.isHidden()
+            for panel_id in (METADATA, STORYLINE)
+        }
+        # A surface is not brought back by being made visible: the workspace
+        # is showing one of them, and which one is what it remembered.
+        assert window.surfaceHost.current() in SURFACE_IDS
+    finally:
+        window.close()
+        WorkspaceStateStore().forget(fresh_id)
 
 
 def test_every_tool_panel_toggle_is_always_reachable(MWEmptyProject):

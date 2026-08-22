@@ -90,6 +90,17 @@ That is a complete plugin. `runtime` says to use the in-process Python driver
 and, in `plugin.py`, call `register`. `register` is handed an `api` object and
 describes one panel.
 
+A tool panel normally keeps one visibility choice for the workspace. To make
+the example accompany the Editor, add
+`visible_with_surfaces=("core.editor",)` to its
+`ProjectPanelContribution`. The panel then starts visible on that surface and
+hidden on the others.
+Manuskript remembers later show/hide choices separately as the reader moves
+between surfaces. Omitting the field leaves the panel independent; plugins do
+not need to know or special-case this routing in their widget code. A
+`preferred_extent=280` can provide an initial dock width without preventing
+the reader from resizing it later.
+
 Two naming rules, both enforced at load:
 
 - the plugin `id` is reverse-DNS and must not collide

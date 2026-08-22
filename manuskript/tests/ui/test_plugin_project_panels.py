@@ -133,6 +133,8 @@ def test_a_declarative_project_panel_supplies_its_host_widget():
             name="Project notes",
         ),
         default_file="notes/main.txt",
+        visible_with_surfaces=("core.editor",),
+        preferred_extent=333,
         ui=UiDocument("example.notes.panel", 0, (
             UiControl(
                 "message",
@@ -152,6 +154,8 @@ def test_a_declarative_project_panel_supplies_its_host_widget():
     # now -- the absence is the type's, not a value to check.
     assert isinstance(descriptor, ToolPanelDescriptor)
     assert descriptor.placement == DOCK
+    assert descriptor.visible_with_surfaces == ("core.editor",)
+    assert descriptor.preferred_extent == 333
     dock = host.open_panel("example.notes.panel")
     deadline = time.monotonic() + 2
     while dock.widget().document is None:
@@ -414,6 +418,4 @@ def test_a_project_panel_cannot_ask_for_a_navigator_row():
             default_file="notes.json",
             navigator=object(),
         )
-
-
 

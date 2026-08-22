@@ -51,6 +51,15 @@ LANDMARKS = (
     ("editor", "mainEditor"),
 )
 
+#: The three native writing surfaces whose geometry has to agree.  The
+#: entity surfaces intentionally changed product shape; General, Outline and
+#: Editor are the stable path a reader uses to judge the window itself.
+SURFACES_TO_VISIT = (
+    ("general", "txtGeneralTitle"),
+    ("outline", "treeOutlineOutline"),
+    ("editor", "mainEditor"),
+)
+
 #: The navigator, and the central mode container it used to drive.
 NAVIGATOR = "lstTabs"
 CENTRAL_STACK = "tabMain"
@@ -93,6 +102,7 @@ def _navigator_rows(window):
     listing = window.findChild(_qt().QListWidget, NAVIGATOR)
     if listing is None:
         return {"present": False, "rows": []}
+    dock = window.findChild(_qt().QDockWidget, "dckNavigation")
     rows = []
     for index in range(listing.count()):
         item = listing.item(index)
@@ -104,6 +114,11 @@ def _navigator_rows(window):
     return {
         "present": True,
         "current": listing.currentRow(),
+        # The outer rectangle, not its title-bar implementation. Upstream
+        # hides that title while this fork deliberately gives every dock the
+        # distinguishable chrome the user requested; both must still reserve
+        # the same part of the writing frame.
+        "where": _where(window, dock) if dock is not None else None,
         "rows": rows,
     }
 
@@ -152,10 +167,18 @@ def _surfaces(window):
         # *appears* when its row is chosen is the navigation question, and
         # it is asked separately.
         visible = widget is not None and widget.isVisible()
-        found[surface] = {
-            "visible": visible,
-            "where": _where(window, widget) if visible else None,
-        }
+        if surface == "project-tree":
+            # It changed from an embedded Editor child to a declared tool
+            # dock. Visibility remains a parity requirement -- it must not
+            # leak into General or Outline -- while its title-bar inset is
+            # the intentional, user-requested distinction. The Editor's own
+            # rectangle catches any wrong tree width or placement.
+            found[surface] = {"visible": visible}
+        else:
+            found[surface] = {
+                "visible": visible,
+                "where": _where(window, widget) if visible else None,
+            }
     return found
 
 
@@ -221,6 +244,36 @@ def _dock_inventory(window):
     return sorted(found, key=lambda entry: entry["name"])
 
 
+def _settle(app):
+    for _turn in range(4):
+        app.processEvents()
+
+
+def _navigate_to_landmark(window, app, object_name):
+    """Choose the navigator row whose surface exposes ``object_name``.
+
+    Row numbers and translated labels are both unstable across the two
+    versions.  What the row reveals is the shared fact, so discover it by
+    exercising the real navigator rather than encoding either implementation's
+    table in the oracle.
+    """
+
+    listing = window.findChild(_qt().QListWidget, NAVIGATOR)
+    if listing is None:
+        raise RuntimeError("The running window has no navigator.")
+    for row in range(listing.count()):
+        if listing.item(row).isHidden():
+            continue
+        listing.setCurrentRow(row)
+        _settle(app)
+        landmark = window.findChild(_qt().QWidget, object_name)
+        if landmark is not None and landmark.isVisible():
+            return row
+    raise RuntimeError(
+        "No navigator row revealed {!r}.".format(object_name)
+    )
+
+
 _QT = None
 
 
@@ -262,7 +315,7 @@ def open_project(window, path):
     raise RuntimeError("No way to open a project in this version.")
 
 
-def describe(window, opened_by):
+def describe(window, opened_by, app):
     """What a reader sees, and separately, how it was built.
 
     Two subtrees rather than a flat record with an ignore list. The
@@ -274,16 +327,21 @@ def describe(window, opened_by):
     nobody would know to pass.
     """
 
-    return {
-        "visual": {
+    states = {}
+    for surface, object_name in SURFACES_TO_VISIT:
+        selected_row = _navigate_to_landmark(window, app, object_name)
+        states[surface] = {
+            "selected_row": selected_row,
             "navigator": _navigator_rows(window),
             "second_selector": _second_selector(window),
             "surfaces": _surfaces(window),
-            "docks": _visible_docks(window),
-        },
+        }
+    return {
+        "visual": {"states": states},
         "diagnostic": {
             "opened_by": opened_by,
             "method": _method(window),
+            "visible_docks": _visible_docks(window),
             "dock_inventory": _dock_inventory(window),
         },
     }
@@ -306,10 +364,14 @@ def main(argv):
     opened_by = open_project(window, project)
     window.resize(*WINDOW_SIZE)
     window.show()
-    for _turn in range(4):
-        app.processEvents()
+    _settle(app)
 
-    json.dump(describe(window, opened_by), sys.stdout, indent=2, sort_keys=True)
+    json.dump(
+        describe(window, opened_by, app),
+        sys.stdout,
+        indent=2,
+        sort_keys=True,
+    )
     sys.stdout.write("\n")
     return 0
 

@@ -20,6 +20,7 @@ from manuskript.panels import (
 from manuskript.panels.core import EDITOR
 from manuskript.services.workspace_state import (
     PRIMARY,
+    WORKSPACE_STATE_VERSION,
     WorkspaceStateStore,
     WorkspaceWindowState,
 )
@@ -92,7 +93,10 @@ class WorkspaceStateViews:
             }),
             document_area=document_area,
             current_surface=lambda: window.surfaceHost.current() or "",
-            select_surface=window.goToSurface,
+            # Restoring a surface is semantic activation, not merely changing
+            # the central page.  This keeps the navigator, selection policy
+            # and any declared companion panels on the same answer.
+            select_surface=window.activatePanel,
             legacy_panel_for_tab=window.panelIdForLegacyTab,
             find_splitter=lambda name: window.findChild(QSplitter, name),
             panel_registry=window.panelRegistry,
@@ -127,6 +131,10 @@ class WorkspaceStateController:
         #: torn out is a fact worth having when detaching into a real
         #: window lands.
         self._legacySurfaceLayouts = ()
+        #: Panel visibility written by a version that understood a routed
+        #: panel as an answer for the active surface, rather than as one
+        #: global default for the entire window.
+        self._recordedPanelVisibility = {}
         #: What each project-scoped panel was showing before the welcome
         #: screen put it away, by panel id. Panels are hidden through the
         #: host rather than the widget, so their toggles keep agreeing
@@ -151,8 +159,15 @@ class WorkspaceStateController:
     # --------------------------------------------------------- restore
 
     def restore(self):
-        self.storedVersion = self.store.stored_version()
+        try:
+            self.storedVersion = int(self.store.stored_version())
+        except (TypeError, ValueError):
+            self.storedVersion = 0
         state = self.store.load(self.windowId)
+        self._recordedPanelVisibility = (
+            dict(state.panels)
+            if self.storedVersion >= WORKSPACE_STATE_VERSION else {}
+        )
         if state.geometry is not None:
             self.views.restore_geometry(state.geometry)
         # Geometry is this window's size and place, and is still true
@@ -225,6 +240,11 @@ class WorkspaceStateController:
             layout for layout in self._legacySurfaceLayouts
             if layout.floating
         )
+
+    def remembered_panel_visibility(self, panel_id):
+        """The saved answer for the active surface, or no answer yet."""
+
+        return self._recordedPanelVisibility.get(panel_id)
 
     def _restore_panel_state(self, state):
         stored = state.panel_state or {}

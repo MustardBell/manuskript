@@ -165,3 +165,39 @@ def test_an_unknown_scope_or_multiplicity_is_refused():
         ToolPanelDescriptor(id="v.x", title="X", scope="document")
     with pytest.raises(ValueError, match="multiplicity"):
         ToolPanelDescriptor(id="v.x", title="X", multiplicity="many")
+
+
+def test_a_tool_panel_can_declare_which_surfaces_it_accompanies():
+    routed = ToolPanelDescriptor(
+        id="vendor.structure",
+        title="Structure",
+        visible_with_surfaces=("core.editor", "vendor.board"),
+        preferred_extent=280,
+    )
+
+    assert routed.visible_with_surfaces == (
+        "core.editor", "vendor.board",
+    )
+    assert routed.preferred_extent == 280
+    assert ToolPanelDescriptor(
+        id="vendor.notes", title="Notes",
+    ).visible_with_surfaces is None
+
+    with pytest.raises(ValueError, match="dotted surface ids"):
+        ToolPanelDescriptor(
+            id="vendor.bad",
+            title="Bad",
+            visible_with_surfaces=("editor",),
+        )
+    with pytest.raises(ValueError, match="twice"):
+        ToolPanelDescriptor(
+            id="vendor.duplicate",
+            title="Duplicate",
+            visible_with_surfaces=("core.editor", "core.editor"),
+        )
+    with pytest.raises(ValueError, match="non-negative integer"):
+        ToolPanelDescriptor(
+            id="vendor.negative",
+            title="Negative",
+            preferred_extent=-1,
+        )

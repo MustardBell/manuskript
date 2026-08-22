@@ -685,6 +685,12 @@ is **declared once** for the application and **built once per window**, so:
 - Both copies see the same models and the same file namespace, because those
   belong to the project rather than to a window. Editing in one is editing
   the project.
+- `visible_with_surfaces` is optional routing, expressed as stable surface
+  ids. `None` leaves a tool panel independent. A tuple makes it start visible
+  on those surfaces and hidden on the others; later reader choices are
+  remembered separately as they move between surfaces. `preferred_extent`
+  optionally supplies its initial dock width in pixels; it is not a minimum,
+  and a later reader resize wins.
 
 Settings panels are built per plugin-manager dialog, and each window has its
 own dialog, so the same applies to them.

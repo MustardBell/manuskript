@@ -87,6 +87,8 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             scope=PROJECT,
             multiplicity=PER_WINDOW,
             default_visible=True,
+            visible_with_surfaces=(EDITOR,),
+            preferred_extent=187,
             widget_factory=factories.get(PROJECT_TREE),
         ),
         ToolPanelDescriptor(

@@ -445,6 +445,29 @@ def test_explicit_surface_membership_wins_over_a_stale_legacy_blob():
     assert not controller.restoredLayout
 
 
+def test_only_surface_aware_state_supplies_a_routed_panel_choice():
+    window = a_window()
+    current = a_saved_layout()
+    current.load.return_value = WorkspaceWindowState(
+        panels={"core.project-tree": False},
+    )
+    controller = state_controller_reading(window, current)
+    controller.restore()
+    assert controller.remembered_panel_visibility(
+        "core.project-tree"
+    ) is False
+
+    old = a_saved_layout(version=WORKSPACE_STATE_VERSION - 1)
+    old.load.return_value = WorkspaceWindowState(
+        panels={"core.project-tree": True},
+    )
+    controller = state_controller_reading(window, old)
+    controller.restore()
+    assert controller.remembered_panel_visibility(
+        "core.project-tree"
+    ) is None
+
+
 def test_an_arrangement_naming_only_docks_we_make_is_applied():
     """Whoever wrote it, and whatever version stamped it.
 

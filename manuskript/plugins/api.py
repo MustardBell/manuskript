@@ -506,6 +506,10 @@ class ProjectPanelContribution:
     default_file: str
     ui: Any = None
     widget_factory: Optional[Callable[..., Any]] = None
+    #: Optional surface routing. None leaves visibility independent; a tuple
+    #: says where this tool starts visible and enables per-surface memory.
+    visible_with_surfaces: Optional[tuple[str, ...]] = None
+    preferred_extent: int = 0
 
     def __post_init__(self):
         path = PurePosixPath(str(self.default_file).replace("\\", "/"))
@@ -522,6 +526,30 @@ class ProjectPanelContribution:
             raise ValueError(
                 "Project panels require declarative UI or a native factory."
             )
+        if self.visible_with_surfaces is not None:
+            surfaces = tuple(str(value) for value in self.visible_with_surfaces)
+            if any("." not in surface_id for surface_id in surfaces):
+                raise ValueError(
+                    "Project panel surface routes must be dotted surface ids."
+                )
+            if len(surfaces) != len(set(surfaces)):
+                raise ValueError(
+                    "Project panel surface routes must not repeat ids."
+                )
+            object.__setattr__(self, "visible_with_surfaces", surfaces)
+        try:
+            preferred_extent = int(self.preferred_extent)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "Project panel preferred extent must be a non-negative "
+                "integer."
+            ) from None
+        if preferred_extent < 0:
+            raise ValueError(
+                "Project panel preferred extent must be a non-negative "
+                "integer."
+            )
+        object.__setattr__(self, "preferred_extent", preferred_extent)
 
 
 @dataclass(frozen=True)

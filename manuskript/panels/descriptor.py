@@ -170,6 +170,15 @@ class ToolPanelDescriptor:
     #: What this panel remembers between sessions, beyond whether it was
     #: showing. Empty for the panels whose whole state is their visibility.
     state: Tuple[PanelState, ...] = ()
+    #: Surface ids where this panel is part of the default working scene.
+    #: None means independent visibility: changing surfaces does not touch
+    #: it.  A tuple opts into routing, and may be empty for a panel hidden by
+    #: default on every surface but still remembered independently per one.
+    visible_with_surfaces: Optional[Tuple[str, ...]] = None
+    #: Preferred width when a routed dock first joins a left/right scene.
+    #: Zero leaves sizing to Qt. It is a default, not a minimum; later sizes
+    #: are remembered by the routing controller.
+    preferred_extent: int = 0
     def __post_init__(self):
         if not self.id or "." not in self.id:
             raise ValueError(
@@ -204,6 +213,35 @@ class ToolPanelDescriptor:
                     ", ".join(MULTIPLICITIES),
                 )
             )
+        if self.visible_with_surfaces is not None:
+            surfaces = tuple(self.visible_with_surfaces)
+            if any(
+                not isinstance(surface_id, str)
+                or "." not in surface_id
+                for surface_id in surfaces
+            ):
+                raise ValueError(
+                    "Panel {} surface routes must be dotted surface ids."
+                    .format(self.id)
+                )
+            if len(surfaces) != len(set(surfaces)):
+                raise ValueError(
+                    "Panel {} names a surface route twice.".format(self.id)
+                )
+            object.__setattr__(self, "visible_with_surfaces", surfaces)
+        try:
+            preferred_extent = int(self.preferred_extent)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "Panel {} preferred extent must be a non-negative integer."
+                .format(self.id)
+            ) from None
+        if preferred_extent < 0:
+            raise ValueError(
+                "Panel {} preferred extent must be a non-negative integer."
+                .format(self.id)
+            )
+        object.__setattr__(self, "preferred_extent", preferred_extent)
 
     @property
     def requires_project(self):

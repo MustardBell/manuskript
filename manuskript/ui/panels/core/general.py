@@ -3,7 +3,7 @@
 from PyQt5.QtWidgets import (
     QFormLayout,
     QGroupBox,
-    QVBoxLayout,
+    QHBoxLayout,
     QWidget,
 )
 
@@ -11,7 +11,7 @@ from manuskript.ui.views.lineEditView import lineEditView
 
 
 class GeneralPanel(QWidget):
-    """A narrow-safe form over the legacy flat-data model."""
+    """The publication and author forms over the legacy flat-data model."""
 
     FIELD_SPECS = (
         ("title", "Title", "txtGeneralTitle"),
@@ -50,11 +50,13 @@ class GeneralPanel(QWidget):
             form = book_form if index < 6 else author_form
             form.addRow(translate(label), editor)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        # These are two peer groups, not one long narrow form.  Keeping them
+        # side by side restores the familiar first-open geometry while each
+        # group still gives its own fields whatever half-width is available.
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(book)
         layout.addWidget(author)
-        layout.addStretch(1)
 
 
 def build_general(context, parent):
