@@ -98,7 +98,11 @@ def a_dock_era_layout():
         Qt.Vertical,
     )
     docks["panel.core.editor"].setFloating(True)
-    docks["panel.core.editor"].setGeometry(120, 90, 640, 480)
+    # Keep the synthetic floating window inside CI's smallest supported
+    # 640x480 virtual display.  A 640x480 window at (120, 90) is necessarily
+    # clamped to the screen origin by Qt, so it cannot preserve the position
+    # this fixture is meant to exercise.
+    docks["panel.core.editor"].setGeometry(120, 90, 320, 240)
     return bytes(window.saveState())
 
 
@@ -264,7 +268,7 @@ def test_the_detector_recovers_surface_identity_and_floating_geometry():
     assert not by_id["core.general"].floating
     editor = by_id["core.editor"]
     assert editor.floating
-    assert editor.geometry == (120, 90, 640, 480)
+    assert editor.geometry == (120, 90, 320, 240)
 
 
 def test_a_payload_that_will_not_restore_is_not_guessed_at():
