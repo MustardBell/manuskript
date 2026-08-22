@@ -76,6 +76,11 @@ class WorkspaceSurfaceHost:
         self.context = context
         self._instances = {}
         self._current = None
+        #: Told when this workspace gains or loses a surface, so whatever
+        #: lists them can list them again. A callback rather than anything
+        #: this host understands: which surfaces a workspace holds is its
+        #: own business, and drawing a list of them is not.
+        self.on_membership_changed = None
 
     # -- what this workspace holds ---------------------------------------
 
@@ -137,6 +142,7 @@ class WorkspaceSurfaceHost:
         instance.container = self.presentation.mount(instance)
         self._instances[surface_id] = instance
         self._settle_current(surface_id)
+        self._membership_changed()
         return instance
 
     def detach(self, surface_id):
@@ -162,6 +168,7 @@ class WorkspaceSurfaceHost:
             remaining = next(iter(self._instances), None)
             if remaining is not None:
                 self.activate(remaining)
+        self._membership_changed()
         return instance
 
     def attach(self, instance):
@@ -187,7 +194,14 @@ class WorkspaceSurfaceHost:
         instance.container = self.presentation.mount(instance)
         self._instances[surface_id] = instance
         self._settle_current(surface_id)
+        self._membership_changed()
         return instance
+
+    def _membership_changed(self):
+        """Say that which surfaces this workspace holds has changed."""
+
+        if callable(self.on_membership_changed):
+            self.on_membership_changed()
 
     def activate(self, surface_id):
         """Show this one. The navigator's whole job, in one call."""
@@ -254,6 +268,9 @@ class WorkspaceSurfaceHost:
         a collection, with no stack that names this code.
         """
 
+        # Nothing is told about the emptying: this workspace is going, and
+        # whatever lists its surfaces is going with it.
+        self.on_membership_changed = None
         for surface_id in tuple(self._instances):
             self.close(surface_id)
         self.presentation = None

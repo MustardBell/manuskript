@@ -326,3 +326,34 @@ def test_the_next_surface_opened_becomes_current_again():
     host.open("core.outline")
 
     assert host.current() == "core.outline"
+
+
+def test_the_workspace_says_when_its_membership_changes():
+    """Whatever lists these surfaces has to hear about it.
+
+    A navigator that listed the registry could be built once and left
+    alone. One that lists what this workspace holds cannot: a surface
+    leaving for another window takes its row with it. Said as a callback,
+    because which surfaces a workspace holds is this host's business and
+    drawing a list of them is not.
+    """
+
+    changes = []
+    host = a_host(surface("core.editor"), surface("core.outline"))
+    host.on_membership_changed = lambda: changes.append(
+        sorted(host.instances)
+    )
+
+    host.open("core.editor")
+    # Going somewhere is not gaining anything, and must not be announced
+    # as though a workspace had changed shape.
+    host.activate("core.editor")
+    host.deactivate()
+    moved = host.detach("core.editor")
+    host.attach(moved)
+
+    assert changes == [
+        ["core.editor"],
+        [],
+        ["core.editor"],
+    ]

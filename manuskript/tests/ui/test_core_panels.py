@@ -542,3 +542,37 @@ def test_the_developer_page_leaves_no_surface_current(MWEmptyProject):
 
     assert window.surfaceHost.current() == GENERAL
     assert window.tabMain.currentWidget() is window.corePanels.general
+
+
+def test_the_navigator_lists_what_this_workspace_holds(MWEmptyProject):
+    """Membership, not availability.
+
+    Rows used to come from every surface in the registry -- the
+    application's list rather than this window's -- so selecting one this
+    workspace did not hold built it here. A window made to hold one
+    surface would fill up with seven, a click at a time.
+    """
+
+    from manuskript.services.workspace_state import WorkspaceStateStore
+
+    window = MWEmptyProject
+    fresh_id = "window-navigator-membership"
+    WorkspaceStateStore().forget(fresh_id)
+    other = window.workspaceWindows.open(fresh_id)
+    try:
+        assert other.navigator.row_for_panel(OUTLINE) is not None
+
+        moved = other.surfaceHost.detach(OUTLINE)
+
+        assert other.navigator.row_for_panel(OUTLINE) is None
+        # And selecting it is no longer a way to acquire it.
+        assert not other.goToSurface(OUTLINE)
+        assert not other.surfaceHost.contains(OUTLINE)
+
+        other.surfaceHost.attach(moved)
+
+        assert other.navigator.row_for_panel(OUTLINE) is not None
+        assert other.goToSurface(OUTLINE)
+    finally:
+        other.close()
+        WorkspaceStateStore().forget(fresh_id)

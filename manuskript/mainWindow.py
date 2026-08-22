@@ -22,7 +22,7 @@ from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.view_configuration_controller import (
     ViewConfigurationController,
 )
-from manuskript.panels import PanelContext, PanelRegistryError
+from manuskript.panels import PanelContext
 from manuskript.panels import core as core_panels
 from manuskript.panels import group_of as _group_of
 from manuskript.panels.core import register_core_panels
@@ -33,10 +33,7 @@ from manuskript.ui.panels.placement import (
 )
 from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.surface_presentation import CentralSurfacePresentation
-from manuskript.ui.workspace_surfaces import (
-    WorkspaceSurfaceError,
-    WorkspaceSurfaceHost,
-)
+from manuskript.ui.workspace_surfaces import WorkspaceSurfaceHost
 from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
@@ -655,26 +652,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.stack.setCurrentIndex(1)
 
     def goToSurface(self, surface_id):
-        """Show a place the writer goes, building it if this one has none.
+        """Show one of the places this workspace holds. Never builds one.
 
-        A navigator row for a surface this workspace does not hold is a
-        request to go there, and going there is how a workspace acquires
-        one -- which is what lets a plugin's surface be reached from the
-        navigator without every window building it in advance.
+        Going somewhere is activation. Building was the other half of
+        this until the navigator listed the whole registry: a row for a
+        surface the workspace did not hold turned selecting it into an
+        acquisition, so a window made to hold one surface filled up with
+        seven, a click at a time, and nothing said so.
 
-        Answers False for anything that is not a surface, so the caller
-        can ask the panel host instead. Asked of the surface host rather
-        than of the id, because which kind an id names is the registry's
-        answer and it already gives it.
+        Which surfaces a workspace holds changes by composition, by
+        restoring, or by a surface arriving from another window -- all of
+        them explicit, and none of them a selection in a list.
+
+        Answers False for a surface this workspace has not got, and for
+        anything that is not a surface, so the caller can ask the panel
+        host instead.
         """
         if not self.surfaceHost.contains(surface_id):
-            try:
-                if self.surfaceHost.open(
-                    surface_id, PanelContext(translate=self.tr),
-                ) is None:
-                    return False
-            except (WorkspaceSurfaceError, PanelRegistryError):
-                return False
+            return False
         self._showCentralPages()
         return self.surfaceHost.activate(surface_id) is not None
 
@@ -729,6 +724,53 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             5: core_panels.OUTLINE,
             6: core_panels.EDITOR,
         }.get(tab, "")
+
+    def rebuildNavigator(self):
+        """List the pages this window keeps and the surfaces it holds.
+
+        Membership, not availability. The rows used to come from every
+        surface in the registry, which is the application's list rather
+        than this workspace's -- so a window that held one surface still
+        offered all seven, and selecting one quietly built it here.
+
+        Called again whenever this workspace gains or loses a surface, so
+        a surface that leaves for another window takes its row with it and
+        one that arrives brings its own.
+        """
+        held = [
+            instance.descriptor
+            for instance in self.surfaceHost.instances.values()
+        ]
+        self.navigator = WorkspaceNavigator.compose(
+            pages=self.NAVIGATOR_PAGES, surfaces=held,
+        )
+        # Blocked while the list is refilled: clearing it moves the
+        # current row through every position on the way to none, and each
+        # of those is a navigation this window would otherwise perform.
+        blocker = QSignalBlocker(self.lstTabs)
+        self.lstTabs.clear()
+        for target in self.navigator.targets:
+            label = self.tr(target.label)
+            item = QListWidgetItem(F.themeIcon(target.icon), label)
+            item.setSizeHint(QSize(item.sizeHint().width(), 64))
+            item.setToolTip(label)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.lstTabs.addItem(item)
+            if target.page is not None:
+                self.tabMain.setTabIcon(target.page, item.icon())
+        debug_row = self.navigator.row_for_page(self.DebugPage)
+        if debug_row is not None:
+            self.lstTabs.item(debug_row).setHidden(not self.SHOW_DEBUG_TAB)
+        # The row that stands for what is showing, if it still has one.
+        showing = self.surfaceHost.current()
+        row = (
+            self.navigator.row_for_panel(showing)
+            if showing is not None
+            else None
+        )
+        if row is not None:
+            self.lstTabs.setCurrentRow(row)
+        del blocker
 
     def _selectNavigatorPage(self, page):
         """Follow a page change back to the row that stands for it."""
@@ -879,30 +921,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actCloseProject,
             self.actGitRevisions,
         )
-        # The navigator on the left. Rows come from the pages this window
-        # still keeps and from every panel that asked for one, so what is
-        # listed is no longer whatever the main tab widget happens to
-        # hold -- which is what took Characters out of it when characters
-        # became a dock.
-        self.navigator = WorkspaceNavigator.compose(
-            pages=self.NAVIGATOR_PAGES,
-            surfaces=self.panelRegistry.surfaces(),
-        )
         self.lstTabs.setIconSize(QSize(48, 48))
-        for target in self.navigator.targets:
-            label = self.tr(target.label)
-            item = QListWidgetItem(F.themeIcon(target.icon), label)
-            item.setSizeHint(QSize(item.sizeHint().width(), 64))
-            item.setToolTip(label)
-            item.setTextAlignment(Qt.AlignCenter)
-            self.lstTabs.addItem(item)
-            if target.page is not None:
-                self.tabMain.setTabIcon(target.page, item.icon())
+        self.rebuildNavigator()
+        # Rebuilt again whenever this workspace gains or loses one, which
+        # is how a row leaves with the surface it stood for.
+        self.surfaceHost.on_membership_changed = self.rebuildNavigator
         self.tabMain.tabBar().hide()
         self.lstTabs.currentRowChanged.connect(self.navigateTo)
-        debug_row = self.navigator.row_for_page(self.DebugPage)
-        if debug_row is not None:
-            self.lstTabs.item(debug_row).setHidden(not self.SHOW_DEBUG_TAB)
         self.tabMain.setTabEnabled(self.DebugPage, self.SHOW_DEBUG_TAB)
         self.tabMain.currentChanged.connect(self._selectNavigatorPage)
 
