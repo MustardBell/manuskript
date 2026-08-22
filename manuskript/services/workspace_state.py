@@ -37,6 +37,9 @@ LOGGER = logging.getLogger(__name__)
 #: showing is filed under activeSurface; the old key could name a tool
 #: panel that no navigator row stands for, and is read once as a migration
 #: input.
+#: 5 -- workspace surface membership became explicit. A missing surfaces
+#: key is the pre-v5 canonical workspace; a stored list is the exact subset
+#: that window owned when the session ended.
 #:
 #: The version says what shape the stored keys are in, and nothing else.
 #: Whether an arrangement of docks may be applied is not asked here and is
@@ -44,7 +47,7 @@ LOGGER = logging.getLogger(__name__)
 #: layout what it contains, because a version answers that wrongly for the
 #: readers who matter most -- one upgrading from upstream arrives stamped
 #: 1 with a layout naming no work-surface docks at all.
-WORKSPACE_STATE_VERSION = 4
+WORKSPACE_STATE_VERSION = 5
 
 #: Everything this module owns lives under here.
 ROOT = "workspace"
@@ -74,6 +77,8 @@ class WorkspaceWindowState:
 
     #: Which documents this window had open, in its own split layout.
     documents: object = None
+    #: Ordered surface ids this window owned. None means pre-v5 state.
+    surfaces: object = None
     #: Legacy tab index, read only as a migration input for pre-v3 layouts.
     main_tab: object = None
     #: Which work surface this window was showing, from the surface host.
@@ -122,6 +127,7 @@ class WorkspaceStateStore:
             panel_state=self._group(window_id, "panelState"),
             docks=self._flags(window_id, "docks"),
             documents=self._json(window_id, "documents"),
+            surfaces=self._string_tuple(window_id, "surfaces"),
             main_tab=self._int(window_id, "mainTab"),
             active_surface=self._string(window_id, "activeSurface"),
             active_panel=self._string(window_id, "activePanel"),
@@ -152,6 +158,7 @@ class WorkspaceStateStore:
         self._write_group(window_id, "panelState", state.panel_state)
         self._write_group(window_id, "docks", state.docks)
         self._set_json(window_id, "documents", state.documents)
+        self._set_json(window_id, "surfaces", state.surfaces)
         # Stop writing the tab-era key. It remains readable above as a
         # migration input, including from project settings in old files.
         self._settings.remove(self._key(window_id, "mainTab"))
@@ -248,6 +255,31 @@ class WorkspaceStateStore:
             self._settings.remove(self._key(window_id, name))
             return
         self._set(window_id, name, json.dumps(value))
+
+    def _string_tuple(self, window_id, name):
+        """A JSON list of stable ids, or None when absent/unreadable."""
+
+        value = self._json(window_id, name)
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            LOGGER.warning(
+                "Ignoring non-list %s for window %s.", name, window_id,
+            )
+            return None
+        found = []
+        for entry in value:
+            if not isinstance(entry, str):
+                LOGGER.warning(
+                    "Ignoring non-string entry in %s for window %s.",
+                    name,
+                    window_id,
+                )
+                continue
+            entry = entry.strip()
+            if entry and entry not in found:
+                found.append(entry)
+        return tuple(found)
 
     def _int(self, window_id, name):
         """A stored whole number, or None when never recorded."""

@@ -26,11 +26,16 @@ surfaces does this workspace have" a consequence of what happened to be
 touched rather than something the workspace states.
 """
 
+import logging
+
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from manuskript.panels import WorkspaceSurfaceDescriptor
+from manuskript.panels import PanelRegistryError, WorkspaceSurfaceDescriptor
 from manuskript.panels.core import CORE_SURFACE_IDS, GENERAL
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,56 @@ class WorkspaceBuildIntent:
             surface_ids=(),
             incoming=(instance,),
             active_surface=instance.id,
+        )
+
+    @classmethod
+    def from_saved(cls, surface_ids, active_surface, registry):
+        """Turn persisted membership into a safe construction intent.
+
+        No ``surfaces`` key is a pre-membership workspace, whose migration
+        is the canonical core set. Unknown ids are contributions no longer
+        installed, not a reason to prevent Manuskript starting. If none of
+        a recorded set remain available, the same canonical fallback keeps
+        the window usable.
+        """
+
+        if surface_ids is None:
+            return cls()
+        valid = []
+        for surface_id in surface_ids:
+            surface_id = str(surface_id or "").strip()
+            if not surface_id or surface_id in valid:
+                continue
+            # The primary intent is resolved before the first MainWindow
+            # registers core factories. The current core vocabulary is still
+            # authoritative at that point; contributed surfaces, by contrast,
+            # have to be present in the shared registry to be restorable.
+            if surface_id in CORE_SURFACE_IDS:
+                valid.append(surface_id)
+                continue
+            try:
+                descriptor = registry.descriptor(surface_id)
+            except PanelRegistryError:
+                LOGGER.warning(
+                    "Ignoring unavailable workspace surface %s.",
+                    surface_id,
+                )
+                continue
+            if not isinstance(descriptor, WorkspaceSurfaceDescriptor):
+                LOGGER.warning(
+                    "Ignoring tool panel %s in surface membership.",
+                    surface_id,
+                )
+                continue
+            valid.append(surface_id)
+        if not valid:
+            return cls()
+        active_surface = str(active_surface or "")
+        if active_surface not in valid:
+            active_surface = valid[0]
+        return cls(
+            surface_ids=tuple(valid),
+            active_surface=active_surface,
         )
 
 

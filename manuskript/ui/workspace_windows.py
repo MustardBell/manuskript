@@ -6,6 +6,7 @@ from typing import Any, Callable
 from PyQt5.QtCore import QCoreApplication, QEvent
 
 from manuskript.services.workspace_state import PRIMARY
+from manuskript.ui.workspace_surfaces import WorkspaceBuildIntent
 
 
 def workspace_id(workspace):
@@ -34,6 +35,7 @@ class WorkspaceWindowViews:
     create: Callable[[str, Any], Any]
     close_all: Callable[[], bool]
     state_store: Callable[[], Any]
+    intent_for_state: Callable[[Any], Any]
     adoption: ProjectAdoptionViews
 
     @classmethod
@@ -76,6 +78,11 @@ class WorkspaceWindowViews:
             create=create,
             close_all=registry.close_all,
             state_store=lambda: state.store,
+            intent_for_state=lambda saved: WorkspaceBuildIntent.from_saved(
+                saved.surfaces,
+                saved.active_surface,
+                window.panelRegistry,
+            ),
             adoption=ProjectAdoptionViews(
                 is_open=lambda: runtime.isOpen,
                 sync_to_state=lifecycle.sync_to_state,
@@ -155,10 +162,12 @@ class WorkspaceWindowController:
             return ()
         self._restoration_attempted = True
         reopened = []
-        for window_id in self.views.state_store().open_windows():
+        store = self.views.state_store()
+        for window_id in store.open_windows():
             if window_id in self.open_ids():
                 continue
-            reopened.append(self.open(window_id))
+            intent = self.views.intent_for_state(store.load(window_id))
+            reopened.append(self.open_with_intent(intent, window_id))
         return tuple(reopened)
 
     def reset_restoration(self, attempted=False):

@@ -32,6 +32,7 @@ def test_a_layout_round_trips(tmp_path):
         panels={"core.metadata": True, "core.storyline": False},
         panel_state={"core.metadata": [True, False]},
         docks={"dckSearch": True},
+        surfaces=("core.general", "core.editor"),
         active_surface="core.editor",
     )
 
@@ -45,7 +46,27 @@ def test_a_layout_round_trips(tmp_path):
         "core.metadata": True, "core.storyline": False,
     }
     assert loaded.docks == {"dckSearch": True}
+    assert loaded.surfaces == ("core.general", "core.editor")
     assert loaded.active_surface == "core.editor"
+
+
+def test_pre_membership_layout_is_distinct_from_an_explicit_set(tmp_path):
+    subject, _settings = store(tmp_path)
+
+    assert subject.load(PRIMARY).surfaces is None
+
+    subject.save(WorkspaceWindowState(surfaces=("core.editor",)), PRIMARY)
+
+    assert subject.load(PRIMARY).surfaces == ("core.editor",)
+
+
+def test_unreadable_surface_membership_is_ignored(tmp_path):
+    subject, settings = store(tmp_path)
+    key = "workspace/windows/main/surfaces"
+
+    settings.setValue(key, '{"core.editor": true}')
+
+    assert subject.load(PRIMARY).surfaces is None
 
 
 def test_saving_surface_identity_removes_the_keys_it_replaced(tmp_path):

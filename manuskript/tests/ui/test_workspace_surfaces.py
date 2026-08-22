@@ -8,9 +8,11 @@ from manuskript.panels import (
     WorkspaceSurfaceDescriptor,
 )
 from manuskript.ui.workspace_surfaces import (
+    WorkspaceBuildIntent,
     WorkspaceSurfaceError,
     WorkspaceSurfaceHost,
 )
+from manuskript.panels.core import CORE_SURFACE_IDS, EDITOR, OUTLINE
 
 
 class Widget:
@@ -96,6 +98,47 @@ def test_a_workspace_holds_only_the_surfaces_it_was_asked_for():
 
     assert host.contains("core.editor")
     assert not host.contains("core.outline")
+
+
+def test_pre_membership_state_migrates_to_the_canonical_surfaces():
+    intent = WorkspaceBuildIntent.from_saved(
+        None, None, PanelRegistry(),
+    )
+
+    assert intent.surface_ids == CORE_SURFACE_IDS
+
+
+def test_saved_membership_keeps_only_available_surfaces_and_active_one():
+    registry = PanelRegistry()
+    registry.register(surface(EDITOR, "Editor"))
+    registry.register(surface(OUTLINE, "Outline"))
+
+    intent = WorkspaceBuildIntent.from_saved(
+        (EDITOR, "plugin.gone", OUTLINE, EDITOR),
+        OUTLINE,
+        registry,
+    )
+
+    assert intent.surface_ids == (EDITOR, OUTLINE)
+    assert intent.active_surface == OUTLINE
+
+
+def test_primary_core_membership_resolves_before_factories_are_registered():
+    intent = WorkspaceBuildIntent.from_saved(
+        (EDITOR,), EDITOR, PanelRegistry(),
+    )
+
+    assert intent.surface_ids == (EDITOR,)
+    assert intent.active_surface == EDITOR
+
+
+def test_unusable_saved_membership_falls_back_to_a_visible_workspace():
+    intent = WorkspaceBuildIntent.from_saved(
+        ("plugin.gone",), "plugin.gone", PanelRegistry(),
+    )
+
+    assert intent.surface_ids == CORE_SURFACE_IDS
+    assert intent.active_surface == "core.general"
 
 
 def test_opening_the_same_surface_twice_gives_the_same_one():

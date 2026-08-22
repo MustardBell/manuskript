@@ -128,6 +128,15 @@ class Registry:
 CORE_DESCRIPTORS = core_panel_descriptors()
 
 
+def surface_instance(surface_id):
+    descriptor = next(
+        candidate
+        for candidate in CORE_DESCRIPTORS
+        if candidate.id == surface_id
+    )
+    return PanelInstance(descriptor=descriptor, widget=MagicMock())
+
+
 def a_window(instances=(), descriptors=(), surfaces=()):
     window = MagicMock()
     # WorkspaceStateViews reads this as a boolean, and a save with a
@@ -198,6 +207,24 @@ def test_a_panel_that_remembers_nothing_files_nothing():
     controller.save()
 
     assert saved_state(controller).panel_state == {}
+
+
+def test_a_window_saves_the_surface_subset_its_host_owns():
+    editor = next(
+        descriptor
+        for descriptor in CORE_DESCRIPTORS
+        if descriptor.id == "core.editor"
+    )
+    instance = PanelInstance(descriptor=editor, widget=MagicMock())
+    window = a_window(
+        descriptors=CORE_DESCRIPTORS,
+        surfaces={editor.id: instance},
+    )
+    controller = state_controller(window, MagicMock())
+
+    controller.save()
+
+    assert saved_state(controller).surfaces == ("core.editor",)
 
 
 def test_nothing_recorded_leaves_a_panel_as_it_opened():
@@ -487,7 +514,10 @@ def test_a_layout_that_recorded_a_tool_panel_is_read_as_nothing():
 def test_a_layout_that_recorded_a_surface_under_the_old_name_is_kept():
     """The migration this leaves room for: most of them did name one."""
 
-    window = a_window(descriptors=CORE_DESCRIPTORS)
+    window = a_window(
+        descriptors=CORE_DESCRIPTORS,
+        surfaces={"core.editor": surface_instance("core.editor")},
+    )
     store = MagicMock()
     store.load.return_value = WorkspaceWindowState(
         active_panel="core.editor",
@@ -500,7 +530,10 @@ def test_a_layout_that_recorded_a_surface_under_the_old_name_is_kept():
 
 
 def test_the_new_field_wins_over_the_one_it_replaced():
-    window = a_window(descriptors=CORE_DESCRIPTORS)
+    window = a_window(
+        descriptors=CORE_DESCRIPTORS,
+        surfaces={"core.outline": surface_instance("core.outline")},
+    )
     store = MagicMock()
     store.load.return_value = WorkspaceWindowState(
         active_surface="core.outline",

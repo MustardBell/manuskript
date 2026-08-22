@@ -33,9 +33,14 @@ def prepare_test_application():
     from PyQt5.QtCore import QSettings
     from manuskript import main
 
-    QSettings(
+    test_settings = QSettings(
         "manuskript_tests", "manuskript_tests",
-    ).remove("workspace/openWindows")
+    )
+    test_settings.remove("workspace/openWindows")
+    # Production composes the primary window from saved surface membership.
+    # Focused tests require their shared primary to begin canonical even if a
+    # previous interrupted test process left a sparse membership behind.
+    test_settings.remove("workspace/windows/main/surfaces")
     arguments = main.process_commandline([])
     _application = main.prepare(arguments, tests=True)
     return _application

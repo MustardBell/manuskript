@@ -245,6 +245,7 @@ class WorkspaceStateController:
                 panel_state=self._panel_state(),
                 docks=dict(self._dock_visibility),
                 documents=self._open_documents(),
+                surfaces=tuple(self.views.surface_host.instances),
                 active_surface=self._current_surface(),
             ),
             self.windowId,
@@ -284,9 +285,11 @@ class WorkspaceStateController:
             descriptor = self.views.panel_registry.descriptor(surface_id)
         except PanelRegistryError:
             return None
+        if not isinstance(descriptor, WorkspaceSurfaceDescriptor):
+            return None
         return (
             surface_id
-            if isinstance(descriptor, WorkspaceSurfaceDescriptor)
+            if self.views.surface_host.instance(surface_id) is not None
             else None
         )
 

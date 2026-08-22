@@ -339,9 +339,21 @@ def prepare(arguments, tests=False):
 
     # Main window
     from manuskript.mainWindow import MainWindow
+    from manuskript.services.workspace_state import (
+        PRIMARY,
+        WorkspaceStateStore,
+    )
+    from manuskript.ui.workspace_surfaces import WorkspaceBuildIntent
+
+    saved_primary = WorkspaceStateStore().load(PRIMARY)
+    primary_intent = WorkspaceBuildIntent.from_saved(
+        saved_primary.surfaces,
+        saved_primary.active_surface,
+        panel_registry,
+    )
 
     with timing.span("startup.main_window"):
-        MW = MainWindow(window_services)
+        MW = MainWindow(window_services, build_intent=primary_intent)
     # Command line project
     if arguments.filename is not None and arguments.filename[-4:] == ".msk":
         # The file is verified to already exist during argument parsing.

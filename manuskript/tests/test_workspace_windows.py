@@ -1698,7 +1698,7 @@ def test_surface_drop_target_is_named_and_has_wcag_text_contrast(
 
 
 def test_move_surface_composes_a_new_window_for_the_living_editor(
-        MWEmptyProject):
+        MWEmptyProject, tmp_path):
     """The command transfers the Editor instead of making a second one."""
 
     window = MWEmptyProject
@@ -1706,6 +1706,11 @@ def test_move_surface_composes_a_new_window_for_the_living_editor(
     original_editor = window.mainEditor
     controller = window.surfaceTransfer
     previous_views = controller.views
+    previous_store = window.windowState.store
+    state_store = WorkspaceStateStore(QSettings(
+        str(tmp_path / "surface-membership.ini"),
+        QSettings.IniFormat,
+    ))
     events = []
 
     def flush():
@@ -1741,6 +1746,12 @@ def test_move_surface_composes_a_new_window_for_the_living_editor(
         assert events == [("flush", True), ("create", False)]
         assert not window.surfaceHost.contains(EDITOR)
         assert fresh.isVisible()
+        window.windowState.store = state_store
+        fresh.windowState.store = state_store
+        window.windowState.save()
+        fresh.windowState.save()
+        assert EDITOR not in state_store.load(window.windowId).surfaces
+        assert state_store.load(fresh.windowId).surfaces == (EDITOR,)
         fresh.surfaceTransfer.build_menu()
         editor_action = next(
             action
@@ -1756,6 +1767,7 @@ def test_move_surface_composes_a_new_window_for_the_living_editor(
                     candidate.surfaceHost.detach(EDITOR)
                 )
             candidate.close()
+        window.windowState.store = previous_store
 
     assert window.mainEditor is original_editor
 

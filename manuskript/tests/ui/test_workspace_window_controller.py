@@ -12,12 +12,15 @@ from manuskript.ui.workspace_windows import (
 def controller_fixture(
         current_id=PRIMARY,
         recorded=(),
-        close_result=True):
+        close_result=True,
+        saved_state=None,
+        intent_for_state=lambda _state: None):
     workspaces = [SimpleNamespace(windowId=current_id)]
     opened = []
     events = []
     store = MagicMock()
     store.open_windows.return_value = tuple(recorded)
+    store.load.return_value = saved_state
     controller_holder = {}
 
     def create(window_id, build_intent=None):
@@ -46,6 +49,7 @@ def controller_fixture(
         create=create,
         close_all=close_all,
         state_store=lambda: store,
+        intent_for_state=intent_for_state,
         adoption=ProjectAdoptionViews(
             is_open=lambda: True,
             sync_to_state=lambda value: events.append(("sync", value)),
@@ -122,6 +126,22 @@ def test_primary_restores_missing_windows_once():
     assert tuple(opened) == first
     assert [workspace.windowId for workspace in first] == ["window-2"]
     assert second == ()
+
+
+def test_session_restore_composes_each_window_from_saved_membership():
+    saved = SimpleNamespace(surfaces=("core.editor",))
+    controller, _workspaces, opened, _store, events = controller_fixture(
+        recorded=(PRIMARY, "window-2"),
+        saved_state=saved,
+        intent_for_state=lambda state: ("intent", state.surfaces),
+    )
+
+    controller.restore()
+
+    assert [workspace.windowId for workspace in opened] == ["window-2"]
+    assert events[-1] == (
+        "create", "window-2", ("intent", ("core.editor",)),
+    )
 
 
 def test_secondary_does_not_restore_the_application_session():
