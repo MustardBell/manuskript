@@ -33,6 +33,10 @@ from manuskript.ui.panels.placement import (
 )
 from manuskript.ui.panels.window_port import PanelWindow
 from manuskript.ui.surface_presentation import CentralSurfacePresentation
+from manuskript.ui.surface_transfer import (
+    SurfaceTransferController,
+    SurfaceTransferViews,
+)
 from manuskript.ui.workspace_surfaces import (
     WorkspaceBuildIntent,
     WorkspaceSurfaceError,
@@ -848,6 +852,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         before = self.menuView.actions()
         anchor = before[0] if before else None
         self.menuView.insertAction(anchor, self.actNewWindow)
+        self.surfaceTransfer = self.workspaceLifetime.own(
+            SurfaceTransferController(
+                SurfaceTransferViews.for_window(self, anchor=anchor)
+            )
+        )
         self.panelPlacement = self.workspaceLifetime.own(
             PanelPlacementController(
                 PanelPlacementViews.for_window(self, anchor=anchor)

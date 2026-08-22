@@ -1597,36 +1597,111 @@ def test_the_float_menu_leaves_out_the_surfaces_that_are_windows(
     assert PROJECT_TREE in offered
 
 
-def test_a_window_made_for_a_move_that_cannot_happen_is_taken_away(
+def test_the_view_menu_offers_each_owned_surface_to_a_new_window(
         MWEmptyProject):
-    """The surface this feature exists for, and it cannot use it yet.
+    window = MWEmptyProject
 
-    Every workspace builds its own Editor as it is constructed, so a new
-    one already holds that id and move_to declines a destination that does.
-    The first version left the window standing: one opened, an editor was
-    in it, the original stayed where it was, and the whole thing looked
-    like it had worked.
+    window.surfaceTransfer.build_menu()
 
-    Moving one for real means carrying view state between two instances,
-    which is architecture rather than a menu entry. The surface host has
-    the halves of it -- detach hands the living widget out, attach adopts
-    it -- and no gesture reaches them yet.
+    actions = {
+        action.data(): action
+        for action in window.surfaceTransfer.views.menu.actions()
+    }
+    assert set(actions) == set(window.surfaceHost.instances)
+    assert actions[EDITOR].isEnabled()
+    assert "new workspace window" in actions[EDITOR].statusTip()
 
-    This test records what is true now and is expected to be rewritten
-    when that lands.
-    """
+
+def test_move_surface_composes_a_new_window_for_the_living_editor(
+        MWEmptyProject):
+    """The command transfers the Editor instead of making a second one."""
 
     window = MWEmptyProject
     before = set(window.windowRegistry.workspace_windows)
+    original_editor = window.mainEditor
+    controller = window.surfaceTransfer
+    previous_views = controller.views
+    events = []
 
-    assert window.panelPlacement.move_to_new_window(EDITOR) is None
-    assert set(window.windowRegistry.workspace_windows) == before, (
-        "the workspace it made for a move that could not happen is gone"
+    def flush():
+        events.append(("flush", window.surfaceHost.contains(EDITOR)))
+        previous_views.flush_pending_edits()
+
+    def create(intent):
+        events.append(("create", window.surfaceHost.contains(EDITOR)))
+        return previous_views.create_workspace(intent)
+
+    controller.views = replace(
+        previous_views,
+        flush_pending_edits=flush,
+        create_workspace=create,
     )
-    # Refused before anything was made, and for a plainer reason than
-    # before: the menu moves panels between panel hosts, and the editor
-    # is not one of those.
-    assert window.surfaceHost.contains(EDITOR)
+
+    try:
+        moved = controller.move_to_new_window(EDITOR)
+    finally:
+        controller.views = previous_views
+    created = [
+        candidate
+        for candidate in window.windowRegistry.workspace_windows
+        if candidate not in before
+    ]
+    try:
+        assert moved is not None
+        assert len(created) == 1
+        fresh = created[0]
+        assert set(fresh.surfaceHost.instances) == {EDITOR}
+        assert fresh.mainEditor is original_editor
+        assert moved.host is fresh.surfaceHost
+        assert events == [("flush", True), ("create", False)]
+        assert not window.surfaceHost.contains(EDITOR)
+        assert fresh.isVisible()
+        fresh.surfaceTransfer.build_menu()
+        editor_action = next(
+            action
+            for action in fresh.surfaceTransfer.views.menu.actions()
+            if action.data() == EDITOR
+        )
+        assert not editor_action.isEnabled()
+        assert "must keep at least one surface" in editor_action.statusTip()
+    finally:
+        for candidate in created:
+            if candidate.surfaceHost.contains(EDITOR):
+                window.surfaceHost.attach(
+                    candidate.surfaceHost.detach(EDITOR)
+                )
+            candidate.close()
+
+    assert window.mainEditor is original_editor
+
+
+def test_a_failed_surface_move_restores_ownership_and_active_view(
+        MWEmptyProject):
+    window = MWEmptyProject
+    controller = window.surfaceTransfer
+    original = window.surfaceHost.instance(EDITOR)
+    window.surfaceHost.activate(EDITOR)
+    previous_views = controller.views
+    before = set(window.windowRegistry.workspace_windows)
+
+    controller.views = replace(
+        previous_views,
+        show_status=lambda *_args: None,
+    )
+    try:
+        with patch.object(
+            type(window.workspaceWindows),
+            "adopt_open_project",
+            side_effect=RuntimeError("destination failed"),
+        ), patch("manuskript.ui.surface_transfer.LOGGER.exception"):
+            assert controller.move_to_new_window(EDITOR) is None
+    finally:
+        controller.views = previous_views
+
+    assert set(window.windowRegistry.workspace_windows) == before
+    assert window.surfaceHost.instance(EDITOR) is original
+    assert original.host is window.surfaceHost
+    assert window.surfaceHost.current() == EDITOR
 
 
 def test_a_workspace_can_be_composed_for_one_living_surface(

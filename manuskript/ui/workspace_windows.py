@@ -31,7 +31,7 @@ class WorkspaceWindowViews:
     workspaces: Callable[[], tuple]
     identify: Callable[[Any], str]
     settle_native_deletions: Callable[[], None]
-    create: Callable[[str], Any]
+    create: Callable[[str, Any], Any]
     close_all: Callable[[], bool]
     state_store: Callable[[], Any]
     adoption: ProjectAdoptionViews
@@ -45,11 +45,26 @@ class WorkspaceWindowViews:
         services = window.services
         window_type = type(window)
 
-        def create(window_id):
-            created = window_type(services, window_id=window_id)
-            created.workspaceWindows.adopt_open_project()
-            created.show()
-            return created
+        def create(window_id, build_intent=None):
+            created = window_type(
+                services,
+                window_id=window_id,
+                build_intent=build_intent,
+            )
+            try:
+                created.workspaceWindows.adopt_open_project()
+                # A transfer destination must not flash its intermediate
+                # composition. It becomes visible only after the running
+                # project has caught up with the surface it was built for.
+                created.show()
+                return created
+            except Exception:
+                # Construction completed and registered this window, but
+                # project adoption did not. Closing releases its bindings and
+                # leaves an incoming living surface ownerless for the caller
+                # to put back where it came from.
+                created.close()
+                raise
 
         return cls(
             current_id=window.windowId,
@@ -101,7 +116,15 @@ class WorkspaceWindowController:
         # interleaves destruction of one native tree with construction of the
         # next. Establish the native lifetime boundary first.
         self.views.settle_native_deletions()
-        return self.views.create(window_id or self.next_id())
+        return self.views.create(window_id or self.next_id(), None)
+
+    def open_with_intent(self, build_intent, window_id=None):
+        """Compose a workspace for declared membership, then reveal it."""
+
+        self.views.settle_native_deletions()
+        return self.views.create(
+            window_id or self.next_id(), build_intent,
+        )
 
     def adopt_open_project(self):
         adoption = self.views.adoption

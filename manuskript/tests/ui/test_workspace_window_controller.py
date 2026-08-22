@@ -20,8 +20,13 @@ def controller_fixture(
     store.open_windows.return_value = tuple(recorded)
     controller_holder = {}
 
-    def create(window_id):
-        events.append(("create", window_id))
+    def create(window_id, build_intent=None):
+        event = (
+            ("create", window_id)
+            if build_intent is None
+            else ("create", window_id, build_intent)
+        )
+        events.append(event)
         workspace = SimpleNamespace(windowId=window_id)
         workspaces.append(workspace)
         opened.append(workspace)
@@ -76,6 +81,19 @@ def test_old_native_windows_are_destroyed_before_a_new_one_is_composed():
     controller.open("window-2")
 
     assert events == [("settle",), ("create", "window-2")]
+
+
+def test_declared_membership_is_passed_to_workspace_composition():
+    controller, _workspaces, _opened, _store, events = controller_fixture()
+    intent = object()
+
+    created = controller.open_with_intent(intent)
+
+    assert created.windowId == "window-2"
+    assert events == [
+        ("settle",),
+        ("create", "window-2", intent),
+    ]
 
 
 def test_new_workspace_adopts_the_running_project_in_order():
