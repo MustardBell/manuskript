@@ -76,6 +76,14 @@ class WorkspaceSurfaceHost:
         self.context = context
         self._instances = {}
         self._current = None
+        # Window-local behaviour that follows a living surface between
+        # workspaces.  A binding receives ``attach_surface(instance)`` after
+        # the surface belongs to this host and ``detach_surface(instance)``
+        # before it stops belonging here.  This is deliberately separate
+        # from ``on_membership_changed``: rebuilding a navigator is an
+        # after-the-fact notification, while a binding is part of the
+        # ownership transaction and must be unwound if it cannot attach.
+        self._bindings = []
         #: Told when this workspace gains or loses a surface, so whatever
         #: lists them can list them again. A callback rather than anything
         #: this host understands: which surfaces a workspace holds is its
@@ -141,6 +149,14 @@ class WorkspaceSurfaceHost:
         )
         instance.container = self.presentation.mount(instance)
         self._instances[surface_id] = instance
+        try:
+            self._attach_bindings(instance)
+        except Exception:
+            self._instances.pop(surface_id, None)
+            self.presentation.unmount(instance)
+            instance.host = None
+            instance.container = None
+            raise
         self._settle_current(surface_id)
         self._membership_changed()
         return instance
@@ -153,9 +169,11 @@ class WorkspaceSurfaceHost:
         detach is not "close here and open there".
         """
 
-        instance = self._instances.pop(surface_id, None)
+        instance = self._instances.get(surface_id)
         if instance is None:
             return None
+        self._detach_bindings(instance)
+        self._instances.pop(surface_id, None)
         self.presentation.unmount(instance)
         instance.host = None
         instance.container = None
@@ -193,9 +211,85 @@ class WorkspaceSurfaceHost:
         instance.host = self
         instance.container = self.presentation.mount(instance)
         self._instances[surface_id] = instance
+        try:
+            self._attach_bindings(instance)
+        except Exception:
+            self._instances.pop(surface_id, None)
+            self.presentation.unmount(instance)
+            instance.host = None
+            instance.container = None
+            raise
         self._settle_current(surface_id)
         self._membership_changed()
         return instance
+
+    # -- bindings -------------------------------------------------------
+
+    def add_binding(self, binding):
+        """Attach one window-local behaviour to present and future surfaces.
+
+        Replaying present membership is what lets composition install a
+        binding after the canonical surfaces have been built.  Conversely, a
+        sparse workspace can install the same binding before accepting a
+        transferred surface.  Either order produces the same result.
+
+        Registration is atomic.  If the binding cannot accept one of the
+        surfaces already here, every earlier replay is undone and the binding
+        is not retained.
+        """
+
+        if binding in self._bindings:
+            return
+        attached = []
+        try:
+            for instance in self._instances.values():
+                binding.attach_surface(instance)
+                attached.append(instance)
+        except Exception:
+            for instance in reversed(attached):
+                binding.detach_surface(instance)
+            raise
+        self._bindings.append(binding)
+
+    def remove_binding(self, binding):
+        """Release a binding without changing workspace membership."""
+
+        if binding not in self._bindings:
+            return
+        detached = []
+        try:
+            for instance in reversed(tuple(self._instances.values())):
+                binding.detach_surface(instance)
+                detached.append(instance)
+        except Exception:
+            for instance in reversed(detached):
+                binding.attach_surface(instance)
+            raise
+        self._bindings.remove(binding)
+
+    def _attach_bindings(self, instance):
+        attached = []
+        try:
+            for binding in self._bindings:
+                binding.attach_surface(instance)
+                attached.append(binding)
+        except Exception:
+            for binding in reversed(attached):
+                binding.detach_surface(instance)
+            raise
+
+    def _detach_bindings(self, instance):
+        detached = []
+        try:
+            for binding in reversed(self._bindings):
+                binding.detach_surface(instance)
+                detached.append(binding)
+        except Exception:
+            # Ownership has not changed yet.  Put every behaviour already
+            # released in this transaction back before reporting failure.
+            for binding in reversed(detached):
+                binding.attach_surface(instance)
+            raise
 
     def _membership_changed(self):
         """Say that which surfaces this workspace holds has changed."""
@@ -273,6 +367,7 @@ class WorkspaceSurfaceHost:
         self.on_membership_changed = None
         for surface_id in tuple(self._instances):
             self.close(surface_id)
+        self._bindings.clear()
         self.presentation = None
         self.registry = None
         self.context = None

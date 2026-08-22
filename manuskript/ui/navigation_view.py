@@ -1,7 +1,7 @@
 """Apply semantic navigation history to one workspace's panel surfaces."""
 
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable
 
 from manuskript.panels.core import (
     CHARACTER_ENTITIES,
@@ -17,8 +17,7 @@ class NavigationViews:
     """The only capabilities history navigation may change."""
 
     activate_panel: Callable[[str], bool]
-    entity_panels: Mapping[str, Any]
-    outline: Any
+    surface_widget: Callable[[str], Any]
     project_tree: Any
     back_action: Any
     forward_action: Any
@@ -26,14 +25,14 @@ class NavigationViews:
     @classmethod
     def for_window(cls, window):
         core = window.corePanels
+
+        def surface_widget(surface_id):
+            instance = window.surfaceHost.instance(surface_id)
+            return instance.widget if instance is not None else None
+
         return cls(
             activate_panel=window.activatePanel,
-            entity_panels={
-                "character": core.character_entities,
-                "plot": core.plot_entities,
-                "world": core.world_entities,
-            },
-            outline=core.outline.treeOutlineOutline,
+            surface_widget=surface_widget,
             project_tree=core.project_tree.tree,
             back_action=window.actBack,
             forward_action=window.actForward,
@@ -79,8 +78,12 @@ class MainNavigationView:
         self.views.forward_action.setEnabled(can_go_forward)
 
     def _navigate_entity(self, kind, entity_id):
-        self.views.activate_panel(self._ENTITY_PANELS[kind])
-        panel = self.views.entity_panels[kind]
+        surface_id = self._ENTITY_PANELS[kind]
+        if not self.views.activate_panel(surface_id):
+            return
+        panel = self.views.surface_widget(surface_id)
+        if panel is None:
+            return
         if entity_id is None:
             panel.tree.clearSelection()
             panel.tree.setCurrentItem(None)
@@ -91,8 +94,11 @@ class MainNavigationView:
                 break
 
     def _navigate_outline(self, outline_id):
-        self.views.activate_panel(OUTLINE)
-        self._select_outline(self.views.outline, outline_id)
+        if not self.views.activate_panel(OUTLINE):
+            return
+        panel = self.views.surface_widget(OUTLINE)
+        if panel is not None:
+            self._select_outline(panel.treeOutlineOutline, outline_id)
 
     def _navigate_redaction(self, outline_id):
         self.views.activate_panel(EDITOR)

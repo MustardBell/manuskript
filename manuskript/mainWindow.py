@@ -269,7 +269,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 WorkspaceFocusViews.for_window(self)
             )
         )
-        self.mainEditor.set_focus_source(self.workspaceFocus)
+        self.surfaceHost.add_binding(self.workspaceFocus)
         self.workspaceSearch = self.workspaceLifetime.own(
             WorkspaceSearchController(
                 WorkspaceSearchViews.for_window(self)

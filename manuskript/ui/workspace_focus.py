@@ -6,6 +6,7 @@ from weakref import WeakMethod, ref
 
 from PyQt5 import sip
 
+from manuskript.panels.core import EDITOR
 from manuskript.ui.views.MDEditView import MDEditView
 
 
@@ -20,7 +21,6 @@ class WorkspaceFocusViews:
         return cls(
             document_targets=(
                 window.corePanels.project_tree.tree,
-                window.corePanels.editor.editor,
             )
         )
 
@@ -35,6 +35,7 @@ class WorkspaceFocusController:
 
     def __init__(self, views):
         self._views = views
+        self._surface_targets = {}
         self._document_target = None
         self._markup_target = None
         self._focused_widget = None
@@ -106,7 +107,7 @@ class WorkspaceFocusController:
 
         candidate = new
         while candidate is not None:
-            if candidate in self._views.document_targets:
+            if candidate in self._document_targets():
                 self._document_target = candidate
                 break
             candidate = candidate.parent()
@@ -121,6 +122,38 @@ class WorkspaceFocusController:
         self._listeners = listeners
         for listener in callbacks:
             listener(_old, new)
+
+    def attach_surface(self, instance):
+        """Adopt the focus endpoints contributed by one surface."""
+
+        if instance.id != EDITOR:
+            return
+        editor = instance.widget.editor
+        self._surface_targets[instance.id] = editor
+        editor.set_focus_source(self)
+
+    def detach_surface(self, instance):
+        """Release endpoints before their surface leaves this workspace."""
+
+        target = self._surface_targets.pop(instance.id, None)
+        if target is None:
+            return
+        target.set_focus_source(None)
+        if self._document_target is target:
+            self._document_target = None
+        focused = self.focused_widget
+        candidate = focused
+        while candidate is not None:
+            if candidate is target:
+                self._focused_widget = None
+                self._markup_target = None
+                break
+            candidate = candidate.parent()
+
+    def _document_targets(self):
+        return self._views.document_targets + tuple(
+            self._surface_targets.values()
+        )
 
     @staticmethod
     def _listener_is_alive(listener):
@@ -152,8 +185,11 @@ class WorkspaceFocusController:
         return None
 
     def dispose(self):
+        for target in self._surface_targets.values():
+            target.set_focus_source(None)
         self._document_target = None
         self._markup_target = None
         self._focused_widget = None
         self._listeners.clear()
+        self._surface_targets.clear()
         self._views = WorkspaceFocusViews(())

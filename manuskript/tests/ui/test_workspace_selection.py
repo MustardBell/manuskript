@@ -10,6 +10,9 @@ from manuskript.ui.workspace_selection import (
 
 def _controller():
     outline_tree = MagicMock()
+    outline_panel = MagicMock()
+    outline_panel.treeOutlineOutline = outline_tree
+    surfaces = {OUTLINE: outline_panel}
     project_tree = MagicMock()
     actions = tuple(MagicMock() for _ in range(5))
     views = WorkspaceSelectionViews(
@@ -17,7 +20,7 @@ def _controller():
         editor_actions=actions,
         resolve_surface=MagicMock(return_value=""),
         surface_focused=MagicMock(),
-        outline_tree=outline_tree,
+        surface_widget=surfaces.get,
         project_tree=project_tree,
     )
     runtime = MagicMock()
@@ -69,7 +72,7 @@ def test_editor_surface_records_document_and_enables_commands():
 
 def test_stable_selection_replaces_a_transient_empty_selection():
     controller, views, runtime, history, _recorders = _controller()
-    selection = views.outline_tree.selectionModel()
+    selection = views.surface_widget(OUTLINE).treeOutlineOutline.selectionModel()
     empty = MagicMock()
     empty.isValid.return_value = False
     selected = MagicMock()
@@ -88,7 +91,10 @@ def test_stable_selection_replaces_a_transient_empty_selection():
 
 def test_surface_event_is_replaced_by_its_immediate_tree_event():
     controller, views, runtime, history, _recorders = _controller()
-    index = views.outline_tree.selectionModel().currentIndex()
+    index = (
+        views.surface_widget(OUTLINE)
+        .treeOutlineOutline.selectionModel().currentIndex()
+    )
     index.isValid.return_value = True
     runtime.models.outline.ID.return_value = "chapter-4"
 

@@ -9,14 +9,15 @@ from manuskript.ui.navigation_view import MainNavigationView, NavigationViews
 
 
 def make_views():
+    surfaces = {
+        CHARACTER_ENTITIES: MagicMock(),
+        PLOT_ENTITIES: MagicMock(),
+        "core.entities.world": MagicMock(),
+        OUTLINE: MagicMock(),
+    }
     return NavigationViews(
         activate_panel=MagicMock(return_value=True),
-        entity_panels={
-            "character": MagicMock(),
-            "plot": MagicMock(),
-            "world": MagicMock(),
-        },
-        outline=MagicMock(),
+        surface_widget=surfaces.get,
         project_tree=MagicMock(),
         back_action=MagicMock(),
         forward_action=MagicMock(),
@@ -25,21 +26,21 @@ def make_views():
 
 def test_plot_navigation_reveals_catalogue_and_selects_entity():
     views = make_views()
-    views.entity_panels["plot"].select_entity.return_value = True
+    panel = views.surface_widget(PLOT_ENTITIES)
+    panel.select_entity.return_value = True
     view = MainNavigationView(views, MagicMock())
 
     view.navigate(("plot", "plot-1"))
 
     views.activate_panel.assert_called_once_with(PLOT_ENTITIES)
-    views.entity_panels["plot"].select_entity.assert_called_once_with(
-        "plot-1"
-    )
+    panel.select_entity.assert_called_once_with("plot-1")
 
 
 def test_outline_navigation_selects_target_from_invalid_selection():
     views = make_views()
     runtime = MagicMock()
-    current = views.outline.selectionModel().currentIndex()
+    outline = views.surface_widget(OUTLINE).treeOutlineOutline
+    current = outline.selectionModel().currentIndex()
     current.isValid.return_value = False
     target = MagicMock()
     runtime.models.outline.getIndexByID.return_value = target
@@ -48,7 +49,7 @@ def test_outline_navigation_selects_target_from_invalid_selection():
     view.navigate(("outline", "scene-1"))
 
     views.activate_panel.assert_called_once_with(OUTLINE)
-    views.outline.setCurrentIndex.assert_called_once_with(target)
+    outline.setCurrentIndex.assert_called_once_with(target)
 
 
 def test_character_navigation_clears_selection_for_empty_target():
@@ -58,10 +59,9 @@ def test_character_navigation_clears_selection_for_empty_target():
     view.navigate(("character", None))
 
     views.activate_panel.assert_called_once_with(CHARACTER_ENTITIES)
-    views.entity_panels["character"].tree.setCurrentItem.assert_called_once_with(
-        None
-    )
-    views.entity_panels["character"].tree.clearSelection.assert_called_once()
+    panel = views.surface_widget(CHARACTER_ENTITIES)
+    panel.tree.setCurrentItem.assert_called_once_with(None)
+    panel.tree.clearSelection.assert_called_once()
 
 
 def test_navigation_view_updates_history_actions():
@@ -78,7 +78,8 @@ def test_navigation_uses_the_replacement_project_models():
     views = make_views()
     runtime = MagicMock()
     view = MainNavigationView(views, runtime)
-    current = views.outline.selectionModel().currentIndex()
+    outline = views.surface_widget(OUTLINE).treeOutlineOutline
+    current = outline.selectionModel().currentIndex()
     current.isValid.return_value = False
     first = runtime.models
     first.outline.getIndexByID.return_value = MagicMock()
@@ -91,6 +92,16 @@ def test_navigation_uses_the_replacement_project_models():
 
     first.outline.getIndexByID.assert_called_once_with("first")
     replacement.outline.getIndexByID.assert_called_once_with("second")
+
+
+def test_navigation_does_not_recreate_or_use_an_absent_surface():
+    views = make_views()
+    views.activate_panel.return_value = False
+    view = MainNavigationView(views, MagicMock())
+
+    view.navigate(("outline", "scene-1"))
+
+    views.activate_panel.assert_called_once_with(OUTLINE)
 
 
 def test_navigation_view_has_no_main_window_escape_hatch():

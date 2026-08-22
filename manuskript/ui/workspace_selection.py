@@ -14,7 +14,7 @@ class WorkspaceSelectionViews:
     editor_actions: Tuple[Any, ...]
     resolve_surface: Callable[[Any], str]
     surface_focused: Callable[[str], None]
-    outline_tree: Any
+    surface_widget: Callable[[str], Any]
     project_tree: Any
 
     @classmethod
@@ -36,6 +36,10 @@ class WorkspaceSelectionViews:
                 candidate = candidate.parent()
             return ""
 
+        def surface_widget(surface_id):
+            instance = window.surfaceHost.instance(surface_id)
+            return instance.widget if instance is not None else None
+
         return cls(
             organize_action=window.menuOrganize.menuAction(),
             editor_actions=(
@@ -47,7 +51,7 @@ class WorkspaceSelectionViews:
             ),
             resolve_surface=resolve_surface,
             surface_focused=window.notePanelFocus,
-            outline_tree=window.corePanels.outline.treeOutlineOutline,
+            surface_widget=surface_widget,
             project_tree=window.corePanels.project_tree.tree,
         )
 
@@ -106,7 +110,11 @@ class WorkspaceSelectionController:
         if recorder is not None:
             recorder()
         elif self._active_surface == OUTLINE:
-            self._record_surface_selection("outline", self._views.outline_tree)
+            panel = self._views.surface_widget(OUTLINE)
+            if panel is not None:
+                self._record_surface_selection(
+                    "outline", panel.treeOutlineOutline,
+                )
         elif self._active_surface == EDITOR:
             self._record_surface_selection("redac", self._views.project_tree)
         elif self._active_surface:
@@ -127,7 +135,9 @@ class WorkspaceSelectionController:
             action.setEnabled(enabled)
 
     def outline_selection_changed(self, *_args):
-        self._record_selection("outline", self._views.outline_tree)
+        panel = self._views.surface_widget(OUTLINE)
+        if panel is not None:
+            self._record_selection("outline", panel.treeOutlineOutline)
 
     def project_selection_changed(self, *_args):
         self._record_selection("redac", self._views.project_tree)

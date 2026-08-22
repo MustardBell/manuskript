@@ -171,3 +171,23 @@ def test_deleted_native_focus_target_is_not_returned():
 
     assert controller.focused_widget is None
     assert controller.markup_target is None
+
+
+def test_editor_focus_binding_follows_surface_ownership():
+    controller = WorkspaceFocusController(WorkspaceFocusViews(()))
+    editor = _Widget()
+    editor.set_focus_source = MagicMock()
+    instance = MagicMock()
+    instance.id = "core.editor"
+    instance.widget.editor = editor
+
+    controller.attach_surface(instance)
+    controller.focus_changed(None, _Widget(editor))
+
+    assert controller.document_target is editor
+    editor.set_focus_source.assert_called_once_with(controller)
+
+    controller.detach_surface(instance)
+
+    assert controller.document_target is None
+    editor.set_focus_source.assert_called_with(None)

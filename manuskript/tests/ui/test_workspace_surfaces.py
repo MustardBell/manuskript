@@ -49,6 +49,23 @@ class Presentation:
         self.activated.append(instance.id)
 
 
+class Binding:
+    """A window-local behaviour which follows surface ownership."""
+
+    def __init__(self, fail_on=None):
+        self.fail_on = fail_on
+        self.attached = []
+        self.detached = []
+
+    def attach_surface(self, instance):
+        if instance.id == self.fail_on:
+            raise RuntimeError("cannot bind {}".format(instance.id))
+        self.attached.append(instance.id)
+
+    def detach_surface(self, instance):
+        self.detached.append(instance.id)
+
+
 def surface(surface_id, title="Surface", factory=None):
     return WorkspaceSurfaceDescriptor(
         id=surface_id,
@@ -357,3 +374,61 @@ def test_the_workspace_says_when_its_membership_changes():
         [],
         ["core.editor"],
     ]
+
+
+def test_a_binding_follows_a_living_surface_between_workspaces():
+    source = a_host(surface("core.editor"))
+    destination = a_host(surface("core.editor"))
+    source_binding = Binding()
+    destination_binding = Binding()
+    source.add_binding(source_binding)
+    destination.add_binding(destination_binding)
+    source.open("core.editor")
+
+    moved = source.detach("core.editor")
+    destination.attach(moved)
+
+    assert source_binding.attached == ["core.editor"]
+    assert source_binding.detached == ["core.editor"]
+    assert destination_binding.attached == ["core.editor"]
+
+
+def test_a_binding_installed_after_composition_replays_membership():
+    host = a_host(surface("core.editor"), surface("core.outline"))
+    host.open("core.editor")
+    host.open("core.outline")
+    binding = Binding()
+
+    host.add_binding(binding)
+
+    assert binding.attached == ["core.editor", "core.outline"]
+
+
+def test_a_failed_binding_replay_is_atomic():
+    host = a_host(surface("core.editor"), surface("core.outline"))
+    host.open("core.editor")
+    host.open("core.outline")
+    binding = Binding(fail_on="core.outline")
+
+    with pytest.raises(RuntimeError, match="cannot bind"):
+        host.add_binding(binding)
+
+    assert binding.attached == ["core.editor"]
+    assert binding.detached == ["core.editor"]
+    assert binding not in host._bindings
+
+
+def test_a_failed_destination_binding_does_not_adopt_the_surface():
+    source = a_host(surface("core.editor"))
+    destination = a_host(surface("core.editor"))
+    destination.add_binding(Binding(fail_on="core.editor"))
+    source.open("core.editor")
+    moved = source.detach("core.editor")
+
+    with pytest.raises(RuntimeError, match="cannot bind"):
+        destination.attach(moved)
+
+    assert moved.host is None
+    assert not destination.contains("core.editor")
+    assert destination.presentation.mounted == ["core.editor"]
+    assert destination.presentation.unmounted == ["core.editor"]
