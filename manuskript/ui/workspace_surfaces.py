@@ -85,7 +85,16 @@ class WorkspaceSurfaceHost:
     def instance(self, surface_id):
         return self._instances.get(surface_id)
 
+    @property
     def instances(self):
+        """Every surface this workspace holds, by id.
+
+        A property, spelled as the panel host spells it: the two owners
+        answer the same question and code that asks both should not have
+        to know which one needs parentheses. Copied rather than handed
+        out, so nobody rearranges a workspace by editing a dictionary.
+        """
+
         return dict(self._instances)
 
     def current(self):
@@ -212,3 +221,19 @@ class WorkspaceSurfaceHost:
         if instance is not None and instance.widget is not None:
             instance.widget.setParent(None)
         return instance is not None
+
+    def dispose(self):
+        """Let go of every surface, in the workspace's teardown order.
+
+        Qt owns the widget tree and would take these with the window; this
+        exists so that it happens while the window is still whole, and in
+        the order the workspace disposes everything else. A wrapper over a
+        widget Qt has already deleted crashes the interpreter later, during
+        a collection, with no stack that names this code.
+        """
+
+        for surface_id in tuple(self._instances):
+            self.close(surface_id)
+        self.presentation = None
+        self.registry = None
+        self.context = None

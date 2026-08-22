@@ -149,6 +149,10 @@ def test_project_search_context_opens_and_highlights_character(
     editor = window.entityWorkspace.current_editor()
     assert editor is not None
     assert editor.titleEdit.selectedText() == "Peter"
-    assert not window.panelHost.instance(
-        CHARACTER_ENTITIES
-    ).container.isHidden()
+    # The detail form is its own window, so what a reader sees does not
+    # depend on which page is up. This used to assert that the character
+    # dock was not hidden, which was true because that dock happened to
+    # be one of the three shown by default rather than because search did
+    # anything about it.
+    assert not editor.isHidden()
+    assert window.surfaceHost.contains(CHARACTER_ENTITIES)

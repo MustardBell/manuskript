@@ -65,7 +65,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="General",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=False,
             widget_factory=factories.get(GENERAL),
             navigator=NavigatorEntry(
                 label="General", icon="general", order=100,
@@ -104,7 +103,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="Project",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=False,
             widget_factory=factories.get(PROJECT_ENTITIES),
             navigator=NavigatorEntry(
                 label="Summary", icon="summary", order=200,
@@ -115,7 +113,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="Characters",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=True,
             widget_factory=factories.get(CHARACTER_ENTITIES),
             navigator=NavigatorEntry(
                 label="Characters", icon="characters", order=300,
@@ -126,7 +123,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="Plots",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=False,
             widget_factory=factories.get(PLOT_ENTITIES),
             navigator=NavigatorEntry(
                 label="Plots", icon="plots", order=400,
@@ -137,7 +133,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="World & entities",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=False,
             widget_factory=factories.get(WORLD_ENTITIES),
             navigator=NavigatorEntry(
                 label="World", icon="world", order=500,
@@ -148,7 +143,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="Outline",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=False,
             widget_factory=factories.get(OUTLINE),
             navigator=NavigatorEntry(
                 label="Outline", icon="outline", order=600,
@@ -159,7 +153,6 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="Editor",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
-            default_visible=True,
             widget_factory=factories.get(EDITOR),
             navigator=NavigatorEntry(
                 label="Editor", icon="editor", order=700,

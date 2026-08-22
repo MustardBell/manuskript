@@ -8,6 +8,8 @@ message, not the window.
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from PyQt5 import sip
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDockWidget, QLabel, QMainWindow, QTabBar, qApp
@@ -556,3 +558,52 @@ def test_a_panel_that_fails_on_the_way_out_does_not_trap_the_window():
     host.close("core.awkward")
 
     assert "core.awkward" not in host.instances
+
+
+def test_a_workspace_surface_is_refused_rather_than_docked():
+    """The boundary, from this side.
+
+    A surface used to be mounted here as a dock, because there was
+    nowhere else for it to go. There is now, and asking the wrong owner
+    for one has to say so rather than quietly building a dock around a
+    place the writer goes -- which is how seven of them came to be docks
+    in the first place.
+
+    Raised rather than reported to the person: a broken plugin panel is
+    news for a reader, and asking the wrong host is news for whoever
+    wrote the call.
+    """
+
+    from manuskript.panels import WorkspaceSurfaceDescriptor
+    from manuskript.ui.panels.host import PanelScopeError
+
+    surface = WorkspaceSurfaceDescriptor(
+        id="core.editor",
+        title="Editor",
+        widget_factory=label_factory,
+    )
+    host, _window = make_host(surface)
+
+    with pytest.raises(PanelScopeError, match="surface host"):
+        host.open("core.editor", PanelContext())
+
+    assert host.instances == {}
+
+
+def test_a_surface_cannot_be_adopted_into_a_dock_either():
+    """The other way in. Adopting skips open, so it needs its own refusal."""
+
+    from manuskript.panels import WorkspaceSurfaceDescriptor
+    from manuskript.ui.panels.host import PanelInstance, PanelScopeError
+
+    surface = WorkspaceSurfaceDescriptor(
+        id="core.outline",
+        title="Outline",
+        widget_factory=label_factory,
+    )
+    host, window = make_host(surface)
+
+    with pytest.raises(PanelScopeError, match="surface host"):
+        host.adopt(PanelInstance(descriptor=surface, widget=QLabel("body")))
+
+    assert host.instances == {}

@@ -120,9 +120,9 @@ def test_entity_detail_is_browser_reachable_but_not_browser_embedded(
 
     assert not hasattr(window.corePanels, "entity_editor")
     assert {
-        panel_id
-        for panel_id in window.panelHost.instances
-        if "editor" in panel_id
+        surface_id
+        for surface_id in window.surfaceHost.instances
+        if "editor" in surface_id
     } == {EDITOR}
 
     assert all(
@@ -134,40 +134,55 @@ def test_entity_detail_is_browser_reachable_but_not_browser_embedded(
     )
 
 
-def test_closing_an_entity_dock_leaves_the_catalogue_usable(MWEmptyProject):
-    """Reported: creating a character raised RuntimeError after a dock
-    was closed with its X. Delete-on-close destroyed the panel, and the
-    next catalogue change wrote into its deleted tree.
+def test_leaving_a_catalogue_browser_leaves_it_usable(MWEmptyProject):
+    """Reported when browsers were docks: creating a character raised
+    RuntimeError after one was closed with its X. Delete-on-close
+    destroyed the panel, and the next catalogue change wrote into its
+    deleted tree.
+
+    There is no X to press now -- a browser is a page, and going to
+    another one leaves it standing. The crash is still worth a test,
+    because what it came through is a catalogue change reaching a panel
+    the reader is not looking at, and that still happens.
     """
     from PyQt5 import sip
     from PyQt5.QtCore import QCoreApplication, QEvent
     from PyQt5.QtWidgets import qApp
 
-    from manuskript.panels.core import CHARACTER_ENTITIES
+    from manuskript.panels.core import CHARACTER_ENTITIES, EDITOR
 
     window = MWEmptyProject
-    instance = window.panelHost.instance(CHARACTER_ENTITIES)
+    instance = window.surfaceHost.instance(CHARACTER_ENTITIES)
     panel = instance.widget
 
-    instance.container.close()
+    window.activatePanel(EDITOR)
     qApp.processEvents()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     qApp.processEvents()
 
     assert not sip.isdeleted(panel)
-    assert window.panelHost.instance(CHARACTER_ENTITIES) is not None
+    assert window.surfaceHost.contains(CHARACTER_ENTITIES)
 
     # What the crash came through: a catalogue change reaching the panel.
     window.entityWorkspace.refresh()
 
-    window.panelHost.set_visible(CHARACTER_ENTITIES, True)
-    assert not instance.container.isHidden()
+    assert window.activatePanel(CHARACTER_ENTITIES)
+    assert window.tabMain.currentWidget() is panel
 
 
 def test_legacy_story_pages_are_not_user_interface(MWEmptyProject):
-    """The pages are absent; descriptor-backed navigation remains."""
+    """The tab-era pages are absent; descriptor-backed navigation remains.
+
+    The central container holds pages again, but they are the surfaces
+    their descriptors name, built by their factories -- not the six
+    hand-built story pages the Designer file used to carry.
+    """
     window = MWEmptyProject
-    assert window.tabMain.count() == 1
+    assert not any(
+        window.tabMain.widget(index).objectName().startswith("lytTab")
+        and window.tabMain.widget(index).objectName() != "lytTabDebug"
+        for index in range(window.tabMain.count())
+    )
     for panel_id in (
         "core.entities.project",
         "core.entities.characters",

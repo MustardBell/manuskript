@@ -252,10 +252,11 @@ class WorkspaceSurfaceDescriptor:
     #: Where this sits in the navigator. Optional: a surface may exist
     #: without being listed, but anything listed is a surface.
     navigator: Optional["NavigatorEntry"] = None
-    #: Transitional, and only while surfaces are mounted as docks. Once the
-    #: central host exists, which surface is showing is the host's current
-    #: one and this stops meaning anything.
-    default_visible: bool = False
+
+    # There is no default_visible. A surface is not shown or hidden: one
+    # of them is what the workspace is currently showing and the rest are
+    # simply not that one. It had the field while surfaces were docks,
+    # where three of the seven claimed to be visible at once.
 
     def __post_init__(self):
         if not self.id or "." not in self.id:

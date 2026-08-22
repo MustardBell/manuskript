@@ -22,7 +22,7 @@ from manuskript.controllers.navigation_controller import NavigationController
 from manuskript.controllers.view_configuration_controller import (
     ViewConfigurationController,
 )
-from manuskript.panels import PanelContext
+from manuskript.panels import PanelContext, PanelRegistryError
 from manuskript.panels import core as core_panels
 from manuskript.panels import group_of as _group_of
 from manuskript.panels.core import register_core_panels
@@ -32,6 +32,11 @@ from manuskript.ui.panels.placement import (
     PanelPlacementViews,
 )
 from manuskript.ui.panels.window_port import PanelWindow
+from manuskript.ui.surface_presentation import CentralSurfacePresentation
+from manuskript.ui.workspace_surfaces import (
+    WorkspaceSurfaceError,
+    WorkspaceSurfaceHost,
+)
 from manuskript.ui.panels.core import (
     CorePanelViewSet,
     core_panel_factories,
@@ -176,13 +181,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # safely once C++-owned child wrappers are involved.
             self.setAttribute(Qt.WA_DeleteOnClose)
         self.setupUi(self)
-        # Welcome and the opt-in debug page are the only central content.
-        # Project surfaces are docks; the central widget is temporarily
-        # removed while a project is shown so those docks can occupy its
-        # space instead of surrounding an invisible placeholder.
+        # The welcome screen, and the pages the project is shown in. The
+        # central widget used to be taken out of the window entirely while
+        # a project was open, so that docked surfaces could have its space;
+        # surfaces live in it now, and the tool panels are what orbits.
         self._centralSurface = self.centralWidget()
         self._projectSurfaceActive = False
-        self._activePanelId = core_panels.EDITOR
+        # Where a workspace that has never been told otherwise starts.
+        # General, because that is what a reader opening Manuskript for
+        # the first time has always been shown.
+        self._activePanelId = core_panels.GENERAL
         # Without GroupedDragging: it is the only thing that builds a
         # QDockWidgetGroupWindow, and closing every dock inside one
         # leaves the frame behind -- an empty window wearing this
@@ -240,6 +248,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 PanelWindow.for_window(self),
                 self.panelRegistry,
                 self.panelDirectory,
+            )
+        )
+        # The places the writer goes have their own owner. They are not
+        # tool panels and they are not docks: they are shown as pages of
+        # the window's central container, which is the one the navigator
+        # has always driven, so a surface gets a window's worth of room
+        # rather than the 230 pixels a dock beside the editor gave it.
+        self.surfaceHost = self.workspaceLifetime.own(
+            WorkspaceSurfaceHost(
+                self.panelRegistry,
+                CentralSurfacePresentation(self.tabMain),
             )
         )
 
@@ -341,7 +360,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # visibility is restored by panel id through the host.
         with timing.span("window.layout"):
             self.windowState.restore()
-            if self.windowState.storedVersion < 3:
+            if not self.windowState.restoredLayout:
                 self._placeDefaultCoreDocks()
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
@@ -537,14 +556,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.windowState.restore_project_docks()
         # Show the toolbar
         self.toolbar.setVisible(True)
-        # Project work happens in independently movable panels. With the
-        # central welcome/debug stack out of the layout, docks may use the
-        # whole window rather than orbiting an empty legacy page.
-        self.stack.hide()
-        if self.centralWidget() is self._centralSurface:
-            self.takeCentralWidget()
+        # The project is shown in the central pages, with the tool panels
+        # around them. Taking the central widget out was what gave docked
+        # surfaces the window's whole area; a surface has that area now
+        # because it is what is in the middle.
+        self._showCentralPages()
         if not self._activePanelId:
-            self._activePanelId = core_panels.EDITOR
+            self._activePanelId = core_panels.GENERAL
         self.activatePanel(self._activePanelId)
 
     def closeEvent(self, event):
@@ -612,29 +630,61 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             placement.watch_dock(instance.container)
 
     def navigateTo(self, row):
-        """Open what a navigator row stands for: a page, or a panel."""
+        """Open what a navigator row stands for: a page, or a surface."""
         target = self.navigator.target(row)
         if target is None:
             return False
         if target.opens_panel:
             return self.activatePanel(target.panel_id)
         self._activePanelId = ""
+        self._showCentralPages()
+        # The developer page is still addressed by number, from
+        # NAVIGATOR_PAGES. It is not a surface, so the surface host goes
+        # on naming the last one as current while this is up -- an
+        # opt-in page nobody but a developer ever sees.
+        self.tabMain.setCurrentIndex(target.page)
+        return False
+
+    def _showCentralPages(self):
+        """Put the central pages back in view, whatever was over them."""
         if self.centralWidget() is None:
             self.setCentralWidget(self._centralSurface)
         self.stack.show()
         self.stack.setCurrentIndex(1)
-        self.tabMain.setCurrentIndex(target.page)
-        return False
+
+    def _goToSurface(self, surface_id):
+        """Show a place the writer goes, building it if this one has none.
+
+        A navigator row for a surface this workspace does not hold is a
+        request to go there, and going there is how a workspace acquires
+        one -- which is what lets a plugin's surface be reached from the
+        navigator without every window building it in advance.
+
+        Answers False for anything that is not a surface, so the caller
+        can ask the panel host instead. Asked of the surface host rather
+        than of the id, because which kind an id names is the registry's
+        answer and it already gives it.
+        """
+        if not self.surfaceHost.contains(surface_id):
+            try:
+                if self.surfaceHost.open(
+                    surface_id, PanelContext(translate=self.tr),
+                ) is None:
+                    return False
+            except (WorkspaceSurfaceError, PanelRegistryError):
+                return False
+        self._showCentralPages()
+        return self.surfaceHost.activate(surface_id) is not None
 
     def activatePanel(self, panel_id):
-        """Reveal a workspace surface and remember it by stable identity."""
-        if not panel_id or not self.panelHost.reveal(panel_id):
+        """Go to a surface, or reveal a tool panel, by stable identity."""
+        if not panel_id:
+            return False
+        if not self._goToSurface(panel_id) and not self.panelHost.reveal(
+            panel_id
+        ):
             return False
         self._activePanelId = panel_id
-        if self._projectSurfaceActive:
-            self.stack.hide()
-            if self.centralWidget() is self._centralSurface:
-                self.takeCentralWidget()
         row = self.navigator.row_for_panel(panel_id)
         if row is not None and self.lstTabs.currentRow() != row:
             blocker = QSignalBlocker(self.lstTabs)
@@ -678,13 +728,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.lstTabs.setCurrentRow(row)
 
     def _placeDefaultCoreDocks(self):
-        """Migrate tab-era layouts to an editor with real side surfaces.
+        """Put the tool panels around the surfaces, for a window with no
+        arrangement of its own.
 
-        Main work surfaces share the large right area as dock tabs, so the
-        navigator raises General, Outline, or Editor without squeezing it.
-        Narrow catalogue browsers share the lower-left area, while the
-        project tree remains visible above them. Once version 3 has been
-        saved, the person's arrangement is authoritative and this never runs.
+        Which is every window until one is saved, and every window whose
+        saved one was written while the work surfaces were docks: such a
+        layout names seven docks this build does not make, and applying it
+        would leave Qt holding those names for the life of the profile.
+
+        What is left to place is the navigator, the project tree and the
+        two companions that share its column. Everything the navigator
+        lists is in the middle now, so nothing here decides how much room
+        a work surface gets -- it gets what the tool panels do not take.
         """
 
         def dock(panel_id):
@@ -692,9 +747,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return instance.container if instance is not None else None
 
         project_tree = dock(core_panels.PROJECT_TREE)
-        editor = dock(core_panels.EDITOR)
-        characters = dock(core_panels.CHARACTER_ENTITIES)
-        if project_tree is None or editor is None or characters is None:
+        if project_tree is None:
             return
 
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dckNavigation)
@@ -702,27 +755,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.splitDockWidget(
             self.dckNavigation, project_tree, Qt.Horizontal
         )
-        self.addDockWidget(Qt.LeftDockWidgetArea, characters)
-        self.splitDockWidget(project_tree, characters, Qt.Vertical)
-        self.addDockWidget(Qt.RightDockWidgetArea, editor)
-
-        previous_catalogue = characters
-        for panel_id in (
-            core_panels.PROJECT_ENTITIES,
-            core_panels.PLOT_ENTITIES,
-            core_panels.WORLD_ENTITIES,
-        ):
-            neighbour = dock(panel_id)
-            if neighbour is not None:
-                self.splitDockWidget(
-                    previous_catalogue, neighbour, Qt.Vertical
-                )
-                previous_catalogue = neighbour
-
-        for panel_id in (core_panels.GENERAL, core_panels.OUTLINE):
-            work_surface = dock(panel_id)
-            if work_surface is not None:
-                self.tabifyDockWidget(editor, work_surface)
 
         for panel_id in (core_panels.METADATA, core_panels.STORYLINE):
             companion = dock(panel_id)
@@ -730,13 +762,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.tabifyDockWidget(project_tree, companion)
 
         self.resizeDocks(
-            (self.dckNavigation, project_tree, editor),
-            (160, 340, 980),
+            (self.dckNavigation, project_tree),
+            (160, 340),
             Qt.Horizontal,
         )
-        editor.raise_()
         project_tree.raise_()
-        characters.raise_()
 
     def buildWorkspaceMenu(self):
         """Offer another window onto the same project.
@@ -792,11 +822,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # plugin controller and would otherwise have no way into the
         # list every other panel appears in.
         self.panelHost.on_open = self._offerPanelToggle
+        context = PanelContext(translate=self.tr)
         for panel_id in (
-            core_panels.GENERAL,
             core_panels.PROJECT_TREE,
             core_panels.METADATA,
             core_panels.STORYLINE,
+        ):
+            self.panelHost.open(panel_id, context)
+        # Every core surface, in every new project's window. Which ones a
+        # workspace holds is the workspace's own state -- a second window
+        # built for one surface is not obliged to build the other six --
+        # but a person opening a project gets all of them, which is what
+        # the navigator has always listed.
+        for surface_id in (
+            core_panels.GENERAL,
             core_panels.PROJECT_ENTITIES,
             core_panels.CHARACTER_ENTITIES,
             core_panels.PLOT_ENTITIES,
@@ -804,14 +843,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             core_panels.OUTLINE,
             core_panels.EDITOR,
         ):
-            self.panelHost.open(panel_id, PanelContext(translate=self.tr))
+            self.surfaceHost.open(surface_id, context)
+        # Said here rather than left to whichever surface was opened first.
+        # Which surface a fresh workspace starts on is composition's to
+        # state, and upstream's answer -- the one a new reader gets -- is
+        # General. A saved layout replaces this when there is one.
+        self.surfaceHost.activate(core_panels.GENERAL)
 
-        # Both owners are the panel host until the cutover moves the seven
-        # surfaces to the workspace's surface host. Named twice rather than
-        # once so that move is a change of argument here, not a change of
-        # shape everywhere the view set is built.
         self.corePanels = CorePanelViewSet.from_hosts(
-            tools=self.panelHost, surfaces=self.panelHost,
+            tools=self.panelHost, surfaces=self.surfaceHost,
         )
         self._installCorePanelAliases()
 

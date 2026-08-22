@@ -14,7 +14,6 @@ from weakref import ref, WeakKeyDictionary, WeakMethod
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDockWidget, QMenu
 
-from manuskript.panels import WorkspaceSurfaceDescriptor
 from manuskript.panels import group_of as _group_of
 
 
@@ -478,11 +477,10 @@ class PanelPlacementController:
     def build_float_menu(self):
         """Offer each owned panel as a float/re-dock toggle.
 
-        Panels the navigator offers are left out. Those are windows: they
-        may be docked, and docked they may fill the frame, but floating one
-        does not give it a window of its own. It gives it a utility window
-        owned by this one, and "Move panel to → New window" is where that
-        reader is actually going.
+        Every panel this host has, with no filtering: the places the
+        navigator lists are not in it any more. They are shown in the
+        window's central pages by another owner, so there is nothing here
+        to leave out and no kind to ask about.
         """
 
         menu = self.floating_menu
@@ -491,8 +489,6 @@ class PanelPlacementController:
         floating = set(host.floating())
         offered = 0
         for panel_id, instance in sorted(host.instances.items()):
-            if isinstance(instance.descriptor, WorkspaceSurfaceDescriptor):
-                continue
             action = menu.addAction(
                 self.views.translate(instance.descriptor.title)
             )

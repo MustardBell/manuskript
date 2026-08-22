@@ -20,11 +20,19 @@ class WorkspaceSelectionViews:
     @classmethod
     def for_window(cls, window):
         def resolve_surface(widget):
+            """Which of this window's panels or surfaces holds this widget.
+
+            Both owners, walking up from wherever the focus landed. A
+            window that asked only the panel host would answer "" for
+            every click inside the editor, the outline or the cast --
+            which is to say for almost every click a writer makes.
+            """
             candidate = widget
             while candidate is not None:
-                for panel_id, instance in window.panelHost.instances.items():
-                    if candidate in (instance.widget, instance.container):
-                        return panel_id
+                for host in (window.panelHost, window.surfaceHost):
+                    for panel_id, instance in host.instances.items():
+                        if candidate in (instance.widget, instance.container):
+                            return panel_id
                 candidate = candidate.parent()
             return ""
 

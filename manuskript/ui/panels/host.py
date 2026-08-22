@@ -21,7 +21,7 @@ coming back.
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from PyQt5.QtWidgets import QWidget
 
@@ -50,12 +50,11 @@ class PanelInstance:
     host at a time; transfer means release from one and adopt by another.
     """
 
-    #: Either kind, and only while surfaces are still mounted here. Any
-    #: threw the information away: there are exactly two things this can
-    #: be, and saying so is what will make the migration's end visible --
-    #: when surfaces leave, this becomes ToolPanelDescriptor and anything
-    #: still routing one through here stops compiling as a sentence.
-    descriptor: Union[ToolPanelDescriptor, WorkspaceSurfaceDescriptor]
+    #: A tool panel, and nothing else. It was briefly either kind while
+    #: the work surfaces were still docked here; they have their own owner
+    #: now, so anything routing a surface through this host no longer
+    #: reads as a sentence -- which is what finishing the migration means.
+    descriptor: ToolPanelDescriptor
     widget: QWidget
     container: Optional[QWidget] = None
     action: Optional[Any] = None
@@ -142,6 +141,15 @@ class PanelHost:
                 self.views.activate_dock(existing.container)
             return existing
         descriptor = self.registry.descriptor(panel_id)
+        if isinstance(descriptor, WorkspaceSurfaceDescriptor):
+            # Raised here rather than left to the mount, because _build
+            # reports what goes wrong inside it to the person: a broken
+            # plugin panel is news for a reader, and asking the wrong
+            # owner for a surface is news for whoever wrote the call.
+            raise PanelScopeError(
+                "{} is a workspace surface; ask the surface host for it."
+                .format(panel_id)
+            )
         if not descriptor.per_window:
             # A singleton exists once in the application. Building a
             # second would give two windows two panels answering to one
@@ -158,14 +166,17 @@ class PanelHost:
 
     def _mount(self, descriptor):
         """How this panel is fastened, by what its descriptor declares."""
+        if isinstance(descriptor, WorkspaceSurfaceDescriptor):
+            # A place the writer goes has no placement to fasten: it is
+            # shown in the window's central pages by the surface host.
+            # Asked of the type rather than of whether it happens to have
+            # a placement, because inferring the kind from a shared field
+            # is what let a surface be docked here in the first place.
+            raise PanelScopeError(
+                "{} is a workspace surface; the surface host owns those."
+                .format(descriptor.id)
+            )
         try:
-            if isinstance(descriptor, WorkspaceSurfaceDescriptor):
-                # Transitional, and deliberately ugly so it is easy to find:
-                # a surface belongs in the central host and there is not one
-                # yet, so it is mounted as a dock. Delete this branch when
-                # WorkspaceSurfaceHost lands -- it is the only place that
-                # still treats a place the writer goes as a dock.
-                return self._mounts[DOCK]
             return self._mounts[descriptor.placement]
         except KeyError:
             raise LookupError(

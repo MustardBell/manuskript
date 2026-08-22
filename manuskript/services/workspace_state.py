@@ -33,7 +33,19 @@ LOGGER = logging.getLogger(__name__)
 #: out once more rather than leaving people with tabs they never chose.
 #: 3 -- the last central story tab became a stable panel identity. The old
 #: integer is still read once so existing workspaces reopen where they were.
-WORKSPACE_STATE_VERSION = 3
+#: 4 -- the seven work surfaces stopped being docks. A layout written by 3
+#: names a dock for each of them, and this build creates none of those.
+WORKSPACE_STATE_VERSION = 4
+
+#: The first version whose saved arrangement describes only docks this
+#: build still makes.
+#:
+#: An older one is not applied at all, and the window lays out its defaults
+#: instead. Qt keeps the entries for docks it restored but never found --
+#: measured here, across three saves -- and hands them back on every later
+#: save, so a single restore of a version-3 layout would carry seven dead
+#: dock names forward for the life of the profile.
+SURFACE_LAYOUT_VERSION = 4
 
 #: Everything this module owns lives under here.
 ROOT = "workspace"

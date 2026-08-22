@@ -1542,7 +1542,7 @@ def test_a_surface_the_navigator_offers_is_a_window_not_a_dock(
 
     window = MWEmptyProject
 
-    editor = window.panelHost.instance(EDITOR)
+    editor = window.surfaceHost.instance(EDITOR)
     tree = window.panelHost.instance(PROJECT_TREE)
 
     # Asked of the type, not of a field. Reading .navigator to find out
@@ -1550,12 +1550,13 @@ def test_a_surface_the_navigator_offers_is_a_window_not_a_dock(
     # panel has no such field to read any more.
     assert isinstance(editor.descriptor, WorkspaceSurfaceDescriptor)
     assert isinstance(tree.descriptor, ToolPanelDescriptor)
-    # Qt's floatable feature stays on both: removing it from the editor made
-    # Qt begin a drag the model then vetoed, so the dock snapped back on
-    # release and a session saved with the editor detached snapped it home.
-    # The distinction is made where it can be made without breaking a
-    # gesture -- the Float Panel menu, below.
-    assert editor.container.features() & QDockWidget.DockWidgetFloatable
+    # The rule is structural now rather than argued. There is no dock to
+    # take Qt's floatable feature away from: the editor is a page of the
+    # window, and the panel host it used to be docked in has never heard
+    # of it. A tool panel still floats, which is what a dock is for.
+    assert editor.container is None
+    assert window.panelHost.instance(EDITOR) is None
+    assert window.tabMain.indexOf(editor.widget) != -1
     assert tree.container.features() & QDockWidget.DockWidgetFloatable
 
 
@@ -1585,8 +1586,12 @@ def test_a_window_made_for_a_move_that_cannot_happen_is_taken_away(
     like it had worked.
 
     Moving one for real means carrying view state between two instances,
-    which is architecture rather than a menu entry. This test records what
-    is true now and is expected to be rewritten when that lands.
+    which is architecture rather than a menu entry. The surface host has
+    the halves of it -- detach hands the living widget out, attach adopts
+    it -- and no gesture reaches them yet.
+
+    This test records what is true now and is expected to be rewritten
+    when that lands.
     """
 
     window = MWEmptyProject
@@ -1596,4 +1601,7 @@ def test_a_window_made_for_a_move_that_cannot_happen_is_taken_away(
     assert set(window.windowRegistry.workspace_windows) == before, (
         "the workspace it made for a move that could not happen is gone"
     )
-    assert window.panelHost.instance(EDITOR) is not None
+    # Refused before anything was made, and for a plainer reason than
+    # before: the menu moves panels between panel hosts, and the editor
+    # is not one of those.
+    assert window.surfaceHost.contains(EDITOR)

@@ -24,7 +24,11 @@ from manuskript.panels.core import (
     METADATA_REVISIONS_STATE,
     core_panel_descriptors,
 )
-from manuskript.services.workspace_state import WorkspaceWindowState
+from manuskript.services.workspace_state import (
+    SURFACE_LAYOUT_VERSION,
+    WORKSPACE_STATE_VERSION,
+    WorkspaceWindowState,
+)
 from manuskript.ui import workspace_state_controller
 from manuskript.ui.panels.host import PanelInstance
 from manuskript.ui.workspace_state_controller import (
@@ -110,7 +114,7 @@ class Registry:
         )
 
 
-def a_window(instances=(), descriptors=()):
+def a_window(instances=(), descriptors=(), surfaces=()):
     window = MagicMock()
     # WorkspaceStateViews reads this as a boolean. An unconstrained
     # MagicMock is truthy and makes save() recursively describe another
@@ -118,6 +122,10 @@ def a_window(instances=(), descriptors=()):
     window._projectSurfaceActive = False
     window._activePanelId = None
     window.panelHost = Host(dict(instances))
+    # The other owner, spelled out for the same reason: an unconstrained
+    # MagicMock iterates as empty, so a window whose surfaces were left
+    # to the mock would pass every test about them by holding none.
+    window.surfaceHost = Host(dict(surfaces))
     window.panelRegistry = Registry(descriptors)
     return window
 
@@ -277,3 +285,120 @@ def test_workspace_state_controller_has_no_main_window_escape_hatch():
     controller = WorkspaceStateController(MagicMock(), store=MagicMock())
 
     assert not hasattr(controller, "window")
+
+
+# ------------------------------------------------- an older arrangement
+
+
+def a_saved_layout(version, window_state=b"arrangement"):
+    """A store holding one window's layout, written by ``version``."""
+
+    store = MagicMock()
+    store.stored_version.return_value = version
+    store.load.return_value = WorkspaceWindowState(
+        geometry=b"where the window was",
+        window_state=window_state,
+    )
+    return store
+
+
+def test_an_arrangement_from_before_the_surfaces_moved_is_not_applied():
+    """It names seven docks this build never makes.
+
+    Qt keeps the entry for a dock it restored but never found, and hands
+    it back on every later save -- deliberately, so a panel whose plugin
+    is temporarily away keeps its place. Applied once here, those seven
+    dead names would ride along for the life of the profile.
+    """
+
+    window = a_window()
+    controller = state_controller(window, a_saved_layout(3))
+
+    controller.restore()
+
+    assert not window.restoreState.called
+    assert not controller.restoredLayout
+    # The window's size and place are still true, and are not what this
+    # refuses: only the arrangement of docks inside it.
+    window.restoreGeometry.assert_called_once_with(b"where the window was")
+
+
+def test_an_arrangement_written_since_is_applied():
+    window = a_window()
+    controller = state_controller(
+        window, a_saved_layout(SURFACE_LAYOUT_VERSION),
+    )
+
+    controller.restore()
+
+    window.restoreState.assert_called_once_with(b"arrangement")
+    assert controller.restoredLayout
+
+
+def test_a_window_with_nothing_saved_places_its_own():
+    """First launch, or a window id that has never been written."""
+
+    window = a_window()
+    controller = state_controller(
+        window, a_saved_layout(WORKSPACE_STATE_VERSION, window_state=None),
+    )
+
+    controller.restore()
+
+    assert not window.restoreState.called
+    assert not controller.restoredLayout
+
+
+def test_this_build_writes_a_layout_it_would_read_back():
+    """The two constants have to agree, or every launch relays out.
+
+    Saving version N while refusing anything below N+1 would make each
+    window discard the arrangement the last one saved -- and nothing
+    would fail, it would just never remember.
+    """
+
+    assert WORKSPACE_STATE_VERSION >= SURFACE_LAYOUT_VERSION
+
+
+def test_a_surface_that_remembers_something_is_asked_too():
+    """Both owners. Asking only the panel host would drop it silently.
+
+    Which is the one failure a reader cannot report: nothing is wrong
+    until the next launch, and then only a setting they chose is gone.
+    """
+
+    from manuskript.panels import PanelState, WorkspaceSurfaceDescriptor
+    from manuskript.ui.workspace_surfaces import WorkspaceSurfaceInstance
+
+    remembered = WorkspaceSurfaceDescriptor(
+        id="core.outline",
+        title="Outline",
+        state=(
+            PanelState(
+                key="core.outline",
+                capture=lambda widget: widget.page,
+                restore=lambda widget, value: setattr(
+                    widget, "page", int(value),
+                ),
+            ),
+        ),
+    )
+    outline = Notebook(page=4)
+    window = a_window(surfaces={
+        "core.outline": WorkspaceSurfaceInstance(
+            descriptor=remembered, widget=outline,
+        ),
+    })
+    store = MagicMock()
+    controller = state_controller(window, store)
+
+    controller.save()
+
+    assert saved_state(controller).panel_state == {"core.outline": 4}
+
+    store.load.return_value = WorkspaceWindowState(
+        panel_state={"core.outline": 9},
+    )
+    controller.restore()
+
+    assert outline.page == 9

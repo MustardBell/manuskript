@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import QSplitter
 from manuskript.panels import SPLITTER_SLOT
 from manuskript.services.workspace_state import (
     PRIMARY,
+    SURFACE_LAYOUT_VERSION,
     WorkspaceStateStore,
     WorkspaceWindowState,
 )
@@ -42,6 +43,11 @@ class WorkspaceStateViews:
     find_splitter: Callable[[str], Any]
     panel_registry: Any
     panel_host: Any
+    #: The other owner. A surface is not shown or hidden and has no dock
+    #: to arrange, so almost nothing here asks it anything -- but a
+    #: surface may still declare state of its own, and a window that
+    #: asked only the panel host would drop it without saying so.
+    surface_host: Any
 
     @classmethod
     def for_window(cls, window):
@@ -69,6 +75,7 @@ class WorkspaceStateViews:
             find_splitter=lambda name: window.findChild(QSplitter, name),
             panel_registry=window.panelRegistry,
             panel_host=window.panelHost,
+            surface_host=window.surfaceHost,
         )
 
 
@@ -87,6 +94,12 @@ class WorkspaceStateController:
         #: here, so a window can tell an arrangement it chose from one
         #: an earlier version left behind.
         self.storedVersion = 0
+        #: Whether a saved dock arrangement was applied to this window.
+        #: False means there was none to apply or it described docks this
+        #: build no longer makes, and the window has to place its own --
+        #: asked here rather than by comparing version numbers at the call
+        #: site, so one place decides what an old layout is worth.
+        self.restoredLayout = False
         #: What each project-scoped panel was showing before the welcome
         #: screen put it away, by panel id. Panels are hidden through the
         #: host rather than the widget, so their toggles keep agreeing
@@ -115,8 +128,17 @@ class WorkspaceStateController:
         state = self.store.load(self.windowId)
         if state.geometry is not None:
             self.views.restore_geometry(state.geometry)
-        if state.window_state is not None:
-            self.views.restore_window_state(state.window_state)
+        # Geometry is this window's size and place and is still true. The
+        # arrangement of docks inside it is not, once it was written by a
+        # version that docked the work surfaces: it names seven docks this
+        # build never makes, and Qt keeps entries for docks it restored but
+        # never found, handing them back on every later save. So an older
+        # arrangement is refused whole and the window places its defaults.
+        self.restoredLayout = bool(
+            state.window_state is not None
+            and self.storedVersion >= SURFACE_LAYOUT_VERSION
+            and self.views.restore_window_state(state.window_state)
+        )
 
         self._dock_visibility = (
             dict(state.docks)
@@ -307,17 +329,24 @@ class WorkspaceStateController:
         }
 
     def _remembered_panel_state(self):
-        """Every panel in this window that remembers something, and what.
+        """Everything in this window that remembers something, and what.
 
         The panels say what they keep; this only asks. The list used to be
         here, together with the widget methods to call and the widget to
         call them on, which made adding a panel with state of its own a
         change to this file and put one panel's internals in it.
+
+        Both owners, because a surface may remember something too. Asking
+        only the panel host would have dropped it silently, which is the
+        one failure a person cannot report: nothing is wrong until the
+        next launch, and then only a setting they chose is missing.
         """
-        host = self.views.panel_host
-        for instance in host.instances.values():
-            for remembered in instance.descriptor.state:
-                yield remembered, instance.widget
+        for host in (self.views.panel_host, self.views.surface_host):
+            if host is None:
+                continue
+            for instance in host.instances.values():
+                for remembered in instance.descriptor.state:
+                    yield remembered, instance.widget
 
     # ----------------------------------------------- welcome screen
 
