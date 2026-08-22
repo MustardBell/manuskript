@@ -1,4 +1,4 @@
-# Manuskript Plugin API 1 release candidate
+# Manuskript Plugin API 1 (draft)
 
 This document describes the API 1 contract being validated for its first
 stable release. The checked-in JSON documents under `plugin_api/schema/` are
