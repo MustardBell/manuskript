@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from manuskript.services.workspace_state import PRIMARY
 from manuskript.ui.workspace_windows import (
+    LegacyWorkspaceMigrationViews,
     ProjectAdoptionViews,
     WorkspaceWindowController,
     WorkspaceWindowViews,
@@ -14,7 +15,8 @@ def controller_fixture(
         recorded=(),
         close_result=True,
         saved_state=None,
-        intent_for_state=lambda _state: None):
+        intent_for_state=lambda _state: None,
+        legacy_layouts=()):
     workspaces = [SimpleNamespace(windowId=current_id)]
     opened = []
     events = []
@@ -41,6 +43,15 @@ def controller_fixture(
             controller.dispose()
         return close_result
 
+    def migrate_surface(surface_id):
+        events.append(("migrate", surface_id))
+        workspace = SimpleNamespace(
+            windowId="window-migrated-{}".format(len(opened) + 1),
+        )
+        workspaces.append(workspace)
+        opened.append(workspace)
+        return workspace
+
     views = WorkspaceWindowViews(
         current_id=current_id,
         workspaces=lambda: tuple(workspaces),
@@ -56,6 +67,16 @@ def controller_fixture(
             connect_project=lambda: events.append(("connect",)),
             apply_loaded_settings=lambda: events.append(("settings",)),
             project_opened=lambda: events.append(("opened",)),
+        ),
+        legacy_migration=LegacyWorkspaceMigrationViews(
+            floating_surfaces=lambda: tuple(legacy_layouts),
+            move_surface=migrate_surface,
+            place_workspace=lambda workspace, geometry: events.append(
+                ("place", workspace.windowId, geometry)
+            ),
+            save_workspace=lambda workspace: events.append(
+                ("save", workspace.windowId)
+            ),
         ),
     )
     controller = WorkspaceWindowController(views)
@@ -141,6 +162,33 @@ def test_session_restore_composes_each_window_from_saved_membership():
     assert [workspace.windowId for workspace in opened] == ["window-2"]
     assert events[-1] == (
         "create", "window-2", ("intent", ("core.editor",)),
+    )
+
+
+def test_a_legacy_floating_surface_becomes_a_persisted_peer_workspace():
+    layout = SimpleNamespace(
+        surface_id="core.editor",
+        geometry=(120, 90, 640, 480),
+    )
+    controller, workspaces, opened, store, events = controller_fixture(
+        legacy_layouts=(layout,),
+    )
+
+    restored = controller.restore()
+
+    assert tuple(opened) == restored
+    assert events[:2] == [
+        ("migrate", "core.editor"),
+        ("place", "window-migrated-1", (120, 90, 640, 480)),
+    ]
+    assert ("save", PRIMARY) in events
+    assert ("save", "window-migrated-1") in events
+    store.set_open_windows.assert_called_once_with(
+        [PRIMARY, "window-migrated-1"]
+    )
+    assert tuple(workspaces) == (
+        SimpleNamespace(windowId=PRIMARY),
+        SimpleNamespace(windowId="window-migrated-1"),
     )
 
 

@@ -1881,3 +1881,81 @@ def test_a_living_editor_takes_its_project_bindings_to_a_sparse_window(
 
     assert window.mainEditor is original
     assert window.mainEditor.editor_context is not None
+
+
+def test_a_legacy_floating_editor_becomes_the_same_living_peer_workspace(
+        MWEmptyProject, tmp_path):
+    """The dock-era float is migration input, not a view to reconstruct."""
+
+    from manuskript.ui.legacy_layouts import LegacySurfaceLayout
+
+    window = MWEmptyProject
+    original_editor = window.mainEditor
+    controller = window.workspaceWindows
+    previous_views = controller.views
+    previous_store = window.windowState.store
+    shared_store = WorkspaceStateStore(QSettings(
+        str(tmp_path / "legacy-floating-surface.ini"),
+        QSettings.IniFormat,
+    ))
+    window.windowState.store = shared_store
+    controller.reset_restoration(False)
+    layout = LegacySurfaceLayout(
+        surface_id=EDITOR,
+        floating=True,
+        geometry=(120, 90, 640, 480),
+    )
+    migration = previous_views.legacy_migration
+
+    def save_in_shared_store(workspace):
+        workspace.windowState.store = shared_store
+        workspace.windowState.save()
+
+    controller.views = replace(
+        previous_views,
+        legacy_migration=replace(
+            migration,
+            floating_surfaces=lambda: (layout,),
+            save_workspace=save_in_shared_store,
+        ),
+    )
+    created = []
+    try:
+        created = list(controller.restore())
+
+        assert len(created) == 1
+        peer = created[0]
+        assert set(peer.surfaceHost.instances) == {EDITOR}
+        assert peer.mainEditor is original_editor
+        assert not window.surfaceHost.contains(EDITOR)
+        peer_geometry = peer.geometry()
+        available = qApp.desktop().availableGeometry(peer)
+        assert peer_geometry.x() == max(
+            available.left(),
+            min(120, available.right() - peer_geometry.width() + 1),
+        )
+        assert peer_geometry.y() == max(
+            available.top(),
+            min(90, available.bottom() - peer_geometry.height() + 1),
+        )
+        # A full workspace has more chrome than its historical dock shell.
+        # Preserve the requested size unless the usable window's own minimum
+        # is larger; never force it into a clipped 640-pixel frame.
+        assert peer_geometry.width() >= 640
+        assert peer_geometry.height() >= 480
+        assert EDITOR not in shared_store.load(window.windowId).surfaces
+        assert shared_store.load(peer.windowId).surfaces == (EDITOR,)
+        assert shared_store.open_windows() == (
+            window.windowId,
+            peer.windowId,
+        )
+    finally:
+        for peer in created:
+            if peer.surfaceHost.contains(EDITOR):
+                window.surfaceHost.attach(peer.surfaceHost.detach(EDITOR))
+            peer.close()
+        controller.views = previous_views
+        controller.reset_restoration(True)
+        window.windowState.store = previous_store
+
+    assert window.mainEditor is original_editor

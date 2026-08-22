@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from PyQt5.QtCore import QCoreApplication, QEvent
+from PyQt5.QtCore import QCoreApplication, QEvent, QRect
+from PyQt5.QtWidgets import QApplication
 
 from manuskript.services.workspace_state import PRIMARY
 from manuskript.ui.workspace_surfaces import WorkspaceBuildIntent
@@ -25,6 +26,16 @@ class ProjectAdoptionViews:
 
 
 @dataclass(frozen=True)
+class LegacyWorkspaceMigrationViews:
+    """One-way conversion from floating dock intent to real workspaces."""
+
+    floating_surfaces: Callable[[], tuple]
+    move_surface: Callable[[str], Any]
+    place_workspace: Callable[[Any, tuple], None]
+    save_workspace: Callable[[Any], None]
+
+
+@dataclass(frozen=True)
 class WorkspaceWindowViews:
     """Application/window capabilities needed by workspace coordination."""
 
@@ -37,6 +48,7 @@ class WorkspaceWindowViews:
     state_store: Callable[[], Any]
     intent_for_state: Callable[[Any], Any]
     adoption: ProjectAdoptionViews
+    legacy_migration: LegacyWorkspaceMigrationViews
 
     @classmethod
     def for_window(cls, window):
@@ -68,6 +80,30 @@ class WorkspaceWindowViews:
                 created.close()
                 raise
 
+        def place_workspace(workspace, geometry):
+            if not geometry or len(geometry) != 4:
+                return
+            x, y, width, height = (int(value) for value in geometry)
+            available = QApplication.desktop().availableGeometry(workspace)
+            minimum = workspace.minimumSizeHint().expandedTo(
+                workspace.minimumSize()
+            )
+            width = max(
+                minimum.width(), min(width, available.width())
+            )
+            height = max(
+                minimum.height(), min(height, available.height())
+            )
+            x = max(
+                available.left(),
+                min(x, available.right() - width + 1),
+            )
+            y = max(
+                available.top(),
+                min(y, available.bottom() - height + 1),
+            )
+            workspace.setGeometry(QRect(x, y, width, height))
+
         return cls(
             current_id=window.windowId,
             workspaces=lambda: registry.workspace_windows,
@@ -89,6 +125,18 @@ class WorkspaceWindowViews:
                 connect_project=lifecycle.connect_project,
                 apply_loaded_settings=lifecycle.apply_loaded_settings,
                 project_opened=lifecycle.project_opened,
+            ),
+            legacy_migration=LegacyWorkspaceMigrationViews(
+                floating_surfaces=(
+                    window.windowState.legacy_floating_surfaces
+                ),
+                # Resolved at call time: this controller is composed before
+                # the View menu builds the transfer controller.
+                move_surface=lambda surface_id: (
+                    window.surfaceTransfer.move_to_new_workspace(surface_id)
+                ),
+                place_workspace=place_workspace,
+                save_workspace=lambda workspace: workspace.windowState.save(),
             ),
         )
 
@@ -163,11 +211,30 @@ class WorkspaceWindowController:
         self._restoration_attempted = True
         reopened = []
         store = self.views.state_store()
-        for window_id in store.open_windows():
+        recorded_windows = store.open_windows()
+        for window_id in recorded_windows:
             if window_id in self.open_ids():
                 continue
             intent = self.views.intent_for_state(store.load(window_id))
             reopened.append(self.open_with_intent(intent, window_id))
+
+        migrated = []
+        migration = self.views.legacy_migration
+        for layout in migration.floating_surfaces():
+            workspace = migration.move_surface(layout.surface_id)
+            if workspace is None:
+                continue
+            migration.place_workspace(workspace, layout.geometry)
+            migrated.append(workspace)
+
+        if migrated:
+            # Persist the declarative answer immediately.  If the application
+            # exits abnormally before a normal quit, the obsolete dock blob
+            # must not be the only record of the windows just recovered.
+            for workspace in self.views.workspaces():
+                migration.save_workspace(workspace)
+            store.set_open_windows(self.open_ids())
+        reopened.extend(migrated)
         return tuple(reopened)
 
     def reset_restoration(self, attempted=False):

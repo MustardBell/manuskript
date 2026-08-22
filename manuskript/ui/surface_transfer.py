@@ -209,6 +209,14 @@ class SurfaceTransferViews:
         )
 
 
+@dataclass(frozen=True)
+class SurfaceTransferResult:
+    """Both sides a successful ownership transaction needs to report."""
+
+    instance: Any
+    workspace: Any
+
+
 class SurfaceTransferController(QObject):
     """Transfer one surface to a workspace composed specifically for it."""
 
@@ -344,6 +352,18 @@ class SurfaceTransferController(QObject):
     def move_to_new_window(self, surface_id, _checked=False):
         """Move one living instance, or leave the source exactly usable."""
 
+        result = self._transfer_to_new_workspace(surface_id)
+        return result.instance if result is not None else None
+
+    def move_to_new_workspace(self, surface_id):
+        """Migration-facing form of the command, returning its new owner."""
+
+        result = self._transfer_to_new_workspace(surface_id)
+        return result.workspace if result is not None else None
+
+    def _transfer_to_new_workspace(self, surface_id):
+        """Run the shared ownership transaction and report both outcomes."""
+
         views = self.views
         host = views.host
         instance = host.instance(surface_id)
@@ -383,7 +403,7 @@ class SurfaceTransferController(QObject):
                 raise WorkspaceSurfaceError(
                     "The destination did not adopt the living surface."
                 )
-            return instance
+            return SurfaceTransferResult(instance, destination)
         except Exception:
             LOGGER.exception(
                 "Could not move workspace surface %s to a new window.",

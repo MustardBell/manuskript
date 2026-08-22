@@ -245,6 +245,28 @@ def test_the_detector_the_window_uses_answers_the_same_way():
     assert legacy_docks_in(bytes(current.saveState())) == ()
 
 
+def test_the_detector_recovers_surface_identity_and_floating_geometry():
+    """Migration keeps the stronger intent before refusing the old blob.
+
+    The old dock itself does not survive.  Its stable surface id and ordinary
+    geometry do, which is enough to make a peer workspace without teaching
+    the new workspace model about obsolete docks or Qt's private byte format.
+    """
+
+    from manuskript.ui.legacy_layouts import legacy_surface_layouts_in
+
+    layouts = legacy_surface_layouts_in(a_dock_era_layout())
+    by_id = {layout.surface_id: layout for layout in layouts}
+
+    assert tuple(by_id) == tuple(
+        name.removeprefix("panel.") for name in LEGACY_SURFACE_DOCKS
+    )
+    assert not by_id["core.general"].floating
+    editor = by_id["core.editor"]
+    assert editor.floating
+    assert editor.geometry == (120, 90, 640, 480)
+
+
 def test_a_payload_that_will_not_restore_is_not_guessed_at():
     """Whatever is wrong with it is about to be wrong for the real
     window, which reports it by failing to restore rather than by having

@@ -25,6 +25,8 @@ restoring: a window that performs the detection is a window the dead
 names are now in.
 """
 
+from dataclasses import dataclass
+
 from PyQt5.QtWidgets import QDockWidget, QMainWindow
 
 
@@ -45,17 +47,28 @@ LEGACY_SURFACE_DOCKS = (
 )
 
 
-def legacy_docks_in(blob, names=LEGACY_SURFACE_DOCKS):
-    """Which of these dock names a saved layout has somewhere to put.
+@dataclass(frozen=True)
+class LegacySurfaceLayout:
+    """One work surface fact recovered from an obsolete dock layout.
 
-    Empty for a layout this build could apply without inheriting
-    anything: one it wrote itself, or one an upstream installation
-    brought with it.
+    Dock object names are an implementation detail of the abandoned
+    presentation.  The rest of the application receives the stable surface
+    id and ordinary geometry instead, so migration does not make workspaces
+    understand old ``QDockWidget`` state.
+    """
 
-    Answers empty for a payload that will not restore at all, rather than
-    guessing at what it might have been. Whatever is wrong with it is
-    about to be wrong for the real window too, which reports it by
-    failing to restore.
+    surface_id: str
+    floating: bool
+    geometry: tuple = ()
+
+
+def legacy_surface_layouts_in(blob, names=LEGACY_SURFACE_DOCKS):
+    """Recover work-surface intent through temporary historical shells.
+
+    Qt owns the serialization format.  Resolving each historical object name
+    with a temporary dock lets Qt tell us whether it existed, whether it was
+    floating, and where it was.  Nothing hand-parses the opaque state blob,
+    and the scratch window is discarded after the question is answered.
     """
 
     if not blob:
@@ -69,11 +82,46 @@ def legacy_docks_in(blob, names=LEGACY_SURFACE_DOCKS):
             candidate = QDockWidget(name, scratch)
             candidate.setObjectName(name)
             if scratch.restoreDockWidget(candidate):
-                found.append(name)
+                geometry = candidate.geometry()
+                found.append(LegacySurfaceLayout(
+                    surface_id=_surface_id_for_dock(name),
+                    floating=candidate.isFloating(),
+                    geometry=(
+                        geometry.x(),
+                        geometry.y(),
+                        geometry.width(),
+                        geometry.height(),
+                    ) if candidate.isFloating() else (),
+                ))
             scratch.removeDockWidget(candidate)
         return tuple(found)
     finally:
-        # The scratch window has the dead names in it now, which is the
-        # whole reason it is not the one being restored.
+        # Resolving even one absent dock changes the scratch window's own
+        # future saves.  It must never become the application window.
         scratch.setParent(None)
         scratch.deleteLater()
+
+
+def _surface_id_for_dock(name):
+    prefix = "panel."
+    return name[len(prefix):] if name.startswith(prefix) else name
+
+
+def legacy_docks_in(blob, names=LEGACY_SURFACE_DOCKS):
+    """Which of these dock names a saved layout has somewhere to put.
+
+    Empty for a layout this build could apply without inheriting
+    anything: one it wrote itself, or one an upstream installation
+    brought with it.
+
+    Answers empty for a payload that will not restore at all, rather than
+    guessing at what it might have been. Whatever is wrong with it is
+    about to be wrong for the real window too, which reports it by
+    failing to restore.
+    """
+
+    layouts = legacy_surface_layouts_in(blob, names)
+    by_surface_id = {
+        _surface_id_for_dock(name): name for name in names
+    }
+    return tuple(by_surface_id[layout.surface_id] for layout in layouts)

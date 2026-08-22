@@ -23,7 +23,7 @@ from manuskript.services.workspace_state import (
     WorkspaceStateStore,
     WorkspaceWindowState,
 )
-from manuskript.ui.legacy_layouts import legacy_docks_in
+from manuskript.ui.legacy_layouts import legacy_surface_layouts_in
 from manuskript.ui.editors.document_area_layout import (
     describe_area,
     restore_area,
@@ -36,11 +36,11 @@ class WorkspaceStateViews:
 
     restore_geometry: Callable[[Any], bool]
     restore_window_state: Callable[[Any], bool]
-    #: Which docks this build no longer makes a saved layout still knows
-    #: about. Given rather than called directly, because deciding whether
-    #: an old arrangement may be applied is this controller's business
-    #: while asking Qt about a payload is not.
-    legacy_docks_in: Callable[[Any], Tuple[str, ...]]
+    #: Surface identities and placement facts recovered through temporary
+    #: historical dock shells. Given rather than called directly, because
+    #: deciding whether an old arrangement may be applied is this
+    #: controller's business while asking Qt about a payload is not.
+    legacy_surface_layouts_in: Callable[[Any], Tuple[Any, ...]]
     save_geometry: Callable[[], Any]
     save_window_state: Callable[[], Any]
     project_active: Callable[[], bool]
@@ -80,7 +80,7 @@ class WorkspaceStateViews:
         return cls(
             restore_geometry=window.restoreGeometry,
             restore_window_state=window.restoreState,
-            legacy_docks_in=legacy_docks_in,
+            legacy_surface_layouts_in=legacy_surface_layouts_in,
             save_geometry=window.saveGeometry,
             save_window_state=window.saveState,
             project_active=lambda: window._projectSurfaceActive,
@@ -126,7 +126,7 @@ class WorkspaceStateController:
         #: Kept because it says why, and because a surface a reader had
         #: torn out is a fact worth having when detaching into a real
         #: window lands.
-        self._legacyDocks = ()
+        self._legacySurfaceLayouts = ()
         #: What each project-scoped panel was showing before the welcome
         #: screen put it away, by panel id. Panels are hidden through the
         #: host rather than the widget, so their toggles keep agreeing
@@ -170,10 +170,20 @@ class WorkspaceStateController:
         #
         # Refused whole when it does name them, since they cannot be taken
         # out -- measured, four ways, on Qt 5.15.3.
-        self._legacyDocks = self.views.legacy_docks_in(state.window_state)
+        detected_legacy_layouts = (
+            self.views.legacy_surface_layouts_in(state.window_state)
+        )
+        # Explicit membership means a v5 workspace has already answered
+        # which surfaces it owns.  A stale Qt blob may still be refused, but
+        # it must not override that newer answer by tearing surfaces out
+        # again.  Only the pre-membership shape is a migration input.
+        self._legacySurfaceLayouts = (
+            tuple(detected_legacy_layouts)
+            if state.surfaces is None else ()
+        )
         self.restoredLayout = bool(
             state.window_state is not None
-            and not self._legacyDocks
+            and not detected_legacy_layouts
             and self.views.restore_window_state(state.window_state)
         )
 
@@ -203,6 +213,18 @@ class WorkspaceStateController:
         # nothing at all.
         self._remember_project_panels()
         return state
+
+    def legacy_floating_surfaces(self):
+        """Obsolete floating docks that should become peer workspaces.
+
+        This is deliberately a one-way migration record.  Callers receive
+        surface identities and geometry, never dock names or a Qt state blob.
+        """
+
+        return tuple(
+            layout for layout in self._legacySurfaceLayouts
+            if layout.floating
+        )
 
     def _restore_panel_state(self, state):
         stored = state.panel_state or {}

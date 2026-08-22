@@ -354,9 +354,20 @@ def a_saved_layout(version=WORKSPACE_STATE_VERSION,
 def state_controller_reading(window, store, legacy=()):
     """A controller whose layout says it knows ``legacy`` dead docks."""
 
+    from manuskript.ui.legacy_layouts import LegacySurfaceLayout
+
     views = WorkspaceStateViews.for_window(window)
     controller = WorkspaceStateController(
-        replace(views, legacy_docks_in=lambda blob: tuple(legacy)),
+        replace(
+            views,
+            legacy_surface_layouts_in=lambda blob: tuple(
+                LegacySurfaceLayout(
+                    surface_id=name.removeprefix("panel."),
+                    floating=False,
+                )
+                for name in legacy
+            ),
+        ),
         store=store,
     )
     return controller
@@ -384,6 +395,54 @@ def test_an_arrangement_that_names_docks_we_no_longer_make_is_refused():
     # The window's size and place are still true, and are not what this
     # refuses: only the arrangement of docks inside it.
     window.restoreGeometry.assert_called_once_with(b"where the window was")
+
+
+def test_a_pre_membership_floating_surface_is_exposed_for_migration():
+    from manuskript.ui.legacy_layouts import LegacySurfaceLayout
+
+    window = a_window()
+    views = WorkspaceStateViews.for_window(window)
+    floating = LegacySurfaceLayout(
+        surface_id="core.editor",
+        floating=True,
+        geometry=(120, 90, 640, 480),
+    )
+    controller = WorkspaceStateController(
+        replace(
+            views,
+            legacy_surface_layouts_in=lambda _blob: (floating,),
+        ),
+        store=a_saved_layout(),
+    )
+
+    controller.restore()
+
+    assert controller.legacy_floating_surfaces() == (floating,)
+
+
+def test_explicit_surface_membership_wins_over_a_stale_legacy_blob():
+    from manuskript.ui.legacy_layouts import LegacySurfaceLayout
+
+    window = a_window()
+    views = WorkspaceStateViews.for_window(window)
+    floating = LegacySurfaceLayout("core.editor", True, (1, 2, 3, 4))
+    store = a_saved_layout()
+    store.load.return_value = WorkspaceWindowState(
+        window_state=b"arrangement",
+        surfaces=("core.editor",),
+    )
+    controller = WorkspaceStateController(
+        replace(
+            views,
+            legacy_surface_layouts_in=lambda _blob: (floating,),
+        ),
+        store=store,
+    )
+
+    controller.restore()
+
+    assert controller.legacy_floating_surfaces() == ()
+    assert not controller.restoredLayout
 
 
 def test_an_arrangement_naming_only_docks_we_make_is_applied():
