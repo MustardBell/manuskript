@@ -771,7 +771,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label = self.tr(target.label)
             item = QListWidgetItem(F.themeIcon(target.icon), label)
             item.setSizeHint(QSize(item.sizeHint().width(), 64))
-            item.setToolTip(label)
+            tooltip = label
+            if target.opens_panel and len(held) > 1:
+                tooltip = self.tr(
+                    "{}\nDrag this row to move the surface to a new "
+                    "workspace window."
+                ).format(label)
+            item.setToolTip(tooltip)
             item.setTextAlignment(Qt.AlignCenter)
             self.lstTabs.addItem(item)
             if target.page is not None:

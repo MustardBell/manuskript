@@ -16,7 +16,7 @@ from dataclasses import replace
 from weakref import ref
 
 import pytest
-from PyQt5.QtCore import QSettings, Qt
+from PyQt5.QtCore import QEvent, QPoint, QSettings, Qt
 from PyQt5.QtWidgets import QDockWidget, QPlainTextEdit, qApp
 
 from manuskript.panels import (
@@ -1610,6 +1610,91 @@ def test_the_view_menu_offers_each_owned_surface_to_a_new_window(
     assert set(actions) == set(window.surfaceHost.instances)
     assert actions[EDITOR].isEnabled()
     assert "new workspace window" in actions[EDITOR].statusTip()
+
+
+def test_dragging_a_surface_row_starts_the_same_transfer_gesture(
+        MWEmptyProject):
+    window = MWEmptyProject
+    controller = window.surfaceTransfer
+    row = window.navigator.row_for_panel(EDITOR)
+    item = window.lstTabs.item(row)
+    start = window.lstTabs.visualItemRect(item).center()
+    assert item.text() in item.toolTip()
+    assert item.toolTip() != item.text()
+
+    class Mouse:
+        def __init__(self, kind, position, button, buttons):
+            self._kind = kind
+            self._position = position
+            self._button = button
+            self._buttons = buttons
+
+        def type(self):
+            return self._kind
+
+        def pos(self):
+            return self._position
+
+        def button(self):
+            return self._button
+
+        def buttons(self):
+            return self._buttons
+
+    press = Mouse(
+        QEvent.MouseButtonPress,
+        start,
+        Qt.LeftButton,
+        Qt.LeftButton,
+    )
+    move = Mouse(
+        QEvent.MouseMove,
+        start + QPoint(qApp.startDragDistance() + 1, 0),
+        Qt.NoButton,
+        Qt.LeftButton,
+    )
+
+    with patch.object(controller, "_drag_to_new_workspace") as drag:
+        assert not controller.eventFilter(window.lstTabs, press)
+        assert controller.eventFilter(window.lstTabs, move)
+
+    drag.assert_called_once_with(EDITOR)
+
+
+def test_only_the_explicit_drop_target_completes_a_surface_drag(
+        MWEmptyProject):
+    controller = MWEmptyProject.surfaceTransfer
+
+    with patch.object(
+        controller,
+        "move_to_new_window",
+        return_value="moved",
+    ) as move:
+        assert controller.complete_drag(
+            EDITOR, Qt.IgnoreAction, None,
+        ) is None
+        assert controller.complete_drag(
+            EDITOR, Qt.MoveAction, "core.outline",
+        ) is None
+        assert controller.complete_drag(
+            EDITOR, Qt.MoveAction, EDITOR,
+        ) == "moved"
+
+    move.assert_called_once_with(EDITOR)
+
+
+def test_surface_drop_target_is_named_and_has_wcag_text_contrast(
+        MWEmptyProject):
+    from manuskript.ui.tooltip_style import contrast_ratio
+
+    target = MWEmptyProject.surfaceTransfer._drop_target
+
+    assert target.accessibleName()
+    assert target.accessibleDescription()
+    assert contrast_ratio(
+        target._foreground_color,
+        target._background_color,
+    ) >= 4.5
 
 
 def test_move_surface_composes_a_new_window_for_the_living_editor(
