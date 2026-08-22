@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMainWindow
@@ -17,7 +18,7 @@ from manuskript.ui.panels.core.entities import (
     build_world_entities,
 )
 from manuskript.panels import PanelContext
-from manuskript.panels.core import EDITOR
+from manuskript.panels.core import CHARACTER_ENTITIES, EDITOR
 
 
 def _workspace(parent):
@@ -64,6 +65,32 @@ def test_entity_workspace_routes_creation_to_the_matching_dock(
     assert panels[2].tree.topLevelItemCount() == 0
     dialog = controller.dialog_for("new-character")
     assert dialog.morphologyButton.isEnabled()
+    controller.unbind()
+    connections.disconnect_all()
+    parent.close()
+
+
+def test_entity_browser_binding_follows_surface_ownership(test_application):
+    parent = QMainWindow()
+    controller, _catalog, panels = _workspace(parent)
+    connections = SignalConnectionRegistry()
+    controller.bind(connections.connect)
+    character_panel = panels[1]
+    instance = SimpleNamespace(
+        id=CHARACTER_ENTITIES,
+        widget=character_panel,
+    )
+
+    controller.detach_surface(instance)
+
+    assert character_panel not in controller.panels
+    assert character_panel not in controller.editors
+    assert character_panel.tree.topLevelItemCount() == 0
+
+    controller.attach_surface(instance)
+
+    assert character_panel in controller.panels
+    assert character_panel in controller.editors
     controller.unbind()
     connections.disconnect_all()
     parent.close()

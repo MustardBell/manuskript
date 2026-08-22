@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from manuskript import functions as F
 from manuskript.ui.views.basicItemView import basicItemView
 from manuskript.ui.views.outlineView import outlineView
 from manuskript.ui.views.plotTreeView import plotTreeView
@@ -106,6 +107,15 @@ class OutlinePanel(QWidget):
 
         self.btnPlanShowDetails.toggled.connect(
             self.detailsFrame.setVisible
+        )
+        self.btnOutlineAddFolder.clicked.connect(
+            self.treeOutlineOutline.addFolder, F.AUC,
+        )
+        self.btnOutlineAddText.clicked.connect(
+            self.treeOutlineOutline.addText, F.AUC,
+        )
+        self.btnOutlineRemoveItem.clicked.connect(
+            self.treeOutlineOutline.delete, F.AUC,
         )
         self.splitterOutlineH.setStretchFactor(0, 25)
         self.splitterOutlineH.setStretchFactor(1, 75)

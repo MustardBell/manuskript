@@ -2,8 +2,23 @@
 
 from PyQt5.QtWidgets import QInputDialog, QMessageBox
 
+from manuskript.panels.core import (
+    CHARACTER_ENTITIES,
+    PLOT_ENTITIES,
+    PROJECT_ENTITIES,
+    WORLD_ENTITIES,
+)
+from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.connections import weak_callback
 from manuskript.ui.entity_editor import EntityEditorController
+
+
+ENTITY_SURFACES = {
+    PROJECT_ENTITIES,
+    CHARACTER_ENTITIES,
+    PLOT_ENTITIES,
+    WORLD_ENTITIES,
+}
 
 
 class EntityWorkspaceController:
@@ -12,10 +27,11 @@ class EntityWorkspaceController:
     def __init__(self, parent, runtime, panels):
         self.parent = parent
         self.runtime = runtime
-        self.panels = tuple(panels)
+        self.panels = list(panels)
         self.catalog = None
         self.manager = None
         self.editors = {}
+        self._connections = {}
         self.bound = False
         # The catalogue belongs to the project and outlives every window
         # onto it, so what it holds must not be this window. A stale
@@ -32,27 +48,8 @@ class EntityWorkspaceController:
         if self.manager is None:
             raise RuntimeError("Entity workspace requires a project manager.")
         self.catalog = self.manager.storage.entity_catalog
-        # One editor per browser, mounted in that browser's own half.
-        # An entity is edited where it is listed, so there is no editor
-        # to be left looking at without the list it came from.
-        self.editors = {
-            panel: EntityEditorController(
-                self.parent,
-                self.catalog,
-                self.manager.updateEntity,
-                self.manager.storage.morphology_schemas,
-                morphology_enabled=lambda manager=self.manager: manager.storage
-                .persistence_strategy.supports(
-                    "morphology.entities", write=True
-                ),
-            )
-            for panel in self.panels
-        }
         for panel in self.panels:
-            connect(panel.createRequested, self.create)
-            connect(panel.editRequested, self.open)
-            connect(panel.selectionActivated, self.retarget)
-            connect(panel.deleteRequested, self.delete)
+            self._bind_panel(panel)
         self.catalog.subscribe(self._onCatalogChanged)
         self.bound = True
         self.refresh()
@@ -61,14 +58,67 @@ class EntityWorkspaceController:
         if not self.bound:
             return
         self.catalog.unsubscribe(self._onCatalogChanged)
-        for editor in self.editors.values():
-            editor.close_all()
-        self.editors = {}
         for panel in self.panels:
-            panel.set_catalogue((), (), False)
+            self._unbind_panel(panel)
         self.catalog = None
         self.manager = None
         self.bound = False
+
+    def attach_surface(self, instance):
+        """Adopt an entity browser when its surface enters this workspace."""
+
+        if instance.id not in ENTITY_SURFACES:
+            return
+        panel = instance.widget
+        if panel in self.panels:
+            return
+        self.panels.append(panel)
+        if self.bound:
+            self._bind_panel(panel)
+            self.refresh()
+
+    def detach_surface(self, instance):
+        """Release an entity browser before it leaves this workspace."""
+
+        if instance.id not in ENTITY_SURFACES:
+            return
+        panel = instance.widget
+        if panel not in self.panels:
+            return
+        if self.bound:
+            self._unbind_panel(panel)
+        self.panels.remove(panel)
+
+    def _bind_panel(self, panel):
+        # One detail controller per browser. The browser travels between
+        # workspaces; its dialogs are window-local and are closed when that
+        # browser leaves rather than remaining owned by the source window.
+        editor = EntityEditorController(
+            self.parent,
+            self.catalog,
+            self.manager.updateEntity,
+            self.manager.storage.morphology_schemas,
+            morphology_enabled=lambda manager=self.manager: manager.storage
+            .persistence_strategy.supports(
+                "morphology.entities", write=True
+            ),
+        )
+        connections = SignalConnectionRegistry()
+        connections.connect(panel.createRequested, self.create)
+        connections.connect(panel.editRequested, self.open)
+        connections.connect(panel.selectionActivated, self.retarget)
+        connections.connect(panel.deleteRequested, self.delete)
+        self.editors[panel] = editor
+        self._connections[panel] = connections
+
+    def _unbind_panel(self, panel):
+        connections = self._connections.pop(panel, None)
+        if connections is not None:
+            connections.disconnect_all()
+        editor = self.editors.pop(panel, None)
+        if editor is not None:
+            editor.close_all()
+        panel.set_catalogue((), (), False)
 
     def refresh(self):
         if self.catalog is None:

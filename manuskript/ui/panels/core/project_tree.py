@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from manuskript import functions as F
 from manuskript.ui.views.treeView import treeView
 
 
@@ -66,5 +67,9 @@ def build_project_tree(context, parent):
         40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum,
     ))
     layout.addLayout(buttons)
+
+    add_folder.clicked.connect(tree.addFolder, F.AUC)
+    add_text.clicked.connect(tree.addText, F.AUC)
+    remove.clicked.connect(tree.delete, F.AUC)
 
     return panel

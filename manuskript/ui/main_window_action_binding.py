@@ -2,8 +2,8 @@ from functools import partial
 
 from PyQt5.QtWidgets import QActionGroup
 
-from manuskript import functions as F
 from manuskript.commands import DocumentCommand, MarkupCommand
+from manuskript.panels.core import EDITOR
 from manuskript.ui.connections import SignalConnectionRegistry
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
@@ -201,10 +201,6 @@ class MainWindowActionBinding:
     def _bind_view_actions(self):
         window = self._window
         window.viewSettingsMenu.rebuild()
-        self._connect(
-            window.corePanels.editor.editor.activeMarkdownPresentationStateChanged,
-            window.markdownMenu.attach,
-        )
         window.actModeGroup = QActionGroup(window)
         window.actModeSimple.setActionGroup(window.actModeGroup)
         window.actModeFiction.setActionGroup(window.actModeGroup)
@@ -272,34 +268,6 @@ class MainWindowActionBinding:
 
     def _bind_permanent_feature_signals(self):
         window = self._window
-        for signal, slot in [
-            (
-                window.corePanels.project_tree.add_folder.clicked,
-                window.corePanels.project_tree.tree.addFolder,
-            ),
-            (
-                window.corePanels.outline.btnOutlineAddFolder.clicked,
-                window.corePanels.outline.treeOutlineOutline.addFolder,
-            ),
-            (
-                window.corePanels.project_tree.add_text.clicked,
-                window.corePanels.project_tree.tree.addText,
-            ),
-            (
-                window.corePanels.outline.btnOutlineAddText.clicked,
-                window.corePanels.outline.treeOutlineOutline.addText,
-            ),
-            (
-                window.corePanels.project_tree.remove_item.clicked,
-                window.corePanels.project_tree.tree.delete,
-            ),
-            (
-                window.corePanels.outline.btnOutlineRemoveItem.clicked,
-                window.corePanels.outline.treeOutlineOutline.delete,
-            ),
-        ]:
-            self._connect(signal, slot, F.AUC)
-
         self._connect(
             window.actNewWindow.triggered,
             window.workspaceWindows.open,
@@ -309,3 +277,34 @@ class MainWindowActionBinding:
         # per window would have every window react to every other
         # window's focus changes.
         window.windowRegistry.watch_focus()
+
+
+class SurfaceActionBinding:
+    """Route actions emitted by whichever surfaces this workspace owns."""
+
+    def __init__(self, markdown_attach):
+        self._markdown_attach = markdown_attach
+        self._connections = {}
+
+    def attach_surface(self, instance):
+        if instance.id != EDITOR:
+            return
+        connections = SignalConnectionRegistry()
+        connections.connect_weak(
+            instance.widget.editor.activeMarkdownPresentationStateChanged,
+            self._markdown_attach,
+        )
+        self._connections[instance.id] = connections
+
+    def detach_surface(self, instance):
+        connections = self._connections.pop(instance.id, None)
+        if connections is None:
+            return
+        connections.disconnect_all()
+        self._markdown_attach(None)
+
+    def dispose(self):
+        for connections in self._connections.values():
+            connections.disconnect_all()
+        self._connections.clear()
+        self._markdown_attach = None

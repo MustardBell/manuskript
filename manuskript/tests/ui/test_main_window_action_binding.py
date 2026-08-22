@@ -12,6 +12,7 @@ from manuskript.ui.editors.markdownPresentation import (
 )
 from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
+    SurfaceActionBinding,
 )
 
 binding_module = importlib.import_module(
@@ -44,7 +45,7 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.viewSettingsMenu.rebuild.assert_called_once_with()
     (
         window.corePanels.editor.editor.activeMarkdownPresentationStateChanged.connect
-        .assert_called_once()
+        .assert_not_called()
     )
     window.actModeSimple.setActionGroup.assert_called_once_with(
         action_group
@@ -101,11 +102,11 @@ def test_main_window_action_binding_installs_permanent_feature_signals():
 
     (
         window.corePanels.project_tree.add_folder.clicked.connect
-        .assert_called_once()
+        .assert_not_called()
     )
     (
         window.corePanels.outline.btnOutlineAddFolder.clicked.connect
-        .assert_called_once()
+        .assert_not_called()
     )
     window.tabMain.currentChanged.connect.assert_not_called()
     # Focus is application-wide, so the window registry watches it once
@@ -174,3 +175,23 @@ def test_format_action_reaches_the_active_markup_editor(MWEmptyProject):
         assert editor.toPlainText() == "**select me**"
     finally:
         window.mainEditor.closeAllTabs()
+
+
+def test_editor_action_binding_follows_surface_ownership():
+    markdown_attach = MagicMock()
+    binding = SurfaceActionBinding(markdown_attach)
+    instance = MagicMock()
+    instance.id = "core.editor"
+    signal = instance.widget.editor.activeMarkdownPresentationStateChanged
+
+    binding.attach_surface(instance)
+
+    signal.connect.assert_called_once()
+    callback = signal.connect.call_args.args[0]
+    callback("presentation")
+    markdown_attach.assert_called_once_with("presentation")
+
+    binding.detach_surface(instance)
+
+    signal.disconnect.assert_called_once_with(callback)
+    markdown_attach.assert_called_with(None)

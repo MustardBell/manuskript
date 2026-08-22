@@ -49,6 +49,7 @@ from manuskript.ui.helpLabel import helpLabel
 from manuskript.ui.mainWindow import Ui_MainWindow
 from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
+    SurfaceActionBinding,
 )
 from manuskript.ui.markdown_menu_controller import (
     MarkdownMenuController,
@@ -291,6 +292,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 MarkdownMenuViews.for_window(self)
             )
         )
+        self.surfaceActions = self.workspaceLifetime.own(
+            SurfaceActionBinding(self.markdownMenu.attach)
+        )
+        self.surfaceHost.add_binding(self.surfaceActions)
         self.spellcheck = self.workspaceLifetime.own(
             SpellcheckController(
                 SpellcheckViews.for_window(self),
@@ -321,14 +326,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             EntityWorkspaceController(
                 self,
                 self.projectRuntime,
-                (
-                    self.corePanels.project_entities,
-                    self.corePanels.character_entities,
-                    self.corePanels.plot_entities,
-                    self.corePanels.world_entities,
-                ),
+                (),
             )
         )
+        self.surfaceHost.add_binding(self.entityWorkspace)
         self.workspaceSelection = self.workspaceLifetime.own(
             WorkspaceSelectionController(
                 WorkspaceSelectionViews.for_window(self),
