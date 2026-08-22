@@ -94,6 +94,7 @@ class PluginUiController:
         self.pageTypes = PageTypeService(
             contributions.registry,
             option_store=self.option_store,
+            scope_grants=contributions,
             media_types=self.mediaTypes,
             report_error=views.show_status,
             source_provider=self._page_source,

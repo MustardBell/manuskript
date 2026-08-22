@@ -3,6 +3,8 @@ from PyQt5.QtWidgets import QCheckBox, QMessageBox, QWidget
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
 from manuskript.plugins import (
+    ContributionKind,
+    ContributionScope,
     ExtensionDescriptor,
     OptionField,
     PageExportDocument,
@@ -11,6 +13,7 @@ from manuskript.plugins import (
     PresentationModeContribution,
 )
 from manuskript.plugins.registry import PluginRegistry
+from manuskript.services.plugin_preferences import InMemoryPluginPreferences
 from manuskript.services.plugin_options import InMemoryPluginOptionStore
 from manuskript.media_types import BBCODE, HTML, MARKDOWN
 from manuskript.ui.editors.markdownPresentation import (
@@ -30,7 +33,8 @@ class Renderer:
         return PageExportDocument(model, target_format)
 
 
-def make_service(activation_warning=None, source_provider=None):
+def make_service(
+        activation_warning=None, source_provider=None, scope_grants=None):
     contribution = PageTypeContribution(
         ExtensionDescriptor("example.structured", "Structured document"),
         "Structured page",
@@ -70,6 +74,7 @@ def make_service(activation_warning=None, source_provider=None):
             registry,
             InMemoryPluginOptionStore(),
             source_provider=source_provider,
+            scope_grants=scope_grants,
         ),
         contribution,
     )
@@ -177,6 +182,57 @@ def test_active_page_type_selects_core_and_owned_catalogue_modes():
     assert service.export_document(item, BBCODE) == (
         PageExportDocument("STRUCTURED:ordinary source", BBCODE)
     )
+
+
+def test_reader_grant_adds_an_external_mode_before_reading_everywhere():
+    preferences = InMemoryPluginPreferences()
+    service, contribution = make_service(scope_grants=preferences)
+    registrar = service.registry.registrar("example.graph")
+    registrar.register_presentation_mode(PresentationModeContribution(
+        ExtensionDescriptor("example.graph.mode", "Story graph"),
+        view_factory=QWidget,
+        scope=ContributionScope.ALL,
+    ))
+    service.registry.install("example.graph", registrar.contributions)
+    item = outlineItem(title="Structured", _type="md")
+    service.set_enabled(item, contribution, True)
+    state = service.create_state(item)
+    changes = []
+    state.changed.connect(lambda: changes.append(True))
+
+    assert "example.graph.mode" not in {
+        definition.id for definition in state.presentation_modes()
+    }
+
+    preferences.set_scope_grant(
+        "example.graph",
+        ContributionKind.PRESENTATION_MODE,
+        "example.graph.mode",
+        ContributionScope.ALL,
+        True,
+    )
+    service.refresh()
+
+    assert tuple(
+        definition.key for definition in state.presentation_modes()
+    ) == (
+        MarkdownPresentationMode.SOURCE,
+        "example.structured-editor",
+        "example.graph.mode",
+        MarkdownPresentationMode.READING,
+    )
+    assert tuple(
+        definition.key
+        for definition in service.presentation_modes_for(None)
+    ) == (
+        MarkdownPresentationMode.SOURCE,
+        MarkdownPresentationMode.FORMATTED_SOURCE,
+        MarkdownPresentationMode.LIVE_PREVIEW,
+        MarkdownPresentationMode.CLEAN_EDITING,
+        "example.graph.mode",
+        MarkdownPresentationMode.READING,
+    )
+    assert changes == [True]
 
 
 def test_page_renderer_uses_fallback_until_an_exact_route_is_selected():

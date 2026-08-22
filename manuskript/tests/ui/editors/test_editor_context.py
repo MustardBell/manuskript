@@ -6,10 +6,16 @@ class _declining:
     def enter(self, request):
         return None
 
-from PyQt5.QtWidgets import qApp
+from PyQt5.QtWidgets import qApp, QWidget
 
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
+from manuskript.plugins import (
+    ContributionKind,
+    ContributionScope,
+    ExtensionDescriptor,
+    PresentationModeContribution,
+)
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
 )
@@ -349,6 +355,71 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
         is MarkdownPresentationMode.FORMATTED_SOURCE
     )
     window.mainEditor.closeAllTabs()
+
+
+def test_scope_grant_rebuilds_an_open_leaf_and_revocation_is_safe(
+        MWEmptyProject):
+    window = MWEmptyProject
+    plugin_id = "example.graph"
+    mode_id = "example.graph.mode"
+    item = outlineItem(title="Chapter")
+    window.projectRuntime.models.outline.appendItem(item)
+    window.mainEditor.setCurrentModelIndex(
+        window.projectRuntime.models.outline.indexFromItem(item),
+        newTab=True,
+    )
+    editor = window.mainEditor.currentEditor()
+    registrar = window.pluginRuntime.registry.registrar(plugin_id)
+    registrar.register_presentation_mode(PresentationModeContribution(
+        ExtensionDescriptor(mode_id, "Story graph"),
+        view_factory=QWidget,
+        scope=ContributionScope.ALL,
+    ))
+    window.pluginRuntime.registry.install(
+        plugin_id, registrar.contributions
+    )
+    try:
+        window.pluginContributions.announce()
+        assert mode_id not in window.markdownMenu.actions
+
+        window.pluginContributions.set_scope_grant(
+            plugin_id,
+            ContributionKind.PRESENTATION_MODE,
+            mode_id,
+            ContributionScope.ALL,
+            True,
+        )
+
+        assert mode_id in window.markdownMenu.actions
+        assert [
+            window.mainEditor.cmbMarkdownMode.itemText(index)
+            for index in range(window.mainEditor.cmbMarkdownMode.count())
+        ][-2:] == ["Story graph", "Reading"]
+
+        window.markdownMenu.actions[mode_id].trigger()
+        contributed = editor.markdownEditorHost.contributedView(mode_id)
+
+        assert isinstance(contributed, QWidget)
+        assert editor.markdownPresentation.mode == mode_id
+
+        window.pluginContributions.set_scope_grant(
+            plugin_id,
+            ContributionKind.PRESENTATION_MODE,
+            mode_id,
+            ContributionScope.ALL,
+            False,
+        )
+
+        assert mode_id not in window.markdownMenu.actions
+        assert (
+            editor.markdownPresentation.mode
+            is MarkdownPresentationMode.FORMATTED_SOURCE
+        )
+        assert editor.markdownEditorHost.contributedView(mode_id) is None
+    finally:
+        window.pluginRuntime.registry.remove_plugin(plugin_id)
+        window.pluginContributions.announce()
+        window.mainEditor.closeAllTabs()
 
 
 def test_markdown_mode_is_independent_between_split_leaves(

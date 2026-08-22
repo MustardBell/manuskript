@@ -131,3 +131,68 @@ def test_manager_makes_tentative_format_compatibility_visible(tmp_path):
     assert "Project formats: 0–1; later formats tentative" in (
         dialog.metadataLabel.text()
     )
+
+
+def test_manager_inspects_declarations_and_controls_requested_reach(
+        tmp_path, monkeypatch):
+    create_plugin(
+        tmp_path,
+        source=(
+            "from manuskript.plugins import (\n"
+            "    ContributionScope, ExtensionDescriptor,\n"
+            "    PresentationModeContribution,\n"
+            ")\n"
+            "def register(api):\n"
+            "    api.register_presentation_mode(\n"
+            "        PresentationModeContribution(\n"
+            "            descriptor=ExtensionDescriptor(\n"
+            "                id='example.graph', name='Story graph'),\n"
+            "            view_factory=object,\n"
+            "            scope=ContributionScope.ALL,\n"
+            "        )\n"
+            "    )\n"
+        ),
+    )
+    preferences = InMemoryPluginPreferences()
+    runtime = PluginRuntime([tmp_path], preferences)
+    service = contributions(runtime)
+    dialog = PluginManagerDialog(service)
+    monkeypatch.setattr(
+        dialog,
+        "_confirm_enable",
+        lambda _plugin_id: True,
+    )
+
+    assert dialog.declarationsTree.isHidden()
+
+    dialog.enable_selected()
+
+    item = dialog.declarationsTree.topLevelItem(0)
+    assert not dialog.declarationsTree.isHidden()
+    assert dialog.declarationsTree.accessibleName() == (
+        "Declared plugin contributions and their reach"
+    )
+    assert [item.text(column) for column in range(4)] == [
+        "Presentation Mode", "Story graph", "All pages", "Own pages",
+    ]
+    assert item.checkState(3) == Qt.Unchecked
+
+    item.setCheckState(3, Qt.Checked)
+
+    assert service.scope_granted(
+        "example.plugin",
+        "presentation_mode",
+        "example.graph",
+        "all",
+    )
+    assert item.text(3) == "All pages"
+
+    item.setCheckState(3, Qt.Unchecked)
+
+    assert not service.scope_granted(
+        "example.plugin",
+        "presentation_mode",
+        "example.graph",
+        "all",
+    )
+    assert item.text(3) == "Own pages"

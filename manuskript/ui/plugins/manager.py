@@ -18,7 +18,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from manuskript.plugins.registry import ContributionKind
+from manuskript.plugins.contracts import (
+    ContributionKind,
+    ContributionScope,
+)
 from manuskript.plugins.runtime import PluginStatus
 
 
@@ -30,6 +33,8 @@ class PluginManagerDialog(QDialog):
     plugin being enabled -- not only whichever window this dialog was
     opened from.
     """
+
+    _SCOPE_GRANT_ROLE = Qt.UserRole + 1
 
     def __init__(
             self, contributions, parent=None, option_store=None,
@@ -125,6 +130,32 @@ class PluginManagerDialog(QDialog):
             Qt.TextSelectableByMouse
         )
         details_layout.addWidget(self.errorLabel)
+        self.declarationsGroup = QGroupBox(
+            self.tr("Declared contributions"),
+            self.detailsWidget,
+        )
+        declarations_layout = QVBoxLayout(self.declarationsGroup)
+        self.declarationsHelp = QLabel(self.declarationsGroup)
+        self.declarationsHelp.setWordWrap(True)
+        declarations_layout.addWidget(self.declarationsHelp)
+        self.declarationsTree = QTreeWidget(self.declarationsGroup)
+        self.declarationsTree.setHeaderLabels([
+            self.tr("Kind"),
+            self.tr("Contribution"),
+            self.tr("Requested reach"),
+            self.tr("Effective reach"),
+        ])
+        self.declarationsTree.setRootIsDecorated(False)
+        self.declarationsTree.setAlternatingRowColors(True)
+        self.declarationsTree.setAccessibleName(
+            self.tr("Declared plugin contributions and their reach")
+        )
+        self.declarationsTree.setAccessibleDescription(self.tr(
+            "Inspect what the selected plugin contributes and grant or "
+            "revoke optional reach beyond content it owns."
+        ))
+        declarations_layout.addWidget(self.declarationsTree)
+        details_layout.addWidget(self.declarationsGroup)
         self.pluginSpace = QWidget(self.detailsWidget)
         self.pluginSpaceLayout = QVBoxLayout(self.pluginSpace)
         self.pluginSpaceLayout.setContentsMargins(0, 0, 0, 0)
@@ -158,6 +189,9 @@ class PluginManagerDialog(QDialog):
 
         self.pluginList.currentItemChanged.connect(
             self._selection_changed
+        )
+        self.declarationsTree.itemChanged.connect(
+            self._declaration_item_changed
         )
         self.refreshButton.clicked.connect(self.refresh)
         self.enableButton.clicked.connect(self.enable_selected)
@@ -195,9 +229,10 @@ class PluginManagerDialog(QDialog):
             self.tr("Trust this plugin?"),
             self.tr(
                 "<p><b>Enable {name}?</b></p>"
-                "<p>Manuskript plugins are Python programs. An enabled "
-                "plugin runs with the same access to your files and "
-                "computer as Manuskript itself.</p>"
+                "<p>Manuskript plugins are programs. An enabled plugin "
+                "may load in the application or start an external process, "
+                "with the same access to your files and computer as "
+                "Manuskript itself.</p>"
                 "<p>Only enable plugins whose source and publisher you "
                 "trust.</p>"
                 "<p><code>{path}</code></p>"
@@ -269,6 +304,7 @@ class PluginManagerDialog(QDialog):
             self.descriptionLabel.clear()
             self.metadataLabel.clear()
             self.errorLabel.clear()
+            self._show_declarations(None)
             self._show_plugin_panel(None)
             self.enableButton.setEnabled(False)
             self.disableButton.setEnabled(False)
@@ -335,6 +371,7 @@ class PluginManagerDialog(QDialog):
         else:
             message = ""
         self.errorLabel.setText(message)
+        self._show_declarations(plugin_id)
         self._show_plugin_panel(plugin_id)
         self.enableButton.setEnabled(
             record.status is not PluginStatus.LOADED
@@ -342,6 +379,127 @@ class PluginManagerDialog(QDialog):
         self.disableButton.setEnabled(
             record.status is not PluginStatus.DISABLED
             or plugin_id in self.runtime.preferences.enabled_plugin_ids
+        )
+
+    def _show_declarations(self, plugin_id):
+        """Show core-validated declarations separately from plugin settings."""
+
+        tree = self.declarationsTree
+        blocked = tree.blockSignals(True)
+        try:
+            tree.clear()
+            records = (
+                self.runtime.registry.plugin_records(plugin_id)
+                if plugin_id is not None else ()
+            )
+            if not records:
+                self.declarationsHelp.setText(self.tr(
+                    "Enable this plugin to inspect its validated "
+                    "contributions."
+                ))
+                tree.setVisible(False)
+                self.declarationsGroup.setVisible(plugin_id is not None)
+                return
+
+            self.declarationsGroup.setVisible(True)
+            tree.setVisible(True)
+            self.declarationsHelp.setText(self.tr(
+                "A declaration may request broader reach, but it remains "
+                "limited to its own content until you allow that reach."
+            ))
+            for record in sorted(
+                records,
+                key=lambda value: (
+                    value.kind.value,
+                    value.contribution.descriptor.name.casefold(),
+                ),
+            ):
+                contribution = record.contribution
+                scope = getattr(contribution, "scope", None)
+                requested = self.tr("—")
+                effective = self.tr("—")
+                if scope is ContributionScope.OWN:
+                    requested = self.tr("Own pages")
+                    effective = self.tr("Own pages")
+                elif scope is ContributionScope.ALL:
+                    requested = self.tr("All pages")
+                    granted = self.contributions.scope_granted(
+                        record.plugin_id,
+                        record.kind,
+                        record.id,
+                        scope,
+                    )
+                    effective = (
+                        self.tr("All pages")
+                        if granted else self.tr("Own pages")
+                    )
+
+                item = QTreeWidgetItem([
+                    record.kind.value.replace("_", " ").title(),
+                    contribution.descriptor.name,
+                    requested,
+                    effective,
+                ])
+                item.setToolTip(1, contribution.descriptor.description)
+                if scope is ContributionScope.ALL:
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                    item.setCheckState(
+                        3, Qt.Checked if granted else Qt.Unchecked
+                    )
+                    item.setData(3, self._SCOPE_GRANT_ROLE, (
+                        record.plugin_id,
+                        record.kind.value,
+                        record.id,
+                        scope.value,
+                    ))
+                    item.setToolTip(3, self.tr(
+                        "Allow {} on documents not owned by this plugin."
+                    ).format(contribution.descriptor.name))
+                    item.setData(
+                        3,
+                        Qt.AccessibleTextRole,
+                        self.tr("{}; {}")
+                        .format(effective, item.toolTip(3)),
+                    )
+                tree.addTopLevelItem(item)
+            for column in range(tree.columnCount()):
+                tree.resizeColumnToContents(column)
+        finally:
+            tree.blockSignals(blocked)
+
+    def _declaration_item_changed(self, item, column):
+        if column != 3:
+            return
+        request = item.data(column, self._SCOPE_GRANT_ROLE)
+        if not request:
+            return
+        plugin_id, kind, contribution_id, scope = request
+        granted = item.checkState(column) == Qt.Checked
+        try:
+            self.contributions.set_scope_grant(
+                plugin_id, kind, contribution_id, scope, granted
+            )
+        except (TypeError, ValueError) as error:
+            blocked = self.declarationsTree.blockSignals(True)
+            try:
+                item.setCheckState(
+                    column, Qt.Unchecked if granted else Qt.Checked
+                )
+            finally:
+                self.declarationsTree.blockSignals(blocked)
+            self.errorLabel.setText(
+                "<b>{}</b><br>{}".format(
+                    self.tr("Scope change failed"),
+                    html.escape(str(error)),
+                )
+            )
+            return
+        effective = self.tr("All pages") if granted else self.tr("Own pages")
+        item.setText(column, effective)
+        item.setData(
+            column,
+            Qt.AccessibleTextRole,
+            self.tr("{}; {}").format(effective, item.toolTip(column)),
         )
 
     def _show_plugin_panel(self, plugin_id):

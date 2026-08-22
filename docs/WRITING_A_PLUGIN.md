@@ -33,6 +33,12 @@ Do not take over `live-preview` or another built-in mode. The complete widget
 bridge and ownership rules are in the presentation-mode section of
 [PLUGIN_API.md](PLUGIN_API.md#declaring-a-page-specific-editor).
 
+If that editor is useful on documents your plugin does not own, declare
+`scope=ContributionScope.ALL` on the presentation contribution. Manuskript
+still loads the plugin with own-page reach only. The reader must separately
+allow “all pages” in the declaration inspector, and can revoke it while
+documents are open.
+
 An in-process Python plugin never imports Manuskript internals. Everything it
 needs comes from `manuskript.plugins`, and there is a test in the repository
 that fails any plugin reaching past it. A process plugin imports no Manuskript

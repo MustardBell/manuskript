@@ -19,7 +19,10 @@ from manuskript.ui.editors.markdownPresentation import (
     contributed_presentation_view,
     core_presentation_modes,
 )
-from manuskript.plugins.contracts import ContributionKind
+from manuskript.plugins.contracts import (
+    ContributionKind,
+    ContributionScope,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -58,7 +61,8 @@ class PageTypeService(QObject):
 
     def __init__(
             self, registry, option_store=None, report_error=None,
-            source_provider=None, media_types=None, parent=None):
+            source_provider=None, media_types=None, scope_grants=None,
+            parent=None):
         super().__init__(parent)
         self.registry = registry
         self.option_store = option_store
@@ -69,6 +73,7 @@ class PageTypeService(QObject):
             lambda _message, _duration=5000, _importance=2: None
         )
         self._source_provider = source_provider
+        self.scopeGrants = scope_grants
 
     @property
     def contributions(self):
@@ -94,22 +99,26 @@ class PageTypeService(QObject):
 
         core = {definition.id: definition
                 for definition in core_presentation_modes()}
+        catalogue = dict(core)
         if contribution is None:
-            selected = (
-                tuple(mode.value for mode in MarkdownPresentationMode)
+            owner = "core"
+            selected = list(
+                (mode.value for mode in MarkdownPresentationMode)
                 if markup_base_id == "markdown"
-                else (
+                else [
                     MarkdownPresentationMode.SOURCE.value,
                     MarkdownPresentationMode.FORMATTED_SOURCE.value,
-                )
+                ]
             )
-            return tuple(core[mode_id] for mode_id in selected)
-
-        owner = self.registry.owner_of(
-            ContributionKind.PAGE_TYPE,
-            contribution.descriptor.id,
-        )
-        catalogue = dict(core)
+        else:
+            owner = self.registry.owner_of(
+                ContributionKind.PAGE_TYPE,
+                contribution.descriptor.id,
+            )
+            selected = list(
+                contribution.presentation_modes
+                or (MarkdownPresentationMode.SOURCE.value,)
+            )
         for record in self.registry.records(
             ContributionKind.PRESENTATION_MODE
         ):
@@ -127,24 +136,67 @@ class PageTypeService(QObject):
                     self.report_error(contribution, error)
                 ),
             )
-        selected = (
-            contribution.presentation_modes
-            or (MarkdownPresentationMode.SOURCE.value,)
-        )
         missing = tuple(
             mode_id for mode_id in selected if mode_id not in catalogue
         )
-        if missing:
+        if missing and contribution is not None:
             LOGGER.error(
                 "Page type %s selected unavailable presentation modes: %s",
                 contribution.descriptor.id,
                 ", ".join(missing),
             )
-        return tuple(
+        definitions = [
             catalogue[mode_id]
             for mode_id in selected
             if mode_id in catalogue
+        ]
+        definitions = self._include_granted_global_modes(
+            definitions, owner
         )
+        return tuple(definitions)
+
+    def _include_granted_global_modes(self, definitions, page_owner):
+        """Add reader-granted modes from outside the page owner's policy."""
+
+        existing = {definition.id for definition in definitions}
+        additions = []
+        for record in sorted(
+            self.registry.records(ContributionKind.PRESENTATION_MODE),
+            key=lambda value: (
+                value.contribution.descriptor.name.casefold(),
+                value.id,
+            ),
+        ):
+            mode = record.contribution
+            if (
+                record.plugin_id == page_owner
+                or record.id in existing
+                or mode.scope is not ContributionScope.ALL
+                or self.scopeGrants is None
+                or not self.scopeGrants.scope_granted(
+                    record.plugin_id,
+                    ContributionKind.PRESENTATION_MODE,
+                    record.id,
+                    ContributionScope.ALL,
+                )
+            ):
+                continue
+            additions.append(PresentationModeDefinition(
+                id=mode.descriptor.id,
+                label=mode.descriptor.name,
+                view_factory=contributed_presentation_view,
+                owner_id=record.plugin_id,
+                widget_factory=mode.view_factory,
+                error_handler=(
+                    lambda error, contribution=mode:
+                    self.report_error(contribution, error)
+                ),
+            ))
+        reading = next((
+            index for index, definition in enumerate(definitions)
+            if definition.key is MarkdownPresentationMode.READING
+        ), len(definitions))
+        return definitions[:reading] + additions + definitions[reading:]
 
     def is_applicable(self, item, contribution):
         return (
@@ -427,7 +479,7 @@ class PageTypeState(QObject):
         self.service = service
         self._item = item
         self._contribution = service.active_for(item)
-        service.contributionsChanged.connect(self.refresh)
+        service.contributionsChanged.connect(self._service_changed)
 
     @property
     def item(self):
@@ -460,3 +512,8 @@ class PageTypeState(QObject):
             return
         self._contribution = contribution
         self.changed.emit()
+
+    def _service_changed(self):
+        # The active page type may be unchanged while the reader grants or
+        # revokes a catalogue entry. Leaf owners still have to recompute.
+        self.refresh(force=True)

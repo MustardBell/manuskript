@@ -18,6 +18,10 @@ is not a separate step it could omit.
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from manuskript.media_types import core_registry
+from manuskript.plugins.contracts import (
+    ContributionKind,
+    ContributionScope,
+)
 
 
 class PluginContributionService(QObject):
@@ -54,6 +58,13 @@ class PluginContributionService(QObject):
     def plugin_records(self, plugin_id, kind):
         return self.registry.plugin_records(plugin_id, kind)
 
+    def scope_granted(
+            self, plugin_id, kind, contribution_id,
+            scope=ContributionScope.ALL):
+        return self.runtime.preferences.scope_granted(
+            plugin_id, kind, contribution_id, scope
+        )
+
     # -------------------------------------------------- changing the set
 
     def enable(self, plugin_id):
@@ -78,6 +89,39 @@ class PluginContributionService(QObject):
         records = self.runtime.set_project_format(version)
         self.announce()
         return records
+
+    def set_scope_grant(
+            self, plugin_id, kind, contribution_id, scope, granted):
+        """Set reader authority only for a declaration that requests it."""
+
+        kind = ContributionKind(kind)
+        scope = ContributionScope(scope)
+        matching = tuple(
+            record
+            for record in self.registry.plugin_records(plugin_id, kind)
+            if record.id == contribution_id
+        )
+        if not matching:
+            raise ValueError(
+                "Plugin {} has no {} contribution {!r}.".format(
+                    plugin_id, kind.value, contribution_id,
+                )
+            )
+        requested = getattr(
+            matching[0].contribution,
+            "scope",
+            ContributionScope.OWN,
+        )
+        if scope is not ContributionScope.ALL or requested is not scope:
+            raise ValueError(
+                "Contribution {!r} did not request {} reach.".format(
+                    contribution_id, scope.value,
+                )
+            )
+        self.runtime.preferences.set_scope_grant(
+            plugin_id, kind, contribution_id, scope, bool(granted)
+        )
+        self.announce()
 
     def announce(self):
         """Say the set changed.

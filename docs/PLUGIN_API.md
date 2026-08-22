@@ -531,9 +531,13 @@ def register(api):
 ```
 
 The page type may select core modes and modes registered by the same plugin.
-It cannot name another plugin's private mode. `scope="all"` records a request
-for broader, reader-controlled reach; it is not permission by itself, and the
-current host does not grant that request.
+It cannot name another plugin's private mode. A presentation contribution may
+declare `scope="all"` to request broader reach, but that request is not
+permission by itself. The reader sees the request under **Manage Plugins →
+Declared contributions** and may allow or revoke it there. When allowed, the
+mode appears on pages outside its plugin immediately, immediately before
+Reading; revocation removes it from open editors and returns an active leaf to
+a safe core mode.
 
 The widget is a sibling of the canonical source editor. It may implement
 `load_source(text)` to receive source snapshots and expose an
