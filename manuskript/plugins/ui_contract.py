@@ -176,4 +176,3 @@ class UiResponse:
     def __post_init__(self):
         if not isinstance(self.document, UiDocument):
             raise TypeError("UI responses require a UI document.")
-

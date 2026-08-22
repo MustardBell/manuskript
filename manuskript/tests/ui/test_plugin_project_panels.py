@@ -418,4 +418,3 @@ def test_a_project_panel_cannot_ask_for_a_navigator_row():
             default_file="notes.json",
             navigator=object(),
         )
-
