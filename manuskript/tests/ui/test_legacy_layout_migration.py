@@ -222,3 +222,37 @@ def test_letting_the_temporary_docks_go_does_not_scrub_the_names():
     for release in (plain, redocked, hidden, reparented):
         scrubbed, _floating = cleaned(blob, release)
         assert names_known_to(scrubbed) == LEGACY_SURFACE_DOCKS, release
+
+
+# ------------------------------------------- what the window does with it
+
+
+def test_the_detector_the_window_uses_answers_the_same_way():
+    """The production one, against the same layouts.
+
+    Written separately above to establish what Qt does; this is the
+    function the state controller actually asks, so the two must not
+    drift apart.
+    """
+
+    from manuskript.ui.legacy_layouts import legacy_docks_in
+
+    upstream, _docks = a_window(UPSTREAM_DOCKS)
+    current, _docks = a_window(TOOL_DOCKS)
+
+    assert legacy_docks_in(a_dock_era_layout()) == LEGACY_SURFACE_DOCKS
+    assert legacy_docks_in(bytes(upstream.saveState())) == ()
+    assert legacy_docks_in(bytes(current.saveState())) == ()
+
+
+def test_a_payload_that_will_not_restore_is_not_guessed_at():
+    """Whatever is wrong with it is about to be wrong for the real
+    window, which reports it by failing to restore rather than by having
+    this decide what it might have been.
+    """
+
+    from manuskript.ui.legacy_layouts import legacy_docks_in
+
+    assert legacy_docks_in(b"not a layout at all") == ()
+    assert legacy_docks_in(None) == ()
+    assert legacy_docks_in(b"") == ()

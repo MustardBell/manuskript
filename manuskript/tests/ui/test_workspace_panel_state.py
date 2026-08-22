@@ -8,6 +8,7 @@ it -- the panel could not answer for itself.
 """
 
 import inspect
+from dataclasses import replace
 
 from unittest.mock import MagicMock
 
@@ -26,7 +27,6 @@ from manuskript.panels.core import (
     core_panel_descriptors,
 )
 from manuskript.services.workspace_state import (
-    SURFACE_LAYOUT_VERSION,
     WORKSPACE_STATE_VERSION,
     WorkspaceWindowState,
 )
@@ -311,7 +311,8 @@ def test_workspace_state_controller_has_no_main_window_escape_hatch():
 # ------------------------------------------------- an older arrangement
 
 
-def a_saved_layout(version, window_state=b"arrangement"):
+def a_saved_layout(version=WORKSPACE_STATE_VERSION,
+                   window_state=b"arrangement"):
     """A store holding one window's layout, written by ``version``."""
 
     store = MagicMock()
@@ -323,17 +324,31 @@ def a_saved_layout(version, window_state=b"arrangement"):
     return store
 
 
-def test_an_arrangement_from_before_the_surfaces_moved_is_not_applied():
-    """It names seven docks this build never makes.
+def state_controller_reading(window, store, legacy=()):
+    """A controller whose layout says it knows ``legacy`` dead docks."""
+
+    views = WorkspaceStateViews.for_window(window)
+    controller = WorkspaceStateController(
+        replace(views, legacy_docks_in=lambda blob: tuple(legacy)),
+        store=store,
+    )
+    return controller
+
+
+def test_an_arrangement_that_names_docks_we_no_longer_make_is_refused():
+    """It cannot be cleaned, so it cannot be taken.
 
     Qt keeps the entry for a dock it restored but never found, and hands
     it back on every later save -- deliberately, so a panel whose plugin
-    is temporarily away keeps its place. Applied once here, those seven
-    dead names would ride along for the life of the profile.
+    is temporarily away keeps its place. Applied once, those dead names
+    would ride along for the life of the profile, and removing them
+    afterwards does not work.
     """
 
     window = a_window()
-    controller = state_controller(window, a_saved_layout(3))
+    controller = state_controller_reading(
+        window, a_saved_layout(), legacy=("panel.core.editor",),
+    )
 
     controller.restore()
 
@@ -344,41 +359,38 @@ def test_an_arrangement_from_before_the_surfaces_moved_is_not_applied():
     window.restoreGeometry.assert_called_once_with(b"where the window was")
 
 
-def test_an_arrangement_written_since_is_applied():
-    window = a_window()
-    controller = state_controller(
-        window, a_saved_layout(SURFACE_LAYOUT_VERSION),
-    )
+def test_an_arrangement_naming_only_docks_we_make_is_applied():
+    """Whoever wrote it, and whatever version stamped it.
 
-    controller.restore()
+    Including version 1, which is what an installation upgrading from
+    upstream arrives as. Refusing by version threw exactly those away,
+    and they are the arrangements somebody actually made.
+    """
 
-    window.restoreState.assert_called_once_with(b"arrangement")
-    assert controller.restoredLayout
+    for version in (1, 3, WORKSPACE_STATE_VERSION):
+        window = a_window()
+        controller = state_controller_reading(
+            window, a_saved_layout(version), legacy=(),
+        )
+
+        controller.restore()
+
+        window.restoreState.assert_called_once_with(b"arrangement")
+        assert controller.restoredLayout, version
 
 
 def test_a_window_with_nothing_saved_places_its_own():
     """First launch, or a window id that has never been written."""
 
     window = a_window()
-    controller = state_controller(
-        window, a_saved_layout(WORKSPACE_STATE_VERSION, window_state=None),
+    controller = state_controller_reading(
+        window, a_saved_layout(window_state=None),
     )
 
     controller.restore()
 
     assert not window.restoreState.called
     assert not controller.restoredLayout
-
-
-def test_this_build_writes_a_layout_it_would_read_back():
-    """The two constants have to agree, or every launch relays out.
-
-    Saving version N while refusing anything below N+1 would make each
-    window discard the arrangement the last one saved -- and nothing
-    would fail, it would just never remember.
-    """
-
-    assert WORKSPACE_STATE_VERSION >= SURFACE_LAYOUT_VERSION
 
 
 def test_a_surface_that_remembers_something_is_asked_too():

@@ -19,10 +19,10 @@ from manuskript.panels import (
 )
 from manuskript.services.workspace_state import (
     PRIMARY,
-    SURFACE_LAYOUT_VERSION,
     WorkspaceStateStore,
     WorkspaceWindowState,
 )
+from manuskript.ui.legacy_layouts import legacy_docks_in
 from manuskript.ui.editors.document_area_layout import (
     describe_area,
     restore_area,
@@ -35,6 +35,11 @@ class WorkspaceStateViews:
 
     restore_geometry: Callable[[Any], bool]
     restore_window_state: Callable[[Any], bool]
+    #: Which docks this build no longer makes a saved layout still knows
+    #: about. Given rather than called directly, because deciding whether
+    #: an old arrangement may be applied is this controller's business
+    #: while asking Qt about a payload is not.
+    legacy_docks_in: Callable[[Any], Tuple[str, ...]]
     save_geometry: Callable[[], Any]
     save_window_state: Callable[[], Any]
     project_active: Callable[[], bool]
@@ -67,6 +72,7 @@ class WorkspaceStateViews:
         return cls(
             restore_geometry=window.restoreGeometry,
             restore_window_state=window.restoreState,
+            legacy_docks_in=legacy_docks_in,
             save_geometry=window.saveGeometry,
             save_window_state=window.saveState,
             project_active=lambda: window._projectSurfaceActive,
@@ -103,11 +109,16 @@ class WorkspaceStateController:
         #: an earlier version left behind.
         self.storedVersion = 0
         #: Whether a saved dock arrangement was applied to this window.
-        #: False means there was none to apply or it described docks this
+        #: False means there was none to apply or it named docks this
         #: build no longer makes, and the window has to place its own --
-        #: asked here rather than by comparing version numbers at the call
-        #: site, so one place decides what an old layout is worth.
+        #: asked here rather than at the call site, so one place decides
+        #: what an old layout is worth.
         self.restoredLayout = False
+        #: Which docks that layout still knew about, when it was refused.
+        #: Kept because it says why, and because a surface a reader had
+        #: torn out is a fact worth having when detaching into a real
+        #: window lands.
+        self._legacyDocks = ()
         #: What each project-scoped panel was showing before the welcome
         #: screen put it away, by panel id. Panels are hidden through the
         #: host rather than the widget, so their toggles keep agreeing
@@ -136,15 +147,25 @@ class WorkspaceStateController:
         state = self.store.load(self.windowId)
         if state.geometry is not None:
             self.views.restore_geometry(state.geometry)
-        # Geometry is this window's size and place and is still true. The
-        # arrangement of docks inside it is not, once it was written by a
-        # version that docked the work surfaces: it names seven docks this
-        # build never makes, and Qt keeps entries for docks it restored but
-        # never found, handing them back on every later save. So an older
-        # arrangement is refused whole and the window places its defaults.
+        # Geometry is this window's size and place, and is still true
+        # whoever wrote it. The arrangement of docks inside it is a
+        # different matter: one written while the work surfaces were docks
+        # names seven this build never makes, and Qt keeps the entry for a
+        # dock it restored but never found -- handing it back on every
+        # later save, for the life of the profile.
+        #
+        # So the layout is asked what it contains rather than what version
+        # stamped it. A version number gets the one group of readers who
+        # have layouts worth keeping exactly wrong: an installation coming
+        # from upstream is stamped version one and names no surface docks
+        # at all, because upstream's surfaces were pages.
+        #
+        # Refused whole when it does name them, since they cannot be taken
+        # out -- measured, four ways, on Qt 5.15.3.
+        self._legacyDocks = self.views.legacy_docks_in(state.window_state)
         self.restoredLayout = bool(
             state.window_state is not None
-            and self.storedVersion >= SURFACE_LAYOUT_VERSION
+            and not self._legacyDocks
             and self.views.restore_window_state(state.window_state)
         )
 
