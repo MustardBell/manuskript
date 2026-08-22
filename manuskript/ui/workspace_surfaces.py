@@ -199,6 +199,28 @@ class WorkspaceSurfaceHost:
         self._current = surface_id
         return instance
 
+    def deactivate(self):
+        """Say that no surface is what the reader is looking at.
+
+        Something else has the view: the window's central container also
+        holds the opt-in developer page, which is instrumentation rather
+        than a place the writer goes and so is not a surface.
+
+        Without this, ``current`` had to answer with whichever surface was
+        showing last, which makes it untrustworthy to every caller and not
+        only to the route that took the view. The rule it restores:
+
+            if ``current()`` names a surface, that surface is what the
+            presentation is showing; if something else owns the view,
+            ``current()`` is None.
+
+        Nothing is told to hide. A surface that is not current is simply
+        not the one on screen, which is as true of all of them as it is
+        of the rest.
+        """
+
+        self._current = None
+
     def _settle_current(self, surface_id):
         """Make this one current if nothing is, showing it as well.
 

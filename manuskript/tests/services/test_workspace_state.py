@@ -32,7 +32,7 @@ def test_a_layout_round_trips(tmp_path):
         panels={"core.metadata": True, "core.storyline": False},
         panel_state={"core.metadata": [True, False]},
         docks={"dckSearch": True},
-        active_panel="core.editor",
+        active_surface="core.editor",
     )
 
     subject.save(state, PRIMARY)
@@ -45,19 +45,30 @@ def test_a_layout_round_trips(tmp_path):
         "core.metadata": True, "core.storyline": False,
     }
     assert loaded.docks == {"dckSearch": True}
-    assert loaded.active_panel == "core.editor"
+    assert loaded.active_surface == "core.editor"
 
 
-def test_saving_panel_identity_removes_obsolete_tab_key(tmp_path):
+def test_saving_surface_identity_removes_the_keys_it_replaced(tmp_path):
+    """Two keys stop being written, for the same reason.
+
+    The tab number was a position; the active panel was two facts under
+    one name, and could say "project tree" -- a tool panel no navigator
+    row stands for. Both remain readable as migration inputs, which is
+    why they have to be cleared rather than merely ignored: left behind,
+    the next load would keep preferring them.
+    """
+
     subject, settings = store(tmp_path)
     settings.setValue("workspace/windows/main/mainTab", 6)
+    settings.setValue("workspace/windows/main/activePanel", "core.metadata")
 
     subject.save(
-        WorkspaceWindowState(active_panel="core.editor"), PRIMARY,
+        WorkspaceWindowState(active_surface="core.editor"), PRIMARY,
     )
 
     assert not settings.contains("workspace/windows/main/mainTab")
-    assert subject.load(PRIMARY).active_panel == "core.editor"
+    assert not settings.contains("workspace/windows/main/activePanel")
+    assert subject.load(PRIMARY).active_surface == "core.editor"
 
 
 def test_two_windows_do_not_overwrite_each_other(tmp_path):

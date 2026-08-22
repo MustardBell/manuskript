@@ -289,3 +289,40 @@ def test_the_first_surface_is_shown_as_well_as_recorded():
 
     assert host.current() == "core.editor"
     assert host.presentation.activated == ["core.editor"]
+
+
+def test_a_workspace_may_be_showing_no_surface_at_all():
+    """Something else has the view, and the host says so.
+
+    Answering with whichever surface was showing last makes `current()`
+    untrustworthy to every caller, not only to the route that took the
+    view -- and the window's central container holds one thing that is
+    not a surface: the opt-in developer page.
+    """
+
+    host = a_host(surface("core.editor"), surface("core.outline"))
+    host.open("core.editor")
+
+    host.deactivate()
+
+    assert host.current() is None
+    # Nothing was put away. The surfaces are still this workspace's, and
+    # going back to one is an activate rather than an open.
+    assert host.contains("core.editor")
+    assert host.presentation.unmounted == []
+
+    host.activate("core.editor")
+
+    assert host.current() == "core.editor"
+
+
+def test_the_next_surface_opened_becomes_current_again():
+    """Deactivating is not a mode the workspace gets stuck in."""
+
+    host = a_host(surface("core.editor"), surface("core.outline"))
+    host.open("core.editor")
+    host.deactivate()
+
+    host.open("core.outline")
+
+    assert host.current() == "core.outline"

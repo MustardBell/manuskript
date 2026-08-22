@@ -12,6 +12,7 @@ import inspect
 from unittest.mock import MagicMock
 
 from manuskript.panels import (
+    PanelRegistryError,
     DOCK,
     PROJECT,
     SPLITTER_SLOT,
@@ -96,10 +97,16 @@ class Host:
 
 
 class Registry:
-    """Enough of a panel registry to say where panels sit."""
+    """Enough of a panel registry to say where panels sit, and what."""
 
     def __init__(self, descriptors):
         self._descriptors = tuple(descriptors)
+
+    def descriptor(self, panel_id):
+        for descriptor in self._descriptors:
+            if descriptor.id == panel_id:
+                return descriptor
+        raise PanelRegistryError("Unknown panel {!r}.".format(panel_id))
 
     def descriptors(self, placement=None):
         # Mirrors the real registry: filtering by placement is a tool
@@ -114,12 +121,26 @@ class Registry:
         )
 
 
+#: Enough of the real core list for the controller to ask what a saved
+#: id names. Taken from the panels themselves rather than restated, so a
+#: descriptor changing kind cannot leave these tests agreeing with a
+#: rule nobody follows any more.
+CORE_DESCRIPTORS = core_panel_descriptors()
+
+
 def a_window(instances=(), descriptors=(), surfaces=()):
     window = MagicMock()
-    # WorkspaceStateViews reads this as a boolean. An unconstrained
-    # MagicMock is truthy and makes save() recursively describe another
-    # unconstrained mock as though it were a live document area.
+    # WorkspaceStateViews reads this as a boolean, and a save with a
+    # project active describes the document area.
     window._projectSurfaceActive = False
+    # Which must not be an unconstrained mock. describe_area walks what
+    # the splitter describes, and a MagicMock answers every question with
+    # another MagicMock -- so the walk never ends and the allocation
+    # never stops. It took a laptop down. Answering None here is what a
+    # splitter with nothing open says, and it makes the project-active
+    # path safe for every test in this file rather than for the ones
+    # whose author remembered.
+    window.corePanels.editor.editor.tabSplitter.describe.return_value = None
     window._activePanelId = None
     window.panelHost = Host(dict(instances))
     # The other owner, spelled out for the same reason: an unconstrained
@@ -402,3 +423,94 @@ def test_a_surface_that_remembers_something_is_asked_too():
     controller.restore()
 
     assert outline.page == 9
+
+
+# ------------------------------------- which surface, and which is focus
+
+
+def a_surface_window(current="core.outline", descriptors=()):
+    """A window whose surface host answers, as the real one does."""
+
+    window = a_window(descriptors=descriptors)
+    window.surfaceHost.current = lambda: current
+    return window
+
+
+def test_what_is_saved_is_what_the_surface_host_is_showing():
+    """Not what last had focus.
+
+    The window's record of semantic focus may name a tool panel; the
+    surface host names the one thing this field is supposed to mean.
+    """
+
+    window = a_surface_window(descriptors=CORE_DESCRIPTORS)
+    window._projectSurfaceActive = True
+    window._activePanelId = "core.project-tree"
+    controller = state_controller(window, MagicMock())
+
+    controller.save()
+
+    assert saved_state(controller).active_surface == "core.outline"
+
+
+def test_a_layout_that_recorded_a_tool_panel_is_read_as_nothing():
+    """Version 3 filed focus under this name, so it can say "project tree".
+
+    Going there would mean nothing -- no navigator row stands for it --
+    and the alternative to refusing it is a launch that tries.
+    """
+
+    window = a_window(descriptors=CORE_DESCRIPTORS)
+    store = MagicMock()
+    store.load.return_value = WorkspaceWindowState(
+        active_panel="core.project-tree",
+    )
+    controller = state_controller(window, store)
+
+    controller.restore()
+
+    assert controller._activeSurface is None
+
+
+def test_a_layout_that_recorded_a_surface_under_the_old_name_is_kept():
+    """The migration this leaves room for: most of them did name one."""
+
+    window = a_window(descriptors=CORE_DESCRIPTORS)
+    store = MagicMock()
+    store.load.return_value = WorkspaceWindowState(
+        active_panel="core.editor",
+    )
+    controller = state_controller(window, store)
+
+    controller.restore()
+
+    assert controller._activeSurface == "core.editor"
+
+
+def test_the_new_field_wins_over_the_one_it_replaced():
+    window = a_window(descriptors=CORE_DESCRIPTORS)
+    store = MagicMock()
+    store.load.return_value = WorkspaceWindowState(
+        active_surface="core.outline",
+        active_panel="core.editor",
+    )
+    controller = state_controller(window, store)
+
+    controller.restore()
+
+    assert controller._activeSurface == "core.outline"
+
+
+def test_a_surface_this_build_has_never_heard_of_is_read_as_nothing():
+    """A plugin's surface, from a session where that plugin was there."""
+
+    window = a_window(descriptors=CORE_DESCRIPTORS)
+    store = MagicMock()
+    store.load.return_value = WorkspaceWindowState(
+        active_surface="plugin.gone.surface",
+    )
+    controller = state_controller(window, store)
+
+    controller.restore()
+
+    assert controller._activeSurface is None

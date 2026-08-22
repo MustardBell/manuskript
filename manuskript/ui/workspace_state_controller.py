@@ -12,7 +12,11 @@ from typing import Any, Callable, Mapping, Tuple
 
 from PyQt5.QtWidgets import QSplitter
 
-from manuskript.panels import SPLITTER_SLOT
+from manuskript.panels import (
+    SPLITTER_SLOT,
+    PanelRegistryError,
+    WorkspaceSurfaceDescriptor,
+)
 from manuskript.services.workspace_state import (
     PRIMARY,
     SURFACE_LAYOUT_VERSION,
@@ -37,8 +41,12 @@ class WorkspaceStateViews:
     project_docks: Tuple[Any, ...]
     default_dock_visibility: Mapping[str, bool]
     document_area: Any
-    active_panel: Callable[[], str]
-    select_panel: Callable[[str], bool]
+    #: The surface this window is showing, from the one owner that knows.
+    #: It used to be the window's record of whatever last had semantic
+    #: focus, which is a different fact and may name a tool panel -- so a
+    #: window could file "project tree" as the surface it was showing.
+    current_surface: Callable[[], str]
+    select_surface: Callable[[str], bool]
     legacy_panel_for_tab: Callable[[Any], str]
     find_splitter: Callable[[str], Any]
     panel_registry: Any
@@ -69,8 +77,8 @@ class WorkspaceStateViews:
                 project_docks[2].objectName(): False,
             }),
             document_area=window.corePanels.editor.editor.tabSplitter,
-            active_panel=lambda: window._activePanelId,
-            select_panel=window.activatePanel,
+            current_surface=lambda: window.surfaceHost.current() or "",
+            select_surface=window.goToSurface,
             legacy_panel_for_tab=window.panelIdForLegacyTab,
             find_splitter=lambda name: window.findChild(QSplitter, name),
             panel_registry=window.panelRegistry,
@@ -111,7 +119,7 @@ class WorkspaceStateController:
         #: applied when a project opens, since neither means anything
         #: until there is a project.
         self._documents = None
-        self._activePanel = None
+        self._activeSurface = None
         self._legacyMainTab = None
         #: Layout captured while a project was still open, for the parts
         #: of it that closing a project makes unknowable.
@@ -148,7 +156,11 @@ class WorkspaceStateController:
         self._dock_visibility_locked = True
 
         self._documents = state.documents
-        self._activePanel = state.active_panel
+        self._activeSurface = self._surface_id(
+            state.active_surface
+            if state.active_surface
+            else state.active_panel
+        )
         self._legacyMainTab = state.main_tab
         self._restore_panel_state(state)
         for name, value in (state.splitters or {}).items():
@@ -204,7 +216,7 @@ class WorkspaceStateController:
                 panel_state=self._panel_state(),
                 docks=dict(self._dock_visibility),
                 documents=self._open_documents(),
-                active_panel=self._current_active_panel(),
+                active_surface=self._current_surface(),
             ),
             self.windowId,
         )
@@ -220,11 +232,33 @@ class WorkspaceStateController:
             return self._documents
         return describe_area(self.views.document_area)
 
-    def _current_active_panel(self):
-        """Which independently movable surface this window last used."""
+    def _current_surface(self):
+        """Which work surface this window was showing."""
         if not self.views.project_active():
-            return self._activePanel
-        return self.views.active_panel()
+            return self._activeSurface
+        return self.views.current_surface()
+
+    def _surface_id(self, value):
+        """Whatever this names, if it names a surface this build has.
+
+        A layout written before the split filed semantic focus here, so
+        it can say "project tree" -- a tool panel, which no navigator row
+        stands for and which going to would mean nothing. It can also
+        name a surface a plugin used to contribute. Either way the answer
+        is that this window has nowhere recorded to return to.
+        """
+        surface_id = str(value or "")
+        if not surface_id:
+            return None
+        try:
+            descriptor = self.views.panel_registry.descriptor(surface_id)
+        except PanelRegistryError:
+            return None
+        return (
+            surface_id
+            if isinstance(descriptor, WorkspaceSurfaceDescriptor)
+            else None
+        )
 
     def capture_view_state(self):
         """Remember this window's view of the project while it has one.
@@ -237,7 +271,7 @@ class WorkspaceStateController:
         if not self.views.project_active():
             return
         self._documents = describe_area(self.views.document_area)
-        self._activePanel = self.views.active_panel()
+        self._activeSurface = self.views.current_surface()
 
     def capture_layout(self):
         """Remember the arrangement while every panel is still in it.
@@ -280,16 +314,16 @@ class WorkspaceStateController:
             self.views.document_area.restoreOpenIndexes(
                 documents
             )
-        panel_id = self._activePanel
-        if panel_id is None:
+        surface_id = self._activeSurface
+        if not surface_id:
             legacy_tab = (
                 self._legacyMainTab
                 if self._legacyMainTab is not None
                 else main_tab
             )
-            panel_id = self.views.legacy_panel_for_tab(legacy_tab)
-        if panel_id:
-            self.views.select_panel(panel_id)
+            surface_id = self.views.legacy_panel_for_tab(legacy_tab)
+        if surface_id:
+            self.views.select_surface(surface_id)
 
     def _splitter_state(self):
         state = {}

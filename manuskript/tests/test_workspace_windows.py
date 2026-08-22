@@ -1332,7 +1332,7 @@ def test_a_newly_contributed_panel_appears_in_both_windows(
         other.close()
 
 
-def test_each_window_keeps_its_own_active_panel(MWEmptyProject):
+def test_each_window_keeps_its_own_active_surface(MWEmptyProject):
     """Two windows keep independent semantic locations."""
     from manuskript.panels.core import EDITOR, GENERAL, OUTLINE
 
@@ -1345,8 +1345,8 @@ def test_each_window_keeps_its_own_active_panel(MWEmptyProject):
         window.windowState.capture_view_state()
         other.windowState.capture_view_state()
 
-        assert window.windowState._activePanel == GENERAL
-        assert other.windowState._activePanel == EDITOR
+        assert window.windowState._activeSurface == GENERAL
+        assert other.windowState._activeSurface == EDITOR
 
         # And each is applied to its own window, not to both.
         window.activatePanel(OUTLINE)
@@ -1354,10 +1354,30 @@ def test_each_window_keeps_its_own_active_panel(MWEmptyProject):
         window.windowState.restore_view_state()
         other.windowState.restore_view_state()
 
-        assert window._activePanelId == GENERAL
-        assert other._activePanelId == EDITOR
+        assert window.surfaceHost.current() == GENERAL
+        assert other.surfaceHost.current() == EDITOR
     finally:
         other.close()
+
+
+def test_focusing_a_tool_panel_is_not_where_this_window_was(MWEmptyProject):
+    """The two facts the old single field ran together.
+
+    Semantic focus may land in the project tree, which is a tool panel.
+    Filing that as the window's surface meant the next launch tried to go
+    somewhere the navigator does not list -- and it was written into
+    version 4 as though it were an answer.
+    """
+    from manuskript.panels.core import OUTLINE, PROJECT_TREE
+
+    window = MWEmptyProject
+    window.activatePanel(OUTLINE)
+
+    window.notePanelFocus(PROJECT_TREE)
+    window.windowState.capture_view_state()
+
+    assert window._activePanelId == PROJECT_TREE
+    assert window.windowState._activeSurface == OUTLINE
 
 
 def test_a_window_with_no_recorded_panel_migrates_the_projects_tab(
@@ -1366,17 +1386,17 @@ def test_a_window_with_no_recorded_panel_migrates_the_projects_tab(
 
     window = MWEmptyProject
     controller = window.windowState
-    previous_panel = controller._activePanel
+    previous_surface = controller._activeSurface
     previous_tab = controller._legacyMainTab
     try:
-        controller._activePanel = None
+        controller._activeSurface = None
         controller._legacyMainTab = None
 
         controller.restore_view_state(main_tab=5)
 
-        assert window._activePanelId == OUTLINE
+        assert window.surfaceHost.current() == OUTLINE
     finally:
-        controller._activePanel = previous_panel
+        controller._activeSurface = previous_surface
         controller._legacyMainTab = previous_tab
 
 

@@ -35,6 +35,9 @@ LOGGER = logging.getLogger(__name__)
 #: integer is still read once so existing workspaces reopen where they were.
 #: 4 -- the seven work surfaces stopped being docks. A layout written by 3
 #: names a dock for each of them, and this build creates none of those.
+#: It is also where "which panel was active" split in two: the surface a
+#: window was showing is filed under activeSurface, and the old key could
+#: name a tool panel that no navigator row stands for.
 WORKSPACE_STATE_VERSION = 4
 
 #: The first version whose saved arrangement describes only docks this
@@ -77,7 +80,12 @@ class WorkspaceWindowState:
     documents: object = None
     #: Legacy tab index, read only as a migration input for pre-v3 layouts.
     main_tab: object = None
-    #: Which independently movable surface this window last used.
+    #: Which work surface this window was showing, from the surface host.
+    active_surface: object = None
+    #: Whatever last held this window's semantic focus, which may be a
+    #: tool panel. Read only as a migration input: it was written as
+    #: though it were the active surface, so a layout from before the two
+    #: were told apart can say "project tree" here.
     active_panel: object = None
 
 
@@ -119,6 +127,7 @@ class WorkspaceStateStore:
             docks=self._flags(window_id, "docks"),
             documents=self._json(window_id, "documents"),
             main_tab=self._int(window_id, "mainTab"),
+            active_surface=self._string(window_id, "activeSurface"),
             active_panel=self._string(window_id, "activePanel"),
         )
 
@@ -150,7 +159,11 @@ class WorkspaceStateStore:
         # Stop writing the tab-era key. It remains readable above as a
         # migration input, including from project settings in old files.
         self._settings.remove(self._key(window_id, "mainTab"))
-        self._set_optional(window_id, "activePanel", state.active_panel)
+        # Likewise the key that meant two things at once. What is written
+        # now is the surface the window was showing; whatever last had
+        # focus is this session's business and nobody's next launch.
+        self._settings.remove(self._key(window_id, "activePanel"))
+        self._set_optional(window_id, "activeSurface", state.active_surface)
         self._settings.sync()
 
     def forget(self, window_id):

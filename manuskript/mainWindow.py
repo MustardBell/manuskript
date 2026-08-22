@@ -638,10 +638,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return self.activatePanel(target.panel_id)
         self._activePanelId = ""
         self._showCentralPages()
-        # The developer page is still addressed by number, from
-        # NAVIGATOR_PAGES. It is not a surface, so the surface host goes
-        # on naming the last one as current while this is up -- an
-        # opt-in page nobody but a developer ever sees.
+        # The developer page is instrumentation rather than a place the
+        # writer goes, so it is not a surface and is still addressed by
+        # number, from NAVIGATOR_PAGES. Saying so out loud is what keeps
+        # the host's answer worth anything: it would otherwise go on
+        # naming the last surface while a reader looks at this.
+        self.surfaceHost.deactivate()
         self.tabMain.setCurrentIndex(target.page)
         return False
 
@@ -652,7 +654,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.stack.show()
         self.stack.setCurrentIndex(1)
 
-    def _goToSurface(self, surface_id):
+    def goToSurface(self, surface_id):
         """Show a place the writer goes, building it if this one has none.
 
         A navigator row for a surface this workspace does not hold is a
@@ -680,7 +682,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Go to a surface, or reveal a tool panel, by stable identity."""
         if not panel_id:
             return False
-        if not self._goToSurface(panel_id) and not self.panelHost.reveal(
+        if not self.goToSurface(panel_id) and not self.panelHost.reveal(
             panel_id
         ):
             return False
@@ -696,7 +698,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return True
 
     def notePanelFocus(self, panel_id):
-        """Follow direct focus into a dock without showing it a second time."""
+        """Follow direct focus into a panel without showing it again.
+
+        This records where the reader is working, which may be a tool
+        panel. It is deliberately not what the window remembers as its
+        surface: focusing the project tree would otherwise be filed as
+        the workspace's current work surface, and the next launch would
+        try to go to a place the navigator does not list.
+        """
         self._activePanelId = str(panel_id or "")
         row = self.navigator.row_for_panel(self._activePanelId)
         if row is not None and self.lstTabs.currentRow() != row:

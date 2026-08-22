@@ -516,3 +516,29 @@ def test_a_workspace_with_nothing_saved_starts_on_general(MWEmptyProject):
     finally:
         other.close()
         WorkspaceStateStore().forget(fresh_id)
+
+
+def test_the_developer_page_leaves_no_surface_current(MWEmptyProject):
+    """What `current()` is worth depends on this.
+
+    The developer page shares the container with the surfaces but is not
+    one: it is instrumentation, not a place the writer goes. While it is
+    up, no surface is what the reader is looking at -- and the host has
+    to say so, or its answer means "whichever was showing last" to every
+    caller and not only to this route.
+    """
+
+    window = MWEmptyProject
+    debug_row = window.navigator.row_for_page(window.DebugPage)
+    assert debug_row is not None
+    assert window.activatePanel(EDITOR)
+
+    window.navigateTo(debug_row)
+
+    assert window.surfaceHost.current() is None
+    assert window.tabMain.currentWidget().objectName() == "lytTabDebug"
+
+    assert window.activatePanel(GENERAL)
+
+    assert window.surfaceHost.current() == GENERAL
+    assert window.tabMain.currentWidget() is window.corePanels.general
