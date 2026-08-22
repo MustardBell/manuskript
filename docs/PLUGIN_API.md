@@ -1,13 +1,13 @@
-# Manuskript Plugin API 1 (draft)
+# Manuskript Plugin API 1
 
-This document describes the API 1 contract being validated for its first
-stable release. The checked-in JSON documents under `plugin_api/schema/` are
-the authoritative portable value, manifest, and protocol definitions. Python
-dataclasses are one binding to those documents, not a second definition.
+This document describes the stable API 1 contract. The checked-in JSON
+documents under `plugin_api/schema/` are the authoritative portable value,
+manifest, and protocol definitions. Python dataclasses are one binding to
+those documents, not a second definition.
 
-The stable API 1 will be transport-neutral. In-process Python and external
-processes will implement the same semantics; a protocol version concerns wire
-framing and lifecycle and is not an API patch version.
+API 1 is transport-neutral. In-process Python and external processes implement
+the same semantics; a protocol version concerns wire framing and lifecycle and
+is not an API patch version.
 
 Core decides what it presents. A plugin declares what it wants to create and
 what it needs to work. Nothing else is available, and nothing else is

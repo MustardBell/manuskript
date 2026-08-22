@@ -1,12 +1,12 @@
-"""Language- and transport-neutral facts about the draft Plugin API.
+"""Language- and transport-neutral facts about Plugin API 1.
 
 This module contains no plugin implementation objects and must remain safe to
 load without Qt.  It is the small piece both an in-process driver and an RPC
 driver can use to negotiate what the host actually supports.
 
-API 1 is not stable yet.  The integer names the contract being designed; it
-does not promise compatibility with earlier development snapshots that also
-used the number 1.
+API 1 is the first stable contract.  Development snapshots that used the same
+integer before this stability declaration were design artifacts, not earlier
+releases of API 1 and therefore are not compatibility targets.
 """
 
 from dataclasses import dataclass
@@ -16,7 +16,7 @@ from manuskript.plugins.specification import protocol_document
 
 _PROTOCOL_SPECIFICATION = protocol_document()
 PLUGIN_API_VERSION = int(_PROTOCOL_SPECIFICATION["api_version"])
-PLUGIN_API_STABILITY = "draft"
+PLUGIN_API_STABILITY = "stable"
 PLUGIN_PROTOCOL_VERSION = int(_PROTOCOL_SPECIFICATION["protocol_version"])
 
 #: A grant a plugin was holding has ended: it was disabled or reloaded, the

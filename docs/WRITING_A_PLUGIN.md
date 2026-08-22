@@ -1,8 +1,8 @@
 # Writing a Manuskript Plugin API 1 plugin
 
-This guide describes the draft API 1. The language-neutral schemas
-and conformance runner live under `plugin_api/`; the Python surface is one
-binding to the same contract used by external processes.
+This guide describes the stable API 1. The language-neutral schemas and
+conformance runner live under `plugin_api/`; the Python surface is one binding
+to the same contract used by external processes.
 
 A guide for people writing their first one. It walks a working plugin from
 an empty directory to something you can enable and see, then points at the

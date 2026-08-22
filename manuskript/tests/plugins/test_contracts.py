@@ -1,4 +1,4 @@
-"""The draft boundary must stay explicit while API 1 is being designed."""
+"""The stable API 1 boundary must remain explicit and transport-neutral."""
 
 import ast
 from dataclasses import fields
@@ -22,7 +22,7 @@ from manuskript.plugins.registry import (
 def test_api_and_protocol_are_independent_integer_contracts():
     assert PLUGIN_API_VERSION == 1
     assert PLUGIN_PROTOCOL_VERSION == 1
-    assert PLUGIN_API_STABILITY == "draft"
+    assert PLUGIN_API_STABILITY == "stable"
 
 
 def test_every_registered_contribution_has_one_portability_decision():
@@ -80,10 +80,10 @@ def test_the_api_offers_no_way_to_ask_for_a_navigator_row():
     says the writer goes there, which is a workspace surface. Nothing can
     consume this any more.
 
-    API 1 is draft, so this is exactly when an orphan should go. Keeping an
-    unused wire record would make today's accidental shape -- a label, an
-    icon and an integer order -- into the shape a real surface contribution
-    has to live with, and plugin ordering may well want anchors or
+    The orphan was removed before the API 1 stability boundary. Keeping an
+    unused wire record would have made an accidental development shape -- a
+    label, an icon and an integer order -- into the shape a real surface
+    contribution had to live with, while plugin ordering may want anchors or
     categories rather than unconstrained integers.
     """
 
