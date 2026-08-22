@@ -29,6 +29,10 @@ class TestProjectManager(unittest.TestCase):
             settings_manager.reset_to_defaults()
         # The project's own things live on the runtime.
         self.window.projectRuntime.settingsManager = settings_manager
+        self.editor = (
+            self.window.surfaceHost.instance.return_value.widget.editor
+        )
+        self.editor.tabSplitter.openIndexes.return_value = []
         self.storage = MagicMock()
         self.status_reporter = MagicMock()
         self.autosave = MagicMock()
@@ -302,8 +306,6 @@ class TestProjectManager(unittest.TestCase):
 
     def test_revision_restore_replaces_models_through_project_owner(self):
         self.project_manager.session.open("project.msk")
-        self.window.tabMain.currentIndex.return_value = 0
-        self.window.corePanels.editor.editor.tabSplitter.openIndexes.return_value = []
         previous_models = MagicMock()
         replacement_models = MagicMock()
         self.project_manager.models = previous_models
@@ -351,8 +353,6 @@ class TestProjectManager(unittest.TestCase):
         self,
     ):
         self.project_manager.session.open("project.msk")
-        self.window.tabMain.currentIndex.return_value = 0
-        self.window.corePanels.editor.editor.tabSplitter.openIndexes.return_value = []
         previous_models = MagicMock()
         replacement_models = MagicMock()
         self.project_manager.models = previous_models
