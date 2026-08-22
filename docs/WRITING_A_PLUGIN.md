@@ -1,6 +1,6 @@
 # Writing a Manuskript Plugin API 1 plugin
 
-This guide describes the API 1 release candidate. The language-neutral schemas
+This guide describes the draft API 1. The language-neutral schemas
 and conformance runner live under `plugin_api/`; the Python surface is one
 binding to the same contract used by external processes.
 
@@ -25,6 +25,13 @@ RPC protocol 1.
 A plugin adds things Manuskript then owns the presentation of: an
 exporter, a panel, a page type, a markup dialect. You describe what you
 are contributing; core decides where it appears.
+
+An in-process plugin may also declare a native presentation mode: a separate
+editor widget selected only by page types that plugin owns. Give it its own
+dotted ID and list that ID in `PageTypeContribution.presentation_modes`.
+Do not take over `live-preview` or another built-in mode. The complete widget
+bridge and ownership rules are in the presentation-mode section of
+[PLUGIN_API.md](PLUGIN_API.md#declaring-a-page-specific-editor).
 
 An in-process Python plugin never imports Manuskript internals. Everything it
 needs comes from `manuskript.plugins`, and there is a test in the repository

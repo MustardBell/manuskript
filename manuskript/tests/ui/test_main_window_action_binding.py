@@ -7,9 +7,6 @@ from PyQt5.QtGui import QTextCursor
 from manuskript.commands import DocumentCommand, MarkupCommand
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
-from manuskript.ui.editors.markdownPresentation import (
-    MarkdownPresentationMode,
-)
 from manuskript.ui.main_window_action_binding import (
     MainWindowActionBinding,
     SurfaceActionBinding,
@@ -50,15 +47,6 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     window.actModeSimple.setActionGroup.assert_called_once_with(
         action_group
     )
-    window.actMarkdownLivePreview.setActionGroup.assert_called_once_with(
-        action_group
-    )
-    window.actMarkdownFormattedSource.setActionGroup.assert_called_once_with(
-        action_group
-    )
-    window.actMarkdownCleanEditing.setActionGroup.assert_called_once_with(
-        action_group
-    )
 
     copy_slot = window.actCopy.triggered.connect.call_args.args[0]
     copy_slot()
@@ -78,13 +66,6 @@ def test_main_window_action_binding_routes_lifecycle_and_commands():
     )
     simple_mode_slot()
     window.viewConfigurationController.set_simple.assert_called_once_with()
-    live_preview_slot = (
-        window.actMarkdownLivePreview.triggered.connect.call_args.args[0]
-    )
-    live_preview_slot()
-    window.markdownMenu.set_mode.assert_called_once_with(
-        MarkdownPresentationMode.LIVE_PREVIEW
-    )
     assert binding.bound
     assert not hasattr(binding, "window")
     assert binding._window is None

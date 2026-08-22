@@ -9,6 +9,8 @@ from manuskript.plugins.api import (
     MarkupContribution,
     MarkupMode,
     NativeMarkupContribution,
+    PageTypeContribution,
+    PresentationModeContribution,
 )
 from manuskript.plugins.contracts import ContributionKind
 from manuskript.plugins.errors import PluginRegistrationError
@@ -213,6 +215,37 @@ def test_registry_exposes_editor_workspaces_by_capability():
     assert registry.records("editor_workspace")[0].plugin_id == (
         "example.comparison"
     )
+
+
+def test_a_page_type_can_select_only_core_or_its_own_presentation_modes():
+    registry = PluginRegistry()
+    registrar = registry.registrar("example.pages")
+    registrar.register_presentation_mode(PresentationModeContribution(
+        ExtensionDescriptor("example.pages.graph", "Graph"),
+        view_factory=lambda: object(),
+    ))
+    registrar.register_page_type(PageTypeContribution(
+        ExtensionDescriptor("example.pages.type", "Page"),
+        property_label="Page",
+        presentation_modes=("source", "example.pages.graph"),
+    ))
+
+    registry.install("example.pages", registrar.contributions)
+
+    assert len(registry.presentation_modes) == 1
+
+    foreign = registry.registrar("example.foreign")
+    foreign.register_page_type(PageTypeContribution(
+        ExtensionDescriptor("example.foreign.type", "Foreign page"),
+        property_label="Foreign page",
+        parser_factory=object,
+        presentation_modes=("source", "example.pages.graph"),
+    ))
+    with pytest.raises(
+        PluginRegistrationError,
+        match="does not own",
+    ):
+        registry.install("example.foreign", foreign.contributions)
 
 
 def test_editor_workspace_validates_selection_bounds():

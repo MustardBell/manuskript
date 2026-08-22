@@ -31,6 +31,7 @@ from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationDefaults,
     MarkdownPresentationMode,
     MarkdownPresentationState,
+    core_presentation_modes,
 )
 
 
@@ -312,17 +313,24 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         self._refreshPresentationModes()
 
     def _refreshPresentationModes(self):
-        page_modes = (
-            self.pageType.allowed_presentation_modes
-            if self.pageType is not None
-            else None
+        base_id = (
+            self.markupProfile.base_id
+            if self.markupProfile is not None else "markdown"
         )
         modes = (
-            page_modes
-            if page_modes is not None
-            else tuple(MarkdownPresentationMode)
-            if self.markupProfile is None
-            else self.markupProfile.allowed_presentation_modes
+            self.pageType.presentation_modes(base_id)
+            if self.pageType is not None
+            else tuple(
+                definition
+                for definition in core_presentation_modes()
+                if (
+                    base_id == "markdown"
+                    or definition.key in (
+                        MarkdownPresentationMode.SOURCE,
+                        MarkdownPresentationMode.FORMATTED_SOURCE,
+                    )
+                )
+            )
         )
         self.markdownPresentation.set_allowed_modes(modes)
 
@@ -333,10 +341,13 @@ class editorWidget(QWidget, Ui_editorWidget_ui):
         """
         source_editor_visible = (
             self.stack.currentIndex() == 0
-            and self.txtRedacText.presentationMode
-            not in (
-                MarkdownPresentationMode.LIVE_PREVIEW,
-                MarkdownPresentationMode.READING,
+            and (
+                isinstance(
+                    self.txtRedacText.presentationMode,
+                    MarkdownPresentationMode,
+                )
+                and self.txtRedacText.presentationMode
+                is not MarkdownPresentationMode.READING
             )
         )
         self.txtEditScrollBar.setVisible(source_editor_visible)

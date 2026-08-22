@@ -9,7 +9,9 @@ from PyQt5.QtWidgets import (
 )
 
 from manuskript.ui.editors.markdownPresentation import (
-    MarkdownPresentationMode,
+    PresentationModeDefinition,
+    core_presentation_mode,
+    presentation_mode_key,
 )
 from manuskript.ui.views.markdownReadingView import MarkdownReadingView
 
@@ -26,10 +28,8 @@ class MarkdownEditorHost(QStackedWidget):
         self.sourceEditor = source_editor
         self.readingView = None
         self.readingRenderer = None
-        self.pageWizard = None
-        self.pageWizardFactory = None
-        self.pageWizardErrorHandler = None
-        self._wizardRefreshPending = False
+        self._contributedViews = {}
+        self._sourceRefreshPending = False
         self._configuredMaximumWidth = QWIDGETSIZE_MAX
         self._maximumWidthOverride = None
         self.addWidget(source_editor)
@@ -67,9 +67,15 @@ class MarkdownEditorHost(QStackedWidget):
     def canonicalEditor(self):
         return self.sourceEditor
 
-    def setPresentationMode(self, mode):
-        mode = MarkdownPresentationMode.from_value(mode)
-        target = self._viewForMode(mode)
+    def setPresentationMode(self, mode, definition=None):
+        mode = presentation_mode_key(mode)
+        definition = definition or core_presentation_mode(mode)
+        if definition is None or definition.key != mode:
+            raise ValueError(
+                "No presentation-mode declaration realizes {!r}."
+                .format(getattr(mode, "value", mode))
+            )
+        target = self._viewForDefinition(definition)
         previous = self.currentWidget()
 
         if previous is not target and hasattr(previous, "setActive"):
@@ -82,15 +88,20 @@ class MarkdownEditorHost(QStackedWidget):
         self.currentViewChanged.emit(target)
         return target if target is not self.sourceEditor else None
 
-    def _viewForMode(self, mode):
-        if mode is MarkdownPresentationMode.READING:
-            return self._ensureReadingView()
-        if (
-            mode is MarkdownPresentationMode.LIVE_PREVIEW
-            and self.pageWizardFactory is not None
-        ):
-            return self._ensurePageWizard()
-        return self.sourceEditor
+    def _viewForDefinition(self, definition):
+        context = _PresentationViewContext(self)
+        try:
+            target = definition.view_factory(context, definition)
+            if not isinstance(target, QWidget):
+                raise TypeError(
+                    "Presentation mode factories must return QWidget "
+                    "instances."
+                )
+            return target
+        except Exception as error:
+            if definition.error_handler is not None:
+                definition.error_handler(error)
+            return self._errorView(definition, error)
 
     def _ensureReadingView(self):
         if self.readingView is None:
@@ -108,85 +119,117 @@ class MarkdownEditorHost(QStackedWidget):
         if self.readingView is not None:
             self.readingView.setRenderer(renderer)
 
-    def setPageWizardFactory(self, factory, error_handler=None):
-        """Install an item-specific structured editor factory.
+    def contributedView(self, mode):
+        """The realized plugin view for a mode, or None if not built yet."""
 
-        Page wizard widgets are isolated from the canonical QTextDocument.
-        They receive source through ``load_source(str)`` and may request one
-        explicit replacement through an ``applyRequested(str)`` signal.
+        record = self._contributedViews.get(presentation_mode_key(mode))
+        return record[1] if record is not None else None
+
+    def ensureContributedView(self, definition):
+        """Build one declared plugin view and bridge source explicitly.
+
+        Contributed widgets never receive the canonical QTextDocument.  A
+        view may consume snapshots through ``load_source(str)`` and may ask
+        the owner to replace that source through an ``applyRequested(str)``
+        signal.  Read-only views can omit the latter.
         """
-        self.pageWizardErrorHandler = error_handler
-        if factory is self.pageWizardFactory:
-            return
-        refresh_live_view = (
-            self.currentWidget() is self.pageWizard
-            or self.sourceEditor.presentationMode
-            is MarkdownPresentationMode.LIVE_PREVIEW
-        )
-        if self.pageWizard is not None:
-            self.removeWidget(self.pageWizard)
-            self.pageWizard.deleteLater()
-            self.pageWizard = None
-        self.pageWizardFactory = factory
-        if refresh_live_view:
-            self.setPresentationMode(
-                MarkdownPresentationMode.LIVE_PREVIEW
-            )
 
-    def _ensurePageWizard(self):
-        if self.pageWizard is not None:
-            return self.pageWizard
+        if not isinstance(definition, PresentationModeDefinition):
+            raise TypeError("Contributed views require a mode declaration.")
+        existing = self._contributedViews.get(definition.key)
+        if existing is not None and existing[0] == definition:
+            return existing[1]
+        if existing is not None:
+            self._discardContributedView(definition.key)
         try:
-            wizard = self.pageWizardFactory()
-            if not isinstance(wizard, QWidget):
+            if definition.widget_factory is None:
                 raise TypeError(
-                    "Page wizard factories must return QWidget instances."
+                    "Contributed presentation modes require a widget factory."
                 )
-            load_source = getattr(wizard, "load_source", None)
-            apply_requested = getattr(wizard, "applyRequested", None)
-            if not callable(load_source) or not hasattr(
-                apply_requested, "connect"
-            ):
+            view = definition.widget_factory()
+            if not isinstance(view, QWidget):
                 raise TypeError(
-                    "Page wizards require load_source(source) and an "
-                    "applyRequested(str) signal."
+                    "Presentation mode factories must return QWidget "
+                    "instances."
                 )
-            apply_requested.connect(self._applyWizardSource)
+            load_source = getattr(view, "load_source", None)
+            if load_source is not None and not callable(load_source):
+                raise TypeError("load_source must be callable when present.")
+            apply_requested = getattr(view, "applyRequested", None)
+            if apply_requested is not None:
+                if not hasattr(apply_requested, "connect"):
+                    raise TypeError(
+                        "applyRequested must be a Qt signal when present."
+                    )
+                apply_requested.connect(self._applyContributedSource)
         except Exception as error:
-            if self.pageWizardErrorHandler is not None:
-                self.pageWizardErrorHandler(error)
-            wizard = QLabel(
-                self.tr("The page wizard could not be loaded: {}")
-                .format(error),
-                self,
-            )
-            wizard.setWordWrap(True)
-            wizard.setAlignment(Qt.AlignCenter)
-        self.pageWizard = wizard
-        self.addWidget(wizard)
-        self._loadWizardSource()
-        return wizard
+            if definition.error_handler is not None:
+                definition.error_handler(error)
+            view = self._errorView(definition, error)
+        self._contributedViews[definition.key] = (definition, view)
+        if self.indexOf(view) < 0:
+            self.addWidget(view)
+        self._loadContributedSource(view)
+        return view
+
+    def setAvailableModes(self, definitions):
+        """Release plugin widgets whose declarations are no longer active."""
+
+        available = {
+            definition.key: definition
+            for definition in definitions
+            if isinstance(definition.key, str)
+        }
+        for key, (definition, _view) in tuple(
+            self._contributedViews.items()
+        ):
+            if available.get(key) != definition:
+                self._discardContributedView(key)
+
+    def _discardContributedView(self, key):
+        _definition, view = self._contributedViews.pop(key)
+        self.removeWidget(view)
+        view.deleteLater()
+
+    def _errorView(self, definition, error):
+        view = QLabel(
+            self.tr("The {} view could not be loaded: {}")
+            .format(definition.label, error),
+            self,
+        )
+        view.setWordWrap(True)
+        view.setAlignment(Qt.AlignCenter)
+        if self.indexOf(view) < 0:
+            self.addWidget(view)
+        return view
 
     def _sourceChanged(self):
-        if self.pageWizard is None or self._wizardRefreshPending:
+        if not self._contributedViews or self._sourceRefreshPending:
             return
-        self._wizardRefreshPending = True
-        QTimer.singleShot(0, self._loadWizardSource)
+        self._sourceRefreshPending = True
+        QTimer.singleShot(0, self._loadContributedSources)
 
-    def _loadWizardSource(self):
-        self._wizardRefreshPending = False
-        if self.pageWizard is None:
-            return
-        load_source = getattr(self.pageWizard, "load_source", None)
+    def _loadContributedSources(self):
+        self._sourceRefreshPending = False
+        for _definition, view in self._contributedViews.values():
+            self._loadContributedSource(view)
+
+    def _loadContributedSource(self, view):
+        load_source = getattr(view, "load_source", None)
         if not callable(load_source):
             return
         try:
             load_source(self.sourceEditor.toPlainText())
         except Exception as error:
-            if self.pageWizardErrorHandler is not None:
-                self.pageWizardErrorHandler(error)
+            definition = next((
+                definition
+                for definition, candidate in self._contributedViews.values()
+                if candidate is view
+            ), None)
+            if definition is not None and definition.error_handler is not None:
+                definition.error_handler(error)
 
-    def _applyWizardSource(self, source):
+    def _applyContributedSource(self, source):
         source = str(source)
         editor = self.sourceEditor
         if source == editor.toPlainText():
@@ -203,3 +246,20 @@ class MarkdownEditorHost(QStackedWidget):
         # Persist through the editor/model owner immediately. The wizard never
         # writes an outline item or project file directly.
         editor.submit()
+
+
+class _PresentationViewContext:
+    """Host-owned realization operations passed to catalogue factories."""
+
+    def __init__(self, host):
+        self._host = host
+
+    @property
+    def source_editor(self):
+        return self._host.sourceEditor
+
+    def reading_view(self):
+        return self._host._ensureReadingView()
+
+    def contributed_view(self, definition):
+        return self._host.ensureContributedView(definition)

@@ -19,6 +19,7 @@ from manuskript.ui.editors.mainEditor_ui import Ui_mainEditor
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationBinding,
     MarkdownPresentationMode,
+    presentation_mode_key,
 )
 
 try:
@@ -194,19 +195,29 @@ class mainEditor(QWidget, Ui_mainEditor):
         )
 
     def syncMarkdownPresentationMode(self, mode):
-        mode = MarkdownPresentationMode.from_value(mode)
-        index = self._markdownModes.index(mode)
+        mode = presentation_mode_key(mode)
+        try:
+            index = self._markdownModes.index(mode)
+        except ValueError:
+            return
         previous = self.cmbMarkdownMode.blockSignals(True)
         self.cmbMarkdownMode.setCurrentIndex(index)
         self.cmbMarkdownMode.blockSignals(previous)
 
     def syncMarkdownPresentationModes(self, modes):
-        allowed = set(modes)
-        model = self.cmbMarkdownMode.model()
-        for index, mode in enumerate(self._markdownModes):
-            item = model.item(index)
-            if item is not None:
-                item.setEnabled(mode in allowed)
+        modes = tuple(presentation_mode_key(mode) for mode in modes)
+        state = self._markdownPresentationBinding.state
+        previous = self.cmbMarkdownMode.blockSignals(True)
+        self.cmbMarkdownMode.clear()
+        self._markdownModes = modes
+        for mode in modes:
+            self.cmbMarkdownMode.addItem(
+                state.label_for(mode)
+                if state is not None else str(getattr(mode, "value", mode))
+            )
+        self.cmbMarkdownMode.blockSignals(previous)
+        if state is not None:
+            self.syncMarkdownPresentationMode(state.mode)
 
     ###############################################################################
     # TABS

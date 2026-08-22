@@ -46,12 +46,26 @@ class ContributionKind(str, Enum):
     INDEX_CARD_STYLE = "index_card_style"
     EDITOR_WORKSPACE = "editor_workspace"
     PAGE_TYPE = "page_type"
+    PRESENTATION_MODE = "presentation_mode"
     PAGE_RENDERER = "page_renderer"
     MARKUP = "markup"
     NATIVE_MARKUP = "native_markup"
     TRANSFORM = "transform"
     CONVERSION_AUGMENTATION = "conversion_augmentation"
     COMMAND = "command"
+
+
+class ContributionScope(str, Enum):
+    """How far a contribution asks to reach.
+
+    ``own`` is implicit authority over things the contributing plugin owns.
+    ``all`` is a separately grantable request to reach things owned by core
+    or another plugin.  The vocabulary is shared by contribution kinds even
+    though presentation modes are its first user.
+    """
+
+    OWN = "own"
+    ALL = "all"
 
 
 @dataclass(frozen=True)
@@ -109,6 +123,11 @@ CONTRIBUTION_CONTRACTS = (
         ContributionKind.PAGE_TYPE,
         _declared_portability(ContributionKind.PAGE_TYPE),
         "Detection, parsing, and rendering can be bounded value calls.",
+    ),
+    ContributionContract(
+        ContributionKind.PRESENTATION_MODE,
+        _declared_portability(ContributionKind.PRESENTATION_MODE),
+        "The current realization factory returns a live QWidget.",
     ),
     ContributionContract(
         ContributionKind.PAGE_RENDERER,

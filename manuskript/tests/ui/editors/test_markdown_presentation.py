@@ -30,6 +30,8 @@ from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationDefaults,
     MarkdownPresentationMode,
     MarkdownPresentationState,
+    PresentationModeDefinition,
+    contributed_presentation_view,
 )
 from manuskript.ui.highlighters import MarkdownHighlighter
 from manuskript.ui.views.MDEditView import MDEditView
@@ -329,7 +331,7 @@ def test_presentation_host_uses_source_for_live_and_sibling_for_reading():
         host.hide()
 
 
-def test_page_wizard_replaces_an_already_active_live_view_and_applies_once():
+def test_a_declared_mode_gets_its_own_view_and_applies_source_once():
     class Wizard(QWidget):
         applyRequested = pyqtSignal(str)
 
@@ -345,16 +347,31 @@ def test_page_wizard_replaces_an_already_active_live_view_and_applies_once():
         settings=SettingsManager(),
     )
     host = host_editor(editor)
+    state = MarkdownPresentationState()
+    editor.setPresentationState(state)
     editor.setPlainText("canonical source")
     editor.document().clearUndoRedoStacks()
-    editor.setPresentationMode(MarkdownPresentationMode.LIVE_PREVIEW)
-
-    host.setPageWizardFactory(Wizard)
-    wizard = host.currentWidget()
+    definition = PresentationModeDefinition(
+        id="example.structured-editor",
+        label="Structured editor",
+        view_factory=contributed_presentation_view,
+        owner_id="example.plugin",
+        widget_factory=Wizard,
+    )
+    state.set_allowed_modes((MarkdownPresentationMode.SOURCE, definition))
+    state.set_mode(definition.id)
+    wizard = host.contributedView(definition.id)
 
     assert isinstance(wizard, Wizard)
+    assert host.currentWidget() is wizard
     assert wizard.loaded == "canonical source"
     assert editor.toPlainText() == "canonical source"
+
+    # Source-editor callbacks can still settle while the sibling widget is
+    # active. They must treat an extension ID as a declared mode rather than
+    # dereference enum-only presentation properties.
+    editor.cursorPositionHasChanged()
+    editor.highlighter._themeForPresentation({"color": "#000000"})
 
     wizard.applyRequested.emit("structured source")
 

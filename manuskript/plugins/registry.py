@@ -4,6 +4,7 @@ from dataclasses import MISSING, dataclass, field, fields
 from types import MappingProxyType
 
 from manuskript.plugins.api import (
+    CORE_PRESENTATION_MODE_IDS,
     Contribution,
     ContributionDeclaration,
     CommandContribution,
@@ -17,6 +18,7 @@ from manuskript.plugins.api import (
     NativeMarkupContribution,
     PageRendererContribution,
     PageTypeContribution,
+    PresentationModeContribution,
     PluginSettingsContribution,
     ProjectPanelContribution,
     TransformContribution,
@@ -38,6 +40,7 @@ CONTRIBUTION_TYPES = {
     ContributionKind.INDEX_CARD_STYLE: IndexCardStyleContribution,
     ContributionKind.EDITOR_WORKSPACE: EditorWorkspaceContribution,
     ContributionKind.PAGE_TYPE: PageTypeContribution,
+    ContributionKind.PRESENTATION_MODE: PresentationModeContribution,
     ContributionKind.PAGE_RENDERER: PageRendererContribution,
     ContributionKind.MARKUP: MarkupContribution,
     ContributionKind.NATIVE_MARKUP: NativeMarkupContribution,
@@ -69,9 +72,9 @@ CONTRIBUTION_HANDLER_FIELDS = {
         "detector",
         "parser_factory",
         "renderer_factory",
-        "wizard_factory",
         "activation_warning",
     ),
+    ContributionKind.PRESENTATION_MODE: ("view_factory",),
     ContributionKind.PAGE_RENDERER: (
         "renderer_factory", "options_view_factory",
     ),
@@ -353,6 +356,9 @@ class PluginRegistrar:
     def register_page_type(self, contribution):
         self._add(ContributionKind.PAGE_TYPE, contribution)
 
+    def register_presentation_mode(self, contribution):
+        self._add(ContributionKind.PRESENTATION_MODE, contribution)
+
     def register_page_renderer(self, contribution):
         self._add(ContributionKind.PAGE_RENDERER, contribution)
 
@@ -441,6 +447,7 @@ class PluginRegistry:
             raise PluginRegistrationError(
                 "A plugin cannot install another plugin's contributions."
             )
+        self._require_owned_presentation_modes(plugin_id, contributions)
 
         collisions = []
         for record in contributions:
@@ -466,6 +473,30 @@ class PluginRegistry:
         for record in contributions:
             self._by_kind[record.kind][record.id] = record
             self._by_plugin[plugin_id].append(record)
+
+    @staticmethod
+    def _require_owned_presentation_modes(plugin_id, contributions):
+        """A page owner may select core modes or modes it declares itself."""
+
+        owned = {
+            record.id for record in contributions
+            if record.kind is ContributionKind.PRESENTATION_MODE
+        }
+        for record in contributions:
+            if record.kind is not ContributionKind.PAGE_TYPE:
+                continue
+            foreign = sorted(
+                set(record.contribution.presentation_modes)
+                - CORE_PRESENTATION_MODE_IDS
+                - owned
+            )
+            if foreign:
+                raise PluginRegistrationError(
+                    "Page type {} from {} selects presentation modes it "
+                    "does not own: {}.".format(
+                        record.id, plugin_id, ", ".join(foreign),
+                    )
+                )
 
     def remove_plugin(self, plugin_id):
         for record in self._by_plugin.pop(plugin_id, ()):
@@ -530,6 +561,10 @@ class PluginRegistry:
     @property
     def page_types(self):
         return self.contributions(ContributionKind.PAGE_TYPE)
+
+    @property
+    def presentation_modes(self):
+        return self.contributions(ContributionKind.PRESENTATION_MODE)
 
     @property
     def page_renderers(self):

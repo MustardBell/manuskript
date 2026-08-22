@@ -6,6 +6,7 @@ from manuskript.ui.editors.editorOverlayButton import (
 )
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
+    presentation_mode_key,
 )
 
 
@@ -94,14 +95,14 @@ class MarkdownModeToolButton(EditorOverlayToolButton):
             self._state.set_mode(target)
 
     def syncMode(self, mode):
-        mode = MarkdownPresentationMode.from_value(mode)
+        mode = presentation_mode_key(mode)
         target = self.nextMode()
         self.setIcon(overlay_icon(*self._iconFor(target)))
         self.setToolTip(
-            self.tr("Switch to {}").format(self.labelFor(target))
-            if target is not None and target is not mode
+            self.tr("Switch to {}").format(self._state.label_for(target))
+            if target is not None and target != mode
             else self.tr("{} is the only mode available here").format(
-                self.labelFor(mode)
+                self._state.label_for(mode)
             )
         )
         action = self._actions.get(mode)
@@ -119,7 +120,7 @@ class MarkdownModeToolButton(EditorOverlayToolButton):
         group = QActionGroup(menu)
         group.setExclusive(True)
         for mode in modes:
-            action = QAction(self.labelFor(mode), menu)
+            action = QAction(self._state.label_for(mode), menu)
             action.setCheckable(True)
             action.setActionGroup(group)
             action.triggered.connect(

@@ -286,7 +286,10 @@ def test_markup_profile_is_independent_per_editor_leaf(
                 MarkdownPresentationMode.FORMATTED_SOURCE,
             )
         )
-        assert not window.actMarkdownReading.isEnabled()
+        assert (
+            MarkdownPresentationMode.READING
+            not in window.markdownMenu.actions
+        )
         first.markdownPresentation.set_mode(
             MarkdownPresentationMode.READING
         )

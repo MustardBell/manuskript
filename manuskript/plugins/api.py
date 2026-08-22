@@ -10,7 +10,20 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from manuskript.domain.exporting import ExportArtifact
 from manuskript.media_types import MARKDOWN
-from manuskript.plugins.contracts import ContributionKind, PLUGIN_API_VERSION
+from manuskript.plugins.contracts import (
+    ContributionKind,
+    ContributionScope,
+    PLUGIN_API_VERSION,
+)
+
+
+CORE_PRESENTATION_MODE_IDS = frozenset({
+    "source",
+    "formatted-source",
+    "live-preview",
+    "clean-editing",
+    "reading",
+})
 
 
 class OptionKind(str, Enum):
@@ -708,9 +721,12 @@ class PageTypeContribution:
     detector: Optional[Callable[[str], bool]] = None
     parser_factory: Optional[Callable[[], Any]] = None
     renderer_factory: Optional[Callable[[], Any]] = None
-    wizard_factory: Optional[Callable[..., Any]] = None
     activation_warning: Optional[Callable[[str], str]] = None
     item_kinds: tuple[str, ...] = ("md",)
+    #: Ordered stable ids selected by the owner from the mode catalogue.
+    #: Core's modes use their persisted values (``source``, ``reading``, ...)
+    #: and plugin modes use their globally unique extension ids.
+    presentation_modes: tuple[str, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(
@@ -718,18 +734,53 @@ class PageTypeContribution:
             "item_kinds",
             tuple(str(value) for value in self.item_kinds),
         )
+        modes = tuple(
+            str(value).strip()
+            for value in self.presentation_modes
+            if str(value).strip()
+        )
+        if len(modes) != len(set(modes)):
+            raise ValueError(
+                "Page type presentation modes must not repeat ids."
+            )
+        if any(
+            mode_id not in CORE_PRESENTATION_MODE_IDS and "." not in mode_id
+            for mode_id in modes
+        ):
+            raise ValueError(
+                "Plugin presentation mode ids must be dotted names."
+            )
+        object.__setattr__(self, "presentation_modes", modes)
         if not self.property_label or not self.item_kinds:
             raise ValueError(
                 "Page types require a property label and item kind."
             )
-        if not any((
-            self.parser_factory,
-            self.renderer_factory,
-            self.wizard_factory,
-        )):
+        custom_modes = set(modes) - CORE_PRESENTATION_MODE_IDS
+        if not any((self.parser_factory, self.renderer_factory, custom_modes)):
             raise ValueError(
-                "Page types must provide a parser, renderer, or wizard."
+                "Page types must provide a parser, renderer, or their own "
+                "presentation mode."
             )
+
+
+@dataclass(frozen=True)
+class PresentationModeContribution:
+    """A native editor presentation declared independently of page types.
+
+    Core brokers the declaration.  A page type names the ordered catalogue
+    entries it accepts; it never calls another plugin or borrows the identity
+    of a built-in mode.  ``all`` records a request for separately granted
+    reach and does not itself confer that authority.
+    """
+
+    descriptor: ExtensionDescriptor
+    view_factory: Callable[[], Any]
+    scope: ContributionScope = ContributionScope.OWN
+
+    def __post_init__(self):
+        object.__setattr__(self, "scope", ContributionScope(self.scope))
+        if self.view_factory is None:
+            raise ValueError("Presentation modes require a view factory.")
 
 
 @dataclass(frozen=True)
@@ -1097,6 +1148,7 @@ Contribution = Union[
     IndexCardStyleContribution,
     EditorWorkspaceContribution,
     PageTypeContribution,
+    PresentationModeContribution,
     PageRendererContribution,
     TransformContribution,
     MarkupContribution,

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QCheckBox, QMessageBox
+from PyQt5.QtWidgets import QCheckBox, QMessageBox, QWidget
 
 from manuskript.enums import Outline
 from manuskript.models.outlineItem import outlineItem
@@ -8,6 +8,7 @@ from manuskript.plugins import (
     PageExportDocument,
     PageRendererContribution,
     PageTypeContribution,
+    PresentationModeContribution,
 )
 from manuskript.plugins.registry import PluginRegistry
 from manuskript.services.plugin_options import InMemoryPluginOptionStore
@@ -36,8 +37,12 @@ def make_service(activation_warning=None, source_provider=None):
         detector=lambda source: source.startswith("BEGIN STRUCTURED"),
         parser_factory=Parser,
         renderer_factory=object,
-        wizard_factory=object,
         activation_warning=activation_warning,
+        presentation_modes=(
+            "source",
+            "example.structured-editor",
+            "reading",
+        ),
     )
     renderer = PageRendererContribution(
         ExtensionDescriptor(
@@ -50,6 +55,13 @@ def make_service(activation_warning=None, source_provider=None):
     )
     registry = PluginRegistry()
     registrar = registry.registrar("example.plugin")
+    registrar.register_presentation_mode(PresentationModeContribution(
+        ExtensionDescriptor(
+            "example.structured-editor",
+            "Structured editor",
+        ),
+        view_factory=QWidget,
+    ))
     registrar.register_page_type(contribution)
     registrar.register_page_renderer(renderer)
     registry.install("example.plugin", registrar.contributions)
@@ -148,16 +160,18 @@ def test_rebuilding_page_type_properties_detaches_old_controls():
     assert old_checkbox.parent() is None
 
 
-def test_active_page_type_owns_reading_live_and_export_behavior():
+def test_active_page_type_selects_core_and_owned_catalogue_modes():
     service, contribution = make_service()
     item = outlineItem(title="Structured", _type="md")
     item.setData(Outline.text, "ordinary source")
     service.set_enabled(item, contribution, True)
     state = service.create_state(item)
 
-    assert state.allowed_presentation_modes == (
+    assert tuple(
+        definition.key for definition in state.presentation_modes()
+    ) == (
         MarkdownPresentationMode.SOURCE,
-        MarkdownPresentationMode.LIVE_PREVIEW,
+        "example.structured-editor",
         MarkdownPresentationMode.READING,
     )
     assert service.export_document(item, BBCODE) == (

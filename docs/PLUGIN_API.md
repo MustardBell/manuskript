@@ -254,6 +254,7 @@ Both methods are optional, and returning nothing stays valid:
 | `register_importer` | `ImportContribution` |
 | `register_converter` | `ConversionContribution` |
 | `register_page_type` | `PageTypeContribution` |
+| `register_presentation_mode` | `PresentationModeContribution` (in-process only) |
 | `register_page_renderer` | `PageRendererContribution` |
 | `register_markup` | `MarkupContribution` |
 | `register_native_markup` | `NativeMarkupContribution` (in-process only) |
@@ -492,6 +493,55 @@ not one of yours" is honoured.
 receives a **bounded window** — the first and last 4096 characters — not the
 document. Prefer a signature.
 
+### Declaring a page-specific editor
+
+A page type chooses an ordered subset of the presentation-mode catalogue by
+stable ID. Core modes use `source`, `formatted-source`, `live-preview`,
+`clean-editing`, and `reading`. A plugin-defined editor has its own dotted ID;
+it does not replace or impersonate one of those core modes:
+
+```python
+from manuskript.plugins import (
+    ExtensionDescriptor,
+    PageTypeContribution,
+    PresentationModeContribution,
+)
+
+
+def register(api):
+    api.register_presentation_mode(PresentationModeContribution(
+        descriptor=ExtensionDescriptor(
+            id="vendor.note.structured-editor",
+            name="Structured editor",
+        ),
+        view_factory=StructuredEditor,
+    ))
+    api.register_page_type(PageTypeContribution(
+        descriptor=ExtensionDescriptor(
+            id="vendor.note.page",
+            name="Vendor note",
+        ),
+        property_label="Vendor note",
+        presentation_modes=(
+            "source",
+            "vendor.note.structured-editor",
+            "reading",
+        ),
+    ))
+```
+
+The page type may select core modes and modes registered by the same plugin.
+It cannot name another plugin's private mode. `scope="all"` records a request
+for broader, reader-controlled reach; it is not permission by itself, and the
+current host does not grant that request.
+
+The widget is a sibling of the canonical source editor. It may implement
+`load_source(text)` to receive source snapshots and expose an
+`applyRequested(str)` Qt signal to request one undoable source replacement.
+It never receives Manuskript's `QTextDocument` and never writes the outline
+model or project file directly. This keeps the same stored source usable in
+Source, the contributed editor, Reading, another window, and export.
+
 ---
 
 ## Bases (`manuskript.plugins.ui`)
@@ -520,7 +570,8 @@ built costs the reader a line rather than blocking them:
 - `ProjectPanelContribution.widget_factory(context, parent)`
 - `PluginSettingsContribution.widget_factory(context, parent)`
 - `EditorWorkspaceContribution.workspace_factory(context, parent)`
-- `PageTypeContribution.wizard_factory` — becomes the Live Preview view
+- `PresentationModeContribution.view_factory()` — becomes its own declared
+  editor mode
 
 The `context` objects (`PluginSettingsContext`, `EditorWorkspaceContext`) are
 capability-scoped by design: you receive your own file namespace, a guarded
@@ -743,6 +794,7 @@ from manuskript.plugins import (
     ExtensionDescriptor,
     PageRendererContribution,
     PageTypeContribution,
+    PresentationModeContribution,
 )
 
 from .renderers import MyBBCodeRenderer
@@ -753,11 +805,20 @@ SIGNATURE = ContentSignature(starts_with=r"^MY DOC")
 
 def register(api):
     markup = api.capability("markup.bbcode")
+    api.register_presentation_mode(PresentationModeContribution(
+        descriptor=ExtensionDescriptor(
+            id="vendor.my-page.editor",
+            name="My page editor",
+        ),
+        view_factory=MyWizard,
+    ))
     api.register_page_type(PageTypeContribution(
         descriptor=ExtensionDescriptor(id="vendor.my-page", name="My page"),
         property_label="My page",
         signature=SIGNATURE,
-        wizard_factory=MyWizard,
+        presentation_modes=(
+            "source", "vendor.my-page.editor", "reading",
+        ),
         renderer_factory=MyBBCodeRenderer,
     ))
     api.register_page_renderer(PageRendererContribution(

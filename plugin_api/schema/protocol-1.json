@@ -41,6 +41,7 @@
     "index_card_style": {"portability": "native", "operations": [], "required": []},
     "editor_workspace": {"portability": "native", "operations": [], "required": []},
     "page_type": {"portability": "portable", "operations": ["detect", "parse", "render", "activation_warning"], "required": []},
+    "presentation_mode": {"portability": "native", "operations": [], "required": []},
     "page_renderer": {"portability": "portable", "operations": ["render"], "required": ["render"]},
     "markup": {"portability": "portable", "operations": ["analyze", "cancel_analysis"], "required": ["analyze", "cancel_analysis"]},
     "native_markup": {"portability": "native", "operations": [], "required": []},

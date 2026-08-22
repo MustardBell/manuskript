@@ -37,6 +37,7 @@ from manuskript.plugins.api import (
     PageExportDocument,
     PageRendererContribution,
     PageTypeContribution,
+    PresentationModeContribution,
     PluginActivationContext,
     PluginFileSnapshot,
     PluginOptionsSnapshot,
@@ -75,6 +76,7 @@ from manuskript.plugins.contracts import (
     PLUGIN_PROTOCOL_VERSION,
     ContractPortability,
     ContributionKind,
+    ContributionScope,
     contribution_contract,
 )
 from manuskript.domain.story_query import (
@@ -153,6 +155,7 @@ __all__ = [
     "CONTRIBUTION_CONTRACTS",
     "ContractPortability",
     "ContributionKind",
+    "ContributionScope",
     "All",
     "And",
     "AssertionDiagnosticSnapshot",
@@ -209,6 +212,7 @@ __all__ = [
     "PageExportDocument",
     "PageRendererContribution",
     "PageTypeContribution",
+    "PresentationModeContribution",
     "PluginActivationContext",
     "PluginFileSnapshot",
     "PluginOptionsSnapshot",

@@ -15,7 +15,11 @@ from manuskript.media_types import (
 )
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
+    PresentationModeDefinition,
+    contributed_presentation_view,
+    core_presentation_modes,
 )
+from manuskript.plugins.contracts import ContributionKind
 
 
 LOGGER = logging.getLogger(__name__)
@@ -78,6 +82,69 @@ class PageTypeService(QObject):
 
     def create_state(self, item=None, parent=None):
         return PageTypeState(self, item=item, parent=parent)
+
+    def presentation_modes_for(self, contribution, markup_base_id="markdown"):
+        """Resolve one page owner's ordered selection from the catalogue.
+
+        Core publishes its modes and every plugin declaration.  A page type
+        can select core entries and entries installed by its own plugin; it
+        cannot address another plugin directly.  Broader ``all`` reach is a
+        grant surface and remains unavailable until that grant is present.
+        """
+
+        core = {definition.id: definition
+                for definition in core_presentation_modes()}
+        if contribution is None:
+            selected = (
+                tuple(mode.value for mode in MarkdownPresentationMode)
+                if markup_base_id == "markdown"
+                else (
+                    MarkdownPresentationMode.SOURCE.value,
+                    MarkdownPresentationMode.FORMATTED_SOURCE.value,
+                )
+            )
+            return tuple(core[mode_id] for mode_id in selected)
+
+        owner = self.registry.owner_of(
+            ContributionKind.PAGE_TYPE,
+            contribution.descriptor.id,
+        )
+        catalogue = dict(core)
+        for record in self.registry.records(
+            ContributionKind.PRESENTATION_MODE
+        ):
+            if record.plugin_id != owner:
+                continue
+            mode = record.contribution
+            catalogue[mode.descriptor.id] = PresentationModeDefinition(
+                id=mode.descriptor.id,
+                label=mode.descriptor.name,
+                view_factory=contributed_presentation_view,
+                owner_id=record.plugin_id,
+                widget_factory=mode.view_factory,
+                error_handler=(
+                    lambda error, contribution=mode:
+                    self.report_error(contribution, error)
+                ),
+            )
+        selected = (
+            contribution.presentation_modes
+            or (MarkdownPresentationMode.SOURCE.value,)
+        )
+        missing = tuple(
+            mode_id for mode_id in selected if mode_id not in catalogue
+        )
+        if missing:
+            LOGGER.error(
+                "Page type %s selected unavailable presentation modes: %s",
+                contribution.descriptor.id,
+                ", ".join(missing),
+            )
+        return tuple(
+            catalogue[mode_id]
+            for mode_id in selected
+            if mode_id in catalogue
+        )
 
     def is_applicable(self, item, contribution):
         return (
@@ -374,20 +441,11 @@ class PageTypeState(QObject):
     def is_active(self):
         return self._contribution is not None
 
-    @property
-    def allowed_presentation_modes(self):
-        contribution = self._contribution
-        if contribution is None or not any((
-            contribution.renderer_factory,
-            contribution.wizard_factory,
-        )):
-            return None
-        modes = [MarkdownPresentationMode.SOURCE]
-        if contribution.wizard_factory is not None:
-            modes.append(MarkdownPresentationMode.LIVE_PREVIEW)
-        if contribution.renderer_factory is not None:
-            modes.append(MarkdownPresentationMode.READING)
-        return tuple(modes)
+    def presentation_modes(self, markup_base_id="markdown"):
+        return self.service.presentation_modes_for(
+            self._contribution,
+            markup_base_id,
+        )
 
     def set_item(self, item):
         if item is self._item:

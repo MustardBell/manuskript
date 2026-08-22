@@ -692,6 +692,7 @@ def api_value_codec():
         enum_types=(
             ("content_encoding", ContentEncoding),
             ("contribution_kind", api.ContributionKind),
+            ("contribution_scope", api.ContributionScope),
             ("option_kind", api.OptionKind),
             ("markup_mode", api.MarkupMode),
             ("text_position_encoding", api.TextPositionEncoding),

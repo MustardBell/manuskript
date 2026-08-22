@@ -14,12 +14,17 @@
       "index_card_style",
       "editor_workspace",
       "page_type",
+      "presentation_mode",
       "page_renderer",
       "markup",
       "native_markup",
       "transform",
       "conversion_augmentation",
       "command"
+    ],
+    "contribution_scope": [
+      "own",
+      "all"
     ],
     "markup_mode": [
       "augment",

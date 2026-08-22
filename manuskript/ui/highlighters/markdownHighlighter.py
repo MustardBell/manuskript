@@ -20,6 +20,7 @@ from manuskript.ui.highlighters import MarkdownTokenType as MTT
 from manuskript.ui.highlighters import BlockquoteStyle as BS
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
+    presentation_mode_renders_markdown,
 )
 from manuskript.ui import style as S
 from manuskript import functions as F
@@ -571,7 +572,7 @@ class MarkdownHighlighter(BasicHighlighter):
         )
 
     def _themeForPresentation(self, theme):
-        if self._presentationMode().renders_markdown:
+        if presentation_mode_renders_markdown(self._presentationMode()):
             return theme
         return {
             key: value

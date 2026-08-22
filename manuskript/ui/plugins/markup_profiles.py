@@ -3,11 +3,6 @@ import logging
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from manuskript.plugins.api import MarkupMode
-from manuskript.ui.editors.markdownPresentation import (
-    MarkdownPresentationMode,
-)
-
-
 LOGGER = logging.getLogger(__name__)
 MARKDOWN_BASE_ID = "markdown"
 
@@ -100,15 +95,6 @@ class MarkupProfileState(QObject):
             available[contribution_id]
             for contribution_id in self._additive_ids
             if contribution_id in available
-        )
-
-    @property
-    def allowed_presentation_modes(self):
-        if self._base_id == MARKDOWN_BASE_ID:
-            return tuple(MarkdownPresentationMode)
-        return (
-            MarkdownPresentationMode.SOURCE,
-            MarkdownPresentationMode.FORMATTED_SOURCE,
         )
 
     def set_base(self, base_id):

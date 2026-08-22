@@ -5,14 +5,6 @@ from PyQt5.QtWidgets import QActionGroup
 from manuskript.commands import DocumentCommand, MarkupCommand
 from manuskript.panels.core import EDITOR
 from manuskript.ui.connections import SignalConnectionRegistry
-from manuskript.ui.editors.markdownPresentation import (
-    MarkdownPresentationMode,
-)
-
-
-def activate_markdown_mode(set_mode, mode, _checked=False):
-    """Adapt QAction's checked argument to the mode command's contract."""
-    set_mode(mode)
 
 
 def activate_without_checked(callback, _checked=False):
@@ -218,39 +210,9 @@ class MainWindowActionBinding:
                 window.viewConfigurationController.set_fiction,
             )
         )
-        window.actMarkdownModeGroup = QActionGroup(window)
-        for action, mode in [
-            (
-                window.actMarkdownSource,
-                MarkdownPresentationMode.SOURCE,
-            ),
-            (
-                window.actMarkdownFormattedSource,
-                MarkdownPresentationMode.FORMATTED_SOURCE,
-            ),
-            (
-                window.actMarkdownLivePreview,
-                MarkdownPresentationMode.LIVE_PREVIEW,
-            ),
-            (
-                window.actMarkdownCleanEditing,
-                MarkdownPresentationMode.CLEAN_EDITING,
-            ),
-            (
-                window.actMarkdownReading,
-                MarkdownPresentationMode.READING,
-            ),
-        ]:
-            action.setActionGroup(window.actMarkdownModeGroup)
-            self._connect(
-                action.triggered,
-                partial(
-                    activate_markdown_mode,
-                    window.markdownMenu.set_mode,
-                    mode,
-                )
-            )
-        window.menuMarkdownMode.setEnabled(False)
+        # Presentation actions are leaf-local catalogue entries. The menu
+        # controller creates them from the active leaf instead of binding a
+        # second hard-coded list here.
 
     def _bind_tool_actions(self):
         window = self._window

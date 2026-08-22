@@ -168,19 +168,27 @@ def test_markdown_modes_are_visible_and_synchronized(MWEmptyProject):
     selector.setCurrentIndex(0)
 
     assert state.mode is MarkdownPresentationMode.SOURCE
-    assert window.actMarkdownSource.isChecked()
+    assert window.markdownMenu.actions[
+        MarkdownPresentationMode.SOURCE
+    ].isChecked()
 
-    window.actMarkdownFormattedSource.trigger()
+    window.markdownMenu.actions[
+        MarkdownPresentationMode.FORMATTED_SOURCE
+    ].trigger()
 
     assert state.mode is MarkdownPresentationMode.FORMATTED_SOURCE
     assert selector.currentText() == "Formatted Source"
 
-    window.actMarkdownCleanEditing.trigger()
+    window.markdownMenu.actions[
+        MarkdownPresentationMode.CLEAN_EDITING
+    ].trigger()
 
     assert state.mode is MarkdownPresentationMode.CLEAN_EDITING
     assert selector.currentText() == "Clean Editing"
 
-    window.actMarkdownReading.trigger()
+    window.markdownMenu.actions[
+        MarkdownPresentationMode.READING
+    ].trigger()
 
     assert state.mode is MarkdownPresentationMode.READING
     assert selector.currentText() == "Reading"
@@ -289,7 +297,9 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
 
     window.mainEditor.setCurrentModelIndex(first_index, newTab=True)
     first_editor = window.mainEditor.currentEditor()
-    window.actMarkdownLivePreview.trigger()
+    window.markdownMenu.actions[
+        MarkdownPresentationMode.LIVE_PREVIEW
+    ].trigger()
 
     window.mainEditor.setCurrentModelIndex(second_index, newTab=True)
     second_editor = window.mainEditor.currentEditor()
@@ -313,7 +323,9 @@ def test_markdown_mode_is_owned_by_each_editor_tab(MWEmptyProject):
         window.mainEditor.cmbMarkdownMode.currentText()
         == "Live Preview"
     )
-    assert window.actMarkdownLivePreview.isChecked()
+    assert window.markdownMenu.actions[
+        MarkdownPresentationMode.LIVE_PREVIEW
+    ].isChecked()
     # The button walks the modes this leaf allows, in their order, so what it
     # offers next is whatever follows the current one rather than a mode it
     # was built to prefer.

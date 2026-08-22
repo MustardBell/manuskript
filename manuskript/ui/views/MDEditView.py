@@ -25,6 +25,10 @@ from manuskript.ui.editors.markdownInlineFormatting import (
 )
 from manuskript.ui.editors.markdownPresentation import (
     MarkdownPresentationMode,
+    core_presentation_mode,
+    presentation_mode_is_editable,
+    presentation_mode_key,
+    presentation_mode_reveals_active_block,
 )
 from manuskript.ui.plugins.markup_profiles import MARKDOWN_BASE_ID
 from manuskript.plugins.api import (
@@ -130,7 +134,7 @@ class MDEditView(textEditView):
         return self._presentationMode
 
     def setPresentationMode(self, mode):
-        mode = MarkdownPresentationMode.from_value(mode)
+        mode = presentation_mode_key(mode)
         if (
             not self._contentReadOnly
             and mode is MarkdownPresentationMode.READING
@@ -156,7 +160,7 @@ class MDEditView(textEditView):
         self.setReadOnly(
             self._contentReadOnly
             or self._editingLocked
-            or not self._presentationMode.is_editable
+            or not presentation_mode_is_editable(self._presentationMode)
         )
         if reading_active and self._presentationHost is None:
             raise RuntimeError(
@@ -167,8 +171,15 @@ class MDEditView(textEditView):
             if not self._contentReadOnly
             else MarkdownPresentationMode.FORMATTED_SOURCE
         )
+        definition = (
+            self._presentationState.definition_for(effective_mode)
+            if self._presentationState is not None
+            else core_presentation_mode(effective_mode)
+        )
         active_sibling = (
-            self._presentationHost.setPresentationMode(effective_mode)
+            self._presentationHost.setPresentationMode(
+                effective_mode, definition,
+            )
             if self._presentationHost is not None
             else None
         )
@@ -230,17 +241,32 @@ class MDEditView(textEditView):
                 self._presentationState.modeChanged.disconnect(
                     self.setPresentationMode
                 )
+                self._presentationState.allowedModesChanged.disconnect(
+                    self._presentationModesChanged
+                )
             except (RuntimeError, TypeError):
                 pass
 
         self._presentationState = state
         if state is not None:
             state.modeChanged.connect(self.setPresentationMode)
+            state.allowedModesChanged.connect(
+                self._presentationModesChanged
+            )
+            self._presentationModesChanged(state.allowed_modes)
             self.setPresentationMode(state.mode)
         else:
             self.setPresentationMode(
                 MarkdownPresentationMode.FORMATTED_SOURCE
             )
+
+    def _presentationModesChanged(self, modes):
+        if self._presentationHost is None or self._presentationState is None:
+            return
+        self._presentationHost.setAvailableModes(tuple(
+            self._presentationState.definition_for(mode)
+            for mode in modes
+        ))
 
     def setMarkupProfileState(self, state):
         if self._markupProfileState is not None:
@@ -370,13 +396,6 @@ class MDEditView(textEditView):
 
     def _applyPageType(self):
         state = self._pageTypeState
-        wizard_contribution = (
-            state.contribution
-            if state is not None
-            and state.contribution is not None
-            and state.contribution.wizard_factory is not None
-            else None
-        )
         renderer_contribution = (
             state.contribution
             if state is not None
@@ -395,19 +414,6 @@ class MDEditView(textEditView):
         if self._presentationHost is not None:
             self._presentationHost.setReadingRenderer(
                 self._readingRenderer
-            )
-            self._presentationHost.setPageWizardFactory(
-                (
-                    wizard_contribution.wizard_factory
-                    if wizard_contribution is not None
-                    else None
-                ),
-                error_handler=(
-                    lambda error, contribution=wizard_contribution:
-                    self._reportPageTypeError(contribution, error)
-                    if contribution is not None
-                    else None
-                ),
             )
 
     def _installHighlighter(self, factory, contribution):
@@ -1015,8 +1021,8 @@ class MDEditView(textEditView):
     def cursorPositionHasChanged(self):
         self.centerCursor()
         current_position = self.textCursor().position()
-        presentation_reveal = (
-            self._presentationMode.reveals_active_block
+        presentation_reveal = presentation_mode_reveals_active_block(
+            self._presentationMode
         )
         focus_mode = self.settings.textEditor["focusMode"]
         if (
