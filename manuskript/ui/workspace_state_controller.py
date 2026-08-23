@@ -37,15 +37,17 @@ class WorkspaceStateViews:
 
     restore_geometry: Callable[[Any], bool]
     restore_window_state: Callable[[Any], bool]
-    #: Surface identities and placement facts recovered through temporary
-    #: historical dock shells. Given rather than called directly, because
-    #: deciding whether an old arrangement may be applied is this
-    #: controller's business while asking Qt about a payload is not.
+    #: Surface identities recovered through temporary dock shells.  A layout
+    #: that names them is now directly restorable again; one that does not is
+    #: from the central-page regression (or upstream) and needs the default
+    #: surface arrangement applied once.
     legacy_surface_layouts_in: Callable[[Any], Tuple[Any, ...]]
     save_geometry: Callable[[], Any]
     save_window_state: Callable[[], Any]
     project_active: Callable[[], bool]
-    project_docks: Tuple[Any, ...]
+    #: Resolved when used because a living surface can leave this workspace
+    #: and return in a different dock container during the same session.
+    project_docks: Any
     default_dock_visibility: Mapping[str, bool]
     document_area: Callable[[], Any]
     #: The surface this window is showing, from the one owner that knows.
@@ -66,11 +68,17 @@ class WorkspaceStateViews:
 
     @classmethod
     def for_window(cls, window):
-        project_docks = (
+        fixed_docks = (
             window.dckNavigation,
             window.dckCheatSheet,
             window.dckSearch,
         )
+        surface_docks = tuple(
+            instance.container
+            for instance in window.surfaceHost.instances.values()
+            if instance.container is not None
+        )
+        project_docks = fixed_docks + surface_docks
         def document_area():
             instance = window.surfaceHost.instance(EDITOR)
             return (
@@ -85,16 +93,29 @@ class WorkspaceStateViews:
             save_geometry=window.saveGeometry,
             save_window_state=window.saveState,
             project_active=lambda: window._projectSurfaceActive,
-            project_docks=project_docks,
-            default_dock_visibility=MappingProxyType({
-                project_docks[0].objectName(): True,
-                project_docks[1].objectName(): False,
-                project_docks[2].objectName(): False,
-            }),
+            project_docks=lambda: fixed_docks + tuple(
+                instance.container
+                for instance in window.surfaceHost.instances.values()
+                if instance.container is not None
+            ),
+            default_dock_visibility=MappingProxyType(dict(
+                {
+                    fixed_docks[0].objectName(): True,
+                    fixed_docks[1].objectName(): False,
+                    fixed_docks[2].objectName(): False,
+                },
+                **{
+                    instance.container.objectName(): bool(
+                        instance.descriptor.default_visible
+                    )
+                    for instance in window.surfaceHost.instances.values()
+                    if instance.container is not None
+                }
+            )),
             document_area=document_area,
             current_surface=lambda: window.surfaceHost.current() or "",
-            # Restoring a surface is semantic activation, not merely changing
-            # the central page.  This keeps the navigator, selection policy
+            # Restoring a surface is semantic activation, not merely revealing
+            # its container. This keeps navigator selection, selection policy
             # and any declared companion panels on the same answer.
             select_surface=window.activatePanel,
             legacy_panel_for_tab=window.panelIdForLegacyTab,
@@ -126,10 +147,8 @@ class WorkspaceStateController:
         #: asked here rather than at the call site, so one place decides
         #: what an old layout is worth.
         self.restoredLayout = False
-        #: Which docks that layout still knew about, when it was refused.
-        #: Kept because it says why, and because a surface a reader had
-        #: torn out is a fact worth having when detaching into a real
-        #: window lands.
+        #: Floating surface docks from the dock presentation are migrated to
+        #: real peer workspaces, never revived as owned utility windows.
         self._legacySurfaceLayouts = ()
         #: Panel visibility written by a version that understood a routed
         #: panel as an answer for the active surface, rather than as one
@@ -154,7 +173,8 @@ class WorkspaceStateController:
 
     @property
     def project_docks(self):
-        return self.views.project_docks
+        docks = self.views.project_docks
+        return tuple(docks()) if callable(docks) else tuple(docks)
 
     # --------------------------------------------------------- restore
 
@@ -170,37 +190,23 @@ class WorkspaceStateController:
         )
         if state.geometry is not None:
             self.views.restore_geometry(state.geometry)
-        # Geometry is this window's size and place, and is still true
-        # whoever wrote it. The arrangement of docks inside it is a
-        # different matter: one written while the work surfaces were docks
-        # names seven this build never makes, and Qt keeps the entry for a
-        # dock it restored but never found -- handing it back on every
-        # later save, for the life of the profile.
-        #
-        # So the layout is asked what it contains rather than what version
-        # stamped it. A version number gets the one group of readers who
-        # have layouts worth keeping exactly wrong: an installation coming
-        # from upstream is stamped version one and names no surface docks
-        # at all, because upstream's surfaces were pages.
-        #
-        # Refused whole when it does name them, since they cannot be taken
-        # out -- measured, four ways, on Qt 5.15.3.
-        detected_legacy_layouts = (
+        # Surface docks are real again. A dock-era layout is authoritative
+        # and can be restored directly. A layout with no surface dock names
+        # was written by the central-page regression (or upstream): restore
+        # its remaining docks, then let composition place the newly restored
+        # surfaces in the deliberate first-run arrangement.
+        detected_surface_layouts = (
             self.views.legacy_surface_layouts_in(state.window_state)
         )
-        # Explicit membership means a v5 workspace has already answered
-        # which surfaces it owns.  A stale Qt blob may still be refused, but
-        # it must not override that newer answer by tearing surfaces out
-        # again.  Only the pre-membership shape is a migration input.
         self._legacySurfaceLayouts = (
-            tuple(detected_legacy_layouts)
+            tuple(detected_surface_layouts)
             if state.surfaces is None else ()
         )
-        self.restoredLayout = bool(
+        restored = bool(
             state.window_state is not None
-            and not detected_legacy_layouts
             and self.views.restore_window_state(state.window_state)
         )
+        self.restoredLayout = bool(restored and detected_surface_layouts)
 
         self._dock_visibility = (
             dict(state.docks)
@@ -230,11 +236,7 @@ class WorkspaceStateController:
         return state
 
     def legacy_floating_surfaces(self):
-        """Obsolete floating docks that should become peer workspaces.
-
-        This is deliberately a one-way migration record.  Callers receive
-        surface identities and geometry, never dock names or a Qt state blob.
-        """
+        """Dock-era floating intent to be recovered as peer workspaces."""
 
         return tuple(
             layout for layout in self._legacySurfaceLayouts

@@ -38,6 +38,9 @@ CORE_SURFACE_IDS = (
     EDITOR,
 )
 
+CORE_TOOL_PANEL_IDS = (PROJECT_TREE, METADATA, STORYLINE)
+CORE_PANEL_IDS = CORE_SURFACE_IDS + CORE_TOOL_PANEL_IDS
+
 #: Where the metadata panel's revision list files its own arrangement.
 #: Its own key rather than part of the panel's, because that is how it
 #: has always been stored and saved layouts outlive this refactoring.
@@ -75,6 +78,7 @@ def core_panel_descriptors(redaction_group=None, factories=None):
             title="General",
             scope=PROJECT,
             multiplicity=PER_WINDOW,
+            default_visible=True,
             widget_factory=factories.get(GENERAL),
             navigator=NavigatorEntry(
                 label="General", icon="general", order=100,

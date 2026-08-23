@@ -2,7 +2,7 @@
 # --!-- coding: utf8 --!--
 import importlib
 
-from PyQt5.QtCore import (pyqtSignal, QSignalBlocker, Qt,
+from PyQt5.QtCore import (pyqtSignal, QSignalBlocker, QTimer, Qt,
                           QUrl, QSize)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
@@ -32,8 +32,10 @@ from manuskript.ui.panels.placement import (
     PanelPlacementViews,
 )
 from manuskript.ui.panels.window_port import PanelWindow
-from manuskript.ui.surface_presentation import CentralSurfacePresentation
+from manuskript.ui.surface_presentation import DockSurfacePresentation
 from manuskript.ui.surface_transfer import (
+    FloatingSurfaceTransferController,
+    FloatingSurfaceTransferViews,
     SurfaceTransferController,
     SurfaceTransferViews,
 )
@@ -202,6 +204,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.dckNavigation.setWindowTitle(
             self.dckNavigation.windowTitle().replace("&", "")
         )
+        # This is an icon-and-label navigator, not an icon strip.  Letting
+        # Qt compress it below the labels also made its nested-dock divider
+        # appear stuck until a neighbouring split was moved first.
+        self.dckNavigation.setMinimumWidth(200)
+        # Relationships that only become expressible once a hidden default
+        # companion is first revealed. Qt drops an all-hidden tab group, so
+        # Reset records the intended peer and the visibility signal consumes
+        # it exactly once instead of snapping a panel back forever after the
+        # reader has arranged it elsewhere.
+        self._pendingDefaultTabPeers = {}
+        self._defaultPeerVisibilitySlots = {}
         # The welcome screen, and the pages the project is shown in. The
         # central widget used to be taken out of the window entirely while
         # a project was open, so that docked surfaces could have its space;
@@ -265,22 +278,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # registry describes, findable from the other windows through the
         # application's one directory.
         self.panelDirectory = services.panel_directory
+        self.panelWindow = PanelWindow.for_window(self)
         self.panelHost = self.workspaceLifetime.own(
             PanelHost(
-                PanelWindow.for_window(self),
+                self.panelWindow,
                 self.panelRegistry,
                 self.panelDirectory,
             )
         )
-        # The places the writer goes have their own owner. They are not
-        # tool panels and they are not docks: they are shown as pages of
-        # the window's central container, which is the one the navigator
-        # has always driven, so a surface gets a window's worth of room
-        # rather than the 230 pixels a dock beside the editor gave it.
+        # The places the writer goes keep their own owner and bindings, but
+        # each is presented in an independent native dock.  This is the
+        # distinction the earlier central-page cutover erased: a surface is
+        # not a tool-panel contribution, yet it must remain independently
+        # visible, movable and floatable beside the Editor.
+        self.surfacePresentation = self.workspaceLifetime.own(
+            DockSurfacePresentation(self.panelWindow)
+        )
         self.surfaceHost = self.workspaceLifetime.own(
             WorkspaceSurfaceHost(
                 self.panelRegistry,
-                CentralSurfacePresentation(self.tabMain),
+                self.surfacePresentation,
             )
         )
 
@@ -475,6 +492,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
         )
         self.buildWorkspaceMenu()
+        self.floatingSurfaceTransfer = self.workspaceLifetime.own(
+            FloatingSurfaceTransferController(
+                FloatingSurfaceTransferViews.for_window(self)
+            )
+        )
+        self.surfaceHost.add_binding(self.floatingSurfaceTransfer)
         self.themeRepository = ThemeRepository()
         self.themePreviewRenderer = ThemePreviewRenderer()
         # The runtime builds the manager around the view side this
@@ -586,11 +609,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.windowState.restore_project_docks()
         # Show the toolbar
         self.toolbar.setVisible(True)
-        # The project is shown in the central pages, with the tool panels
-        # around them. Taking the central widget out was what gave docked
-        # surfaces the window's whole area; a surface has that area now
-        # because it is what is in the middle.
-        self._showCentralPages()
+        # Project surfaces are docks. Remove the welcome/debug container so
+        # the dock layout owns the whole workspace instead of orbiting an
+        # empty central placeholder.
+        self._hideCentralPages()
         if not self._activePanelId:
             self._activePanelId = core_panels.GENERAL
         self.activatePanel(self._activePanelId)
@@ -599,6 +621,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Settle routed dock extents once native window geometry exists."""
 
         super().showEvent(event)
+        if getattr(self, "_defaultDockLayoutPending", False):
+            self._settleDefaultCoreDocks()
         routing = getattr(self, "surfacePanelRouting", None)
         if routing is not None:
             routing.settle_layout()
@@ -666,9 +690,82 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         placement = getattr(self, "panelPlacement", None)
         if placement is not None:
             placement.watch_dock(instance.container)
+        dock = instance.container
+        if (
+            dock is not None
+            and dock not in self._defaultPeerVisibilitySlots
+        ):
+            panel_id = instance.descriptor.id
+
+            def place_default_peer(visible, owned_id=panel_id):
+                self._placePendingDefaultTab(owned_id, visible)
+                self._placePendingTabsForPeer(owned_id, visible)
+
+            dock.visibilityChanged.connect(place_default_peer)
+            self._defaultPeerVisibilitySlots[dock] = place_default_peer
         routing = getattr(self, "surfacePanelRouting", None)
         if routing is not None:
             routing.panel_opened(instance.descriptor.id)
+
+    def _offerSurfaceToggle(self, instance, dock):
+        """Expose a mounted writing surface without changing its owner."""
+        self.toolbar.addPanelToggle(
+            dock.toggleViewAction(),
+            instance.widget,
+            None,
+            panel_id=instance.id,
+        )
+        placement = getattr(self, "panelPlacement", None)
+        if placement is not None:
+            placement.watch_dock(dock)
+
+    def _removeSurfaceToggle(self, instance, _dock):
+        """Remove this window's control when a surface moves elsewhere."""
+        self.toolbar.removePanelToggle(instance.id)
+
+    def _placePendingDefaultTab(self, panel_id, visible):
+        """Consume one first-open tab relationship on first reveal."""
+        if not visible:
+            return False
+        peer_id = self._pendingDefaultTabPeers.get(panel_id)
+        instance = self.panelHost.instance(panel_id)
+        peer = self.panelHost.instance(peer_id) if peer_id else None
+        dock = instance.container if instance is not None else None
+        peer_dock = peer.container if peer is not None else None
+        if (
+            dock is None
+            or peer_dock is None
+            or dock.isFloating()
+            or peer_dock.isFloating()
+        ):
+            return False
+        if not peer_dock.isVisible():
+            area = self.dockWidgetArea(peer_dock)
+            if area != Qt.NoDockWidgetArea:
+                self.addDockWidget(area, dock)
+            return False
+        self.tabifyDockWidget(peer_dock, dock)
+        dock.raise_()
+        self._pendingDefaultTabPeers.pop(panel_id, None)
+        return True
+
+    def _placePendingTabsForPeer(self, peer_id, visible):
+        """Finish companion tabs when their previously hidden peer appears."""
+        if not visible:
+            return False
+        placed = False
+        for panel_id, expected_peer in tuple(
+            self._pendingDefaultTabPeers.items()
+        ):
+            if expected_peer != peer_id:
+                continue
+            instance = self.panelHost.instance(panel_id)
+            dock = instance.container if instance is not None else None
+            if dock is not None and dock.isVisible():
+                placed = self._placePendingDefaultTab(
+                    panel_id, True,
+                ) or placed
+        return placed
 
     def navigateTo(self, row):
         """Open what a navigator row stands for: a page, or a surface."""
@@ -689,11 +786,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return False
 
     def _showCentralPages(self):
-        """Put the central pages back in view, whatever was over them."""
+        """Show the non-surface developer container."""
         if self.centralWidget() is None:
             self.setCentralWidget(self._centralSurface)
         self.stack.show()
         self.stack.setCurrentIndex(1)
+
+    def _hideCentralPages(self):
+        """Give the whole frame back to independently docked surfaces."""
+        self.stack.hide()
+        if self.centralWidget() is self._centralSurface:
+            self.takeCentralWidget()
 
     def goToSurface(self, surface_id):
         """Show one of the places this workspace holds. Never builds one.
@@ -714,7 +817,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         if not self.surfaceHost.contains(surface_id):
             return False
-        self._showCentralPages()
+        self._hideCentralPages()
         return self.surfaceHost.activate(surface_id) is not None
 
     def activatePanel(self, panel_id):
@@ -831,27 +934,48 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.lstTabs.setCurrentRow(row)
 
     def _placeDefaultCoreDocks(self):
-        """Put the tool panels around the surfaces, for a window with no
-        arrangement of its own.
+        """Build the upstream-shaped first-open frame out of real docks.
 
-        Which is every window until one is saved, and every window whose
-        saved one was written while the work surfaces were docks: such a
-        layout names seven docks this build does not make, and applying it
-        would leave Qt holding those names for the life of the profile.
-
-        What is left to place is the navigator, the project tree and the
-        two companions that share its column. Everything the navigator
-        lists is in the middle now, so nothing here decides how much room
-        a work surface gets -- it gets what the tool panels do not take.
+        Upstream opens on General with a 200-pixel navigator and no project
+        tree beside it.  The hidden surfaces still receive deterministic,
+        independent places. Revealing Editor or Outline therefore adds a
+        dock instead of replacing General in a central page stack.
         """
 
         def dock(panel_id):
             instance = self.panelHost.instance(panel_id)
+            if instance is None:
+                instance = self.surfaceHost.instance(panel_id)
             return instance.container if instance is not None else None
 
         project_tree = dock(core_panels.PROJECT_TREE)
-        if project_tree is None:
+        general = dock(core_panels.GENERAL)
+        editor = dock(core_panels.EDITOR)
+        if any(
+            candidate is None
+            for candidate in (project_tree, general, editor)
+        ):
             return
+
+        # Remove every core container from whatever partial/central-era
+        # arrangement Qt restored. The widgets remain alive and are added
+        # back below; plugin panels are deliberately not part of this method.
+        core_docks = [self.dckNavigation]
+        core_docks.extend(
+            instance.container
+            for instance in self.panelHost.instances.values()
+            if instance.descriptor.id in core_panels.CORE_TOOL_PANEL_IDS
+            and instance.container is not None
+        )
+        core_docks.extend(
+            instance.container
+            for instance in self.surfaceHost.instances.values()
+            if instance.container is not None
+        )
+        for candidate in core_docks:
+            if candidate.isFloating():
+                candidate.setFloating(False)
+            self.removeDockWidget(candidate)
 
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dckNavigation)
         self.addDockWidget(Qt.LeftDockWidgetArea, project_tree)
@@ -859,21 +983,143 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.dckNavigation, project_tree, Qt.Horizontal
         )
 
-        for panel_id in (core_panels.METADATA, core_panels.STORYLINE):
+        # The large writing surfaces share the main work area as native dock
+        # tabs. They remain independently detachable QDockWidgets, but one
+        # never squeezes the others into unusable slivers merely because the
+        # navigator revealed it. This was the working pre-regression layout;
+        # the central-page cutover copied only its single-visible appearance
+        # and discarded the independent containers behind it.
+        self.addDockWidget(Qt.RightDockWidgetArea, general)
+        self.addDockWidget(Qt.RightDockWidgetArea, editor)
+        self.tabifyDockWidget(editor, general)
+
+        outline = dock(core_panels.OUTLINE)
+        if outline is not None:
+            self.tabifyDockWidget(editor, outline)
+
+        previous_catalogue = project_tree
+        for panel_id in (
+            core_panels.PROJECT_ENTITIES,
+            core_panels.CHARACTER_ENTITIES,
+            core_panels.PLOT_ENTITIES,
+            core_panels.WORLD_ENTITIES,
+        ):
+            neighbour = dock(panel_id)
+            if neighbour is not None:
+                self.splitDockWidget(
+                    previous_catalogue, neighbour, Qt.Vertical
+                )
+                previous_catalogue = neighbour
+
+        # Tool companions share the project-tree slot as native dock tabs.
+        # They can still be pulled out or placed elsewhere, while their first
+        # reveal does not become a full-width strip with no neighbour.
+        for panel_id in (core_panels.STORYLINE, core_panels.METADATA):
             companion = dock(panel_id)
             if companion is not None:
                 self.tabifyDockWidget(project_tree, companion)
+        self._pendingDefaultTabPeers = {
+            core_panels.METADATA: core_panels.PROJECT_TREE,
+            core_panels.STORYLINE: core_panels.PROJECT_TREE,
+        }
 
+        # Moving hidden docks exposes them in Qt. Reassert the canonical
+        # first-open visibility after the whole structure exists.
+        for instance in self.surfaceHost.instances.values():
+            instance.container.setVisible(
+                bool(instance.descriptor.default_visible)
+            )
+        for panel_id in (
+            core_panels.PROJECT_TREE,
+            core_panels.METADATA,
+            core_panels.STORYLINE,
+        ):
+            instance = self.panelHost.instance(panel_id)
+            routed = instance.descriptor.visible_with_surfaces
+            visible = (
+                core_panels.GENERAL in routed
+                if routed is not None
+                else bool(instance.descriptor.default_visible)
+            )
+            self.panelHost.set_visible(
+                panel_id, visible,
+            )
+
+        self.dckCheatSheet.hide()
+        self.dckSearch.hide()
+        self.dckNavigation.show()
+        general.show()
+        general.raise_()
+        self._defaultDockLayoutPending = True
+        if self.isVisible():
+            # Hiding a routed neighbour changes QMainWindow's native dock
+            # grid on the next event turn. Resizing synchronously here is
+            # immediately overwritten by that relayout, which is how Reset
+            # Layout returned a 302px navigator despite requesting 200px.
+            QTimer.singleShot(0, self._settleDefaultCoreDocks)
+
+    def _settleDefaultCoreDocks(self):
+        """Apply pixel extents after the native window has real geometry."""
+        general = self.surfaceHost.instance(core_panels.GENERAL)
+        general_dock = general.container if general is not None else None
+        if general_dock is None:
+            return
+        # Native tab groups may select one member on the event turn after
+        # they are rebuilt, even when composition hid every member. Reassert
+        # the canonical visibility at the same deferred boundary used for
+        # sizing so Reset from an already-General workspace cannot revive
+        # Project Tree merely because Metadata and Story line share its slot.
+        for instance in self.surfaceHost.instances.values():
+            instance.container.setVisible(
+                bool(instance.descriptor.default_visible)
+            )
+        for panel_id in core_panels.CORE_TOOL_PANEL_IDS:
+            instance = self.panelHost.instance(panel_id)
+            if instance is not None:
+                routed = instance.descriptor.visible_with_surfaces
+                visible = (
+                    core_panels.GENERAL in routed
+                    if routed is not None
+                    else bool(instance.descriptor.default_visible)
+                )
+                self.panelHost.set_visible(
+                    panel_id, visible,
+                )
+        general_dock.show()
+        general_dock.raise_()
         self.resizeDocks(
-            (self.dckNavigation, project_tree),
-            # The familiar frame is 200 pixels of navigation and, on the
-            # Editor surface where its routed companion is shown, about 187
-            # pixels of project tree.  These are defaults only; Qt's saved
-            # layout remains authoritative once the reader moves them.
-            (200, 187),
+            (self.dckNavigation, general_dock),
+            (200, max(1, self.width() - 200)),
             Qt.Horizontal,
         )
-        project_tree.raise_()
+        self._defaultDockLayoutPending = False
+
+    def resetWorkspaceLayout(self, _checked=False):
+        """Close contributed UI and reconstruct the first-open arrangement."""
+        self.projectLifecycleView.flush_pending_edits()
+        if self.pluginUi is not None:
+            self.pluginUi.projectPanels.close_all()
+            self.pluginUi.editorWorkspaces.close_workspace()
+        for panel_id in tuple(self.panelHost.instances):
+            if panel_id not in core_panels.CORE_PANEL_IDS:
+                self.panelHost.close(panel_id)
+                self.toolbar.removePanelToggle(panel_id)
+        self._placeDefaultCoreDocks()
+        self._activePanelId = core_panels.GENERAL
+        routing = getattr(self, "surfacePanelRouting", None)
+        if routing is not None:
+            routing.reset()
+        self.activatePanel(core_panels.GENERAL)
+        self.windowState.forget_captured_layout()
+        self.windowState.capture_layout()
+        placement = getattr(self, "panelPlacement", None)
+        if placement is not None:
+            placement.refresh_docks()
+        self.statusPresenter.show(
+            self.tr("Workspace layout reset to the first-open arrangement."),
+            5000,
+            1,
+        )
 
     def buildWorkspaceMenu(self):
         """Offer another window onto the same project.
@@ -890,6 +1136,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         before = self.menuView.actions()
         anchor = before[0] if before else None
         self.menuView.insertAction(anchor, self.actNewWindow)
+        self.actResetWorkspaceLayout = QAction(
+            self.tr("&Reset Workspace Layout"), self
+        )
+        self.actResetWorkspaceLayout.setObjectName(
+            "actResetWorkspaceLayout"
+        )
+        self.actResetWorkspaceLayout.setStatusTip(self.tr(
+            "Close plugin panels and restore the first-open workspace layout"
+        ))
+        self.actResetWorkspaceLayout.triggered.connect(
+            self.resetWorkspaceLayout
+        )
+        self.menuView.insertAction(anchor, self.actResetWorkspaceLayout)
+        self.menuView.insertSeparator(anchor)
         self.surfaceTransfer = self.workspaceLifetime.own(
             SurfaceTransferController(
                 SurfaceTransferViews.for_window(self, anchor=anchor)
@@ -925,6 +1185,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # panel and anything watching it agree on one action. They are
         # built first: window styling reaches into the project tree.
         self.toolbar = collapsibleDockWidgets(Qt.RightDockWidgetArea, self)
+        self.surfacePresentation.on_mounted = self._offerSurfaceToggle
+        self.surfacePresentation.on_unmounted = self._removeSurfaceToggle
         register_core_panels(
             self.panelRegistry,
             factories=core_panel_factories(),

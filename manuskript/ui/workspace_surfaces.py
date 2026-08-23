@@ -1,12 +1,9 @@
 """The places a writer goes, and which of them this workspace holds.
 
-A workspace surface is not a dock. It may be *presented* in one -- the user's
-rule allows that explicitly, and it is what happens today -- but being docked
-is where a presentation puts it, not what it is. That distinction is why this
-host exists separately from ``PanelHost``: if surfaces stayed owned by the
-panel host, they would keep tool-panel visibility, floating and toggle
-semantics for no better reason than their presentation being a QDockWidget,
-and the split into two descriptor types would be cosmetic.
+A workspace surface is not *defined* by being a dock. It is presented in one
+today because independent, floatable panes are the required interaction, but
+being docked remains where a presentation puts it rather than what it is.
+That distinction is why this host remains separate from ``PanelHost``.
 
 Deliberately not called a central host. Centrality is one presentation, and a
 plausible one, but the requirement it was meant to serve is that a reader
@@ -143,14 +140,12 @@ class WorkspaceSurfaceError(RuntimeError):
 class WorkspaceSurfaceHost:
     """Which surfaces this workspace holds, and which one is showing.
 
-    ``presentation`` is how they are shown -- given rather than chosen here,
-    because whether that is a central stack or docks is a question for the
-    parity oracle rather than for this class. It needs ``mount(instance)``,
+    ``presentation`` is how they are shown -- given rather than chosen here.
+    It needs ``mount(instance)``,
     ``unmount(instance)`` and ``activate(instance)``.
 
-    An earlier port also declared ``hide``, which nothing called: a mounted
-    surface is not individually shown or hidden, because one of them is
-    current and the rest are simply not the current one.
+    ``current`` records the last surface explicitly activated by navigation
+    or focus.  A dock presentation may keep other surfaces visible beside it.
     """
 
     def __init__(self, registry, presentation, context=None):
@@ -381,7 +376,7 @@ class WorkspaceSurfaceHost:
             self.on_membership_changed()
 
     def activate(self, surface_id):
-        """Show this one. The navigator's whole job, in one call."""
+        """Reveal and focus this one. The navigator's whole job, in one call."""
 
         instance = self._instances.get(surface_id)
         if instance is None:

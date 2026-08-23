@@ -1,10 +1,9 @@
 """Two kinds of core widget, and the two owners they belong to.
 
-Tool panels are docks, built by the panel host on the same native
-infrastructure as a plugin's. Work surfaces are pages of the window's
-central container, built by the surface host. Which a thing is comes
-from its descriptor type, so no test here has to read a field to find
-out what it is holding.
+Tool panels and workspace surfaces have different owners. Both may use
+native docks as presentation, but a surface never enters PanelHost and a
+tool panel never enters WorkspaceSurfaceHost merely because their Qt
+containers look alike.
 """
 
 from dataclasses import fields
@@ -55,7 +54,7 @@ def test_panel_factories_receive_no_main_window_escape_hatch():
 #: Kept beside the writing, in docks.
 TOOL_PANEL_IDS = (PROJECT_TREE, METADATA, STORYLINE)
 
-#: Places the writer goes, shown in the window's central pages.
+#: Places the writer goes, each independently presentable and movable.
 SURFACE_IDS = (
     GENERAL,
     PROJECT_ENTITIES,
@@ -82,14 +81,9 @@ def test_tool_panels_are_docks_their_host_built(MWEmptyProject):
         assert instance.action is not None
 
 
-def test_surfaces_are_pages_of_the_window_rather_than_docks(MWEmptyProject):
-    """The other owner, and the whole of the difference.
-
-    A surface has no dock, no toggle and no visibility: it is one of the
-    window's central pages, and one of them is what the workspace is
-    showing. Asking the panel host for one now answers nothing, which is
-    what makes the two kinds impossible to confuse by accident.
-    """
+def test_surfaces_are_independent_docks_owned_by_the_surface_host(
+        MWEmptyProject):
+    """Presentation does not collapse the ownership boundary."""
 
     window = MWEmptyProject
     widgets = (
@@ -105,8 +99,9 @@ def test_surfaces_are_pages_of_the_window_rather_than_docks(MWEmptyProject):
         instance = window.surfaceHost.instance(surface_id)
         assert surface_id in window.panelRegistry
         assert instance.widget is widget
-        assert instance.container is None
-        assert window.tabMain.indexOf(widget) != -1
+        assert isinstance(instance.container, QDockWidget)
+        assert instance.container.widget() is widget
+        assert window.tabMain.indexOf(widget) == -1
         assert window.panelHost.instance(surface_id) is None
 
 
@@ -133,14 +128,9 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
 
-def test_every_tool_panel_is_movable_floatable_and_nestable(MWEmptyProject):
-    """What a dock is for, now that only tool panels are in one.
-
-    Floating one gives it a utility window owned by this workspace, which
-    is the right answer for something kept beside the writing. It was the
-    wrong answer for a place the writer goes, and that is no longer
-    expressible: those are pages, and pages do not float.
-    """
+def test_every_core_container_is_movable_floatable_and_nestable(
+        MWEmptyProject):
+    """Every core surface can begin the real-window tear-off gesture."""
 
     window = MWEmptyProject
     required = (
@@ -148,8 +138,14 @@ def test_every_tool_panel_is_movable_floatable_and_nestable(MWEmptyProject):
         | QDockWidget.DockWidgetMovable
         | QDockWidget.DockWidgetFloatable
     )
-    for panel_id in TOOL_PANEL_IDS:
-        dock = window.panelHost.instance(panel_id).container
+    docks = [
+        window.panelHost.instance(panel_id).container
+        for panel_id in TOOL_PANEL_IDS
+    ] + [
+        window.surfaceHost.instance(surface_id).container
+        for surface_id in SURFACE_IDS
+    ]
+    for dock in docks:
         assert dock.features() & required == required
         assert dock.allowedAreas() == Qt.AllDockWidgetAreas
     assert window.dockOptions() & QMainWindow.AllowNestedDocks
@@ -198,9 +194,9 @@ def test_declaring_core_panels_twice_is_harmless():
     register_core_panels(registry, 6)
 
     assert tuple(entry.id for entry in registry.descriptors()) == CORE_IDS
-    # Only a tool panel has a placement to be asked about. A surface is
-    # hosted centrally, and answering DOCK from a property was how every
-    # old consumer went on believing everything has one.
+    # Only a tool panel has a placement to be asked about. A surface's native
+    # dock is presentation, and answering DOCK from its descriptor would make
+    # every old consumer believe PanelHost owns it again.
     assert all(
         descriptor.placement == DOCK
         for descriptor in registry.tool_panels()
@@ -247,31 +243,17 @@ def test_the_welcome_screen_shows_no_project_panel(MWNoProject):
         assert shown.isHidden(), panel_id
 
 
-def test_the_welcome_screen_covers_every_surface(MWNoProject):
-    """One page instead of seven put away one at a time.
-
-    Surfaces are pages of the same container the welcome screen is a page
-    of, so showing it hides all of them at once -- which is what putting
-    the project panels away by hand was reaching for. It matters: using
-    the search dock over the welcome screen used to crash Manuskript.
-    """
+def test_the_welcome_screen_hides_every_surface(MWNoProject):
+    """Independent docks must not remain interactive over the welcome UI."""
 
     window = MWNoProject
 
-    # Asked of the stack rather than of the surfaces. A child of a page
-    # that is not showing is not itself "hidden" in Qt's sense -- nobody
-    # hid it -- so asking each surface would pass whether the welcome
-    # screen were up or not.
-    page = window.tabMain
-    while page.parentWidget() is not window.stack:
-        page = page.parentWidget()
-
     assert window.stack.currentIndex() == 0
-    assert window.stack.currentWidget() is not page
-    assert window.surfaceHost.contains(GENERAL)
+    for surface_id, instance in window.surfaceHost.instances.items():
+        assert instance.container.isHidden(), surface_id
 
 
-def test_every_story_surface_is_a_navigator_backed_page(
+def test_every_story_surface_is_a_navigator_backed_independent_dock(
         MWEmptyProject):
     """General through Editor share one descriptor-driven route."""
     window = MWEmptyProject
@@ -288,24 +270,14 @@ def test_every_story_surface_is_a_navigator_backed_page(
 
     assert window.surfaceHost.current() == CHARACTER_ENTITIES
     assert window._activePanelId == CHARACTER_ENTITIES
-    # The central pages are what a project is shown in now. They used to
-    # be taken out of the window entirely so docked surfaces could have
-    # the space, which is why this once asserted the opposite.
-    assert window.centralWidget() is window._centralSurface
-    assert window.tabMain.currentWidget() is (
-        window.corePanels.character_entities
-    )
+    assert window.centralWidget() is None
+    assert not window.surfaceHost.instance(
+        CHARACTER_ENTITIES
+    ).container.isHidden()
 
 
 def test_navigator_selects_the_requested_work_surface(MWEmptyProject):
-    """The highlighted navigator row and the page on screen must agree.
-
-    They are one operation now rather than two things kept in step: the
-    navigator asks the surface host to show one, and what the host says
-    is current is the page the container has up. This used to need a
-    tabified pair of docks and a search through Qt's tab bars to find out
-    which of them was on top.
-    """
+    """Navigation reveals its surface without hiding another visible one."""
 
     window = MWEmptyProject
     was_visible = window.isVisible()
@@ -313,12 +285,14 @@ def test_navigator_selects_the_requested_work_surface(MWEmptyProject):
     qApp.processEvents()
     try:
         assert window.activatePanel(EDITOR)
-        assert window.tabMain.currentWidget() is window.corePanels.editor
+        editor = window.surfaceHost.instance(EDITOR).container
+        assert not editor.isHidden()
         assert window.activatePanel(GENERAL)
         qApp.processEvents()
 
         assert window.surfaceHost.current() == GENERAL
-        assert window.tabMain.currentWidget() is window.corePanels.general
+        assert not window.surfaceHost.instance(GENERAL).container.isHidden()
+        assert not editor.isHidden()
         assert window.lstTabs.currentRow() == window.navigator.row_for_panel(
             GENERAL
         )
@@ -327,13 +301,9 @@ def test_navigator_selects_the_requested_work_surface(MWEmptyProject):
             window.hide()
 
 
-def test_the_central_pages_hold_the_surfaces_and_no_legacy_ones(
+def test_the_debug_container_holds_no_workspace_surface(
         MWEmptyProject):
-    """The debug page, plus one page per surface, and nothing else.
-
-    The tab-era story pages were deleted from the Designer file; what the
-    container holds now is built by the factories the descriptors name.
-    """
+    """No central page stack remains as an alternate surface topology."""
 
     window = MWEmptyProject
 
@@ -341,11 +311,13 @@ def test_the_central_pages_hold_the_surfaces_and_no_legacy_ones(
         window.tabMain.widget(index)
         for index in range(window.tabMain.count())
     ]
-    assert pages[0].objectName() == "lytTabDebug"
-    assert set(pages[1:]) == {
-        window.surfaceHost.instance(surface_id).widget
+    assert [page.objectName() for page in pages] == ["lytTabDebug"]
+    assert all(
+        window.tabMain.indexOf(
+            window.surfaceHost.instance(surface_id).widget
+        ) == -1
         for surface_id in SURFACE_IDS
-    }
+    )
     for name in (
         "lytTabSummary", "lytTabPersos", "lytTabPlot", "lytTabContext",
         "lytTabOutline", "lytTabRedac",
@@ -400,23 +372,17 @@ def test_project_panels_return_with_the_surface_scene_they_declare(
         WorkspaceStateStore().forget(fresh_id)
 
 
-def test_every_tool_panel_toggle_is_always_reachable(MWEmptyProject):
-    """A toggle is a tool panel's, and only a tool panel has one.
-
-    A surface has no toggle to reach: it is not shown or hidden, it is
-    either the page the workspace has up or one of the others.
-    """
+def test_every_independently_visible_core_container_has_a_toggle(
+        MWEmptyProject):
 
     window = MWEmptyProject
     toolbar = window.toolbar
 
     for group in ("anything", None, "plugin.surface"):
         toolbar.setCurrentGroup(group)
-        for panel_id in TOOL_PANEL_IDS:
+        for panel_id in TOOL_PANEL_IDS + SURFACE_IDS:
             entry = toolbar._panelToggles[panel_id][1]
             assert entry.isVisible(), (panel_id, group)
-    for surface_id in SURFACE_IDS:
-        assert surface_id not in toolbar._panelToggles
 
 
 def test_the_two_kinds_are_declared_as_two_kinds():
@@ -470,14 +436,8 @@ def test_a_tool_panel_has_no_navigator_row_to_ask_for():
         )
 
 
-def test_a_surface_has_no_placement_to_be_asked_about():
-    """It is hosted centrally, so the question does not apply to it.
-
-    It briefly answered DOCK from a property so the panel host could mount
-    one, which let every old consumer go on believing everything has a
-    placement. The transitional wrongness lives in the host that is about
-    to lose it instead.
-    """
+def test_a_surface_has_no_tool_panel_placement_to_be_asked_about():
+    """Its presentation may dock it; its public descriptor remains Qt-free."""
 
     from manuskript.panels import DOCK, WorkspaceSurfaceDescriptor
 
@@ -492,14 +452,7 @@ def test_a_surface_has_no_placement_to_be_asked_about():
         )
 
 
-def test_what_the_window_calls_active_is_the_page_on_screen(MWEmptyProject):
-    """One answer rather than two kept in step.
-
-    The window's record, the surface host's current surface and the page
-    the container has up were three things that could disagree while
-    surfaces were docks: a dock could be raised without the navigator
-    knowing, or recorded without being raised.
-    """
+def test_what_the_window_calls_active_is_a_visible_surface(MWEmptyProject):
 
     window = MWEmptyProject
 
@@ -507,9 +460,9 @@ def test_what_the_window_calls_active_is_the_page_on_screen(MWEmptyProject):
         assert window.activatePanel(surface_id)
         assert window._activePanelId == surface_id
         assert window.surfaceHost.current() == surface_id
-        assert window.tabMain.currentWidget() is (
-            window.surfaceHost.instance(surface_id).widget
-        )
+        assert not window.surfaceHost.instance(
+            surface_id
+        ).container.isHidden()
 
 
 def test_a_workspace_with_nothing_saved_starts_on_general(MWEmptyProject):
@@ -539,14 +492,7 @@ def test_a_workspace_with_nothing_saved_starts_on_general(MWEmptyProject):
 
 
 def test_the_developer_page_leaves_no_surface_current(MWEmptyProject):
-    """What `current()` is worth depends on this.
-
-    The developer page shares the container with the surfaces but is not
-    one: it is instrumentation, not a place the writer goes. While it is
-    up, no surface is what the reader is looking at -- and the host has
-    to say so, or its answer means "whichever was showing last" to every
-    caller and not only to this route.
-    """
+    """Debug temporarily owns the central frame but never surface identity."""
 
     window = MWEmptyProject
     debug_row = window.navigator.row_for_page(window.DebugPage)
@@ -561,7 +507,8 @@ def test_the_developer_page_leaves_no_surface_current(MWEmptyProject):
     assert window.activatePanel(GENERAL)
 
     assert window.surfaceHost.current() == GENERAL
-    assert window.tabMain.currentWidget() is window.corePanels.general
+    assert window.centralWidget() is None
+    assert not window.surfaceHost.instance(GENERAL).container.isHidden()
 
 
 def test_the_navigator_lists_what_this_workspace_holds(MWEmptyProject):

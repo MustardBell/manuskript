@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from PyQt5.QtCore import QEvent, QMimeData, QObject, QPoint, Qt
+from PyQt5.QtCore import QEvent, QMimeData, QObject, QPoint, QTimer, Qt
 from PyQt5.QtGui import QColor, QDrag, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
@@ -215,6 +215,144 @@ class SurfaceTransferResult:
 
     instance: Any
     workspace: Any
+
+
+@dataclass(frozen=True)
+class FloatingSurfaceTransferViews:
+    """Turn a native dock tear-off into a peer workspace transaction."""
+
+    host: Any
+    project_active: Callable[[], bool]
+    move_to_new_workspace: Callable[[str], Any]
+    place_workspace: Callable[[Any, Any], None]
+    show_status: Callable[[str, int, int], None]
+    translate: Callable[[str], str]
+    defer: Callable[[Callable[[], None]], None] = (
+        lambda callback: QTimer.singleShot(0, callback)
+    )
+
+    @classmethod
+    def for_window(cls, window):
+        return cls(
+            host=window.surfaceHost,
+            project_active=lambda: window.projectRuntime.isOpen,
+            move_to_new_workspace=(
+                window.surfaceTransfer.move_to_new_workspace
+            ),
+            place_workspace=lambda workspace, geometry: (
+                workspace.setGeometry(geometry)
+            ),
+            show_status=window.statusPresenter.show,
+            translate=window.tr,
+        )
+
+
+class FloatingSurfaceTransferController:
+    """Replace a floated surface dock with a real workspace window.
+
+    A floating ``QDockWidget`` is an owned utility window: it has no taskbar
+    entry or minimize/maximize controls, raises with its owner and cannot host
+    another dock.  Once Qt has completed the user's tear-off gesture, move the
+    *living* surface through the existing ownership transaction and retire the
+    temporary utility container.  The destination is a peer ``MainWindow``
+    and can therefore accept project-tree, metadata, plugin and other docks.
+    """
+
+    def __init__(self, views):
+        self.views = views
+        self._connections = {}
+        self._pending = set()
+        self._settling = set()
+
+    def attach_surface(self, instance):
+        dock = instance.container
+        if dock is None or instance.id in self._connections:
+            return
+
+        def changed(floating, surface_id=instance.id, expected=dock):
+            self._floating_changed(surface_id, expected, floating)
+
+        dock.topLevelChanged.connect(changed)
+        self._connections[instance.id] = (dock, changed)
+
+    def detach_surface(self, instance):
+        found = self._connections.pop(instance.id, None)
+        self._pending.discard(instance.id)
+        self._settling.discard(instance.id)
+        if found is None:
+            return
+        dock, changed = found
+        try:
+            dock.topLevelChanged.disconnect(changed)
+        except (RuntimeError, TypeError):
+            pass
+
+    def _floating_changed(self, surface_id, dock, floating):
+        if (
+            not floating
+            or surface_id in self._settling
+            or surface_id in self._pending
+            or not self.views.project_active()
+        ):
+            return
+        self._pending.add(surface_id)
+        geometry = dock.frameGeometry()
+        self.views.defer(
+            lambda: self._finish_tear_off(surface_id, dock, geometry)
+        )
+
+    def _finish_tear_off(self, surface_id, dock, geometry):
+        self._pending.discard(surface_id)
+        instance = self.views.host.instance(surface_id)
+        if (
+            instance is None
+            or instance.container is not dock
+            or not dock.isFloating()
+        ):
+            return
+        # A sparse peer workspace already *is* the real window requested by
+        # the first tear-off. It cannot surrender its only surface to another
+        # new window and remain a valid visible workspace.
+        if len(self.views.host.instances) <= 1:
+            self._dock_back(surface_id, dock)
+            self.views.show_status(
+                self.views.translate(
+                    "This surface already occupies its own workspace window."
+                ),
+                5000,
+                1,
+            )
+            return
+
+        workspace = self.views.move_to_new_workspace(surface_id)
+        if workspace is None:
+            if self.views.host.instance(surface_id) is instance:
+                self._dock_back(surface_id, dock)
+            return
+        self.views.place_workspace(workspace, geometry)
+        workspace.show()
+        workspace.raise_()
+        workspace.activateWindow()
+
+    def _dock_back(self, surface_id, dock):
+        self._settling.add(surface_id)
+        try:
+            dock.setFloating(False)
+        finally:
+            self._settling.discard(surface_id)
+
+    def dispose(self):
+        for surface_id, (dock, changed) in tuple(
+            self._connections.items()
+        ):
+            try:
+                dock.topLevelChanged.disconnect(changed)
+            except (RuntimeError, TypeError):
+                pass
+            self._connections.pop(surface_id, None)
+        self._pending.clear()
+        self._settling.clear()
+        self.views = None
 
 
 class SurfaceTransferController(QObject):

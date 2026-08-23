@@ -477,10 +477,9 @@ class PanelPlacementController:
     def build_float_menu(self):
         """Offer each owned panel as a float/re-dock toggle.
 
-        Every panel this host has, with no filtering: the places the
-        navigator lists are not in it any more. They are shown in the
-        window's central pages by another owner, so there is nothing here
-        to leave out and no kind to ask about.
+        Every tool panel this host has, with no filtering. Navigator
+        surfaces belong to another owner and have their own visibility
+        controls, so there is no surface kind to filter out here.
         """
 
         menu = self.floating_menu

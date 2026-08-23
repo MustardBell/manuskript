@@ -94,6 +94,34 @@ class SurfacePanelRoutingViews:
                 else:
                     horizontal.append(dock)
                     horizontal_sizes.append(max(1, int(extent)))
+            # QMainWindow.resizeDocks preserves the combined extent of the
+            # docks it is given. Passing only the navigator and a newly shown
+            # project tree asks Qt to divide the old navigator column between
+            # them; with the navigator's 200px minimum, the tree becomes the
+            # unusably narrow remainder. Include the active work surface so
+            # Qt can move the boundary between the tool column and the work
+            # area while preserving the latter's generous width.
+            active_id = window.surfaceHost.current()
+            active = window.surfaceHost.instance(active_id)
+            active_dock = active.container if active is not None else None
+            if (
+                active_dock is not None
+                and not active_dock.isHidden()
+                and active_dock not in horizontal
+                and window.dockWidgetArea(active_dock) in (
+                    Qt.LeftDockWidgetArea,
+                    Qt.RightDockWidgetArea,
+                )
+            ):
+                available_extent = sum(
+                    max(1, candidate.width())
+                    for candidate in horizontal
+                ) + max(1, active_dock.width())
+                horizontal.append(active_dock)
+                horizontal_sizes.append(max(
+                    1,
+                    available_extent - sum(horizontal_sizes),
+                ))
             window.resizeDocks(
                 tuple(horizontal), tuple(horizontal_sizes), Qt.Horizontal,
             )
@@ -223,6 +251,15 @@ class SurfacePanelRoutingController:
             self._navigation_extent,
             dict(self._visible_extents),
         )
+
+    def reset(self):
+        """Forget per-session overrides before rebuilding first-open UI."""
+        self._current_surface = None
+        self._applied = False
+        self._visibility.clear()
+        self._extents.clear()
+        self._navigation_extent = 0
+        self._visible_extents.clear()
 
     def dispose(self):
         self.views = None

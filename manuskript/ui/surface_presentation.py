@@ -6,14 +6,11 @@ presentation, injected, and the host's tests use one that is neither a
 stack nor a dock so that nothing asserts the arrangement they were written
 against.
 
-This is the first production one. It shows a surface in the window's
-central pages -- the tab widget MainWindow already has, whose tab bar it
-already hides and whose current page the navigator already sets. Central
-because the complaint that started this was that surfaces are narrow: they
-were built for the 230 pixels a dock gave them, and they are supposed to be
-windows. Whether centrality reproduces upstream's *frame* is a separate
-question the parity oracle answers by running upstream, not one this class
-assumes.
+The production presentation uses independent native docks.  A dock is a
+presentation of a surface, not its domain identity: the surface host still
+owns the living widget and can transfer it intact between workspaces.  This
+keeps every writing surface independently visible, movable and floatable
+without conflating it with a tool-panel contribution.
 
 Every address here is a widget. The old central area was addressed by tab
 number -- which is why removing a surface moved every surface after it, and
@@ -24,77 +21,77 @@ The port is ``mount(instance) -> container``, ``unmount(instance)`` and
 ``activate(instance)``.
 """
 
+from PyQt5.QtCore import Qt
+
+from manuskript.ui.panels.mounts import dock_name
 from manuskript.ui.workspace_surfaces import WorkspaceSurfaceError
 
 
-class CentralSurfacePresentation:
-    """Surfaces shown as pages of one container, one of them current.
+class DockSurfacePresentation:
+    """Present each living surface in its own native ``QDockWidget``.
 
-    ``pages`` is a ``QTabWidget``. Its tab bar is hidden and stays hidden:
-    the navigator list is what chooses a surface, and a row of tabs over
-    the same surfaces would be a second control for the same choice. That
-    is not hypothetical -- the navigator and the tab widget already came
-    apart once, when Characters became a dock and left the tabs while the
-    navigator went on listing it.
+    ``views`` is the same narrow window port used by panel mounting.  The
+    presentation deliberately does not use ``PanelHost``: surface ownership,
+    bindings and transfer remain in ``WorkspaceSurfaceHost`` while Qt docking
+    is only the way that owner displays a surface in this window.
     """
 
-    def __init__(self, pages):
-        self.pages = pages
-        self.pages.tabBar().hide()
+    def __init__(self, views, default_area=Qt.RightDockWidgetArea):
+        self.views = views
+        self.default_area = default_area
+        self.on_mounted = None
+        self.on_unmounted = None
+        self._containers = {}
 
     def mount(self, instance):
-        """Put a surface in the pages without showing it.
-
-        Appended, never inserted: the debug page is still reached by the
-        index in ``NAVIGATOR_PAGES``, and inserting ahead of it would make
-        that number quietly mean a surface instead.
-
-        Arriving is not being asked for, and appending is what keeps those
-        apart: Qt only makes a new page current when there was no current
-        page. Which surface is showing is the host's to say -- it settles
-        that explicitly -- and a mount that decided it would make what a
-        reader sees depend on the order the workspace built things in.
-
-        Answers None because nothing here wraps the surface. The pages hold
-        the widget itself, and handing back the container they all share
-        would read as one each.
-        """
-
-        self.pages.addTab(instance.widget, instance.descriptor.title)
-        return None
+        descriptor = instance.descriptor
+        dock = self.views.create_dock(descriptor.title)
+        dock.setObjectName(dock_name(descriptor))
+        dock.setAttribute(Qt.WA_DeleteOnClose, False)
+        dock.setWidget(instance.widget)
+        # All canonical surfaces exist before window-state restoration, so a
+        # new one only needs a fallback area. A transferred/plugin surface
+        # may arrive later and can still reclaim a saved place by objectName.
+        restored = self.views.restore_dock(dock)
+        if not restored:
+            self.views.add_dock(self.default_area, dock)
+        dock.setVisible(bool(descriptor.default_visible))
+        self._containers[id(instance)] = dock
+        if callable(self.on_mounted):
+            self.on_mounted(instance, dock)
+        return dock
 
     def unmount(self, instance):
-        """Take a surface out, alive and belonging to nobody.
-
-        Qt keeps a removed page as a child of the container it came out
-        of. A surface handed to another window while still parented here
-        would be destroyed with this one -- the writer's editor, with work
-        in it, dying because the window it used to be in closed.
-
-        Silent about a surface that is not here: detaching what was
-        already detached has nothing to undo.
-        """
-
-        position = self.pages.indexOf(instance.widget)
-        if position == -1:
+        dock = instance.container
+        if (
+            dock is None
+            or self._containers.get(id(instance)) is not dock
+        ):
             return
-        self.pages.removeTab(position)
+        if callable(self.on_unmounted):
+            self.on_unmounted(instance, dock)
+        # Reparent the living surface before the old container is scheduled
+        # for deletion.  The same widget may be mounted in another workspace
+        # immediately by the transfer transaction.
         instance.widget.setParent(None)
+        self.views.remove_dock(dock)
+        dock.setParent(None)
+        dock.deleteLater()
+        self._containers.pop(id(instance), None)
 
     def activate(self, instance):
-        """Show this one.
-
-        Refuses a surface it does not hold rather than doing what Qt does,
-        which is nothing: that leaves the host saying one surface is
-        current while the reader is looking at another. The host has
-        already had that divergence fixed inside it once, and a
-        presentation that answered quietly would put it straight back.
-        """
-
-        position = self.pages.indexOf(instance.widget)
-        if position == -1:
+        dock = instance.container
+        if (
+            dock is None
+            or self._containers.get(id(instance)) is not dock
+        ):
             raise WorkspaceSurfaceError(
-                "{} is not mounted in these pages, so it cannot be "
-                "shown.".format(instance.id)
+                "{} has no dock in this workspace.".format(instance.id)
             )
-        self.pages.setCurrentIndex(position)
+        self.views.activate_dock(dock)
+
+    def dispose(self):
+        self.on_mounted = None
+        self.on_unmounted = None
+        self._containers.clear()
+        self.views = None

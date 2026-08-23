@@ -1552,14 +1552,11 @@ def test_a_workspace_that_cannot_be_made_leaves_the_panel_where_it_was(
 
 def test_a_surface_the_navigator_offers_is_a_window_not_a_dock(
         MWEmptyProject):
-    """The user's rule: anything navigation has is not a dock.
+    """A dock container does not turn a surface into a tool panel.
 
-    It may be docked, and docked it may fill most of the frame, but that is
-    a placement rather than what it is. Floating one does not give it a
-    window of its own -- it gives it a utility window owned by this one,
-    with no taskbar entry, no minimize or maximize, raising with its owner
-    and unable to hold anything else. That is what a reader got when they
-    dragged an editor out, so Qt is not offered the chance.
+    Qt begins the gesture in a native dock, then the transfer controller
+    replaces that temporary utility window with a peer MainWindow. Ownership
+    remains in WorkspaceSurfaceHost throughout.
     """
 
     window = MWEmptyProject
@@ -1572,13 +1569,10 @@ def test_a_surface_the_navigator_offers_is_a_window_not_a_dock(
     # panel has no such field to read any more.
     assert isinstance(editor.descriptor, WorkspaceSurfaceDescriptor)
     assert isinstance(tree.descriptor, ToolPanelDescriptor)
-    # The rule is structural now rather than argued. There is no dock to
-    # take Qt's floatable feature away from: the editor is a page of the
-    # window, and the panel host it used to be docked in has never heard
-    # of it. A tool panel still floats, which is what a dock is for.
-    assert editor.container is None
+    assert isinstance(editor.container, QDockWidget)
+    assert editor.container.features() & QDockWidget.DockWidgetFloatable
     assert window.panelHost.instance(EDITOR) is None
-    assert window.tabMain.indexOf(editor.widget) != -1
+    assert window.tabMain.indexOf(editor.widget) == -1
     assert tree.container.features() & QDockWidget.DockWidgetFloatable
 
 

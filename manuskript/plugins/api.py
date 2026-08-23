@@ -502,10 +502,10 @@ class ProjectPanelContribution:
     """A tool panel: something the writer keeps beside what they are writing.
 
     Deliberately not a place the writer *goes*. Those are workspace
-    surfaces -- the manuscript, the cast, the outline -- and they live in
-    the window's central host rather than in a dock, cannot be floated into
-    a utility window, and move between windows by changing which workspace
-    owns them.
+    surfaces -- the manuscript, the cast, the outline. They remain
+    independently owned and transferable even when the application uses a
+    native dock as their presentation. A project-panel contribution does not
+    receive those surface semantics merely because it also appears in a dock.
 
     This contribution used to carry a ``navigator`` entry, which made a
     contradiction expressible: the navigator row said "a place the writer

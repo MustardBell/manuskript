@@ -373,15 +373,8 @@ def state_controller_reading(window, store, legacy=()):
     return controller
 
 
-def test_an_arrangement_that_names_docks_we_no_longer_make_is_refused():
-    """It cannot be cleaned, so it cannot be taken.
-
-    Qt keeps the entry for a dock it restored but never found, and hands
-    it back on every later save -- deliberately, so a panel whose plugin
-    is temporarily away keeps its place. Applied once, those dead names
-    would ride along for the life of the profile, and removing them
-    afterwards does not work.
-    """
+def test_an_arrangement_that_names_surface_docks_is_applied_again():
+    """Restored independent surfaces make their saved names live again."""
 
     window = a_window()
     controller = state_controller_reading(
@@ -390,8 +383,8 @@ def test_an_arrangement_that_names_docks_we_no_longer_make_is_refused():
 
     controller.restore()
 
-    assert not window.restoreState.called
-    assert not controller.restoredLayout
+    window.restoreState.assert_called_once_with(b"arrangement")
+    assert controller.restoredLayout
     # The window's size and place are still true, and are not what this
     # refuses: only the arrangement of docks inside it.
     window.restoreGeometry.assert_called_once_with(b"where the window was")
@@ -420,7 +413,7 @@ def test_a_pre_membership_floating_surface_is_exposed_for_migration():
     assert controller.legacy_floating_surfaces() == (floating,)
 
 
-def test_explicit_surface_membership_wins_over_a_stale_legacy_blob():
+def test_explicit_membership_prevents_replaying_floating_dock_migration():
     from manuskript.ui.legacy_layouts import LegacySurfaceLayout
 
     window = a_window()
@@ -442,7 +435,7 @@ def test_explicit_surface_membership_wins_over_a_stale_legacy_blob():
     controller.restore()
 
     assert controller.legacy_floating_surfaces() == ()
-    assert not controller.restoredLayout
+    assert controller.restoredLayout
 
 
 def test_only_surface_aware_state_supplies_a_routed_panel_choice():
@@ -468,13 +461,8 @@ def test_only_surface_aware_state_supplies_a_routed_panel_choice():
     ) is None
 
 
-def test_an_arrangement_naming_only_docks_we_make_is_applied():
-    """Whoever wrote it, and whatever version stamped it.
-
-    Including version 1, which is what an installation upgrading from
-    upstream arrives as. Refusing by version threw exactly those away,
-    and they are the arrangements somebody actually made.
-    """
+def test_an_arrangement_without_surface_docks_gets_the_new_default():
+    """Upstream and central-era blobs cannot place independent surfaces."""
 
     for version in (1, 3, WORKSPACE_STATE_VERSION):
         window = a_window()
@@ -485,7 +473,7 @@ def test_an_arrangement_naming_only_docks_we_make_is_applied():
         controller.restore()
 
         window.restoreState.assert_called_once_with(b"arrangement")
-        assert controller.restoredLayout, version
+        assert not controller.restoredLayout, version
 
 
 def test_a_window_with_nothing_saved_places_its_own():

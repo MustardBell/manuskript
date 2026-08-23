@@ -3,11 +3,9 @@
 There are two of them and they were one for too long.
 
 A **workspace surface** is a place the writer goes: the manuscript, the
-cast, the outline, the editor. It is what the navigator lists. It lives in
-the window's central host, it is not a dock, and it may be docked without
-that being what it is -- the user's rule, and the correction that produced
-this split: *"anything that navigation has is NOT a dock. It could be
-docked but anything that navigation has and can enable is a window."*
+cast, the outline, the editor. It is what the navigator lists. It is owned
+by the workspace surface host and remains independently placeable; a native
+dock may present it without making it a tool panel.
 
 A **tool panel** is something kept beside what is being written: the
 project tree, the metadata editor, a plugin's notes. It lives in a dock,
@@ -258,10 +256,10 @@ class ToolPanelDescriptor:
 class WorkspaceSurfaceDescriptor:
     """One place the writer goes, before any widget of it exists.
 
-    A surface is hosted by the window's central surface host, and moving one
-    between windows changes which workspace owns it rather than where it is
-    docked. So it has no ``placement`` to choose, no splitter ``slot`` and no
-    ``group``: those are a tool panel's vocabulary and mean nothing here.
+    A surface is owned independently from tool panels, and moving one between
+    windows changes which workspace owns it.  Its *presentation* may be a
+    dock, a separate window, or something else; that presentation remains a
+    concern of the surface host rather than a ``placement`` field here.
 
     ``multiplicity`` says at most one presentation of this surface **may**
     belong to a workspace. It does not say every workspace gets one -- that
@@ -287,14 +285,13 @@ class WorkspaceSurfaceDescriptor:
     object_name: str = ""
     widget_factory: Optional[Callable[..., Any]] = None
     state: Tuple[PanelState, ...] = ()
+    #: Whether a new workspace presents this surface before the reader has a
+    #: saved layout.  Visibility belongs to the presentation, but the useful
+    #: first-run policy belongs to the surface being described.
+    default_visible: bool = False
     #: Where this sits in the navigator. Optional: a surface may exist
     #: without being listed, but anything listed is a surface.
     navigator: Optional["NavigatorEntry"] = None
-
-    # There is no default_visible. A surface is not shown or hidden: one
-    # of them is what the workspace is currently showing and the rest are
-    # simply not that one. It had the field while surfaces were docks,
-    # where three of the seven claimed to be visible at once.
 
     def __post_init__(self):
         if not self.id or "." not in self.id:

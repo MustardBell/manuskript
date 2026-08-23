@@ -168,7 +168,7 @@ class PanelHost:
         """How this panel is fastened, by what its descriptor declares."""
         if isinstance(descriptor, WorkspaceSurfaceDescriptor):
             # A place the writer goes has no placement to fasten: it is
-            # shown in the window's central pages by the surface host.
+            # shown independently by the surface host.
             # Asked of the type rather than of whether it happens to have
             # a placement, because inferring the kind from a shared field
             # is what let a surface be docked here in the first place.
