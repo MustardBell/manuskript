@@ -97,6 +97,10 @@ from manuskript.ui.workspace_windows import (
     WorkspaceWindowController,
     WorkspaceWindowViews,
 )
+from manuskript.ui.workspace_layout_reset import (
+    WorkspaceLayoutResetController,
+    WorkspaceLayoutResetViews,
+)
 from manuskript.ui.workspace_lifetime import WorkspaceLifetime
 from manuskript.ui.workspace_focus import (
     WorkspaceFocusController,
@@ -215,10 +219,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # reader has arranged it elsewhere.
         self._pendingDefaultTabPeers = {}
         self._defaultPeerVisibilitySlots = {}
-        # The welcome screen, and the pages the project is shown in. The
-        # central widget used to be taken out of the window entirely while
-        # a project was open, so that docked surfaces could have its space;
-        # surfaces live in it now, and the tool panels are what orbits.
+        # The welcome screen and opt-in Debug page are the only central
+        # content. Project surfaces are independently owned native docks, so
+        # this container leaves the window while a project is being shown.
         self._centralSurface = self.centralWidget()
         self._projectSurfaceActive = False
         # Where a workspace that has never been told otherwise starts.
@@ -489,6 +492,47 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.workspaceWindows = self.workspaceLifetime.own(
             WorkspaceWindowController(
                 WorkspaceWindowViews.for_window(self)
+            )
+        )
+        self.workspaceLayoutReset = self.workspaceLifetime.own(
+            WorkspaceLayoutResetController(
+                WorkspaceLayoutResetViews(
+                    current_workspace=self,
+                    workspaces=lambda: self.windowRegistry.workspace_windows,
+                    identify=lambda workspace: workspace.windowId,
+                    surface_host=lambda workspace: workspace.surfaceHost,
+                    flush_pending_edits=lambda workspace: (
+                        workspace.projectLifecycleView.flush_pending_edits()
+                    ),
+                    close_contributed_ui=lambda workspace: (
+                        workspace._closeContributedWorkspaceUi()
+                    ),
+                    open_surface=lambda workspace, surface_id: (
+                        workspace.surfaceHost.open(
+                            surface_id,
+                            PanelContext(translate=workspace.tr),
+                        )
+                    ),
+                    activate_surface=lambda workspace, surface_id: (
+                        workspace.activatePanel(surface_id)
+                    ),
+                    reconstruct_layout=lambda workspace: (
+                        workspace._resetLocalWorkspaceLayout()
+                    ),
+                    close_workspace=lambda workspace: bool(
+                        workspace.close()
+                    ),
+                    remember_session=lambda window_ids: (
+                        self.windowState.store.set_open_windows(window_ids)
+                    ),
+                    show_status=lambda workspace, message, duration, level: (
+                        workspace.statusPresenter.show(
+                            workspace.tr(message), duration, level,
+                        )
+                    ),
+                    core_surface_ids=core_panels.CORE_SURFACE_IDS,
+                    default_surface=core_panels.GENERAL,
+                )
             )
         )
         self.buildWorkspaceMenu()
@@ -1094,9 +1138,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self._defaultDockLayoutPending = False
 
-    def resetWorkspaceLayout(self, _checked=False):
-        """Close contributed UI and reconstruct the first-open arrangement."""
-        self.projectLifecycleView.flush_pending_edits()
+    def _closeContributedWorkspaceUi(self):
+        """Remove UI which is not part of the canonical core workspace."""
         if self.pluginUi is not None:
             self.pluginUi.projectPanels.close_all()
             self.pluginUi.editorWorkspaces.close_workspace()
@@ -1104,6 +1147,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if panel_id not in core_panels.CORE_PANEL_IDS:
                 self.panelHost.close(panel_id)
                 self.toolbar.removePanelToggle(panel_id)
+        for surface_id in tuple(self.surfaceHost.instances):
+            if surface_id not in core_panels.CORE_SURFACE_IDS:
+                self.surfaceHost.close(surface_id)
+
+    def _resetLocalWorkspaceLayout(self):
+        """Rebuild this complete workspace's canonical dock presentation."""
         self._placeDefaultCoreDocks()
         self._activePanelId = core_panels.GENERAL
         routing = getattr(self, "surfacePanelRouting", None)
@@ -1115,11 +1164,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         placement = getattr(self, "panelPlacement", None)
         if placement is not None:
             placement.refresh_docks()
-        self.statusPresenter.show(
-            self.tr("Workspace layout reset to the first-open arrangement."),
-            5000,
-            1,
-        )
+
+    def resetWorkspaceLayout(self, _checked=False):
+        """Restore the one first-open application workspace explicitly."""
+        return self.workspaceLayoutReset.reset(_checked)
 
     def buildWorkspaceMenu(self):
         """Offer another window onto the same project.
@@ -1143,7 +1191,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "actResetWorkspaceLayout"
         )
         self.actResetWorkspaceLayout.setStatusTip(self.tr(
-            "Close plugin panels and restore the first-open workspace layout"
+            "Close contributed UI, reunite core surfaces in the main "
+            "workspace, and restore the first-open layout"
         ))
         self.actResetWorkspaceLayout.triggered.connect(
             self.resetWorkspaceLayout

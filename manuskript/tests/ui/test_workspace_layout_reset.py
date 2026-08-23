@@ -2,7 +2,11 @@
 
 from PyQt5.QtWidgets import QLabel, qApp
 
-from manuskript.panels import PanelContext, ToolPanelDescriptor
+from manuskript.panels import (
+    PanelContext,
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
+)
 from manuskript.panels.core import (
     CORE_SURFACE_IDS,
     EDITOR,
@@ -124,3 +128,83 @@ def test_view_menu_exposes_reset_as_an_explicit_command(MWEmptyProject):
 
     assert action.objectName() == "actResetWorkspaceLayout"
     assert "first-open" in action.statusTip()
+
+
+def test_reset_reunites_a_detached_editor_and_retires_its_wrapper(
+        MWEmptyProject):
+    primary = MWEmptyProject
+    primary.show()
+    primary.activatePanel(EDITOR)
+    original = primary.surfaceHost.instance(EDITOR)
+    widget = original.widget
+    wrapper = primary.surfaceTransfer.move_to_new_workspace(EDITOR)
+    assert wrapper is not None
+    assert set(wrapper.surfaceHost.instances) == {EDITOR}
+
+    # The command is application-scoped even when invoked from the
+    # temporary window that it will retire.
+    assert wrapper.resetWorkspaceLayout()
+    settle()
+
+    assert primary.windowRegistry.workspace_windows == (primary,)
+    assert set(primary.surfaceHost.instances) >= set(CORE_SURFACE_IDS)
+    assert primary.surfaceHost.instance(EDITOR) is original
+    assert original.widget is widget
+    assert original.host is primary.surfaceHost
+    assert primary.surfaceHost.current() == GENERAL
+    assert primary.windowState.store.open_windows() == (primary.windowId,)
+
+
+def test_reset_closes_a_contributed_workspace_surface(MWEmptyProject):
+    window = MWEmptyProject
+    surface_id = "test.reset.contributed-surface"
+    window.panelRegistry.register(WorkspaceSurfaceDescriptor(
+        id=surface_id,
+        title="Contributed surface",
+        widget_factory=lambda context, parent: QLabel("plugin", parent),
+    ))
+    try:
+        window.surfaceHost.open(
+            surface_id,
+            PanelContext(translate=window.tr),
+        )
+        assert window.surfaceHost.contains(surface_id)
+        assert surface_id in window.toolbar._panelToggles
+
+        assert window.resetWorkspaceLayout()
+        settle()
+
+        assert not window.surfaceHost.contains(surface_id)
+        assert surface_id not in window.toolbar._panelToggles
+    finally:
+        window.surfaceHost.close(surface_id)
+        if surface_id in window.panelRegistry:
+            window.panelRegistry.deregister(surface_id)
+
+
+def test_failed_reset_returns_a_gathered_surface_to_its_wrapper(
+        MWEmptyProject, monkeypatch):
+    primary = MWEmptyProject
+    primary.activatePanel(EDITOR)
+    original = primary.surfaceHost.instance(EDITOR)
+    wrapper = primary.surfaceTransfer.move_to_new_workspace(EDITOR)
+    assert wrapper is not None
+
+    def reject_layout():
+        raise RuntimeError("layout probe")
+
+    monkeypatch.setattr(primary, "_resetLocalWorkspaceLayout", reject_layout)
+    try:
+        assert not primary.resetWorkspaceLayout()
+
+        assert wrapper.surfaceHost.instance(EDITOR) is original
+        assert original.host is wrapper.surfaceHost
+        assert not primary.surfaceHost.contains(EDITOR)
+        assert wrapper in primary.windowRegistry.workspace_windows
+    finally:
+        if wrapper.surfaceHost.contains(EDITOR):
+            instance = wrapper.surfaceHost.detach(EDITOR)
+            primary.surfaceHost.attach(instance)
+            primary.activatePanel(EDITOR)
+        wrapper.close()
+        settle()
