@@ -19,6 +19,7 @@ from manuskript.ui.workspace_surfaces import (
     WorkspaceBuildIntent,
     WorkspaceSurfaceError,
 )
+from manuskript.services.workspace_state import PRIMARY
 from manuskript.ui.tooltip_style import contrast_ratio
 
 
@@ -153,17 +154,22 @@ class SurfaceTransferViews:
     create_workspace: Callable[[WorkspaceBuildIntent], Any]
     close_workspace: Callable[[Any], None]
     workspace_host: Callable[[Any], Any]
+    current_workspace: Any
+    peer_workspaces: Callable[[], tuple]
+    workspace_title: Callable[[Any], str]
+    activate_workspace_surface: Callable[[Any, str], bool]
+    close_when_empty: bool
     show_status: Callable[[str, int, int], None]
 
     @classmethod
     def for_window(cls, window, anchor=None):
         menu = QMenu(
-            window.tr("Move &Surface to New Window"), window,
+            window.tr("Move &Surface To"), window,
         )
-        menu.setObjectName("menuMoveSurfaceToNewWindow")
+        menu.setObjectName("menuMoveSurfaceTo")
         menu.menuAction().setStatusTip(window.tr(
-            "Move one writing surface, with its current view state, to a "
-            "new workspace window"
+            "Move one writing surface, with its current view state, to "
+            "another or a new workspace window"
         ))
         window.menuView.insertMenu(anchor, menu)
 
@@ -188,6 +194,14 @@ class SurfaceTransferViews:
             rectangle = window.lstTabs.visualItemRect(item)
             return window.lstTabs.viewport().grab(rectangle)
 
+        def workspace_title(workspace):
+            title = workspace.windowTitle() or window.tr("Workspace")
+            if workspace.windowId == PRIMARY:
+                identity = window.tr("Main workspace")
+            else:
+                identity = workspace.windowId
+            return window.tr("{} — {}").format(title, identity)
+
         return cls(
             host=window.surfaceHost,
             menu=menu,
@@ -205,6 +219,17 @@ class SurfaceTransferViews:
             ),
             close_workspace=lambda workspace: workspace.close(),
             workspace_host=lambda workspace: workspace.surfaceHost,
+            current_workspace=window,
+            peer_workspaces=lambda: tuple(
+                candidate
+                for candidate in window.windowRegistry.workspace_windows
+                if candidate is not window
+            ),
+            workspace_title=workspace_title,
+            activate_workspace_surface=lambda workspace, surface_id: (
+                workspace.activatePanel(surface_id)
+            ),
+            close_when_empty=(window.windowId != PRIMARY),
             show_status=window.statusPresenter.show,
         )
 
@@ -453,25 +478,62 @@ class SurfaceTransferController(QObject):
             self._disabled_action("This workspace has no surface to move")
             return
 
-        can_move = len(instances) > 1
+        can_move_to_new = len(instances) > 1
+        peers = tuple(self.views.peer_workspaces())
         for instance in sorted(instances, key=self._sort_key):
             title = self.views.translate(instance.descriptor.title)
-            action = menu.addAction(title.replace("&", "&&"))
-            action.setData(instance.id)
-            if can_move:
-                action.setStatusTip(self.views.translate(
+            submenu = menu.addMenu(title.replace("&", "&&"))
+            submenu.menuAction().setData(instance.id)
+
+            fresh = submenu.addAction(self.views.translate("New window"))
+            fresh.setData((instance.id, "new"))
+            fresh.setEnabled(can_move_to_new)
+            fresh_tip = (
+                self.views.translate(
                     "Move {} to a new workspace window"
-                ).format(title))
-                action.triggered.connect(
+                ).format(title)
+                if can_move_to_new else
+                self.views.translate(
+                    "A workspace must keep at least one surface"
+                )
+            )
+            fresh.setStatusTip(fresh_tip)
+            if can_move_to_new:
+                fresh.triggered.connect(
                     lambda checked=False, surface_id=instance.id: (
                         self.move_to_new_window(surface_id, checked)
                     )
                 )
-            else:
-                action.setEnabled(False)
-                action.setStatusTip(self.views.translate(
-                    "A workspace must keep at least one surface"
-                ))
+
+            destinations = [
+                workspace
+                for workspace in peers
+                if self.views.workspace_host(workspace).instance(
+                    instance.id
+                ) is None
+            ]
+            if destinations:
+                submenu.addSeparator()
+            can_leave_empty = (
+                len(instances) > 1 or self.views.close_when_empty
+            )
+            for workspace in destinations:
+                destination = submenu.addAction(
+                    self.views.workspace_title(workspace)
+                )
+                destination.setData((instance.id, workspace.windowId))
+                destination.setEnabled(can_leave_empty)
+                destination.setStatusTip(self.views.translate(
+                    "Move {} to {}"
+                ).format(title, self.views.workspace_title(workspace)))
+                if can_leave_empty:
+                    destination.triggered.connect(
+                        lambda checked=False,
+                        surface_id=instance.id,
+                        target=workspace: self.move_to_workspace(
+                            surface_id, target, checked,
+                        )
+                    )
 
     @staticmethod
     def _sort_key(instance):
@@ -498,6 +560,78 @@ class SurfaceTransferController(QObject):
 
         result = self._transfer_to_new_workspace(surface_id)
         return result.workspace if result is not None else None
+
+    def move_to_workspace(self, surface_id, workspace, _checked=False):
+        """Attach one living surface to an existing peer workspace.
+
+        A sparse window created by tear-off is a temporary wrapper around
+        its one surface. Once that surface is attached elsewhere, the empty
+        wrapper closes. A primary workspace is never retired implicitly.
+        """
+
+        views = self.views
+        host = views.host
+        instance = host.instance(surface_id)
+        if (
+            instance is None
+            or not views.project_active()
+            or workspace is None
+            or workspace is views.current_workspace
+        ):
+            return None
+        destination_host = views.workspace_host(workspace)
+        if destination_host.instance(surface_id) is not None:
+            return None
+        closes_source = len(host.instances) == 1
+        if closes_source and not views.close_when_empty:
+            views.show_status(
+                views.translate(
+                    "The primary workspace must keep at least one surface."
+                ),
+                5000,
+                2,
+            )
+            return None
+
+        previous_surface = host.current()
+        attached = False
+        try:
+            views.flush_pending_edits()
+            detached = host.detach(surface_id)
+            if detached is None:
+                raise WorkspaceSurfaceError(
+                    "The source no longer owns the requested surface."
+                )
+            instance = detached
+            destination_host.attach(instance)
+            attached = True
+            if not views.activate_workspace_surface(workspace, surface_id):
+                raise WorkspaceSurfaceError(
+                    "The destination could not activate the surface."
+                )
+        except Exception:
+            LOGGER.exception(
+                "Could not move workspace surface %s to an existing window.",
+                surface_id,
+            )
+            if attached and instance.host is destination_host:
+                destination_host.detach(surface_id)
+            self._rollback(instance, previous_surface)
+            views.show_status(
+                views.translate(
+                    "The surface could not be moved; it was restored to "
+                    "this workspace."
+                ),
+                8000,
+                3,
+            )
+            return None
+
+        if closes_source:
+            # Last operation through this controller: closeEvent disposes the
+            # source workspace and therefore this controller itself.
+            views.close_workspace(views.current_workspace)
+        return instance
 
     def _transfer_to_new_workspace(self, surface_id):
         """Run the shared ownership transaction and report both outcomes."""

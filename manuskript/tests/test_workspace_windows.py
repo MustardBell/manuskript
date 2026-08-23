@@ -1597,13 +1597,15 @@ def test_the_view_menu_offers_each_owned_surface_to_a_new_window(
 
     window.surfaceTransfer.build_menu()
 
-    actions = {
-        action.data(): action
+    submenus = {
+        action.data(): action.menu()
         for action in window.surfaceTransfer.views.menu.actions()
+        if action.menu() is not None
     }
-    assert set(actions) == set(window.surfaceHost.instances)
-    assert actions[EDITOR].isEnabled()
-    assert "new workspace window" in actions[EDITOR].statusTip()
+    assert set(submenus) == set(window.surfaceHost.instances)
+    fresh = submenus[EDITOR].actions()[0]
+    assert fresh.isEnabled()
+    assert "new workspace window" in fresh.statusTip()
 
 
 def test_dragging_a_surface_row_starts_the_same_transfer_gesture(
@@ -1747,13 +1749,16 @@ def test_move_surface_composes_a_new_window_for_the_living_editor(
         assert EDITOR not in state_store.load(window.windowId).surfaces
         assert state_store.load(fresh.windowId).surfaces == (EDITOR,)
         fresh.surfaceTransfer.build_menu()
-        editor_action = next(
+        editor_menu = next(
             action
             for action in fresh.surfaceTransfer.views.menu.actions()
             if action.data() == EDITOR
+        ).menu()
+        new_window_action = editor_menu.actions()[0]
+        assert not new_window_action.isEnabled()
+        assert "must keep at least one surface" in (
+            new_window_action.statusTip()
         )
-        assert not editor_action.isEnabled()
-        assert "must keep at least one surface" in editor_action.statusTip()
     finally:
         for candidate in created:
             if candidate.surfaceHost.contains(EDITOR):
