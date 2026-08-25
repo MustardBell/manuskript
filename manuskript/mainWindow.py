@@ -224,6 +224,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # this container leaves the window while a project is being shown.
         self._centralSurface = self.centralWidget()
         self._projectSurfaceActive = False
+        # A peer workspace may adopt the already-open project while its
+        # constructor is still composing the rest of the window.  Keep the
+        # deferred-layout latch valid from the first possible lifecycle call;
+        # the default-layout builder turns it on once there is work to settle.
+        self._defaultDockLayoutPending = False
         # Where a workspace that has never been told otherwise starts.
         # General, because that is what a reader opening Manuskript for
         # the first time has always been shown.
@@ -660,6 +665,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self._activePanelId:
             self._activePanelId = core_panels.GENERAL
         self.activatePanel(self._activePanelId)
+        if self._defaultDockLayoutPending:
+            QTimer.singleShot(0, self._settleDefaultCoreDocks)
 
     def showEvent(self, event):
         """Settle routed dock extents once native window geometry exists."""
@@ -1037,23 +1044,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, editor)
         self.tabifyDockWidget(editor, general)
 
-        outline = dock(core_panels.OUTLINE)
-        if outline is not None:
-            self.tabifyDockWidget(editor, outline)
-
-        previous_catalogue = project_tree
+        # Every destination is designed for the generous work area first.
+        # The entity browsers were previously split into four 153-pixel-high
+        # slivers under Project Tree; merely navigating through them left the
+        # column behind and permanently squeezed Outline. Native dock tabs
+        # preserve independent containers and tear-off while giving each
+        # surface the same usable default canvas.
         for panel_id in (
             core_panels.PROJECT_ENTITIES,
             core_panels.CHARACTER_ENTITIES,
             core_panels.PLOT_ENTITIES,
             core_panels.WORLD_ENTITIES,
+            core_panels.OUTLINE,
         ):
-            neighbour = dock(panel_id)
-            if neighbour is not None:
-                self.splitDockWidget(
-                    previous_catalogue, neighbour, Qt.Vertical
-                )
-                previous_catalogue = neighbour
+            surface = dock(panel_id)
+            if surface is not None:
+                self.tabifyDockWidget(editor, surface)
 
         # Tool companions share the project-tree slot as native dock tabs.
         # They can still be pulled out or placed elsewhere, while their first
@@ -1104,6 +1110,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def _settleDefaultCoreDocks(self):
         """Apply pixel extents after the native window has real geometry."""
+        # The first showEvent belongs to the welcome screen. Reasserting the
+        # default surface visibility there paints General over the open/create
+        # invitation and makes Manuskript look as though it started in a
+        # broken project. Keep the pending work until a project owns the
+        # frame; switchToProject schedules this method again.
+        if not self._projectSurfaceActive:
+            return
         general = self.surfaceHost.instance(core_panels.GENERAL)
         general_dock = general.container if general is not None else None
         if general_dock is None:

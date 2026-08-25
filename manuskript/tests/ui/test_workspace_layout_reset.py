@@ -52,6 +52,12 @@ def test_reset_reconstructs_the_upstream_shaped_first_open_frame(
     assert not storyline.isVisible()
     assert editor in window.tabifiedDockWidgets(general)
     assert outline in window.tabifiedDockWidgets(general)
+    assert all(
+        window.surfaceHost.instance(surface_id).container
+        in window.tabifiedDockWidgets(general)
+        for surface_id in CORE_SURFACE_IDS
+        if surface_id != GENERAL
+    )
     # Qt drops a tab group when every member is hidden. The reset contract
     # therefore records these peers until the companion's first reveal.
     window.panelHost.reveal(METADATA)

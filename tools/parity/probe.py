@@ -155,6 +155,27 @@ def _where(window, widget):
     }
 
 
+def _actually_visible(window, widget):
+    """Whether any part of a widget is painted inside the window.
+
+    Qt keeps inactive tabified docks ``isVisible()`` while parking their
+    native containers far outside the window.  That is useful internal
+    state, but a reader sees no widget there.  Effective visibility therefore
+    requires both Qt visibility and an on-window rectangle.
+    """
+
+    if widget is None or not widget.isVisible():
+        return False
+    top_left = widget.mapTo(window, widget.rect().topLeft())
+    size = widget.size()
+    return (
+        top_left.x() < window.width()
+        and top_left.y() < window.height()
+        and top_left.x() + size.width() > 0
+        and top_left.y() + size.height() > 0
+    )
+
+
 def _surfaces(window):
     found = {}
     for surface, name in LANDMARKS:
@@ -166,7 +187,7 @@ def _surfaces(window):
         # only, which is worse than leaving it in openly. Whether a surface
         # *appears* when its row is chosen is the navigation question, and
         # it is asked separately.
-        visible = widget is not None and widget.isVisible()
+        visible = _actually_visible(window, widget)
         if surface == "project-tree":
             # It changed from an embedded Editor child to a declared tool
             # dock. Visibility remains a parity requirement -- it must not
@@ -249,6 +270,17 @@ def _settle(app):
         app.processEvents()
 
 
+def _capture(window, state):
+    """Optionally retain the frame behind a measurement for human review."""
+
+    root = os.environ.get("MANUSKRIPT_PARITY_SCREENSHOTS")
+    if not root:
+        return
+    destination = pathlib.Path(root) / pathlib.Path.cwd().name
+    destination.mkdir(parents=True, exist_ok=True)
+    window.grab().save(str(destination / "{}.png".format(state)))
+
+
 def _navigate_to_landmark(window, app, object_name):
     """Choose the navigator row whose surface exposes ``object_name``.
 
@@ -327,7 +359,19 @@ def describe(window, opened_by, app):
     nobody would know to pass.
     """
 
-    states = {}
+    # Record the untouched frame before the navigation probe changes
+    # anything.  A sequence that begins by selecting General can otherwise
+    # hide a first-paint regression behind the very interaction intended to
+    # inspect it.
+    states = {
+        "first-open": {
+            "selected_row": _navigator_rows(window).get("current"),
+            "navigator": _navigator_rows(window),
+            "second_selector": _second_selector(window),
+            "surfaces": _surfaces(window),
+        },
+    }
+    _capture(window, "first-open")
     for surface, object_name in SURFACES_TO_VISIT:
         selected_row = _navigate_to_landmark(window, app, object_name)
         states[surface] = {
@@ -336,6 +380,7 @@ def describe(window, opened_by, app):
             "second_selector": _second_selector(window),
             "surfaces": _surfaces(window),
         }
+        _capture(window, surface)
     return {
         "visual": {"states": states},
         "diagnostic": {
@@ -366,12 +411,15 @@ def main(argv):
     window.show()
     _settle(app)
 
-    json.dump(
-        describe(window, opened_by, app),
-        sys.stdout,
-        indent=2,
-        sort_keys=True,
-    )
+    description = describe(window, opened_by, app)
+    if not window.close():
+        raise RuntimeError("The parity window refused deterministic teardown.")
+    window.deleteLater()
+    from PyQt5.QtCore import QCoreApplication, QEvent
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _settle(app)
+
+    json.dump(description, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")
     return 0
 

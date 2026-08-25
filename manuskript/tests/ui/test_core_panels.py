@@ -253,6 +253,20 @@ def test_the_welcome_screen_hides_every_surface(MWNoProject):
         assert instance.container.isHidden(), surface_id
 
 
+def test_deferred_default_layout_never_reopens_a_surface_over_welcome(
+        MWNoProject):
+    window = MWNoProject
+    window._defaultDockLayoutPending = True
+
+    window._settleDefaultCoreDocks()
+
+    assert window._defaultDockLayoutPending
+    assert window.stack.currentIndex() == 0
+    assert window.centralWidget() is window._centralSurface
+    for surface_id, instance in window.surfaceHost.instances.items():
+        assert instance.container.isHidden(), surface_id
+
+
 def test_every_story_surface_is_a_navigator_backed_independent_dock(
         MWEmptyProject):
     """General through Editor share one descriptor-driven route."""

@@ -50,7 +50,6 @@ def _run(checkout, project, home):
     environment = dict(os.environ)
     environment.update({
         "QT_QPA_PLATFORM": "offscreen",
-        "HOME": str(home),
         "XDG_CONFIG_HOME": str(home / "config"),
         "XDG_DATA_HOME": str(home / "data"),
     })
@@ -125,7 +124,12 @@ def main(argv=None):
 
     with tempfile.TemporaryDirectory() as scratch:
         scratch = pathlib.Path(scratch)
-        project = _project(scratch / "project")
+        # Each run receives identical bytes, not the same mutable directory.
+        # Upstream records its final selected tab while closing; sharing one
+        # fixture therefore made the fork's "first open" start wherever the
+        # upstream probe finished.
+        upstream_project = _project(scratch / "project-upstream")
+        fork_project = _project(scratch / "project-fork")
         tree = scratch / "upstream"
         subprocess.run(
             ["git", "-C", str(REPOSITORY), "worktree", "add", "--detach",
@@ -133,8 +137,10 @@ def main(argv=None):
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         )
         try:
-            upstream = _run(tree, project, scratch / "home-upstream")
-            fork = _run(REPOSITORY, project, scratch / "home-fork")
+            upstream = _run(
+                tree, upstream_project, scratch / "home-upstream"
+            )
+            fork = _run(REPOSITORY, fork_project, scratch / "home-fork")
         finally:
             subprocess.run(
                 ["git", "-C", str(REPOSITORY), "worktree", "remove",
