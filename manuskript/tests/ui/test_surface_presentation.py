@@ -32,7 +32,8 @@ class Dock:
 
     def setWidget(self, widget):
         self.widget = widget
-        widget.setParent(None)
+        if widget is not None:
+            widget.setParent(None)
 
     def setVisible(self, visible):
         self.visible = bool(visible)
@@ -148,6 +149,7 @@ def test_unmount_preserves_the_living_widget_for_transfer():
 
     assert instance.widget.parent() is None
     assert instance.widget.text() == "core.editor"
+    assert old_dock.widget is None
     assert views.removed == [old_dock]
     assert old_dock.parent is None
     assert old_dock.deleted

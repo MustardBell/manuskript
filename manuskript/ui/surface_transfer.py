@@ -327,18 +327,19 @@ class FloatingSurfaceTransferController:
         )
 
     def _finish_tear_off(self, surface_id, dock, geometry):
-        self._pending.discard(surface_id)
         instance = self.views.host.instance(surface_id)
         if (
             instance is None
             or instance.container is not dock
             or not dock.isFloating()
         ):
+            self._pending.discard(surface_id)
             return
         # A sparse peer workspace already *is* the real window requested by
         # the first tear-off. It cannot surrender its only surface to another
         # new window and remain a valid visible workspace.
         if len(self.views.host.instances) <= 1:
+            self._pending.discard(surface_id)
             self._dock_back(surface_id, dock)
             self.views.show_status(
                 self.views.translate(
@@ -349,9 +350,40 @@ class FloatingSurfaceTransferController:
             )
             return
 
+        # A QDockWidget floated by a native drag is still a top-level utility
+        # window owned by the source QMainWindow. QMainWindow.removeDockWidget
+        # mutates that window's private dock graph; doing so while the native
+        # float transition is still settling can segfault below SIP. Dock it
+        # back without painting an intermediate frame, then cross one event
+        # boundary before the ordinary ownership transaction removes it.
+        self._settling.add(surface_id)
+        dock.setUpdatesEnabled(False)
+        try:
+            dock.setFloating(False)
+        finally:
+            self._settling.discard(surface_id)
+        self.views.defer(
+            lambda: self._transfer_settled_float(
+                surface_id, dock, geometry,
+            )
+        )
+
+    def _transfer_settled_float(self, surface_id, dock, geometry):
+        self._pending.discard(surface_id)
+        instance = self.views.host.instance(surface_id)
+        if instance is None or instance.container is not dock:
+            return
+        if dock.isFloating():
+            # Another float transition won the event turn. Treat it as a new
+            # gesture rather than removing a native window mid-transition.
+            dock.setUpdatesEnabled(True)
+            self._floating_changed(surface_id, dock, True)
+            return
+
         workspace = self.views.move_to_new_workspace(surface_id)
         if workspace is None:
             if self.views.host.instance(surface_id) is instance:
+                dock.setUpdatesEnabled(True)
                 self._dock_back(surface_id, dock)
             return
         self.views.place_workspace(workspace, geometry)
@@ -363,6 +395,7 @@ class FloatingSurfaceTransferController:
         self._settling.add(surface_id)
         try:
             dock.setFloating(False)
+            dock.setUpdatesEnabled(True)
         finally:
             self._settling.discard(surface_id)
 

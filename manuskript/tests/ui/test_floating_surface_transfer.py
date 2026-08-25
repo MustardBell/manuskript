@@ -28,6 +28,7 @@ class Dock:
         self.topLevelChanged = Signal()
         self.floating = False
         self.geometry = object()
+        self.updates_enabled = True
 
     def isFloating(self):
         return self.floating
@@ -38,6 +39,9 @@ class Dock:
 
     def frameGeometry(self):
         return self.geometry
+
+    def setUpdatesEnabled(self, enabled):
+        self.updates_enabled = bool(enabled)
 
 
 class Host:
@@ -97,6 +101,11 @@ def test_floating_a_surface_moves_the_living_instance_to_a_real_workspace():
     assert moved == []
     assert len(deferred) == 1
     deferred.pop()()
+    assert moved == []
+    assert not dock.isFloating()
+    assert not dock.updates_enabled
+    assert len(deferred) == 1
+    deferred.pop()()
     assert moved == ["core.editor"]
     assert placed == [(workspace, dock.geometry)]
     assert (workspace.shown, workspace.raised, workspace.activated) == (1, 1, 1)
@@ -118,6 +127,24 @@ def test_a_surface_already_alone_in_a_workspace_is_docked_back():
     assert not dock.isFloating()
     assert moved == []
     assert statuses
+
+
+def test_failed_transfer_restores_the_normalized_source_dock():
+    dock = Dock()
+    editor = SimpleNamespace(id="core.editor", container=dock)
+    host = Host({"core.editor": editor, "core.general": object()})
+    controller, deferred, _placed, _statuses = controller_for(
+        host, lambda _surface_id: None
+    )
+    controller.attach_surface(editor)
+
+    dock.setFloating(True)
+    deferred.pop()()
+    deferred.pop()()
+
+    assert not dock.isFloating()
+    assert dock.updates_enabled
+    assert host.instance("core.editor") is editor
 
 
 def test_a_surface_that_leaves_disconnects_its_old_dock():

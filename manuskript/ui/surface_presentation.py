@@ -70,9 +70,13 @@ class DockSurfacePresentation:
             return
         if callable(self.on_unmounted):
             self.on_unmounted(instance, dock)
-        # Reparent the living surface before the old container is scheduled
-        # for deletion.  The same widget may be mounted in another workspace
-        # immediately by the transfer transaction.
+        # Tell QDockWidget that it no longer owns content before reparenting
+        # the living surface. Reparenting the child directly happens to look
+        # sufficient for an ordinary dock, but leaves QDockWidget's private
+        # layout pointing at content that has already left. Removing a native
+        # floating dock in that state can crash below SIP rather than raise a
+        # Python exception. Tool-panel transfer uses the same Qt API boundary.
+        dock.setWidget(None)
         instance.widget.setParent(None)
         self.views.remove_dock(dock)
         dock.setParent(None)
