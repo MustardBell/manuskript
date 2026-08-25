@@ -165,54 +165,59 @@ CORE_MEMBERS: Tuple[CoreMember, ...] = (
 class CorePanelViewSet:
     """Typed observation of the core widgets a workspace currently holds.
 
-    Tool panels are stable members of every workspace and are resolved once.
-    Surfaces are movable, so their compatibility properties ask the surface
-    host for existing structure each time.  They never call ``open`` and
-    therefore never turn observation into QWidget construction.
+    Both categories are observed through their living owner. Surfaces move
+    between workspaces, and sparse workspaces may deliberately omit tool
+    panels too; freezing either category into constructor fields would turn a
+    complete primary window into an accidental requirement on every peer.
+    Properties never call ``open`` and therefore never turn observation into
+    QWidget construction.
     """
 
-    def __init__(self, project_tree, metadata, storyline, surfaces):
-        self.project_tree = project_tree
-        self.metadata = metadata
-        self.storyline = storyline
+    def __init__(self, tools, surfaces):
+        self._tools = tools
         self._surfaces = surfaces
 
     @classmethod
     def from_hosts(cls, tools, surfaces):
         """Ask each owner for what it owns, and nothing else.
 
-        Tool panels are part of every workspace.  Surfaces are not: a sparse
-        window may own only one, so they remain lookups against the living
-        surface host rather than construction-time fields.
+        A complete primary happens to answer every property. A sparse peer
+        may answer only the members explicitly composed there. The view set
+        records owners, not an eager inventory of their current contents.
         """
+        return cls(tools=tools, surfaces=surfaces)
 
-        resolved = {}
-        for member in CORE_MEMBERS:
-            if member.owner != TOOL_PANEL:
-                continue
-            widget = _panel_widget(
-                tools,
-                member.panel_id,
-                member.widget_type,
-                member.owner,
-            )
-            resolved[member.attribute] = (
-                member.views(widget) if member.views else widget
-            )
-        return cls(surfaces=surfaces, **resolved)
-
-    def _surface(self, attribute):
+    @staticmethod
+    def _member(owner, host, attribute):
         member = next(
             item for item in CORE_MEMBERS
-            if item.owner == SURFACE and item.attribute == attribute
+            if item.owner == owner and item.attribute == attribute
         )
         widget = _panel_widget(
-            self._surfaces,
+            host,
             member.panel_id,
             member.widget_type,
             member.owner,
         )
         return member.views(widget) if member.views else widget
+
+    def _tool(self, attribute):
+        return self._member(TOOL_PANEL, self._tools, attribute)
+
+    def _surface(self, attribute):
+        return self._member(SURFACE, self._surfaces, attribute)
+
+    @property
+    def project_tree(self):
+        return self._tool("project_tree")
+
+    @property
+    def metadata(self):
+        return self._tool("metadata")
+
+    @property
+    def storyline(self):
+        return self._tool("storyline")
 
     @property
     def general(self):
