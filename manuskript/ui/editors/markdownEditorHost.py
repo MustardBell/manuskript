@@ -82,6 +82,14 @@ class MarkdownEditorHost(QStackedWidget):
             previous.setActive(False)
 
         self.setCurrentWidget(target)
+        # A presentation view may be constructed only when it is first
+        # selected. QStackedWidget normally sizes that new page on a later
+        # layout event; under a constrained native screen that leaves the
+        # visible view at QWidget's 100-pixel construction width for a frame
+        # even though this host is already laid out. A completed mode switch
+        # must return a usable view, so establish the stack's current geometry
+        # synchronously. The stacked layout remains its owner afterwards.
+        target.setGeometry(self.contentsRect())
         if hasattr(target, "setActive"):
             target.setActive(True)
         self.setFocusProxy(target)

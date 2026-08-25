@@ -241,6 +241,21 @@ def test_reading_mode_requires_an_explicit_editor_host():
     )
 
 
+def test_a_lazily_created_presentation_immediately_fits_its_host():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    host = host_editor(editor, width=600, height=400)
+    host.show()
+    qApp.processEvents()
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+
+    assert host.currentWidget() is editor.readingView
+    assert editor.readingView.geometry() == host.contentsRect()
+
+
 def test_editor_mode_switch_preserves_source_selection_and_undo_state():
     editor = MDEditView(
         spellcheck=False,
