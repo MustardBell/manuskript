@@ -30,7 +30,10 @@ from manuskript.panels.core import (
     PROJECT_TREE,
     STORYLINE,
 )
-from manuskript.services.workspace_state import WorkspaceStateStore
+from manuskript.services.workspace_state import (
+    WorkspaceStateStore,
+    WorkspaceWindowState,
+)
 from manuskript.services.workspace_window_services import (
     WorkspaceWindowServices,
 )
@@ -478,6 +481,31 @@ def test_a_recorded_session_reopens_its_extra_windows(
         ]
         assert reopened[0].projectRuntime is window.projectRuntime
         assert reopened[0].currentProject == window.currentProject
+
+
+def test_a_recorded_sparse_workspace_restores_exact_membership(
+        MWEmptyProject, tmp_path):
+    """Restart must not turn one detached surface back into a full window."""
+
+    window = MWEmptyProject
+    restored_id = "window-sparse-editor"
+    with isolated_session(
+        window, tmp_path, [window.windowId, restored_id],
+    ) as session:
+        window.windowState.store.save(WorkspaceWindowState(
+            surfaces=(EDITOR,),
+            tool_panels=(),
+            active_surface=EDITOR,
+        ), restored_id)
+
+        reopened = session.restore()
+
+        assert len(reopened) == 1
+        sparse = reopened[0]
+        assert tuple(sparse.surfaceHost.instances) == (EDITOR,)
+        assert tuple(sparse.panelHost.instances) == ()
+        assert sparse.surfaceHost.current() == EDITOR
+        assert sparse.dckNavigation.isHidden()
 
 
 def test_a_session_is_restored_once_per_window(
