@@ -47,13 +47,15 @@ def test_text_editor_context_has_no_legacy_story_model_mutators():
 
 def test_text_editor_context_routes_typed_outline_command():
     window = make_window()
+    project_tree = window.corePanels.optional_tool.return_value
     context = text_editor_context_for(
         window, MagicMock(), MagicMock(),
     )
 
     context.invoke_outline_command(DocumentCommand.MOVE_DOWN)
 
-    window.corePanels.project_tree.tree.moveDown.assert_called_once_with()
+    window.corePanels.optional_tool.assert_called_once_with("project_tree")
+    project_tree.tree.moveDown.assert_called_once_with()
 
 
 def test_text_editor_context_reports_focus_to_its_known_workspace():
