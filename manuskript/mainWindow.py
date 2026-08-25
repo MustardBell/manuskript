@@ -778,6 +778,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             def place_default_peer(visible, owned_id=panel_id):
                 self._placePendingDefaultTab(owned_id, visible)
                 self._placePendingTabsForPeer(owned_id, visible)
+                routing = getattr(self, "surfacePanelRouting", None)
+                if routing is not None:
+                    # Showing a dock in another region makes QMainWindow
+                    # redistribute the complete horizontal row on its next
+                    # layout pass. Reassert routed extents after that pass so
+                    # an arriving inspector cannot halve Project Tree.
+                    QTimer.singleShot(0, routing.settle_layout)
 
             dock.visibilityChanged.connect(place_default_peer)
             self._defaultPeerVisibilitySlots[dock] = place_default_peer
@@ -1056,10 +1063,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.removeDockWidget(candidate)
 
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dckNavigation)
-        self.addDockWidget(Qt.LeftDockWidgetArea, project_tree)
-        self.splitDockWidget(
-            self.dckNavigation, project_tree, Qt.Horizontal
-        )
+        # Navigation owns the fixed left strip. Project Tree belongs to the
+        # project workspace beside it, not to that strip: putting both in the
+        # left dock area fixes their *combined* width, so a 200px navigator
+        # leaves the tree stuck at its 96px minimum. Keep the tree in the
+        # right-area row with the surface and inspectors instead.
+        self.addDockWidget(Qt.RightDockWidgetArea, project_tree)
 
         # The large writing surfaces share the main work area as native dock
         # tabs. They remain independently detachable QDockWidgets, but one
@@ -1068,8 +1077,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # the central-page cutover copied only its single-visible appearance
         # and discarded the independent containers behind it.
         self.addDockWidget(Qt.RightDockWidgetArea, general)
+        self.splitDockWidget(project_tree, general, Qt.Horizontal)
+
+        # Metadata and Story line are inspectors, not alternative project
+        # trees. Establish their region before building the surface tab group:
+        # QMainWindow.splitDockWidget() splits one tab out of an existing
+        # group, rather than splitting the group as a unit.
+        metadata = dock(core_panels.METADATA)
+        storyline = dock(core_panels.STORYLINE)
+        if metadata is not None:
+            self.addDockWidget(Qt.RightDockWidgetArea, metadata)
+            self.splitDockWidget(general, metadata, Qt.Horizontal)
+        if storyline is not None:
+            self.addDockWidget(Qt.RightDockWidgetArea, storyline)
+            if metadata is not None:
+                self.tabifyDockWidget(metadata, storyline)
+
         self.addDockWidget(Qt.RightDockWidgetArea, editor)
-        self.tabifyDockWidget(editor, general)
+        self.tabifyDockWidget(general, editor)
 
         # Every destination is designed for the generous work area first.
         # The entity browsers were previously split into four 153-pixel-high
@@ -1088,16 +1113,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if surface is not None:
                 self.tabifyDockWidget(editor, surface)
 
-        # Tool companions share the project-tree slot as native dock tabs.
-        # They can still be pulled out or placed elsewhere, while their first
-        # reveal does not become a full-width strip with no neighbour.
-        for panel_id in (core_panels.STORYLINE, core_panels.METADATA):
-            companion = dock(panel_id)
-            if companion is not None:
-                self.tabifyDockWidget(project_tree, companion)
         self._pendingDefaultTabPeers = {
-            core_panels.METADATA: core_panels.PROJECT_TREE,
-            core_panels.STORYLINE: core_panels.PROJECT_TREE,
+            core_panels.STORYLINE: core_panels.METADATA,
         }
 
         # Moving hidden docks exposes them in Qt. Reassert the canonical

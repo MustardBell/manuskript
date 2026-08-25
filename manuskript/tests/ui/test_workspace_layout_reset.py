@@ -34,7 +34,8 @@ def test_reset_reconstructs_the_upstream_shaped_first_open_frame(
     general = window.surfaceHost.instance(GENERAL).container
     editor = window.surfaceHost.instance(EDITOR).container
     outline = window.surfaceHost.instance(OUTLINE).container
-    project_tree = window.panelHost.instance(PROJECT_TREE).container
+    project_tree_instance = window.panelHost.instance(PROJECT_TREE)
+    project_tree = project_tree_instance.container
     metadata = window.panelHost.instance(METADATA).container
     storyline = window.panelHost.instance(STORYLINE).container
 
@@ -58,20 +59,23 @@ def test_reset_reconstructs_the_upstream_shaped_first_open_frame(
         for surface_id in CORE_SURFACE_IDS
         if surface_id != GENERAL
     )
-    # Qt drops a tab group when every member is hidden. The reset contract
-    # therefore records these peers until the companion's first reveal.
+    # Inspectors belong on the far side of the writing surface. They must not
+    # replace Project Tree merely because all three are tool panels.
     window.panelHost.reveal(METADATA)
     settle()
     assert metadata.isVisible()
-    assert window.dockWidgetArea(metadata) == window.dockWidgetArea(
-        project_tree
-    )
+    assert metadata.x() > general.x()
     window.activatePanel(EDITOR)
     settle()
-    assert metadata in window.tabifiedDockWidgets(project_tree)
+    assert project_tree.isVisible()
+    assert project_tree.x() < editor.x() < metadata.x()
+    assert project_tree.width() >= (
+        project_tree_instance.descriptor.preferred_extent - 10
+    )
     window.panelHost.reveal(STORYLINE)
     settle()
-    assert storyline in window.tabifiedDockWidgets(project_tree)
+    assert storyline in window.tabifiedDockWidgets(metadata)
+    assert storyline not in window.tabifiedDockWidgets(project_tree)
 
 
 def test_reset_rearranges_living_surfaces_without_rebuilding_them(

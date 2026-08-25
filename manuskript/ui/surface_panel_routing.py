@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 
 @dataclass(frozen=True)
@@ -88,6 +88,7 @@ class SurfacePanelRoutingViews:
             horizontal_sizes = [max(1, int(navigation_width))]
             vertical = []
             vertical_sizes = []
+            temporary_minimums = []
             for panel_id, extent in panel_extents.items():
                 instance = window.panelHost.instance(panel_id)
                 dock = instance.container if instance is not None else None
@@ -95,9 +96,26 @@ class SurfacePanelRoutingViews:
                     continue
                 area = window.dockWidgetArea(dock)
                 if area in (Qt.TopDockWidgetArea, Qt.BottomDockWidgetArea):
+                    minimum = dock.minimumHeight()
+                    if dock.height() < extent and minimum < extent:
+                        dock.setMinimumHeight(extent)
+                        temporary_minimums.append(
+                            (dock, "height", minimum)
+                        )
                     vertical.append(dock)
                     vertical_sizes.append(max(1, int(extent)))
                 else:
+                    minimum = dock.minimumWidth()
+                    if dock.width() < extent and minimum < extent:
+                        # resizeDocks() is advisory in a nested/tabbed layout
+                        # and can leave a newly revealed dock at its minimum.
+                        # A temporary layout constraint makes Qt negotiate the
+                        # declared extent; it is released next turn so the
+                        # reader can still resize the panel freely.
+                        dock.setMinimumWidth(extent)
+                        temporary_minimums.append(
+                            (dock, "width", minimum)
+                        )
                     horizontal.append(dock)
                     horizontal_sizes.append(max(1, int(extent)))
             # QMainWindow.resizeDocks preserves the combined extent of the
@@ -135,6 +153,21 @@ class SurfacePanelRoutingViews:
                 window.resizeDocks(
                     tuple(vertical), tuple(vertical_sizes), Qt.Vertical,
                 )
+            if temporary_minimums:
+                def release_minimums():
+                    for dock, dimension, minimum in temporary_minimums:
+                        try:
+                            if dimension == "width":
+                                dock.setMinimumWidth(minimum)
+                            else:
+                                dock.setMinimumHeight(minimum)
+                        except RuntimeError:
+                            # Its owning workspace may have closed before the
+                            # deferred layout turn. There is then no widget
+                            # constraint left to restore.
+                            pass
+
+                QTimer.singleShot(0, release_minimums)
 
         return cls(
             project_active=lambda: window._projectSurfaceActive,
@@ -218,8 +251,9 @@ class SurfacePanelRoutingController:
     def settle_layout(self):
         """Reapply defaults once a previously hidden window has geometry."""
 
-        if self._applied and self.views.project_active():
-            self.views.restore_extents(
+        views = self.views
+        if views is not None and self._applied and views.project_active():
+            views.restore_extents(
                 self._navigation_extent,
                 dict(self._visible_extents),
             )

@@ -108,3 +108,15 @@ def test_a_routed_plugin_panel_mounted_late_joins_the_current_scene():
         ("plugin.companion", False),
         ("layout", 200, {"core.project-tree": 187}),
     ]
+
+
+def test_a_deferred_layout_settle_is_harmless_after_workspace_disposal():
+    controller, active, _visible, events, _routes = a_controller()
+    active["value"] = True
+    controller.surface_changed("core.editor")
+    controller.dispose()
+    events.clear()
+
+    controller.settle_layout()
+
+    assert events == []
