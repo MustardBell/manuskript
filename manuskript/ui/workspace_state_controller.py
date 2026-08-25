@@ -243,6 +243,26 @@ class WorkspaceStateController:
             if layout.floating
         )
 
+    def use_default_layout(self, active_surface=None):
+        """Reject layout facts written by an impossible sole workspace.
+
+        Geometry and document state remain useful. Dock positions,
+        visibility, routed-panel choices, and active-surface intent do not:
+        they were captured while a core owner was missing and would recreate
+        the same unusable frame immediately after composition repaired it.
+        """
+
+        self.restoredLayout = False
+        self._dock_visibility = dict(
+            self.views.default_dock_visibility
+        )
+        self._recordedPanelVisibility = {}
+        self._projectPanelVisibility = {}
+        self._activeSurface = active_surface
+        self._legacyMainTab = None
+        self._legacySurfaceLayouts = ()
+        self._remembered.clear()
+
     def remembered_panel_visibility(self, panel_id):
         """The saved answer for the active surface, or no answer yet."""
 

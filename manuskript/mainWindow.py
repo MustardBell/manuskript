@@ -425,6 +425,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # visibility is restored by panel id through the host.
         with timing.span("window.layout"):
             self.windowState.restore()
+            if self.buildIntent.recover_default_layout:
+                self.windowState.use_default_layout(
+                    self.buildIntent.active_surface
+                )
             if not self.windowState.restoredLayout:
                 self._placeDefaultCoreDocks()
             self._applyBuildIntentPresentation()

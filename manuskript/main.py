@@ -345,11 +345,17 @@ def prepare(arguments, tests=False):
     )
     from manuskript.ui.workspace_surfaces import WorkspaceBuildIntent
 
-    saved_primary = WorkspaceStateStore().load(PRIMARY)
-    primary_intent = WorkspaceBuildIntent.from_saved(
+    workspace_store = WorkspaceStateStore()
+    saved_primary = workspace_store.load(PRIMARY)
+    primary_intent = WorkspaceBuildIntent.for_primary_session(
         saved_primary.surfaces,
         saved_primary.active_surface,
         panel_registry,
+        saved_primary.tool_panels,
+        has_saved_peers=any(
+            window_id != PRIMARY
+            for window_id in workspace_store.open_windows()
+        ),
     )
 
     with timing.span("startup.main_window"):

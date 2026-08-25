@@ -14,6 +14,7 @@ from manuskript.ui.workspace_surfaces import (
 )
 from manuskript.panels.core import (
     CORE_SURFACE_IDS,
+    CORE_TOOL_PANEL_IDS,
     EDITOR,
     GENERAL,
     METADATA,
@@ -137,6 +138,38 @@ def test_primary_core_membership_resolves_before_factories_are_registered():
     assert intent.surface_ids == (EDITOR,)
     assert intent.active_surface == EDITOR
     assert intent.standalone_surface
+
+
+def test_a_sole_primary_repairs_missing_core_membership_and_layout():
+    intent = WorkspaceBuildIntent.for_primary_session(
+        (GENERAL, OUTLINE),
+        OUTLINE,
+        PanelRegistry(),
+        (METADATA,),
+        has_saved_peers=False,
+    )
+
+    assert intent.surface_ids == CORE_SURFACE_IDS
+    assert intent.tool_panel_ids == CORE_TOOL_PANEL_IDS
+    assert intent.active_surface == GENERAL
+    assert not intent.standalone_surface
+    assert intent.recover_default_layout
+
+
+def test_a_primary_with_saved_peers_keeps_its_sparse_membership():
+    intent = WorkspaceBuildIntent.for_primary_session(
+        (GENERAL, OUTLINE),
+        OUTLINE,
+        PanelRegistry(),
+        (METADATA,),
+        has_saved_peers=True,
+    )
+
+    assert intent.surface_ids == (GENERAL, OUTLINE)
+    assert intent.tool_panel_ids == (METADATA,)
+    assert intent.active_surface == OUTLINE
+    assert not intent.standalone_surface
+    assert not intent.recover_default_layout
 
 
 def test_saved_tool_membership_is_exact_and_rejects_surface_ids():

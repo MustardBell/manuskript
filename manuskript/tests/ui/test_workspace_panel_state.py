@@ -390,6 +390,47 @@ def test_an_arrangement_that_names_surface_docks_is_applied_again():
     window.restoreGeometry.assert_called_once_with(b"where the window was")
 
 
+def test_repaired_membership_rejects_only_the_saved_layout_facts():
+    views = MagicMock()
+    views.default_dock_visibility = {
+        "dckNavigation": True,
+        "dckCheatSheet": False,
+        "dckSearch": False,
+        "panel.core.general": True,
+        "panel.core.editor": False,
+    }
+    controller = WorkspaceStateController(views, store=MagicMock())
+    controller.restoredLayout = True
+    controller._dock_visibility = {
+        "dckCheatSheet": True,
+        "dckSearch": True,
+    }
+    controller._recordedPanelVisibility = {
+        "core.project-tree": True,
+    }
+    controller._projectPanelVisibility = {
+        "core.project-tree": True,
+    }
+    controller._activeSurface = "core.outline"
+    controller._legacyMainTab = 4
+    controller._legacySurfaceLayouts = (MagicMock(),)
+    controller._documents = [0, ["scene-1"], None]
+    controller._remembered = {"window_state": b"broken"}
+
+    controller.use_default_layout("core.general")
+
+    assert not controller.restoredLayout
+    assert controller._dock_visibility == views.default_dock_visibility
+    assert controller._recordedPanelVisibility == {}
+    assert controller._projectPanelVisibility == {}
+    assert controller._activeSurface == "core.general"
+    assert controller._legacyMainTab is None
+    assert controller._legacySurfaceLayouts == ()
+    assert controller._remembered == {}
+    # Membership/layout recovery must not throw away the reader's documents.
+    assert controller._documents == [0, ["scene-1"], None]
+
+
 def test_a_pre_membership_floating_surface_is_exposed_for_migration():
     from manuskript.ui.legacy_layouts import LegacySurfaceLayout
 

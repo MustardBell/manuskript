@@ -55,6 +55,11 @@ class WorkspaceBuildIntent:
     #: full second copy of Manuskript's navigation shell. Its separate tool
     #: membership names only dependencies composition explicitly requested.
     standalone_surface: bool = False
+    #: A sole primary whose persisted membership has lost a core surface or
+    #: tool is not a deliberately sparse workspace: there is no peer that can
+    #: own the missing instance.  Composition repairs membership and asks the
+    #: window to reject the dock state written by that impossible session.
+    recover_default_layout: bool = False
 
     def __post_init__(self):
         ids = tuple(self.surface_ids)
@@ -76,6 +81,72 @@ class WorkspaceBuildIntent:
             incoming=(instance,),
             active_surface=instance.id,
             standalone_surface=True,
+        )
+
+    @classmethod
+    def for_primary_session(
+        cls,
+        surface_ids,
+        active_surface,
+        registry,
+        tool_panel_ids=None,
+        has_saved_peers=False,
+    ):
+        """Restore primary membership without preserving an orphaned hole.
+
+        A primary may be sparse while another saved workspace owns the
+        missing living surface.  With no peer session, however, missing core
+        membership can only be the residue of an interrupted detach/close.
+        Recreate that core surface exactly once and reject the dock layout
+        that was saved without it.
+        """
+
+        saved = cls.from_saved(
+            surface_ids,
+            active_surface,
+            registry,
+            tool_panel_ids,
+        )
+        if has_saved_peers:
+            return cls(
+                surface_ids=saved.surface_ids,
+                tool_panel_ids=saved.tool_panel_ids,
+                incoming=saved.incoming,
+                active_surface=saved.active_surface,
+                # The primary remains the application workspace even when
+                # peers temporarily own most of its surfaces.
+                standalone_surface=False,
+            )
+
+        missing_surface = any(
+            surface_id not in saved.surface_ids
+            for surface_id in CORE_SURFACE_IDS
+        )
+        missing_tool = any(
+            panel_id not in saved.tool_panel_ids
+            for panel_id in CORE_TOOL_PANEL_IDS
+        )
+        if not missing_surface and not missing_tool:
+            return cls(
+                surface_ids=saved.surface_ids,
+                tool_panel_ids=saved.tool_panel_ids,
+                incoming=saved.incoming,
+                active_surface=saved.active_surface,
+                standalone_surface=False,
+            )
+
+        return cls(
+            surface_ids=CORE_SURFACE_IDS + tuple(
+                surface_id for surface_id in saved.surface_ids
+                if surface_id not in CORE_SURFACE_IDS
+            ),
+            tool_panel_ids=CORE_TOOL_PANEL_IDS + tuple(
+                panel_id for panel_id in saved.tool_panel_ids
+                if panel_id not in CORE_TOOL_PANEL_IDS
+            ),
+            active_surface=GENERAL,
+            standalone_surface=False,
+            recover_default_layout=True,
         )
 
     @classmethod
