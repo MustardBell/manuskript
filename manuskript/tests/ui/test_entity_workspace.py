@@ -167,10 +167,9 @@ def test_leaving_a_catalogue_browser_leaves_it_usable(MWEmptyProject):
     destroyed the panel, and the next catalogue change wrote into its
     deleted tree.
 
-    There is no X to press now -- a browser is a page, and going to
-    another one leaves it standing. The crash is still worth a test,
-    because what it came through is a catalogue change reaching a panel
-    the reader is not looking at, and that still happens.
+    Browsers are independently docked surfaces again. Closing one must hide
+    its presentation without destroying the living surface owned by the
+    workspace; activation must reveal that same instance again.
     """
     from PyQt5 import sip
     from PyQt5.QtCore import QCoreApplication, QEvent
@@ -181,12 +180,14 @@ def test_leaving_a_catalogue_browser_leaves_it_usable(MWEmptyProject):
     window = MWEmptyProject
     instance = window.surfaceHost.instance(CHARACTER_ENTITIES)
     panel = instance.widget
+    dock = instance.container
 
-    window.activatePanel(EDITOR)
+    assert dock.close()
     qApp.processEvents()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     qApp.processEvents()
 
+    assert dock.isHidden()
     assert not sip.isdeleted(panel)
     assert window.surfaceHost.contains(CHARACTER_ENTITIES)
 
@@ -194,22 +195,20 @@ def test_leaving_a_catalogue_browser_leaves_it_usable(MWEmptyProject):
     window.entityWorkspace.refresh()
 
     assert window.activatePanel(CHARACTER_ENTITIES)
-    assert window.tabMain.currentWidget() is panel
+    assert window.surfaceHost.current() == CHARACTER_ENTITIES
+    assert instance.widget is panel
+    assert not dock.isHidden()
 
 
 def test_legacy_story_pages_are_not_user_interface(MWEmptyProject):
     """The tab-era pages are absent; descriptor-backed navigation remains.
 
-    The central container holds pages again, but they are the surfaces
-    their descriptors name, built by their factories -- not the six
-    hand-built story pages the Designer file used to carry.
+    The central container is only the welcome/developer shell. Project
+    surfaces are descriptor-built docks and never compatibility pages in it.
     """
     window = MWEmptyProject
-    assert not any(
-        window.tabMain.widget(index).objectName().startswith("lytTab")
-        and window.tabMain.widget(index).objectName() != "lytTabDebug"
-        for index in range(window.tabMain.count())
-    )
+    assert window.tabMain.count() == 1
+    assert window.tabMain.widget(window.DebugPage).objectName() == "lytTabDebug"
     for panel_id in (
         "core.entities.project",
         "core.entities.characters",
