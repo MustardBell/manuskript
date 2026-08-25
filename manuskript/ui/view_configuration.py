@@ -132,6 +132,14 @@ class ViewSettingsMenuBuilder:
         self.views = views
         self.controller = controller
         self.connections = SignalConnectionRegistry()
+        # The Designer-created entries are this builder's initial section.
+        # Other workspace controllers add reset, transfer, and deterministic
+        # placement commands to the same View menu after this object is
+        # composed.  Rebuilding view settings must replace only this section;
+        # clearing the whole menu silently removed every command another
+        # controller had contributed.
+        self._owned_actions = tuple(views.menu.actions())
+        self._generated_menus = []
 
     def rebuild(self):
         self.connections.disconnect_all()
@@ -169,13 +177,20 @@ class ViewSettingsMenuBuilder:
             ],
         }
 
-        views.menu.clear()
-        views.menu.addMenu(views.mode_menu)
-        views.menu.addMenu(views.markdown_menu)
-        views.menu.addSeparator()
+        for action in self._owned_actions:
+            views.menu.removeAction(action)
+        for menu in self._generated_menus:
+            menu.deleteLater()
+        self._generated_menus = []
+
+        owned_actions = []
+        owned_actions.append(views.menu.addMenu(views.mode_menu))
+        owned_actions.append(views.menu.addMenu(views.markdown_menu))
+        owned_actions.append(views.menu.addSeparator())
 
         for title, category, icon_name in menus:
             menu = QMenu(title, views.menu)
+            self._generated_menus.append(menu)
             menu.setIcon(QIcon.fromTheme(icon_name))
             for subtitle, part in submenus[category]:
                 submenu = QMenu(subtitle, menu)
@@ -202,7 +217,8 @@ class ViewSettingsMenuBuilder:
                     action_group.addAction(action)
                     submenu.addAction(action)
                 menu.addMenu(submenu)
-            views.menu.addMenu(menu)
+            owned_actions.append(views.menu.addMenu(menu))
+        self._owned_actions = tuple(owned_actions)
 
     def dispose(self):
         self.connections.disconnect_all()

@@ -138,6 +138,7 @@ def test_view_menu_exposes_reset_as_an_explicit_command(MWEmptyProject):
 
     assert action.objectName() == "actResetWorkspaceLayout"
     assert "first-open" in action.statusTip()
+    assert action in MWEmptyProject.menuView.actions()
 
 
 def test_reset_reunites_a_detached_editor_and_retires_its_wrapper(

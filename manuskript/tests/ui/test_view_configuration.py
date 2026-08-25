@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+from PyQt5.QtWidgets import QAction, QMenu
+
 from manuskript.enums import Outline
 from manuskript.ui.view_configuration import (
     MainViewConfiguration,
@@ -81,3 +83,44 @@ def test_menu_views_expose_only_menu_building_capabilities():
     assert views.mode_menu is window.menuMode
     assert views.markdown_menu is window.menuMarkdownMode
     assert views.translate is window.tr
+
+
+def test_rebuilding_view_settings_preserves_other_view_commands():
+    menu = QMenu()
+    mode_menu = menu.addMenu("Mode")
+    markdown_menu = menu.addMenu("Markdown Editor")
+    menu.addSeparator()
+    menu.addMenu("Old generated settings")
+    views = ViewSettingsMenuViews(
+        menu=menu,
+        mode_menu=mode_menu,
+        markdown_menu=markdown_menu,
+        translate=lambda text: text,
+    )
+    controller = MagicMock()
+    controller.settings.viewSettings = {
+        category: {
+            part: "Nothing"
+            for part in parts
+        }
+        for category, parts in {
+            "Tree": ("Icon", "Text", "Background"),
+            "Cork": ("Icon", "Text", "Background", "Border", "Corner"),
+            "Outline": ("Icon", "Text", "Background"),
+        }.items()
+    }
+    builder = ViewSettingsMenuBuilder(views, controller)
+    reset = QAction("Reset Workspace Layout", menu)
+    reset.setObjectName("actResetWorkspaceLayout")
+    menu.insertAction(menu.actions()[0], reset)
+
+    builder.rebuild()
+    builder.rebuild()
+
+    assert reset in menu.actions()
+    assert sum(action is reset for action in menu.actions()) == 1
+    assert [
+        action.text() for action in menu.actions() if action.menu()
+    ][-5:] == [
+        "Mode", "Markdown Editor", "Tree", "Index cards", "Outline",
+    ]
