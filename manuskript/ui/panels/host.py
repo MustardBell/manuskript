@@ -452,6 +452,13 @@ class PanelHost:
             self.close(panel_id)
 
     def dispose(self):
+        # ``on_open`` is supplied by the owning workspace and is commonly a
+        # bound MainWindow method.  Leaving it installed after the host has
+        # been removed from its directory keeps the deleted window's Python
+        # wrapper alive even though Qt has already destroyed its native
+        # object.  Clear outward callbacks before dismantling the instances
+        # they used to announce.
+        self.on_open = None
         self.visibility.dispose()
         self.close_all()
         self.directory.remove(self)

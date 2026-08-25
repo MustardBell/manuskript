@@ -745,6 +745,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.windowState.save()
         self.projectRuntime.detach(self.projectLifecycleView)
         self.windowRegistry.unregister(self)
+        self._disconnectDefaultPeerVisibilitySlots()
         self.workspaceLifetime.dispose()
         super().closeEvent(event)
 
@@ -791,6 +792,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         routing = getattr(self, "surfacePanelRouting", None)
         if routing is not None:
             routing.panel_opened(instance.descriptor.id)
+
+    def _disconnectDefaultPeerVisibilitySlots(self):
+        """Release the window callbacks installed on dynamically made docks.
+
+        The slots are functions because each carries the panel id associated
+        with its dock.  A function closing over ``self`` is nevertheless a
+        strong owner of the MainWindow wrapper, and PyQt retains connected
+        Python callables independently of Python's visible QObject tree.
+        Native deletion is therefore not sufficient: close must disconnect
+        the exact callables retained when the docks were offered.
+        """
+
+        slots = tuple(self._defaultPeerVisibilitySlots.items())
+        self._defaultPeerVisibilitySlots.clear()
+        self._pendingDefaultTabPeers.clear()
+        for dock, slot in slots:
+            try:
+                dock.visibilityChanged.disconnect(slot)
+            except (RuntimeError, TypeError):
+                # The dock may already have been destroyed or disconnected
+                # as part of an accepted close.  Either state means there is
+                # no remaining connection to own.
+                pass
 
     def _offerSurfaceToggle(self, instance, dock):
         """Expose a mounted writing surface without changing its owner."""

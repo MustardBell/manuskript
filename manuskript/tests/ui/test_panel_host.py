@@ -607,3 +607,19 @@ def test_a_surface_cannot_be_adopted_into_a_dock_either():
         host.adopt(PanelInstance(descriptor=surface, widget=QLabel("body")))
 
     assert host.instances == {}
+
+
+def test_dispose_releases_the_workspace_callback():
+    """A disposed per-window host must not remain an owner of its window."""
+
+    host, _window = make_host(ToolPanelDescriptor(
+        id="core.notes",
+        title="Notes",
+        widget_factory=label_factory,
+    ))
+    receiver = QLabel("receiver")
+    host.on_open = receiver.show
+
+    host.dispose()
+
+    assert host.on_open is None
