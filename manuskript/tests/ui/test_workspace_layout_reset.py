@@ -157,6 +157,14 @@ def test_reset_reunites_a_detached_editor_and_retires_its_wrapper(
     assert primary.surfaceHost.instance(EDITOR) is original
     assert original.widget is widget
     assert original.host is primary.surfaceHost
+    assert (
+        original.widget.editor.editor_context.outline_tree
+        is primary.outlineSelection
+    )
+    assert (
+        primary.corePanels.project_tree.tree.selectionModel()
+        is primary.outlineSelection.selectionModel()
+    )
     assert primary.surfaceHost.current() == GENERAL
     assert primary.windowState.store.open_windows() == (primary.windowId,)
 
