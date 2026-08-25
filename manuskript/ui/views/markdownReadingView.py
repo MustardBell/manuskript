@@ -25,9 +25,6 @@ class MarkdownReadingView(QTextBrowser):
         self._refreshTimer.setSingleShot(True)
         self._refreshTimer.setInterval(0)
         self._refreshTimer.timeout.connect(self.refresh)
-        source_editor.document().contentsChanged.connect(
-            self.scheduleRefresh
-        )
 
     def setActive(self, active):
         self._active = bool(active)

@@ -6,6 +6,7 @@ from PyQt5.QtGui import (
     QFont,
     QTextCharFormat,
     QTextCursor,
+    QTextDocument,
 )
 from PyQt5.QtWidgets import qApp, QWidget
 from PyQt5.QtTest import QSignalSpy, QTest
@@ -270,6 +271,34 @@ def test_a_visible_reading_view_is_populated_before_mode_switch_returns():
 
     assert host.currentWidget() is editor.readingView
     assert editor.readingView.toPlainText() == "Immediate projection"
+
+
+def test_reading_follows_the_source_editors_replacement_document():
+    editor = MDEditView(
+        spellcheck=False,
+        settings=SettingsManager(),
+    )
+    host = host_editor(editor)
+    host.show()
+    qApp.processEvents()
+    editor.setPlainText("# Construction document")
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+    assert editor.readingView.toPlainText() == "Construction document"
+
+    editor.setPresentationMode(MarkdownPresentationMode.SOURCE)
+    if editor.highlighter is not None:
+        highlighter = editor.highlighter
+        highlighter.setDocument(None)
+        highlighter.deleteLater()
+        editor.highlighter = None
+    replacement = QTextDocument(editor)
+    replacement.setPlainText("# Project buffer projection")
+    editor.setDocument(replacement)
+    editor.documentReplaced.emit()
+
+    editor.setPresentationMode(MarkdownPresentationMode.READING)
+
+    assert editor.readingView.toPlainText() == "Project buffer projection"
 
 
 def test_editor_mode_switch_preserves_source_selection_and_undo_state():

@@ -30,13 +30,15 @@ class MarkdownEditorHost(QStackedWidget):
         self.readingRenderer = None
         self._contributedViews = {}
         self._sourceRefreshPending = False
+        self._sourceDocument = None
         self._configuredMaximumWidth = QWIDGETSIZE_MAX
         self._maximumWidthOverride = None
         self.addWidget(source_editor)
         source_editor.setPresentationHost(self)
-        source_editor.document().contentsChanged.connect(
-            self._sourceChanged
+        source_editor.documentReplaced.connect(
+            self._sourceDocumentReplaced
         )
+        self._sourceDocumentReplaced()
 
     def setConfiguredMaximumWidth(self, width):
         """Apply the user's editor width unless a workspace overrides it."""
@@ -212,10 +214,33 @@ class MarkdownEditorHost(QStackedWidget):
         return view
 
     def _sourceChanged(self):
+        if self.readingView is not None:
+            self.readingView.scheduleRefresh()
         if not self._contributedViews or self._sourceRefreshPending:
             return
         self._sourceRefreshPending = True
         QTimer.singleShot(0, self._loadContributedSources)
+
+    def _sourceDocumentReplaced(self):
+        """Observe the projection the source editor currently displays.
+
+        Project binding replaces the QTextDocument created with the widget by
+        a view-local projection from DocumentBufferRegistry. QTextEdit has no
+        native document-changed signal, so textEditView publishes this one.
+        Holding a connection to the construction document makes Reading and
+        contributed views stale as soon as a real manuscript page is opened.
+        """
+        previous = self._sourceDocument
+        if previous is not None:
+            try:
+                previous.contentsChanged.disconnect(self._sourceChanged)
+            except (TypeError, RuntimeError):
+                # setDocument may have deleted a document owned by the editor
+                # before documentReplaced can describe its successor.
+                pass
+        self._sourceDocument = self.sourceEditor.document()
+        self._sourceDocument.contentsChanged.connect(self._sourceChanged)
+        self._sourceChanged()
 
     def _loadContributedSources(self):
         self._sourceRefreshPending = False
