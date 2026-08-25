@@ -24,6 +24,7 @@ from manuskript.domain.entity_catalog import (
     EntitySchema,
 )
 from manuskript.models.outlineItem import outlineItem
+from manuskript.panels.core import EDITOR
 from manuskript.settingsManager import SettingsManager
 from manuskript.ui.editors.markdownEditorHost import MarkdownEditorHost
 from manuskript.ui.editors.markdownPresentation import (
@@ -1053,6 +1054,8 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
     window.raise_()
     window.activateWindow()
     assert QTest.qWaitForWindowActive(window)
+    assert window.surfaceHost.activate(EDITOR) is not None
+    qApp.processEvents()
     source = (
         "# Model-backed chapter\n\n"
         "A paragraph with **rendered emphasis**.\n\n"
@@ -1064,6 +1067,7 @@ def test_live_preview_click_focuses_and_edits_the_canonical_model(
     index = window.projectRuntime.models.outline.indexFromItem(item)
     window.mainEditor.setCurrentModelIndex(index, newTab=True)
     source_editor = window.mainEditor.currentEditor().txtRedacText
+    assert source_editor._presentationHost.isVisible()
     source_editor.setPresentationMode(
         MarkdownPresentationMode.LIVE_PREVIEW
     )
