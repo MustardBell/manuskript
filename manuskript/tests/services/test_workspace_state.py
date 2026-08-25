@@ -33,6 +33,7 @@ def test_a_layout_round_trips(tmp_path):
         panel_state={"core.metadata": [True, False]},
         docks={"dckSearch": True},
         surfaces=("core.general", "core.editor"),
+        tool_panels=("core.project-tree",),
         active_surface="core.editor",
     )
 
@@ -47,6 +48,7 @@ def test_a_layout_round_trips(tmp_path):
     }
     assert loaded.docks == {"dckSearch": True}
     assert loaded.surfaces == ("core.general", "core.editor")
+    assert loaded.tool_panels == ("core.project-tree",)
     assert loaded.active_surface == "core.editor"
 
 
@@ -58,6 +60,16 @@ def test_pre_membership_layout_is_distinct_from_an_explicit_set(tmp_path):
     subject.save(WorkspaceWindowState(surfaces=("core.editor",)), PRIMARY)
 
     assert subject.load(PRIMARY).surfaces == ("core.editor",)
+
+
+def test_missing_tool_membership_differs_from_an_explicit_empty_set(tmp_path):
+    subject, _settings = store(tmp_path)
+
+    assert subject.load(PRIMARY).tool_panels is None
+
+    subject.save(WorkspaceWindowState(tool_panels=()), PRIMARY)
+
+    assert subject.load(PRIMARY).tool_panels == ()
 
 
 def test_unreadable_surface_membership_is_ignored(tmp_path):

@@ -18,10 +18,9 @@ class WorkspaceFocusViews:
 
     @classmethod
     def for_window(cls, window):
+        project_tree = window.corePanels.optional_tool("project_tree")
         return cls(
-            document_targets=(
-                window.corePanels.project_tree.tree,
-            )
+            document_targets=(project_tree.tree,) if project_tree else (),
         )
 
 

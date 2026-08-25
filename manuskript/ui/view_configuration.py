@@ -30,7 +30,8 @@ class ViewConfigurationViews:
     def for_window(cls, window):
         toolbar = window.toolbar
         navigation = window.dckNavigation
-        project_tree = window.corePanels.project_tree.tree
+        project_tree = window.corePanels.optional_tool("project_tree")
+        project_tree = project_tree.tree if project_tree else None
 
         def surface_widget(surface_id):
             instance = window.surfaceHost.instance(surface_id)
@@ -63,7 +64,10 @@ class ViewConfigurationViews:
             refreshers=MappingProxyType({
                 "Cork": refresh_cork,
                 "Outline": refresh_outline,
-                "Tree": project_tree.viewport().update,
+                "Tree": (
+                    project_tree.viewport().update
+                    if project_tree is not None else lambda: None
+                ),
             }),
         )
 

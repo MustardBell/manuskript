@@ -1328,11 +1328,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # list every other panel appears in.
         self.panelHost.on_open = self._offerPanelToggle
         context = PanelContext(translate=self.tr)
-        for panel_id in (
-            core_panels.PROJECT_TREE,
-            core_panels.METADATA,
-            core_panels.STORYLINE,
-        ):
+        for panel_id in self.buildIntent.tool_panel_ids:
             self.panelHost.open(panel_id, context)
         # Every core surface, in every new project's window. Which ones a
         # workspace holds is the workspace's own state -- a second window

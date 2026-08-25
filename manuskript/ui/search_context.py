@@ -72,8 +72,8 @@ class SearchResultViews:
 
     @classmethod
     def for_window(cls, window):
-        metadata = window.corePanels.metadata
-        properties = metadata.properties
+        metadata = window.corePanels.optional_tool("metadata")
+        properties = metadata.properties if metadata is not None else None
         panel_host = window.panelHost
 
         def current_document_text():
@@ -85,17 +85,23 @@ class SearchResultViews:
 
         return cls(
             entity_workspace=window.entityWorkspace,
-            metadata_fields=MappingProxyType({
-                Outline.title: properties.txtTitle,
-                Outline.summarySentence: metadata.txtSummarySentence,
-                Outline.summaryFull: metadata.txtSummaryFull,
-                Outline.notes: metadata.txtNotes,
-                Outline.POV: properties.lblPOV,
-                Outline.status: properties.lblStatus,
-                Outline.label: properties.lblLabel,
-            }),
+            metadata_fields=MappingProxyType(
+                {
+                    Outline.title: properties.txtTitle,
+                    Outline.summarySentence: metadata.txtSummarySentence,
+                    Outline.summaryFull: metadata.txtSummaryFull,
+                    Outline.notes: metadata.txtNotes,
+                    Outline.POV: properties.lblPOV,
+                    Outline.status: properties.lblStatus,
+                    Outline.label: properties.lblLabel,
+                }
+                if metadata is not None else {}
+            ),
             current_document_text=current_document_text,
-            show_metadata=partial(panel_host.set_visible, METADATA),
+            show_metadata=(
+                partial(panel_host.set_visible, METADATA)
+                if metadata is not None else lambda: None
+            ),
         )
 
 

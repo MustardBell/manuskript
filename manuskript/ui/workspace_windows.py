@@ -118,6 +118,7 @@ class WorkspaceWindowViews:
                 saved.surfaces,
                 saved.active_surface,
                 window.panelRegistry,
+                saved.tool_panels,
             ),
             adoption=ProjectAdoptionViews(
                 is_open=lambda: runtime.isOpen,

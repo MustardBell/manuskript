@@ -62,10 +62,10 @@ def text_editor_context_for(
 
     def invoke_outline_command(command):
         command = DocumentCommand(command)
-        handler = getattr(
-            window.corePanels.project_tree.tree,
-            command.value,
-            None,
+        project_tree = window.corePanels.optional_tool("project_tree")
+        handler = (
+            getattr(project_tree.tree, command.value, None)
+            if project_tree is not None else None
         )
         if callable(handler):
             handler()

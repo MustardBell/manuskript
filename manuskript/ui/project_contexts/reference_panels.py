@@ -22,13 +22,14 @@ class ReferencePanelBinding:
     def bind(self, connect, references):
         views = self.views
         models = self.models
-        views.storyline.setModels(
-            models.outline,
-            models.characters,
-            models.plots,
-            references,
-            connect=connect,
-        )
+        if views.storyline is not None:
+            views.storyline.setModels(
+                models.outline,
+                models.characters,
+                models.plots,
+                references,
+                connect=connect,
+            )
         views.cheat_sheet.setModels(
             models.outline,
             models.characters,
@@ -58,5 +59,6 @@ class ReferencePanelBinding:
             for editor in self._completers.pop(instance_id):
                 editor.setReferenceService(None)
         views.cheat_sheet.clearModels()
-        views.storyline.clearModels()
+        if views.storyline is not None:
+            views.storyline.clearModels()
         self.references = None

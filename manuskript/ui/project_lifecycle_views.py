@@ -83,6 +83,7 @@ class ProjectLifecycleViews:
     def for_window(cls, window):
         """Take an inventory once; do not hand the window to the consumer."""
         plugin_ui = window.pluginUi
+        project_tree = window.corePanels.optional_tool("project_tree")
 
         def global_tool_actions():
             if plugin_ui is None:
@@ -137,7 +138,9 @@ class ProjectLifecycleViews:
                     window.spellcheck.rebuild_dictionary_menu
                 ),
                 set_dictionary=window.spellcheck.apply_dictionary,
-                project_tree=window.corePanels.project_tree.tree,
+                project_tree=(
+                    project_tree.tree if project_tree is not None else None
+                ),
                 set_simple_mode=(
                     window.viewConfigurationController.set_simple
                 ),

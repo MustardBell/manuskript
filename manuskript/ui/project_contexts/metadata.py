@@ -21,13 +21,14 @@ class MetadataBinding:
     def bind(self):
         views = self.views
         models = self.models
-        views.panel.setModels(
-            models.outline,
-            models.characters,
-            models.labels,
-            models.statuses,
-            page_types=views.page_types(),
-        )
+        if views.panel is not None:
+            views.panel.setModels(
+                models.outline,
+                models.characters,
+                models.labels,
+                models.statuses,
+                page_types=views.page_types(),
+            )
         self.bound = True
 
     def attach_surface(self, instance):

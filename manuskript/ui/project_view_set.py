@@ -124,6 +124,10 @@ class ProjectViewSet:
 
         runtime = window.projectRuntime
         core = window.corePanels
+        project_tree = core.optional_tool("project_tree")
+        project_tree = project_tree.tree if project_tree is not None else None
+        metadata = core.optional_tool("metadata")
+        storyline = core.optional_tool("storyline")
         search_result_views = SearchResultViews.for_window(window)
         navigation = reference_navigation_for(
             window,
@@ -143,7 +147,7 @@ class ProjectViewSet:
             models=runtime.models,
             navigation=navigation,
             editors=EditorViews(
-                project_tree=core.project_tree.tree,
+                project_tree=project_tree,
                 text_editor_context=lambda: text_editor_context_for(
                     window,
                     runtime.settingsManager,
@@ -156,16 +160,22 @@ class ProjectViewSet:
                     navigation.open_entity,
                     lambda: runtime.projectManager.storage.persistence_strategy,
                 ),
-                open_index=core.project_tree.tree.setCurrentIndex,
+                open_index=(
+                    project_tree.setCurrentIndex
+                    if project_tree is not None else None
+                ),
                 open_indexes=open_indexes,
-                selection_changed=core.metadata.selectionChanged,
+                selection_changed=(
+                    metadata.selectionChanged
+                    if metadata is not None else None
+                ),
                 show_status=window.statusPresenter.show,
                 settings=runtime.settingsManager,
                 card_styles=getattr(window, "cardStyles", None),
                 undo_stack=runtime.undoStack,
             ),
             metadata=MetadataViews(
-                panel=core.metadata,
+                panel=metadata,
                 page_types=lambda: (
                     window.pluginUi.pageTypes
                     if window.pluginUi is not None
@@ -173,7 +183,7 @@ class ProjectViewSet:
                 ),
             ),
             reference_panels=ReferencePanelViews(
-                storyline=core.storyline,
+                storyline=storyline,
                 cheat_sheet=window.cheatSheet,
             ),
             search=SearchViews(

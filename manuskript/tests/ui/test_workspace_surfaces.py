@@ -12,7 +12,13 @@ from manuskript.ui.workspace_surfaces import (
     WorkspaceSurfaceError,
     WorkspaceSurfaceHost,
 )
-from manuskript.panels.core import CORE_SURFACE_IDS, EDITOR, OUTLINE
+from manuskript.panels.core import (
+    CORE_SURFACE_IDS,
+    EDITOR,
+    GENERAL,
+    METADATA,
+    OUTLINE,
+)
 
 
 class Widget:
@@ -133,6 +139,17 @@ def test_primary_core_membership_resolves_before_factories_are_registered():
     assert intent.standalone_surface
 
 
+def test_saved_tool_membership_is_exact_and_rejects_surface_ids():
+    registry = PanelRegistry()
+    registry.register(surface(OUTLINE, "Outline"))
+
+    intent = WorkspaceBuildIntent.from_saved(
+        (GENERAL,), GENERAL, registry, (METADATA, OUTLINE),
+    )
+
+    assert intent.tool_panel_ids == (METADATA,)
+
+
 def test_a_transfer_intent_names_a_standalone_living_surface():
     host = a_host(surface(EDITOR, "Editor"))
     instance = host.open(EDITOR)
@@ -140,6 +157,7 @@ def test_a_transfer_intent_names_a_standalone_living_surface():
     intent = WorkspaceBuildIntent.for_transfer(instance)
 
     assert intent.surface_ids == ()
+    assert intent.tool_panel_ids == ("core.project-tree",)
     assert intent.incoming == (instance,)
     assert intent.active_surface == EDITOR
     assert intent.standalone_surface

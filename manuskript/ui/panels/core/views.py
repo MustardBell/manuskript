@@ -204,6 +204,14 @@ class CorePanelViewSet:
     def _tool(self, attribute):
         return self._member(TOOL_PANEL, self._tools, attribute)
 
+    def optional_tool(self, attribute):
+        """Return an existing typed tool view, or ``None`` for sparse peers."""
+
+        try:
+            return self._tool(attribute)
+        except LookupError:
+            return None
+
     def _surface(self, attribute):
         return self._member(SURFACE, self._surfaces, attribute)
 

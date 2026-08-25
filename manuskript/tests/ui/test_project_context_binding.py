@@ -10,6 +10,7 @@ It also used to be one class holding all of them. These tests are about
 the coordinator: the two objects the areas share, and the order.
 """
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
@@ -175,6 +176,26 @@ def test_the_binding_reads_its_models_from_the_set():
     )
     views.reference_panels.storyline.setModels.assert_called_once()
     views.reference_panels.cheat_sheet.setModels.assert_called_once()
+
+
+def test_project_contexts_bind_without_metadata_or_storyline_tools():
+    views = make_views()
+    sparse = replace(
+        views,
+        metadata=replace(views.metadata, panel=None),
+        reference_panels=replace(
+            views.reference_panels, storyline=None,
+        ),
+    )
+    references, outlines, editors, searches = patched_contexts()
+
+    with references, outlines, editors, searches:
+        binding = ProjectContextBinding(sparse)
+        binding.bind(MagicMock())
+        binding.unbind()
+
+    sparse.reference_panels.cheat_sheet.setModels.assert_called_once()
+    sparse.reference_panels.cheat_sheet.clearModels.assert_called_once()
 
 
 def test_each_area_is_handed_only_its_own_views():

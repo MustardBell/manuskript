@@ -50,9 +50,10 @@ class EditorBinding:
             selection_changed=views.selection_changed,
             show_status=views.show_status,
         )
-        views.project_tree.bind_project_model(
-            models.outline, self.outline_views,
-        )
+        if views.project_tree is not None:
+            views.project_tree.bind_project_model(
+                models.outline, self.outline_views,
+            )
         return self.text_editor_context
 
     def attach_surface(self, instance):
@@ -63,6 +64,13 @@ class EditorBinding:
                 self.models.outline, self.outline_views,
             )
         elif instance.id == EDITOR:
+            if self.views.project_tree is None:
+                # The current Editor presentation still declares Project Tree
+                # as its selection dependency. Refuse a malformed intent
+                # explicitly instead of failing later on the first click.
+                raise RuntimeError(
+                    "An Editor workspace needs an outline selection view."
+                )
             panel = instance.widget
             for editor in panel.findChildren(textEditView):
                 editor.set_text_editor_context(self.text_editor_context)
@@ -90,6 +98,7 @@ class EditorBinding:
     def unbind(self):
         for instance in reversed(tuple(self._surfaces.values())):
             self.detach_surface(instance)
-        self.views.project_tree.unbind_project_model()
+        if self.views.project_tree is not None:
+            self.views.project_tree.unbind_project_model()
         self.text_editor_context = None
         self.outline_views = None

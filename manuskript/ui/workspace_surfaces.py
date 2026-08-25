@@ -28,8 +28,18 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from manuskript.panels import PanelRegistryError, WorkspaceSurfaceDescriptor
-from manuskript.panels.core import CORE_SURFACE_IDS, GENERAL
+from manuskript.panels import (
+    PanelRegistryError,
+    ToolPanelDescriptor,
+    WorkspaceSurfaceDescriptor,
+)
+from manuskript.panels.core import (
+    CORE_SURFACE_IDS,
+    CORE_TOOL_PANEL_IDS,
+    EDITOR,
+    GENERAL,
+    PROJECT_TREE,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -40,35 +50,48 @@ class WorkspaceBuildIntent:
     """Which surfaces a new workspace must contain before it is composed."""
 
     surface_ids: Tuple[str, ...] = CORE_SURFACE_IDS
+    tool_panel_ids: Tuple[str, ...] = CORE_TOOL_PANEL_IDS
     incoming: Tuple["WorkspaceSurfaceInstance", ...] = ()
     active_surface: Optional[str] = GENERAL
     #: A transfer wrapper presents the moved surface as the window, not as a
-    #: full second copy of Manuskript's navigation shell.  Tool panels still
-    #: exist as attachable window-local views, but none is routed into view
-    #: until the reader explicitly asks for it.
+    #: full second copy of Manuskript's navigation shell. Its separate tool
+    #: membership names only dependencies composition explicitly requested.
     standalone_surface: bool = False
 
     def __post_init__(self):
         ids = tuple(self.surface_ids)
+        tool_ids = tuple(self.tool_panel_ids)
         incoming = tuple(self.incoming)
         incoming_ids = tuple(instance.id for instance in incoming)
         all_ids = ids + incoming_ids
         if len(all_ids) != len(set(all_ids)):
             raise ValueError("A workspace build intent names a surface twice.")
         object.__setattr__(self, "surface_ids", ids)
+        object.__setattr__(self, "tool_panel_ids", tool_ids)
         object.__setattr__(self, "incoming", incoming)
 
     @classmethod
     def for_transfer(cls, instance):
         return cls(
             surface_ids=(),
+            # Editor still consumes this workspace's outline selection through
+            # Project Tree. State that dependency explicitly; other surfaces,
+            # Metadata, and Story line are unrelated and are not built as
+            # hidden cargo.
+            tool_panel_ids=(PROJECT_TREE,) if instance.id == EDITOR else (),
             incoming=(instance,),
             active_surface=instance.id,
             standalone_surface=True,
         )
 
     @classmethod
-    def from_saved(cls, surface_ids, active_surface, registry):
+    def from_saved(
+        cls,
+        surface_ids,
+        active_surface,
+        registry,
+        tool_panel_ids=None,
+    ):
         """Turn persisted membership into a safe construction intent.
 
         No ``surfaces`` key is a pre-membership workspace, whose migration
@@ -112,8 +135,42 @@ class WorkspaceBuildIntent:
         active_surface = str(active_surface or "")
         if active_surface not in valid:
             active_surface = valid[0]
+        if tool_panel_ids is None:
+            # Pre-v7 transfer wrappers can be identified from their one
+            # surface. Complete/multi-surface workspaces used the canonical
+            # core tools; other one-surface peers had no tool dependency.
+            valid_tools = (
+                [PROJECT_TREE]
+                if valid == [EDITOR]
+                else ([] if len(valid) == 1 else list(CORE_TOOL_PANEL_IDS))
+            )
+        else:
+            valid_tools = []
+            for panel_id in tool_panel_ids:
+                panel_id = str(panel_id or "").strip()
+                if not panel_id or panel_id in valid_tools:
+                    continue
+                if panel_id in CORE_TOOL_PANEL_IDS:
+                    valid_tools.append(panel_id)
+                    continue
+                try:
+                    descriptor = registry.descriptor(panel_id)
+                except PanelRegistryError:
+                    LOGGER.warning(
+                        "Ignoring unavailable workspace tool panel %s.",
+                        panel_id,
+                    )
+                    continue
+                if not isinstance(descriptor, ToolPanelDescriptor):
+                    LOGGER.warning(
+                        "Ignoring workspace surface %s in tool membership.",
+                        panel_id,
+                    )
+                    continue
+                valid_tools.append(panel_id)
         return cls(
             surface_ids=tuple(valid),
+            tool_panel_ids=tuple(valid_tools),
             active_surface=active_surface,
             # A persisted one-surface peer is the transfer wrapper restored,
             # not a request to grow a new full navigation shell around it.

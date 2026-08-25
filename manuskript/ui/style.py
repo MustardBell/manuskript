@@ -128,11 +128,13 @@ def styleMainWindow(mw):
     # Custom palette?
     #qApp.setPalette(appPalette())
 
-    mw.corePanels.project_tree.tree.setStyleSheet("""
-            QTreeView{
-                background: transparent;
-                margin-top: 30px;
-            }""" + simpleScrollBarV())
+    project_tree = mw.corePanels.optional_tool("project_tree")
+    if project_tree is not None:
+        project_tree.tree.setStyleSheet("""
+                QTreeView{
+                    background: transparent;
+                    margin-top: 30px;
+                }""" + simpleScrollBarV())
 
     mw.lstTabs.setStyleSheet("""
         QListView {{

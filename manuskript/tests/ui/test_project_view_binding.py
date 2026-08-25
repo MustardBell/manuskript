@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import MagicMock
 from types import SimpleNamespace
 
@@ -48,8 +49,28 @@ def test_outline_selection_binding_registers_project_connections():
     )
 
 
+def test_outline_selection_binding_needs_no_metadata_panel():
+    window = MagicMock()
+    window.corePanels.optional_tool.side_effect = (
+        lambda name: getattr(window.corePanels, name)
+    )
+    views = ProjectBindingViews.for_window(window)
+    sparse = replace(views.outline_selection, metadata=None)
+    connect = MagicMock()
+
+    OutlineSelectionProjectBinding(sparse).bind(connect)
+
+    connect.assert_called_once()
+    signal, slot, _connection_type = connect.call_args.args
+    assert signal is sparse.project_tree.selectionModel().selectionChanged
+    assert slot is sparse.project_tree_changed
+
+
 def test_outline_and_editor_selection_connections_follow_their_surfaces():
     window = MagicMock()
+    window.corePanels.optional_tool.side_effect = (
+        lambda name: getattr(window.corePanels, name)
+    )
     views = ProjectBindingViews.for_window(window)
     binding = OutlineSelectionProjectBinding(views.outline_selection)
     binding.bind(MagicMock())

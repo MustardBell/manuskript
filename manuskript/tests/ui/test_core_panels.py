@@ -122,9 +122,10 @@ def test_core_view_contract_contains_only_current_surfaces(MWEmptyProject):
         "character_entities",
         "plot_entities",
         "world_entities",
-        "outline",
-        "editor",
-    }
+            "outline",
+            "editor",
+            "optional_tool",
+        }
     assert not hasattr(MWEmptyProject.corePanels, "book_summary")
 
 

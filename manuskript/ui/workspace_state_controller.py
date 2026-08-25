@@ -290,6 +290,7 @@ class WorkspaceStateController:
                 docks=dict(self._dock_visibility),
                 documents=self._open_documents(),
                 surfaces=tuple(self.views.surface_host.instances),
+                tool_panels=tuple(self.views.panel_host.instances),
                 active_surface=self._current_surface(),
             ),
             self.windowId,

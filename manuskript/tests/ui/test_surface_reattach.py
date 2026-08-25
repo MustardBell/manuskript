@@ -2,9 +2,17 @@
 
 from dataclasses import replace
 
+import pytest
+
 from PyQt5.QtWidgets import QDockWidget, qApp
 
-from manuskript.panels.core import CORE_TOOL_PANEL_IDS, EDITOR
+from manuskript.panels.core import (
+    CORE_SURFACE_IDS,
+    EDITOR,
+    METADATA,
+    PROJECT_TREE,
+    STORYLINE,
+)
 
 
 def settle():
@@ -97,10 +105,36 @@ def test_a_transfer_wrapper_shows_the_surface_without_workspace_passengers(
         editor_dock = wrapper.surfaceHost.instance(EDITOR).container
         assert not editor_dock.isHidden()
         assert not editor_dock.features() & QDockWidget.DockWidgetClosable
-        for panel_id in CORE_TOOL_PANEL_IDS:
-            assert wrapper.panelHost.instance(panel_id).container.isHidden()
+        project_tree = wrapper.panelHost.instance(PROJECT_TREE)
+        assert project_tree is not None
+        assert project_tree.container.isHidden()
+        assert wrapper.panelHost.instance(METADATA) is None
+        assert wrapper.panelHost.instance(STORYLINE) is None
     finally:
         return_editor_if_needed(source, wrapper)
+
+
+@pytest.mark.parametrize(
+    "surface_id",
+    tuple(item for item in CORE_SURFACE_IDS if item != EDITOR),
+)
+def test_a_non_editor_transfer_constructs_no_core_tool_panels(
+        MWEmptyProject, surface_id):
+    source = MWEmptyProject
+    source.activatePanel(surface_id)
+    original = source.surfaceHost.instance(surface_id)
+    wrapper = source.surfaceTransfer.move_to_new_workspace(surface_id)
+    assert wrapper is not None
+    try:
+        settle()
+
+        assert tuple(wrapper.panelHost.instances) == ()
+        assert set(wrapper.surfaceHost.instances) == {surface_id}
+        assert wrapper.surfaceHost.instance(surface_id) is original
+    finally:
+        if wrapper.surfaceHost.contains(surface_id):
+            wrapper.surfaceTransfer.move_to_workspace(surface_id, source)
+        settle()
 
 
 def test_closing_a_transfer_wrapper_returns_its_unique_editor(

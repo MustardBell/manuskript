@@ -84,10 +84,11 @@ class ProjectLifecycleView:
             views.rebuild_dictionary_menu()
             views.set_dictionary()
 
-        icon_size = settings.viewSettings["Tree"]["iconSize"]
-        views.project_tree.setIconSize(
-            QSize(icon_size, icon_size)
-        )
+        if views.project_tree is not None:
+            icon_size = settings.viewSettings["Tree"]["iconSize"]
+            views.project_tree.setIconSize(
+                QSize(icon_size, icon_size)
+            )
         if editor is not None:
             with timing.span("settings.folder_view"):
                 editor.setFolderView(settings.folderView)

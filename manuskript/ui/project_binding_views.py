@@ -60,6 +60,7 @@ class ProjectBindingViews:
 
     @classmethod
     def for_window(cls, window):
+        project_tree = window.corePanels.optional_tool("project_tree")
         def general_fields(instance):
             panel = instance.widget
             return (
@@ -78,8 +79,10 @@ class ProjectBindingViews:
                 fields_for_surface=general_fields,
             ),
             outline_selection=OutlineSelectionBindingViews(
-                project_tree=window.corePanels.project_tree.tree,
-                metadata=window.corePanels.metadata,
+                project_tree=(
+                    project_tree.tree if project_tree is not None else None
+                ),
+                metadata=window.corePanels.optional_tool("metadata"),
                 outline_changed=(
                     window.workspaceSelection.outline_selection_changed
                 ),

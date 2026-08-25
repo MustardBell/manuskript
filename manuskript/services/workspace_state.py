@@ -44,6 +44,9 @@ LOGGER = logging.getLogger(__name__)
 #: reader's choice for the saved active surface. Earlier versions always
 #: opened the project tree globally, so their saved ``true`` is an obsolete
 #: default rather than evidence that it was requested on General or Outline.
+#: 7 -- tool-panel membership became explicit alongside surface membership.
+#: A missing toolPanels key is migrated from the workspace's surface shape;
+#: an empty list is the valid answer for a sparse surface-only workspace.
 #:
 #: The version says what shape the stored keys are in, and nothing else.
 #: Whether an arrangement of docks may be applied is not asked here and is
@@ -51,7 +54,7 @@ LOGGER = logging.getLogger(__name__)
 #: layout what it contains, because a version answers that wrongly for the
 #: readers who matter most -- one upgrading from upstream arrives stamped
 #: 1 with a layout naming no work-surface docks at all.
-WORKSPACE_STATE_VERSION = 6
+WORKSPACE_STATE_VERSION = 7
 
 #: Everything this module owns lives under here.
 ROOT = "workspace"
@@ -83,6 +86,8 @@ class WorkspaceWindowState:
     documents: object = None
     #: Ordered surface ids this window owned. None means pre-v5 state.
     surfaces: object = None
+    #: Ordered tool-panel ids this window owned. None means pre-v7 state.
+    tool_panels: object = None
     #: Legacy tab index, read only as a migration input for pre-v3 layouts.
     main_tab: object = None
     #: Which work surface this window was showing, from the surface host.
@@ -132,6 +137,7 @@ class WorkspaceStateStore:
             docks=self._flags(window_id, "docks"),
             documents=self._json(window_id, "documents"),
             surfaces=self._string_tuple(window_id, "surfaces"),
+            tool_panels=self._string_tuple(window_id, "toolPanels"),
             main_tab=self._int(window_id, "mainTab"),
             active_surface=self._string(window_id, "activeSurface"),
             active_panel=self._string(window_id, "activePanel"),
@@ -163,6 +169,7 @@ class WorkspaceStateStore:
         self._write_group(window_id, "docks", state.docks)
         self._set_json(window_id, "documents", state.documents)
         self._set_json(window_id, "surfaces", state.surfaces)
+        self._set_json(window_id, "toolPanels", state.tool_panels)
         # Stop writing the tab-era key. It remains readable above as a
         # migration input, including from project settings in old files.
         self._settings.remove(self._key(window_id, "mainTab"))

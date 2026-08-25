@@ -75,7 +75,8 @@ class SettingsWindowViews:
         runtime = window.projectRuntime
         manager = window.projectManager
         history = window.projectHistory
-        project_tree = window.corePanels.project_tree.tree
+        project_tree = window.corePanels.optional_tool("project_tree")
+        project_tree = project_tree.tree if project_tree is not None else None
 
         def update_editor(method):
             instance = window.surfaceHost.instance(EDITOR)
