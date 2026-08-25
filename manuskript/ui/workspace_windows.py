@@ -162,6 +162,19 @@ class WorkspaceWindowController:
             index += 1
         return "window-{}".format(index)
 
+    def _new_id(self):
+        """Allocate one clean identity for a newly requested workspace.
+
+        Numeric ids are intentionally reusable after a peer closes; otherwise
+        a long writing session would grow them forever. Reusing the name must
+        not resurrect the closed peer's layout, documents, or membership,
+        though. Restoration supplies an explicit id and bypasses this path.
+        """
+
+        window_id = self.next_id()
+        self.views.state_store().forget(window_id)
+        return window_id
+
     def open(self, window_id=None, _checked=False):
         # QAction.triggered supplies a bool; it is not a workspace id.
         if isinstance(window_id, bool):
@@ -172,14 +185,14 @@ class WorkspaceWindowController:
         # interleaves destruction of one native tree with construction of the
         # next. Establish the native lifetime boundary first.
         self.views.settle_native_deletions()
-        return self.views.create(window_id or self.next_id(), None)
+        return self.views.create(window_id or self._new_id(), None)
 
     def open_with_intent(self, build_intent, window_id=None):
         """Compose a workspace for declared membership, then reveal it."""
 
         self.views.settle_native_deletions()
         return self.views.create(
-            window_id or self.next_id(), build_intent,
+            window_id or self._new_id(), build_intent,
         )
 
     def adopt_open_project(self):

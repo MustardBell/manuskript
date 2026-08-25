@@ -85,7 +85,7 @@ def controller_fixture(
 
 
 def test_workspace_ids_are_stable_and_action_bool_is_not_an_id():
-    controller, workspaces, _opened, _store, _events = (
+    controller, workspaces, _opened, store, _events = (
         controller_fixture()
     )
     workspaces.append(SimpleNamespace(windowId="window-2"))
@@ -98,18 +98,20 @@ def test_workspace_ids_are_stable_and_action_bool_is_not_an_id():
         "window-2",
         "window-3",
     ]
+    store.forget.assert_called_once_with("window-3")
 
 
 def test_old_native_windows_are_destroyed_before_a_new_one_is_composed():
-    controller, _workspaces, _opened, _store, events = controller_fixture()
+    controller, _workspaces, _opened, store, events = controller_fixture()
 
     controller.open("window-2")
 
     assert events == [("settle",), ("create", "window-2")]
+    store.forget.assert_not_called()
 
 
 def test_declared_membership_is_passed_to_workspace_composition():
-    controller, _workspaces, _opened, _store, events = controller_fixture()
+    controller, _workspaces, _opened, store, events = controller_fixture()
     intent = object()
 
     created = controller.open_with_intent(intent)
@@ -119,6 +121,7 @@ def test_declared_membership_is_passed_to_workspace_composition():
         ("settle",),
         ("create", "window-2", intent),
     ]
+    store.forget.assert_called_once_with("window-2")
 
 
 def test_new_workspace_adopts_the_running_project_in_order():
@@ -151,7 +154,7 @@ def test_primary_restores_missing_windows_once():
 
 def test_session_restore_composes_each_window_from_saved_membership():
     saved = SimpleNamespace(surfaces=("core.editor",))
-    controller, _workspaces, opened, _store, events = controller_fixture(
+    controller, _workspaces, opened, store, events = controller_fixture(
         recorded=(PRIMARY, "window-2"),
         saved_state=saved,
         intent_for_state=lambda state: ("intent", state.surfaces),
@@ -163,6 +166,7 @@ def test_session_restore_composes_each_window_from_saved_membership():
     assert events[-1] == (
         "create", "window-2", ("intent", ("core.editor",)),
     )
+    store.forget.assert_not_called()
 
 
 def test_a_legacy_floating_surface_becomes_a_persisted_peer_workspace():
