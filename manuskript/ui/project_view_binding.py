@@ -50,10 +50,7 @@ class OutlineSelectionProjectBinding:
 
     def bind(self, connect):
         views = self.views
-        if views.project_tree is None:
-            self.bound = True
-            return
-        project_selection = views.project_tree.selectionModel()
+        project_selection = views.outline_selection.selectionModel()
         connections = [(
             project_selection.selectionChanged,
             views.project_tree_changed,
@@ -64,11 +61,12 @@ class OutlineSelectionProjectBinding:
                     project_selection.selectionChanged,
                     views.metadata.selectionChanged,
                 ),
-                (
-                    views.project_tree.clicked,
-                    views.metadata.selectionChanged,
-                ),
             ))
+            if views.project_tree_clicked is not None:
+                connections.append((
+                    views.project_tree_clicked,
+                    views.metadata.selectionChanged,
+                ))
         for signal, slot in connections:
             connect(signal, slot, F.AUC)
         self.bound = True
@@ -98,7 +96,7 @@ class OutlineSelectionProjectBinding:
             )
         else:
             connections.connect(
-                views.project_tree.selectionModel().selectionChanged,
+                views.outline_selection.selectionModel().selectionChanged,
                 instance.widget.editor.selectionChanged,
                 F.AUC,
             )

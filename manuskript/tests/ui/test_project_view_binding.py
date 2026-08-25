@@ -62,7 +62,9 @@ def test_outline_selection_binding_needs_no_metadata_panel():
 
     connect.assert_called_once()
     signal, slot, _connection_type = connect.call_args.args
-    assert signal is sparse.project_tree.selectionModel().selectionChanged
+    assert signal is (
+        sparse.outline_selection.selectionModel().selectionChanged
+    )
     assert slot is sparse.project_tree_changed
 
 
@@ -90,10 +92,7 @@ def test_outline_and_editor_selection_connections_follow_their_surfaces():
         window.corePanels.outline.treeOutlineOutline.selectionModel()
         .selectionChanged.connect.assert_called()
     )
-    project_signal = (
-        window.corePanels.project_tree.tree.selectionModel()
-        .selectionChanged
-    )
+    project_signal = window.outlineSelection.selectionModel().selectionChanged
     assert any(
         call.args[0] is window.corePanels.editor.editor.selectionChanged
         for call in project_signal.connect.call_args_list

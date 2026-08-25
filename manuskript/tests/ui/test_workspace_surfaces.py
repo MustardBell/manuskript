@@ -157,7 +157,7 @@ def test_a_transfer_intent_names_a_standalone_living_surface():
     intent = WorkspaceBuildIntent.for_transfer(instance)
 
     assert intent.surface_ids == ()
-    assert intent.tool_panel_ids == ("core.project-tree",)
+    assert intent.tool_panel_ids == ()
     assert intent.incoming == (instance,)
     assert intent.active_surface == EDITOR
     assert intent.standalone_surface

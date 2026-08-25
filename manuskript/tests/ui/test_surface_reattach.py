@@ -105,11 +105,13 @@ def test_a_transfer_wrapper_shows_the_surface_without_workspace_passengers(
         editor_dock = wrapper.surfaceHost.instance(EDITOR).container
         assert not editor_dock.isHidden()
         assert not editor_dock.features() & QDockWidget.DockWidgetClosable
-        project_tree = wrapper.panelHost.instance(PROJECT_TREE)
-        assert project_tree is not None
-        assert project_tree.container.isHidden()
+        assert wrapper.panelHost.instance(PROJECT_TREE) is None
         assert wrapper.panelHost.instance(METADATA) is None
         assert wrapper.panelHost.instance(STORYLINE) is None
+        assert (
+            wrapper.outlineSelection.selectionModel().model()
+            is wrapper.projectRuntime.models.outline
+        )
     finally:
         return_editor_if_needed(source, wrapper)
 

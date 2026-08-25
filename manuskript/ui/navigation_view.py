@@ -18,14 +18,13 @@ class NavigationViews:
 
     activate_panel: Callable[[str], bool]
     surface_widget: Callable[[str], Any]
-    project_tree: Any
+    outline_selection: Any
     back_action: Any
     forward_action: Any
 
     @classmethod
     def for_window(cls, window):
         core = window.corePanels
-        project_tree = core.optional_tool("project_tree")
 
         def surface_widget(surface_id):
             instance = window.surfaceHost.instance(surface_id)
@@ -34,7 +33,7 @@ class NavigationViews:
         return cls(
             activate_panel=window.activatePanel,
             surface_widget=surface_widget,
-            project_tree=project_tree.tree if project_tree else None,
+            outline_selection=window.outlineSelection,
             back_action=window.actBack,
             forward_action=window.actForward,
         )
@@ -102,10 +101,8 @@ class MainNavigationView:
             self._select_outline(panel.treeOutlineOutline, outline_id)
 
     def _navigate_redaction(self, outline_id):
-        if self.views.project_tree is None:
-            return
         self.views.activate_panel(EDITOR)
-        self._select_outline(self.views.project_tree, outline_id)
+        self._select_outline(self.views.outline_selection, outline_id)
 
     def _select_outline(self, tree, outline_id):
         selection = tree.selectionModel()

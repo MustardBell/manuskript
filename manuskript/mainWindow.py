@@ -134,6 +134,9 @@ from manuskript.ui.workspace_retirement import (
     WorkspaceRetirementController,
     WorkspaceRetirementViews,
 )
+from manuskript.ui.workspace_outline_selection import (
+    WorkspaceOutlineSelection,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -285,6 +288,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.buildIntent = build_intent or WorkspaceBuildIntent()
         self._standaloneSurfacePresentation = bool(
             self.buildIntent.standalone_surface
+        )
+        self.outlineSelection = self.workspaceLifetime.own(
+            WorkspaceOutlineSelection(self)
         )
 
         # Application scope: every window reads the same panel list.

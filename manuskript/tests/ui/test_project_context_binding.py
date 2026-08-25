@@ -42,6 +42,7 @@ def make_views(text_editor=None, completer=None, text_context=None):
         navigation=MagicMock(),
         editors=EditorViews(
             project_tree=MagicMock(),
+            outline_selection=MagicMock(),
             text_editor_context=lambda: text_context,
             open_index=MagicMock(),
             open_indexes=MagicMock(),

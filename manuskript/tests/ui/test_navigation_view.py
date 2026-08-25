@@ -18,7 +18,7 @@ def make_views():
     return NavigationViews(
         activate_panel=MagicMock(return_value=True),
         surface_widget=surfaces.get,
-        project_tree=MagicMock(),
+        outline_selection=MagicMock(),
         back_action=MagicMock(),
         forward_action=MagicMock(),
     )

@@ -27,7 +27,8 @@ class FlatDataBindingViews:
 class OutlineSelectionBindingViews:
     """The two outline selections and the consumers they drive."""
 
-    project_tree: Any
+    outline_selection: Any
+    project_tree_clicked: Any
     metadata: Any
     outline_changed: Callable[..., None]
     project_tree_changed: Callable[..., None]
@@ -79,8 +80,10 @@ class ProjectBindingViews:
                 fields_for_surface=general_fields,
             ),
             outline_selection=OutlineSelectionBindingViews(
-                project_tree=(
-                    project_tree.tree if project_tree is not None else None
+                outline_selection=window.outlineSelection,
+                project_tree_clicked=(
+                    project_tree.tree.clicked
+                    if project_tree is not None else None
                 ),
                 metadata=window.corePanels.optional_tool("metadata"),
                 outline_changed=(

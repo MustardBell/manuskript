@@ -36,8 +36,11 @@ class EditorViews:
     about metadata, references or search.
     """
 
-    #: The project tree is a tool panel and remains in this workspace.
+    #: Optional Project Tree presentation of this workspace's selection.
     project_tree: Any
+    #: Workspace-owned selection state. Project Tree may present it, but an
+    #: Editor does not require that optional tool to exist.
+    outline_selection: Any
     #: Builds this window's text editor context.
     text_editor_context: Optional[Callable[[], Any]]
     open_index: Optional[Callable[..., Any]]
@@ -148,6 +151,7 @@ class ProjectViewSet:
             navigation=navigation,
             editors=EditorViews(
                 project_tree=project_tree,
+                outline_selection=window.outlineSelection,
                 text_editor_context=lambda: text_editor_context_for(
                     window,
                     runtime.settingsManager,
@@ -161,8 +165,7 @@ class ProjectViewSet:
                     lambda: runtime.projectManager.storage.persistence_strategy,
                 ),
                 open_index=(
-                    project_tree.setCurrentIndex
-                    if project_tree is not None else None
+                    window.outlineSelection.setCurrentIndex
                 ),
                 open_indexes=open_indexes,
                 selection_changed=(

@@ -36,9 +36,7 @@ from manuskript.panels import (
 from manuskript.panels.core import (
     CORE_SURFACE_IDS,
     CORE_TOOL_PANEL_IDS,
-    EDITOR,
     GENERAL,
-    PROJECT_TREE,
 )
 
 
@@ -74,11 +72,7 @@ class WorkspaceBuildIntent:
     def for_transfer(cls, instance):
         return cls(
             surface_ids=(),
-            # Editor still consumes this workspace's outline selection through
-            # Project Tree. State that dependency explicitly; other surfaces,
-            # Metadata, and Story line are unrelated and are not built as
-            # hidden cargo.
-            tool_panel_ids=(PROJECT_TREE,) if instance.id == EDITOR else (),
+            tool_panel_ids=(),
             incoming=(instance,),
             active_surface=instance.id,
             standalone_surface=True,
@@ -136,13 +130,11 @@ class WorkspaceBuildIntent:
         if active_surface not in valid:
             active_surface = valid[0]
         if tool_panel_ids is None:
-            # Pre-v7 transfer wrappers can be identified from their one
-            # surface. Complete/multi-surface workspaces used the canonical
-            # core tools; other one-surface peers had no tool dependency.
+            # Pre-v7 one-surface transfer wrappers were intended to be
+            # surface-only. Complete/multi-surface workspaces used the
+            # canonical core tools.
             valid_tools = (
-                [PROJECT_TREE]
-                if valid == [EDITOR]
-                else ([] if len(valid) == 1 else list(CORE_TOOL_PANEL_IDS))
+                [] if len(valid) == 1 else list(CORE_TOOL_PANEL_IDS)
             )
         else:
             valid_tools = []

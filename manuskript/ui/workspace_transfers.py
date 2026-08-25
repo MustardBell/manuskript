@@ -44,13 +44,12 @@ class WorkspaceTransferViews:
         # The central welcome widget is not present while a project is open.
         # Import/export dialogs belong to the workspace for their lifetime.
         dialog_parent = window
-        project_tree = window.corePanels.optional_tool("project_tree")
-        tree = project_tree.tree if project_tree is not None else None
+        selection = window.outlineSelection
 
         def current_outline_index():
             return (
-                tree.currentIndex()
-                if tree is not None and tree.selectedIndexes()
+                selection.currentIndex()
+                if selection.selectedIndexes()
                 else QModelIndex()
             )
 

@@ -15,11 +15,10 @@ class WorkspaceSelectionViews:
     resolve_surface: Callable[[Any], str]
     surface_focused: Callable[[str], None]
     surface_widget: Callable[[str], Any]
-    project_tree: Any
+    outline_selection: Any
 
     @classmethod
     def for_window(cls, window):
-        project_tree = window.corePanels.optional_tool("project_tree")
         def resolve_surface(widget):
             """Which of this window's panels or surfaces holds this widget.
 
@@ -53,7 +52,7 @@ class WorkspaceSelectionViews:
             resolve_surface=resolve_surface,
             surface_focused=window.notePanelFocus,
             surface_widget=surface_widget,
-            project_tree=project_tree.tree if project_tree else None,
+            outline_selection=window.outlineSelection,
         )
 
 
@@ -117,10 +116,9 @@ class WorkspaceSelectionController:
                     "outline", panel.treeOutlineOutline,
                 )
         elif self._active_surface == EDITOR:
-            if self._views.project_tree is not None:
-                self._record_surface_selection(
-                    "redac", self._views.project_tree,
-                )
+            self._record_surface_selection(
+                "redac", self._views.outline_selection,
+            )
         elif self._active_surface:
             self._history.record_location(("panel", self._active_surface))
 
@@ -144,8 +142,7 @@ class WorkspaceSelectionController:
             self._record_selection("outline", panel.treeOutlineOutline)
 
     def project_selection_changed(self, *_args):
-        if self._views.project_tree is not None:
-            self._record_selection("redac", self._views.project_tree)
+        self._record_selection("redac", self._views.outline_selection)
 
     def _record_surface_selection(self, kind, tree):
         valid, item_id = self._current_outline_selection(tree)

@@ -13,7 +13,7 @@ def _controller():
     outline_panel = MagicMock()
     outline_panel.treeOutlineOutline = outline_tree
     surfaces = {OUTLINE: outline_panel}
-    project_tree = MagicMock()
+    outline_selection = MagicMock()
     actions = tuple(MagicMock() for _ in range(5))
     views = WorkspaceSelectionViews(
         organize_action=MagicMock(),
@@ -21,7 +21,7 @@ def _controller():
         resolve_surface=MagicMock(return_value=""),
         surface_focused=MagicMock(),
         surface_widget=surfaces.get,
-        project_tree=project_tree,
+        outline_selection=outline_selection,
     )
     runtime = MagicMock()
     history = MagicMock()
@@ -56,7 +56,7 @@ def test_contributed_surface_delegates_to_its_recorder():
 
 def test_editor_surface_records_document_and_enables_commands():
     controller, views, runtime, history, _recorders = _controller()
-    index = views.project_tree.selectionModel().currentIndex()
+    index = views.outline_selection.selectionModel().currentIndex()
     index.isValid.return_value = True
     runtime.models.outline.ID.return_value = "scene-7"
 
