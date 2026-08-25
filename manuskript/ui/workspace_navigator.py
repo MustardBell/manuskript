@@ -27,6 +27,11 @@ class NavigatorTarget:
     page: Optional[int] = None
     #: The panel this row reveals, when it stands for one.
     panel_id: str = ""
+    #: Selecting this row is an explicit construction command, not ordinary
+    #: navigation. Kept on the target rather than inferred from absence:
+    #: sparse workspaces must not acquire every missing surface, while Editor
+    #: deliberately offers another independent editing view.
+    creates_surface: bool = False
 
     def __post_init__(self):
         if (self.page is None) == (not self.panel_id):
@@ -35,6 +40,10 @@ class NavigatorTarget:
                 "got page={!r} panel_id={!r}.".format(
                     self.page, self.panel_id
                 )
+            )
+        if self.creates_surface and not self.panel_id:
+            raise ValueError(
+                "Only a surface target can construct a surface."
             )
 
     @property
@@ -77,11 +86,14 @@ class WorkspaceNavigator:
         return None
 
     @classmethod
-    def compose(cls, pages=(), surfaces=()):
-        """Rows from the pages a window keeps and the surfaces it can show.
+    def compose(cls, pages=(), surfaces=(), launchers=()):
+        """Rows from this window's pages, surfaces, and explicit commands.
 
         ``pages`` are ``NavigatorTarget``s the window states itself.
         ``surfaces`` are workspace surfaces -- the places the writer goes.
+        ``launchers`` are visibly declared construction commands. They are
+        not synthesized from every surface the application knows, and an
+        owned surface replaces a launcher with its ordinary activation row.
 
         It used to take every panel and pick out the ones with a navigator
         entry, reaching for the field with ``getattr`` and accepting its
@@ -102,4 +114,10 @@ class WorkspaceNavigator:
                 order=entry.order,
                 panel_id=descriptor.id,
             ))
+        held_ids = {descriptor.id for descriptor in surfaces}
+        targets.extend(
+            launcher
+            for launcher in launchers
+            if launcher.panel_id not in held_ids
+        )
         return cls(targets)

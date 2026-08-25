@@ -5,6 +5,8 @@ only ever stand for a page. Anything that stopped being a page lost its
 row -- which is exactly what happened to Characters.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from manuskript.panels import (
@@ -67,6 +69,40 @@ def test_a_plugin_panel_takes_a_row_on_the_same_terms_as_core():
     target = navigator.target(1)
     assert target.opens_panel
     assert target.panel_id == "plugin.research.sources"
+
+
+def test_an_explicit_launcher_survives_without_changing_other_membership():
+    launcher = NavigatorTarget(
+        "Editor", "editor", 700,
+        panel_id="core.editor",
+        creates_surface=True,
+    )
+    navigator = WorkspaceNavigator.compose(
+        surfaces=(), launchers=(launcher,),
+    )
+
+    target = navigator.target(navigator.row_for_panel("core.editor"))
+
+    assert target.creates_surface
+
+
+def test_an_owned_surface_replaces_its_construction_launcher():
+    descriptor = SimpleNamespace(
+        id="core.editor",
+        navigator=SimpleNamespace(label="Editor", icon="editor", order=700),
+    )
+    launcher = NavigatorTarget(
+        "Editor", "editor", 700,
+        panel_id="core.editor",
+        creates_surface=True,
+    )
+
+    navigator = WorkspaceNavigator.compose(
+        surfaces=(descriptor,), launchers=(launcher,),
+    )
+
+    assert len(navigator.targets) == 1
+    assert not navigator.targets[0].creates_surface
 
 
 def test_a_page_row_is_found_again_when_the_page_changes():

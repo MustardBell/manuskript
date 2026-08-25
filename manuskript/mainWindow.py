@@ -886,6 +886,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if target is None:
             return False
         if target.opens_panel:
+            if target.creates_surface:
+                return self.createWorkspaceSurface(target.panel_id)
             return self.activatePanel(target.panel_id)
         self._activePanelId = ""
         self._showCentralPages()
@@ -897,6 +899,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.surfaceHost.deactivate()
         self.tabMain.setCurrentIndex(target.page)
         return False
+
+    def createWorkspaceSurface(self, surface_id):
+        """Apply an explicit navigator construction command.
+
+        Navigation itself still never infers membership from a missing
+        surface. Editor is the one core command presently exposed here:
+        after one Editor has moved to a peer window, selecting Editor in the
+        original workspace means "open another editing view here", not
+        "steal the living view back" and not "populate every missing place".
+        """
+        if (
+            surface_id != core_panels.EDITOR
+            or not self.projectRuntime.isOpen
+        ):
+            return False
+        if not self.surfaceHost.contains(surface_id):
+            self.surfaceHost.open(
+                surface_id,
+                PanelContext(translate=self.tr),
+            )
+        return self.activatePanel(surface_id)
 
     def _showCentralPages(self):
         """Show the non-surface developer container."""
@@ -988,7 +1011,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         }.get(tab, "")
 
     def rebuildNavigator(self):
-        """List the pages this window keeps and the surfaces it holds.
+        """List this window's pages, held surfaces, and explicit launchers.
 
         Membership, not availability. The rows used to come from every
         surface in the registry, which is the application's list rather
@@ -997,14 +1020,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         Called again whenever this workspace gains or loses a surface, so
         a surface that leaves for another window takes its row with it and
-        one that arrives brings its own.
+        one that arrives brings its own. Editor is the deliberate exception:
+        when its activation row leaves, a construction row remains so the
+        writer can create another per-window Editor without reacquiring every
+        other missing surface.
         """
         held = [
             instance.descriptor
             for instance in self.surfaceHost.instances.values()
         ]
+        editor_entry = self.panelRegistry.descriptor(
+            core_panels.EDITOR
+        ).navigator
+        launchers = (
+            NavigatorTarget(
+                label=editor_entry.label,
+                icon=editor_entry.icon,
+                order=editor_entry.order,
+                panel_id=core_panels.EDITOR,
+                creates_surface=True,
+            ),
+        )
         self.navigator = WorkspaceNavigator.compose(
-            pages=self.NAVIGATOR_PAGES, surfaces=held,
+            pages=self.NAVIGATOR_PAGES,
+            surfaces=held,
+            launchers=launchers,
         )
         # Blocked while the list is refilled: clearing it moves the
         # current row through every position on the way to none, and each
@@ -1016,7 +1056,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             item = QListWidgetItem(F.themeIcon(target.icon), label)
             item.setSizeHint(QSize(item.sizeHint().width(), 64))
             tooltip = label
-            if target.opens_panel and len(held) > 1:
+            if target.creates_surface:
+                tooltip = self.tr(
+                    "Open another Editor in this workspace"
+                )
+            elif target.opens_panel and len(held) > 1:
                 tooltip = self.tr(
                     "{}\nDrag this row to move the surface to a new "
                     "workspace window."
@@ -1424,8 +1468,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.lstTabs.setIconSize(QSize(48, 48))
         self.rebuildNavigator()
-        # Rebuilt again whenever this workspace gains or loses one, which
-        # is how a row leaves with the surface it stood for.
+        # Rebuilt again whenever this workspace gains or loses one, which is
+        # how activation rows follow their instances and explicit launchers
+        # appear only while their instance is absent.
         self.surfaceHost.on_membership_changed = (
             self._workspaceSurfaceMembershipChanged
         )

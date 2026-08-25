@@ -1799,6 +1799,51 @@ def test_move_surface_composes_a_new_window_for_the_living_editor(
     assert window.mainEditor is original_editor
 
 
+def test_editor_navigation_constructs_another_view_after_transfer(
+        MWEmptyProject):
+    """Moving an Editor must not remove the command that creates another.
+
+    The first Editor remains the living surface in its peer workspace. The
+    row left in the primary is an explicit constructor and therefore creates
+    a distinct per-window Editor instead of stealing the first one back or
+    opening every other missing surface.
+    """
+
+    window = MWEmptyProject
+    original = window.surfaceHost.instance(EDITOR)
+    before = set(window.windowRegistry.workspace_windows)
+    moved = window.surfaceTransfer.move_to_new_window(EDITOR)
+    created = [
+        candidate
+        for candidate in window.windowRegistry.workspace_windows
+        if candidate not in before
+    ]
+    try:
+        assert moved is original
+        assert len(created) == 1
+        peer = created[0]
+        assert peer.surfaceHost.instance(EDITOR) is original
+        assert not window.surfaceHost.contains(EDITOR)
+
+        row = window.navigator.row_for_panel(EDITOR)
+        launcher = window.navigator.target(row)
+        assert launcher.creates_surface
+        assert "another Editor" in window.lstTabs.item(row).toolTip()
+
+        assert window.navigateTo(row)
+
+        second = window.surfaceHost.instance(EDITOR)
+        assert second is not None
+        assert second is not original
+        assert peer.surfaceHost.instance(EDITOR) is original
+        assert not window.navigator.target(
+            window.navigator.row_for_panel(EDITOR)
+        ).creates_surface
+    finally:
+        for candidate in created:
+            candidate.close()
+
+
 def test_a_failed_surface_move_restores_ownership_and_active_view(
         MWEmptyProject):
     window = MWEmptyProject
