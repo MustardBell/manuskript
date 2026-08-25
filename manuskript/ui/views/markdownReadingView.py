@@ -32,7 +32,23 @@ class MarkdownReadingView(QTextBrowser):
     def setActive(self, active):
         self._active = bool(active)
         if active:
-            self.refreshIfNeeded()
+            host = self.parentWidget()
+            if (
+                self._dirty
+                and host is not None
+                and host.isVisible()
+            ):
+                # A QStackedWidget changes its current page before every
+                # native backend reports that child as visible. Scheduling
+                # through ``isVisible()`` can therefore expose an empty
+                # Reading page for one event turn on macOS. The host is the
+                # stable exposure boundary: when it is already visible, a
+                # completed mode switch must also have completed the first
+                # projection. Hidden hosts retain the intentional lazy path.
+                self._refreshTimer.stop()
+                self.refresh()
+            else:
+                self.refreshIfNeeded()
 
     def setRenderer(self, renderer):
         if renderer is self._renderer:
