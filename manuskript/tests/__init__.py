@@ -3,8 +3,29 @@
 
 """Test application composition, created only by tests that need it."""
 
-from PyQt5.QtCore import Qt
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtWidgets import QApplication
+
+
+# Every pytest process gets a settings filesystem of its own.  Process-level
+# Qt isolation is incomplete if QSettings still joins the processes through a
+# developer's real profile (or through one shared CI runner profile): a closed
+# ``window-2`` from one batch can otherwise become the layout of a fresh
+# transfer wrapper in another.  INI format makes the location override work
+# consistently on Linux, macOS, and Windows instead of falling through to the
+# registry or platform preferences service.
+_settings_directory = TemporaryDirectory(prefix="manuskript-tests-")
+_settings_root = Path(_settings_directory.name)
+QSettings.setDefaultFormat(QSettings.IniFormat)
+for _settings_format in (QSettings.NativeFormat, QSettings.IniFormat):
+    QSettings.setPath(
+        _settings_format,
+        QSettings.UserScope,
+        str(_settings_root),
+    )
 
 # Widgets constructed by focused UI tests still need an application. Own
 # exactly one for the interpreter lifetime, as Qt requires, while deferring
@@ -30,7 +51,6 @@ def prepare_test_application():
     if _application is not None:
         return _application
 
-    from PyQt5.QtCore import QSettings
     from manuskript import main
 
     test_settings = QSettings(
