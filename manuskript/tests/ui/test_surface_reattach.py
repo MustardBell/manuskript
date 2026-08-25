@@ -2,9 +2,9 @@
 
 from dataclasses import replace
 
-from PyQt5.QtWidgets import qApp
+from PyQt5.QtWidgets import QDockWidget, qApp
 
-from manuskript.panels.core import EDITOR
+from manuskript.panels.core import CORE_TOOL_PANEL_IDS, EDITOR
 
 
 def settle():
@@ -83,6 +83,73 @@ def test_a_sparse_wrapper_offers_existing_workspaces_but_not_another_new_one(
         assert destinations[0].isEnabled()
         assert destinations[0].data() == (EDITOR, source.windowId)
     finally:
+        return_editor_if_needed(source, wrapper)
+
+
+def test_a_transfer_wrapper_shows_the_surface_without_workspace_passengers(
+        MWEmptyProject):
+    source = MWEmptyProject
+    _original, wrapper = detach_editor(source)
+    try:
+        settle()
+
+        assert wrapper.dckNavigation.isHidden()
+        editor_dock = wrapper.surfaceHost.instance(EDITOR).container
+        assert not editor_dock.isHidden()
+        assert not editor_dock.features() & QDockWidget.DockWidgetClosable
+        for panel_id in CORE_TOOL_PANEL_IDS:
+            assert wrapper.panelHost.instance(panel_id).container.isHidden()
+    finally:
+        return_editor_if_needed(source, wrapper)
+
+
+def test_closing_a_transfer_wrapper_returns_its_unique_editor(
+        MWEmptyProject):
+    from manuskript.models.outlineItem import outlineItem
+
+    source = MWEmptyProject
+    original, wrapper = detach_editor(source)
+    widget = original.widget
+    item = outlineItem(title="Returned scene", _type="md")
+    source.projectRuntime.models.outline.appendItem(item)
+    index = source.projectRuntime.models.outline.indexFromItem(item)
+
+    assert wrapper.close()
+    settle()
+
+    assert wrapper not in source.windowRegistry.workspace_windows
+    assert source.surfaceHost.instance(EDITOR) is original
+    assert original.widget is widget
+    assert original.container.parentWidget() is source
+
+    tree = source.corePanels.project_tree.tree
+    tree.setCurrentIndex(index)
+    settle()
+
+    assert source.activatePanel(EDITOR)
+    assert source.mainEditor.currentEditor().currentIndex == index
+
+
+def test_a_wrapper_refuses_to_close_if_its_editor_cannot_be_preserved(
+        MWEmptyProject, monkeypatch):
+    source = MWEmptyProject
+    original, wrapper = detach_editor(source)
+    attach = source.surfaceHost.attach
+
+    def reject(_instance):
+        raise RuntimeError("destination rejected surface")
+
+    monkeypatch.setattr(source.surfaceHost, "attach", reject)
+    try:
+        assert not wrapper.close()
+        settle()
+
+        assert wrapper in source.windowRegistry.workspace_windows
+        assert wrapper.surfaceHost.instance(EDITOR) is original
+        assert original.host is wrapper.surfaceHost
+        assert not source.surfaceHost.contains(EDITOR)
+    finally:
+        monkeypatch.setattr(source.surfaceHost, "attach", attach)
         return_editor_if_needed(source, wrapper)
 
 

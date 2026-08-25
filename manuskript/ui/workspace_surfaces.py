@@ -42,6 +42,11 @@ class WorkspaceBuildIntent:
     surface_ids: Tuple[str, ...] = CORE_SURFACE_IDS
     incoming: Tuple["WorkspaceSurfaceInstance", ...] = ()
     active_surface: Optional[str] = GENERAL
+    #: A transfer wrapper presents the moved surface as the window, not as a
+    #: full second copy of Manuskript's navigation shell.  Tool panels still
+    #: exist as attachable window-local views, but none is routed into view
+    #: until the reader explicitly asks for it.
+    standalone_surface: bool = False
 
     def __post_init__(self):
         ids = tuple(self.surface_ids)
@@ -59,6 +64,7 @@ class WorkspaceBuildIntent:
             surface_ids=(),
             incoming=(instance,),
             active_surface=instance.id,
+            standalone_surface=True,
         )
 
     @classmethod
@@ -109,6 +115,9 @@ class WorkspaceBuildIntent:
         return cls(
             surface_ids=tuple(valid),
             active_surface=active_surface,
+            # A persisted one-surface peer is the transfer wrapper restored,
+            # not a request to grow a new full navigation shell around it.
+            standalone_surface=(len(valid) == 1),
         )
 
 

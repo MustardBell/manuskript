@@ -29,6 +29,12 @@ class SurfacePanelRoutingViews:
     @classmethod
     def for_window(cls, window):
         def routes():
+            if window._standaloneSurfacePresentation:
+                # A detached surface is already the whole purpose of this
+                # window. Activating it must not implicitly pull Project
+                # Tree, Metadata, or Story line across the frame as though
+                # the transfer requested a second complete workspace.
+                return ()
             found = []
             for panel_id, instance in window.panelHost.instances.items():
                 surfaces = instance.descriptor.visible_with_surfaces

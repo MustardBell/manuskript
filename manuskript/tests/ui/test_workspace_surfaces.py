@@ -130,6 +130,19 @@ def test_primary_core_membership_resolves_before_factories_are_registered():
 
     assert intent.surface_ids == (EDITOR,)
     assert intent.active_surface == EDITOR
+    assert intent.standalone_surface
+
+
+def test_a_transfer_intent_names_a_standalone_living_surface():
+    host = a_host(surface(EDITOR, "Editor"))
+    instance = host.open(EDITOR)
+
+    intent = WorkspaceBuildIntent.for_transfer(instance)
+
+    assert intent.surface_ids == ()
+    assert intent.incoming == (instance,)
+    assert intent.active_surface == EDITOR
+    assert intent.standalone_surface
 
 
 def test_unusable_saved_membership_falls_back_to_a_visible_workspace():

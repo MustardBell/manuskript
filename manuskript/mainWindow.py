@@ -130,6 +130,10 @@ from manuskript.ui.workspace_support import (
     WorkspaceSupportController,
     WorkspaceSupportViews,
 )
+from manuskript.ui.workspace_retirement import (
+    WorkspaceRetirementController,
+    WorkspaceRetirementViews,
+)
 from manuskript.ui.plugins.controller import PluginUiController
 from manuskript.ui.plugins.plugin_ui_views import PluginUiViews
 from manuskript.ui.plugins.index_card_styles import (
@@ -279,6 +283,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # sharing one set of keys meant the second saved over the first.
         self.windowId = window_id
         self.buildIntent = build_intent or WorkspaceBuildIntent()
+        self._standaloneSurfacePresentation = bool(
+            self.buildIntent.standalone_surface
+        )
 
         # Application scope: every window reads the same panel list.
         self.panelRegistry = services.panel_registry
@@ -414,6 +421,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.windowState.restore()
             if not self.windowState.restoredLayout:
                 self._placeDefaultCoreDocks()
+            self._applyBuildIntentPresentation()
         self.statusLabel = statusLabel(parent=self)
         self.statusLabel.setAutoFillBackground(True)
         self.statusLabel.hide()
@@ -492,6 +500,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ProjectLifecycleView(
                 self.projectRuntime,
                 ProjectLifecycleViews.for_window(self),
+            )
+        )
+        self.workspaceRetirement = self.workspaceLifetime.own(
+            WorkspaceRetirementController(
+                WorkspaceRetirementViews.for_window(self)
             )
         )
         self.workspaceWindows = self.workspaceLifetime.own(
@@ -665,6 +678,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self._activePanelId:
             self._activePanelId = core_panels.GENERAL
         self.activatePanel(self._activePanelId)
+        self._applyBuildIntentPresentation()
         if self._defaultDockLayoutPending:
             QTimer.singleShot(0, self._settleDefaultCoreDocks)
 
@@ -697,10 +711,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.workspaceWindows.open_ids()
                 )
         else:
-            # These editors are private to this view and disappear when its
-            # bindings are disconnected.  Shared document buffers outlive a
-            # workspace, but character notes and other panel editors do not.
+            # A view may be the sole owner of a living Editor or contributed
+            # surface. Closing the view must move that instance to a survivor
+            # before its bindings and Qt tree disappear. The transfer also
+            # flushes window-private editors while their bindings still live.
             self.projectLifecycleView.flush_pending_edits()
+            if (
+                not self.windowRegistry.quitting
+                and not self.workspaceRetirement.preserve_unique_surfaces()
+            ):
+                event.ignore()
+                return
         # Before the tool windows go, because closing them takes the
         # plugin docks out of the layout and QMainWindow.saveState can
         # only record docks that are still there. The last window comes
@@ -1108,6 +1129,54 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Layout returned a 302px navigator despite requesting 200px.
             QTimer.singleShot(0, self._settleDefaultCoreDocks)
 
+    def _applyBuildIntentPresentation(self):
+        """Keep a transfer wrapper about the surface it was built for.
+
+        A peer ``MainWindow`` supplies real window-manager behaviour and a
+        dock host, but that does not make every piece of the ordinary
+        Manuskript shell part of the transfer.  The navigator and routed core
+        tools remain available to composition; they simply do not appear as
+        accidental passengers beside a detached surface.
+        """
+
+        if not self._standaloneSurfacePresentation:
+            return
+        self.dckNavigation.hide()
+        self.dckCheatSheet.hide()
+        self.dckSearch.hide()
+        for panel_id in core_panels.CORE_TOOL_PANEL_IDS:
+            if self.panelHost.instance(panel_id) is not None:
+                self.panelHost.set_visible(panel_id, False)
+        for instance in self.surfaceHost.instances.values():
+            dock = instance.container
+            dock.setFeatures(
+                dock.features() & ~QDockWidget.DockWidgetClosable
+            )
+
+    def _workspaceSurfaceMembershipChanged(self):
+        """Keep navigator chrome aligned with workspace composition."""
+
+        if (
+            self._standaloneSurfacePresentation
+            and len(self.surfaceHost.instances) > 1
+        ):
+            # A one-surface wrapper has become a real multi-surface
+            # workspace. It now needs ordinary navigation and routing; this
+            # is an explicit membership transition, not a navigation side
+            # effect.
+            self._standaloneSurfacePresentation = False
+            self.dckNavigation.show()
+            for instance in self.surfaceHost.instances.values():
+                dock = instance.container
+                dock.setFeatures(
+                    dock.features() | QDockWidget.DockWidgetClosable
+                )
+            routing = getattr(self, "surfacePanelRouting", None)
+            if routing is not None:
+                routing.reset()
+                routing.surface_changed(self.surfaceHost.current())
+        self.rebuildNavigator()
+
     def _settleDefaultCoreDocks(self):
         """Apply pixel extents after the native window has real geometry."""
         # The first showEvent belongs to the welcome screen. Reasserting the
@@ -1310,7 +1379,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.rebuildNavigator()
         # Rebuilt again whenever this workspace gains or loses one, which
         # is how a row leaves with the surface it stood for.
-        self.surfaceHost.on_membership_changed = self.rebuildNavigator
+        self.surfaceHost.on_membership_changed = (
+            self._workspaceSurfaceMembershipChanged
+        )
         self.tabMain.tabBar().hide()
         self.lstTabs.currentRowChanged.connect(self.navigateTo)
         self.tabMain.setTabEnabled(self.DebugPage, self.SHOW_DEBUG_TAB)
