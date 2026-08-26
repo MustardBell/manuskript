@@ -357,6 +357,42 @@ def test_declaring_outline_write_grants_the_whole_gateway(MWEmptyProject):
         _remove_workspace(window)
 
 
+def test_plugin_compile_command_can_include_an_inherited_exclusion(
+        MWEmptyProject):
+    window = MWEmptyProject
+    model = window.projectRuntime.models.outline
+    folder = outlineItem(title="Excluded folder", parent=model.rootItem)
+    document = outlineItem(
+        title="Included scene", _type="md", parent=folder,
+    )
+    folder.setData(Outline.compile, 0)
+    assert not document.compile()
+
+    gateway = window.pluginUi.editorWorkspaces._outline
+    assert gateway.set_compile(document.ID(), True)
+
+    assert folder.compile()
+    assert document.compile()
+
+
+def test_plugin_can_retain_a_direct_exclusion_beneath_excluded_parent(
+        MWEmptyProject):
+    window = MWEmptyProject
+    model = window.projectRuntime.models.outline
+    folder = outlineItem(title="Excluded folder", parent=model.rootItem)
+    document = outlineItem(
+        title="Explicitly excluded scene", _type="md", parent=folder,
+    )
+    folder.setData(Outline.compile, 0)
+    assert document.compileDirectly()
+    assert not document.compile()
+
+    gateway = window.pluginUi.editorWorkspaces._outline
+    assert gateway.set_compile(document.ID(), False)
+
+    assert not document.compileDirectly()
+
+
 def test_editor_panes_need_declaring_too(MWEmptyProject):
     window = MWEmptyProject
     try:

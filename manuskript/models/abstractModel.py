@@ -208,6 +208,12 @@ class abstractModel(QAbstractItemModel):
 
     def setData(self, index, value, role=Qt.EditRole):
         item = index.internalPointer()
+        if (
+            index.column() == Outline.compile
+            and role == Qt.CheckStateRole
+        ):
+            item.setCompileEnabled(value == Qt.Checked)
+            return True
         if item.data(index.column(), role) != value:
 
             item.setData(index.column(), value, role)

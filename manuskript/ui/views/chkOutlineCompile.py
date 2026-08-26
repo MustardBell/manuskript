@@ -19,6 +19,11 @@ class chkOutlineCompile(QCheckBox):
         self._indexes = None
         self._model = None
         self._updating = False
+        self.setAccessibleName(self.tr("Compile"))
+        self.setToolTip(self.tr(
+            "Include this item in compiled output. Including an item also "
+            "includes its parent folders."
+        ))
 
     def setModel(self, model):
         self._model = model
@@ -66,47 +71,56 @@ class chkOutlineCompile(QCheckBox):
                 self.updateCheckState()
 
     def updateCheckState(self):
+        self._updating = True
+        try:
+            if self._index:
+                self.setEnabled(True)
+                c = self.getCheckedValue(self._index)
+                self.setCheckState(c)
 
-        if self._index:
-            self.setEnabled(True)
-            c = self.getCheckedValue(self._index)
-            self.setCheckState(c)
+            elif self._indexes:
+                self.setEnabled(True)
+                values = []
+                for i in self._indexes:
+                    values.append(self.getCheckedValue(i))
 
-        elif self._indexes:
-            self.setEnabled(True)
-            values = []
-            for i in self._indexes:
-                values.append(self.getCheckedValue(i))
+                same = True
+                for v in values[1:]:
+                    if v != values[0]:
+                        same = False
+                        break
 
-            same = True
-            for v in values[1:]:
-                if v != values[0]:
-                    same = False
-                    break
+                if same:
+                    self.setCheckState(values[0])
+                else:
+                    self.setCheckState(Qt.PartiallyChecked)
 
-            if same:
-                self.setCheckState(values[0])
             else:
-                self._updating = True
-                self.setCheckState(Qt.PartiallyChecked)
-                self._updating = False
-
-        else:
-            self.setChecked(False)
-            self.setEnabled(False)
+                self.setChecked(False)
+                self.setEnabled(False)
+        finally:
+            self._updating = False
 
     def submit(self, state):
 
-        if self._updating:
+        if self._updating or state == Qt.PartiallyChecked:
             return
 
-        if self._index:
-            if self._model.data(self._index) != state:
-                self._model.setData(self._index, state)
-
-        elif self._indexes:
-            for i in self._indexes:
-                if self._model.data(i) != state:
-                    self._model.setData(i, state)
-
-        self.setTristate(False)
+        indexes = (
+            (self._index,)
+            if self._index
+            else tuple(self._indexes or ())
+        )
+        self._updating = True
+        try:
+            for index in indexes:
+                if self._model.data(index, Qt.CheckStateRole) != state:
+                    self._model.setData(
+                        index,
+                        state,
+                        Qt.CheckStateRole,
+                    )
+            self.setTristate(False)
+        finally:
+            self._updating = False
+        self.updateCheckState()

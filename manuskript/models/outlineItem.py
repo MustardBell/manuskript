@@ -76,12 +76,53 @@ class outlineItem(abstractItem, searchableItem):
         return self.data(self.enum.text)
 
     def compile(self):
-        if self._data.get(self.enum.compile, 1) in ["0", 0]:
+        if not self.compileDirectly():
             return False
         elif self.parent():
             return self.parent().compile()
         else:
             return True  # rootItem always compile
+
+    def compileDirectly(self):
+        """Whether this item itself permits compilation.
+
+        ``compile()`` is the effective answer and therefore also observes
+        every ancestor.  Editing needs both answers: a child can retain its
+        local inclusion while an excluded folder temporarily masks it.
+        """
+
+        value = self._data.get(self.enum.compile, 2)
+        if isinstance(value, str):
+            return value.strip().casefold() not in {
+                "", "0", "false", "no", "off",
+            }
+        return value not in (None, False, 0)
+
+    def setCompileEnabled(self, enabled):
+        """Apply a user's effective compile choice to this branch.
+
+        Excluding one item is local. Including it must also include the
+        folders through which the compiler reaches it; otherwise the stored
+        child value can be checked while ``compile()`` remains false and the
+        UI appears to ignore the command.
+
+        Loading deliberately does not use this command. Project files may
+        retain a child's local state beneath an excluded ancestor, which is
+        what makes disabling and later restoring a whole branch lossless.
+        """
+
+        enabled = bool(enabled)
+        value = 2 if enabled else 0
+        current = self
+        changed = False
+        while current is not None and current.parent() is not None:
+            if current.compileDirectly() != enabled:
+                current.setData(current.enum.compile, value)
+                changed = True
+            if not enabled:
+                break
+            current = current.parent()
+        return changed
 
     def POV(self):
         return self.data(self.enum.POV)

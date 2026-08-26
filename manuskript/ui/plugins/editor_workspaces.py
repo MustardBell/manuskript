@@ -122,11 +122,26 @@ class WorkspaceOutlineGateway(QObject):
         return self._set(item_id, Outline.title, str(title))
 
     def set_compile(self, item_id, compile_document):
-        return self._set(
-            item_id,
-            Outline.compile,
-            2 if bool(compile_document) else 0,
+        item = self.model.getItemByID(str(item_id))
+        if item is None:
+            raise KeyError("Unknown outline item {!r}.".format(item_id))
+        enabled = bool(compile_document)
+        if (
+            (enabled and item.compile())
+            or (not enabled and not item.compileDirectly())
+        ):
+            return False
+        index = self.model.getIndexByID(
+            str(item_id), column=Outline.compile,
         )
+        if not index.isValid():
+            raise KeyError("Unknown outline item {!r}.".format(item_id))
+        self.model.setData(
+            index,
+            Qt.Checked if enabled else Qt.Unchecked,
+            Qt.CheckStateRole,
+        )
+        return True
 
     def set_compile_many(self, compile_by_id):
         changed = False
@@ -164,10 +179,7 @@ class WorkspaceOutlineGateway(QObject):
             settings=getattr(self.model, "settings", None),
         )
         item.setData(Outline.text, str(text))
-        item.setData(
-            Outline.compile,
-            2 if bool(compile_document) else 0,
-        )
+        item.setData(Outline.compile, 0 if not compile_document else 2)
         if after_id is not None:
             inserted = self.model.insertItem(
                 item,
@@ -182,6 +194,8 @@ class WorkspaceOutlineGateway(QObject):
             )
         if not inserted:
             raise RuntimeError("The outline rejected the new text document.")
+        if compile_document:
+            self.set_compile(item.ID(), True)
         return self._snapshot(item)
 
     def duplicate_text_document(

@@ -78,6 +78,16 @@ def test_outline_item_preserves_typed_plugin_values_in_xml():
     assert restored.pluginValue("example.structured-page") is True
 
 
+@pytest.mark.parametrize("value", (0, "0", False, "False", "no", "off"))
+def test_compile_false_spellings_are_not_treated_as_included(value):
+    item = outlineItem(title="Excluded", _type="md")
+
+    item.setData(Outline.compile, value)
+
+    assert not item.compileDirectly()
+    assert not item.compile()
+
+
 def test_outline_model_accepts_opaque_format_2_ids_and_keeps_numeric_allocator_safe():
     model = outlineModel()
     root = model.rootItem
