@@ -107,6 +107,16 @@ def test_a_workspace_holds_only_the_surfaces_it_was_asked_for():
     assert not host.contains("core.outline")
 
 
+def test_a_fresh_surface_workspace_constructs_instead_of_adopting():
+    intent = WorkspaceBuildIntent.for_new_surface(EDITOR)
+
+    assert intent.surface_ids == (EDITOR,)
+    assert intent.incoming == ()
+    assert intent.tool_panel_ids == ()
+    assert intent.active_surface == EDITOR
+    assert intent.standalone_surface
+
+
 def test_pre_membership_state_migrates_to_the_canonical_surfaces():
     intent = WorkspaceBuildIntent.from_saved(
         None, None, PanelRegistry(),

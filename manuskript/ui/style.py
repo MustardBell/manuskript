@@ -224,7 +224,7 @@ def mainEditorTabSS(settings):
                 border: {bw}px solid {borderColor};
             }}
             QTabWidget::tab-bar{{
-                left:50px;
+                left:75px;
             }}
             QTabBar{{
                 background: {bgColor};
@@ -263,7 +263,7 @@ def mainEditorTabSS(settings):
                 border: none;
             }}
             QTabWidget::tab-bar{{
-                left:50px;
+                left:75px;
             }}
             QTabBar{{
                 background: {bgColor};

@@ -2,10 +2,12 @@
 # --!-- coding: utf8 --!--
 import locale, os
 
-from PyQt5.QtCore import QModelIndex, QRect, QPoint, Qt, QObject, QSize
-from PyQt5.QtGui import QIcon, QPalette
+from PyQt5.QtCore import (
+    QEvent, QMimeData, QModelIndex, QRect, QPoint, Qt, QObject, QSize,
+)
+from PyQt5.QtGui import QCursor, QDrag, QIcon, QPalette
 from PyQt5.QtGui import QDropEvent, QDragEnterEvent
-from PyQt5.QtWidgets import QWidget, QPushButton
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton
 
 from manuskript.functions import appPath
 from manuskript.ui import style
@@ -16,6 +18,8 @@ from manuskript.ui.views.text_editor_settings import (
 
 import logging
 LOGGER = logging.getLogger(__name__)
+
+EDITOR_PANE_MIME_TYPE = "application/x-manuskript-editor-pane"
 
 class tabSplitter(QWidget, Ui_tabSplitter):
     """
@@ -86,6 +90,36 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
         self.mainEditor = mainEditor or parent
 
+        # A pane, rather than the whole Editor surface, can become its own
+        # Editor window. The button is the keyboard/accessibility route; a
+        # tab dragged beyond its bar invokes the same command.
+        tear_off_icon = QIcon.fromTheme(
+            "window-new",
+            QIcon(appPath(os.path.join(
+                "icons", "NumixMsk", "256x256", "actions",
+                "document-export.svg",
+            ))),
+        )
+        self.btnTearOff = QPushButton(tear_off_icon, "", self)
+        self.btnTearOff.setGeometry(QRect(50, 0, 24, 24))
+        self.btnTearOff.setMinimumSize(QSize(24, 24))
+        self.btnTearOff.setMaximumSize(QSize(24, 24))
+        self.btnTearOff.setFlat(True)
+        self.btnTearOff.setObjectName("btnTearOffPane")
+        tear_off_text = self.tr("Move this editor pane to a new window")
+        self.btnTearOff.setToolTip(tear_off_text)
+        self.btnTearOff.setAccessibleName(tear_off_text)
+        self.btnTearOff.clicked.connect(self.requestPaneTearOff)
+        self._paneTearOffAvailable = bool(
+            getattr(self.mainEditor, "_paneTearOffHandler", None)
+        )
+        self.refreshPaneTearOff()
+
+        self._paneDragStart = None
+        self._paneDragTab = -1
+        self._tabBar = self.tab.tabBar()
+        self._tabBar.installEventFilter(self)
+
         self.secondTab = None
         # The child holding this node's own side, once that side has been
         # divided. While it is None this node owns ``self.tab`` directly;
@@ -99,8 +133,25 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
         self.tab.tabCloseRequested.connect(self.closeTab)
         self.tab.currentChanged.connect(self.mainEditor.tabChanged)
+        self.tab.currentChanged.connect(
+            lambda _index: self.refreshPaneTearOff()
+        )
 
         self.setAcceptDrops(True)
+
+    def setPaneTearOffEnabled(self, enabled):
+        self._paneTearOffAvailable = bool(enabled)
+        self.refreshPaneTearOff()
+        for child in self.children_areas():
+            child.setPaneTearOffEnabled(enabled)
+
+    def refreshPaneTearOff(self):
+        self.btnTearOff.setEnabled(bool(
+            self._paneTearOffAvailable and self.tab.count()
+        ))
+
+    def requestPaneTearOff(self):
+        return self.mainEditor.tearOffPane(self)
 
     def set_focus_source(self, focus_source):
         """Use the owning workspace's focus stream for pane activation."""
@@ -619,6 +670,8 @@ class tabSplitter(QWidget, Ui_tabSplitter):
             self.mainEditor.tabChanged()
 
     def eventFilter(self, object, event):
+        if object is self._tabBar:
+            return self._tabBarEvent(event)
         if object == self.btnSplit and event.type() == event.HoverEnter:
             # self.setAutoFillBackground(True)
             # self.setBackgroundRole(QPalette.Highlight)
@@ -645,3 +698,53 @@ class tabSplitter(QWidget, Ui_tabSplitter):
 
             self.setStyleSheet(style.mainEditorTabSS(self.settings))
         return QWidget.eventFilter(self, object, event)
+
+    def _tabBarEvent(self, event):
+        """Turn a tab dragged outside its bar into a pane tear-off gesture."""
+
+        if event.type() == QEvent.MouseButtonPress:
+            if event.button() == Qt.LeftButton:
+                index = self._tabBar.tabAt(event.pos())
+                if index >= 0:
+                    self._paneDragStart = QPoint(event.pos())
+                    self._paneDragTab = index
+            return False
+        if event.type() == QEvent.MouseButtonRelease:
+            self._paneDragStart = None
+            self._paneDragTab = -1
+            return False
+        if (
+            event.type() != QEvent.MouseMove
+            or self._paneDragStart is None
+            or not event.buttons() & Qt.LeftButton
+            or (
+                event.pos() - self._paneDragStart
+            ).manhattanLength() < QApplication.startDragDistance()
+            or self._tabBar.rect().adjusted(
+                -12, -12, 12, 12,
+            ).contains(event.pos())
+        ):
+            return False
+
+        index = self._paneDragTab
+        self._paneDragStart = None
+        self._paneDragTab = -1
+        drag = QDrag(self._tabBar)
+        mime_data = QMimeData()
+        mime_data.setData(
+            EDITOR_PANE_MIME_TYPE,
+            self.objectName().encode("utf-8"),
+        )
+        drag.setMimeData(mime_data)
+        rectangle = self._tabBar.tabRect(index)
+        pixmap = self._tabBar.grab(rectangle)
+        if not pixmap.isNull():
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(pixmap.rect().center())
+        try:
+            action = drag.exec_(Qt.MoveAction)
+        finally:
+            drag.deleteLater()
+        if action == Qt.IgnoreAction:
+            self.mainEditor.tearOffPane(self, QCursor.pos())
+        return True

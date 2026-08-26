@@ -84,6 +84,17 @@ class WorkspaceBuildIntent:
         )
 
     @classmethod
+    def for_new_surface(cls, surface_id):
+        """Build one fresh per-window surface in a real peer workspace."""
+
+        return cls(
+            surface_ids=(surface_id,),
+            tool_panel_ids=(),
+            active_surface=surface_id,
+            standalone_surface=True,
+        )
+
+    @classmethod
     def for_primary_session(
         cls,
         surface_ids,

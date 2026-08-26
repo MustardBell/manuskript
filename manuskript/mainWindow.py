@@ -134,6 +134,10 @@ from manuskript.ui.workspace_retirement import (
     WorkspaceRetirementController,
     WorkspaceRetirementViews,
 )
+from manuskript.ui.editor_pane_transfer import (
+    EditorPaneTransferController,
+    EditorPaneTransferViews,
+)
 from manuskript.ui.workspace_outline_selection import (
     WorkspaceOutlineSelection,
 )
@@ -522,6 +526,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 WorkspaceWindowViews.for_window(self)
             )
         )
+        self.editorPaneTransfer = self.workspaceLifetime.own(
+            EditorPaneTransferController(
+                EditorPaneTransferViews.for_window(self)
+            )
+        )
+        self.surfaceHost.add_binding(self.editorPaneTransfer)
         self.workspaceLayoutReset = self.workspaceLifetime.own(
             WorkspaceLayoutResetController(
                 WorkspaceLayoutResetViews(

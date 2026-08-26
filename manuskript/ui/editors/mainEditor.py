@@ -84,6 +84,7 @@ class mainEditor(QWidget, Ui_mainEditor):
         self._contentStack.addWidget(self.tabSplitter)
         self.verticalLayout.insertWidget(0, self._contentStack, 1)
         self._pluginWorkspace = None
+        self._paneTearOffHandler = None
         self._focus_source = None
         self._nativeFooterWidgets = (
             self.btnGoUp,
@@ -157,6 +158,19 @@ class mainEditor(QWidget, Ui_mainEditor):
     def set_focus_source(self, focus_source):
         self._focus_source = focus_source
         self.tabSplitter.set_focus_source(focus_source)
+
+    def setPaneTearOffHandler(self, handler):
+        """Install the owning workspace's pane-transfer command."""
+
+        self._paneTearOffHandler = handler
+        for pane in self.allTabSplitters():
+            pane.setPaneTearOffEnabled(handler is not None)
+
+    def tearOffPane(self, pane, global_position=None):
+        handler = self._paneTearOffHandler
+        if handler is None:
+            return None
+        return handler(pane, global_position)
 
     def set_context(self, context):
         self.editor_context = context
